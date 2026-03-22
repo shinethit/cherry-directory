@@ -11,9 +11,10 @@ import { uploadImage } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
 
 const ROLE_CONFIG = {
-  admin:     { label: 'Admin',     icon: Crown,  color: 'text-gold-400',   bg: 'bg-gold-500/15 border-gold-500/30' },
-  moderator: { label: 'Moderator', icon: Shield, color: 'text-amber-400',  bg: 'bg-amber-500/15 border-amber-500/30' },
-  member:    { label: 'Member',    icon: User,   color: 'text-brand-300',  bg: 'bg-brand-600/20 border-brand-400/30' },
+  super_admin: { label: 'Super Admin', icon: Crown,  color: 'text-gold-400',   bg: 'bg-gold-500/20 border-gold-500/40' },
+  admin:       { label: 'Admin',       icon: Crown,  color: 'text-gold-400',   bg: 'bg-gold-500/15 border-gold-500/30' },
+  moderator:   { label: 'Moderator',   icon: Shield, color: 'text-amber-400',  bg: 'bg-amber-500/15 border-amber-500/30' },
+  member:      { label: 'Member',      icon: User,   color: 'text-brand-300',  bg: 'bg-brand-600/20 border-brand-400/30' },
 }
 
 export default function ProfilePage() {

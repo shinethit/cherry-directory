@@ -151,7 +151,7 @@ export default function DirectoryPage() {
             </span>
           )}
           {activeCat && (
-            <span className="badge bg-brand-700/60 text-brand-200">{activeCat.icon} {activeCat.name_mm}</span>
+            <span className="badge bg-brand-700/60 text-brand-200">{activeCat?.icon} {activeCat?.name_mm || activeCat?.name}</span>
           )}
         </div>
       </div>
