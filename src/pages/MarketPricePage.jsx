@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { TrendingUp, TrendingDown, Minus, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -7,17 +7,18 @@ import { useSEO } from '../hooks/useSEO'
 
 // ── Constants ─────────────────────────────────────────────────
 const CATEGORIES = [
-  { id: 'all',       mm: 'အားလုံး',        en: 'All',       icon: '🛒' },
-  { id: 'grain',     mm: 'ဆန်/စီရီသီ',     en: 'Grain',     icon: '🌾' },
-  { id: 'oil',       mm: 'ဆီ',             en: 'Oil',        icon: '🫙' },
+  { id: 'all',       mm: 'အားလုံး',          en: 'All',       icon: '🛒' },
+  { id: 'grain',     mm: 'ဆန်/ပဲ/စီရသီ',    en: 'Grain',     icon: '🌾' },
+  { id: 'oil',       mm: 'ဆီ',               en: 'Oil',        icon: '🫙' },
   { id: 'vegetable', mm: 'ဟင်းသီးဟင်းရွက်', en: 'Vegetable', icon: '🥬' },
-  { id: 'meat',      mm: 'အသား',           en: 'Meat',       icon: '🥩' },
-  { id: 'fish',      mm: 'ငါး',            en: 'Fish',       icon: '🐟' },
-  { id: 'fruit',     mm: 'သစ်သီး',         en: 'Fruit',      icon: '🍎' },
-  { id: 'fuel',      mm: 'ဓာတ်ဆီ/ဂတ်',    en: 'Fuel',       icon: '⛽' },
-  { id: 'other',     mm: 'အခြား',          en: 'Other',      icon: '📦' },
+  { id: 'meat',      mm: 'အသား',             en: 'Meat',       icon: '🥩' },
+  { id: 'fish',      mm: 'ငါး/ပုဇွန်',       en: 'Fish',       icon: '🐟' },
+  { id: 'fruit',     mm: 'သစ်သီး',           en: 'Fruit',      icon: '🍎' },
+  { id: 'fuel',      mm: 'ဓာတ်ဆီ/ဂတ်',      en: 'Fuel',       icon: '⛽' },
+  { id: 'other',     mm: 'အခြား',            en: 'Other',      icon: '📦' },
 ]
-const MARKETS = ['ပြည်သူ့ဈေး', 'ပင်လုံဈေး', 'မြို့သစ်ဈေး', 'အောင်မင်္ဂလာဈေး', 'အခြား']
+// Default markets — shown if DB has none yet
+const DEFAULT_MARKETS = ['ပြည်သူ့ဈေး', 'ပင်လုံဈေး', 'မြို့သစ်ဈေး', 'အောင်မင်္ဂလာဈေး', 'အခြား']
 const REPORT_COOLDOWN = 10 * 60 * 1000
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -50,9 +51,9 @@ function PctBadge({ pct, label, lang }) {
 }
 
 // ── Report modal ──────────────────────────────────────────────
-function ReportModal({ item, onClose, onSubmit, lang }) {
+function ReportModal({ item, onClose, onSubmit, lang, markets = DEFAULT_MARKETS }) {
   const [price, setPrice]   = useState('')
-  const [market, setMarket] = useState(MARKETS[0])
+  const [market, setMarket] = useState(markets[0] || DEFAULT_MARKETS[0])
   const [notes, setNotes]   = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]   = useState('')
@@ -67,14 +68,23 @@ function ReportModal({ item, onClose, onSubmit, lang }) {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{item.icon}</span>
-          <div>
-            <h3 className="font-display font-bold text-white">{lang === 'mm' ? item.name : (item.name_en || item.name)}</h3>
-            <p className="text-[10px] text-white/40">per {lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</p>
+      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* Drag handle + header */}
+        <div className="flex items-center justify-between px-5 pt-3 pb-2 border-b border-white/8">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{item.icon}</span>
+            <div>
+              <p className="font-display font-bold text-white text-sm">{lang === 'mm' ? item.name : (item.name_en || item.name)}</p>
+              <p className="text-[9px] text-white/40">per {lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</p>
+            </div>
           </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white transition-colors">
+            ✕
+          </button>
         </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto max-h-[75dvh] px-5 pb-8 pt-4 space-y-4">
 
         {/* Current price context */}
         {item.median_price && (
@@ -100,7 +110,7 @@ function ReportModal({ item, onClose, onSubmit, lang }) {
         <div>
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဈေးကွက်' : 'Market'}</label>
           <div className="flex gap-2 flex-wrap">
-            {MARKETS.map(m => (
+            {markets.map(m => (
               <button key={m} onClick={() => setMarket(m)} className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors font-myanmar ${market === m ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{m}</button>
             ))}
           </div>
@@ -118,10 +128,208 @@ function ReportModal({ item, onClose, onSubmit, lang }) {
             {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> ...</span>
               : lang === 'mm' ? '📤 တင်ပြမည်' : '📤 Submit'}
           </button>
-          <button onClick={onClose} className="btn-ghost px-4">{lang === 'mm' ? 'ပိတ်' : 'Close'}</button>
         </div>
 
         <p className="text-[9px] text-white/25 text-center font-myanmar">Guest ပါ တင်ပြနိုင် • Outlier ဈေးများ auto-filter • ၁၀ မိနစ် Cooldown</p>
+        </div>{/* end scrollable */}
+      </div>
+    </div>
+  )
+}
+
+// ── Edit Item Modal (Admin/Mod only) ─────────────────────────
+function EditItemModal({ item, onClose, onSave, lang }) {
+  const [name, setName]             = useState(item.name || '')
+  const [nameEn, setNameEn]         = useState(item.name_en || '')
+  const [subcategory, setSubcat]    = useState(item.subcategory || '')
+  const [unit, setUnit]             = useState(item.unit || '')
+  const [unitEn, setUnitEn]         = useState(item.unit_en || '')
+  const [icon, setIcon]             = useState(item.icon || '🛒')
+  const [saving, setSaving]         = useState(false)
+
+  const ICONS = ['🌾','🍚','🫙','🥬','🧅','🧄','🌶️','🥩','🍗','🐟','🦐','⛽','🚛','🔥','🥜','🫘','🍎','📦']
+
+  async function save() {
+    setSaving(true)
+    await onSave({ name, name_en: nameEn || null, subcategory: subcategory || null, unit, unit_en: unitEn || null, icon })
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <h3 className="font-display font-bold text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း ပြင်ဆင်မည်' : 'Edit Item'}</h3>
+
+        {/* Icon picker */}
+        <div>
+          <label className="block text-xs text-white/50 mb-1.5">Icon</label>
+          <div className="flex gap-1.5 flex-wrap">
+            {ICONS.map(ic => (
+              <button key={ic} onClick={() => setIcon(ic)}
+                className={`w-8 h-8 rounded-lg text-lg flex items-center justify-center transition-colors ${icon === ic ? 'bg-brand-600/60 border border-brand-400/50' : 'bg-white/5 hover:bg-white/10'}`}>
+                {ic}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[10px] text-white/50 mb-1">အမည် (မြန်မာ) *</label>
+            <input value={name} onChange={e => setName(e.target.value)} className="input-dark font-myanmar text-sm" />
+          </div>
+          <div>
+            <label className="block text-[10px] text-white/50 mb-1">Name (English)</label>
+            <input value={nameEn} onChange={e => setNameEn(e.target.value)} className="input-dark text-sm" />
+          </div>
+          <div>
+            <label className="block text-[10px] text-white/50 mb-1">Sub-category</label>
+            <input value={subcategory} onChange={e => setSubcat(e.target.value)} className="input-dark font-myanmar text-sm" placeholder="e.g. ဆန်, ပဲ" />
+          </div>
+          <div />
+          <div>
+            <label className="block text-[10px] text-white/50 mb-1">ယူနစ် (မြန်မာ) *</label>
+            <input value={unit} onChange={e => setUnit(e.target.value)} className="input-dark font-myanmar text-sm" placeholder="တင်း" />
+          </div>
+          <div>
+            <label className="block text-[10px] text-white/50 mb-1">Unit (English)</label>
+            <input value={unitEn} onChange={e => setUnitEn(e.target.value)} className="input-dark text-sm" placeholder="tin" />
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={save} disabled={!name || !unit || saving} className="btn-primary flex-1">
+            {saving ? '...' : lang === 'mm' ? '✓ သိမ်းမည်' : '✓ Save'}
+          </button>
+          <button onClick={onClose} className="btn-ghost px-4">{lang === 'mm' ? 'ပိတ်' : 'Close'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Manage Markets Modal (Admin/Mod only) ────────────────────
+function ManageMarketsModal({ onClose, onUpdated, lang }) {
+  const [list, setList]         = useState([])
+  const [newName, setNewName]   = useState('')
+  const [loading, setLoading]   = useState(true)
+  const [saving, setSaving]     = useState(false)
+
+  useEffect(() => {
+    supabase.from('markets').select('*').order('sort_order').then(({ data }) => {
+      setList(data || [])
+      setLoading(false)
+    })
+  }, [])
+
+  async function addMarket() {
+    if (!newName.trim()) return
+    setSaving(true)
+    await supabase.from('markets').insert({
+      name: newName.trim(),
+      city: 'Taunggyi',
+      sort_order: list.length + 1,
+      is_active: true,
+    })
+    setNewName('')
+    const { data } = await supabase.from('markets').select('*').order('sort_order')
+    setList(data || [])
+    setSaving(false)
+    onUpdated()
+  }
+
+  async function toggleMarket(id, current) {
+    await supabase.from('markets').update({ is_active: !current }).eq('id', id)
+    setList(l => l.map(m => m.id === id ? { ...m, is_active: !current } : m))
+    onUpdated()
+  }
+
+  async function deleteMarket(id) {
+    await supabase.from('markets').delete().eq('id', id)
+    setList(l => l.filter(m => m.id !== id))
+    onUpdated()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
+          <div>
+            <p className="font-display font-bold text-white">🏪 {lang === 'mm' ? 'ဈေးကွက် စီမံမည်' : 'Manage Markets'}</p>
+            <p className="text-[10px] text-white/40 font-myanmar mt-0.5">
+              {lang === 'mm' ? 'ဈေးနှုန်း Report မှာ ပေါ်မည့် ဈေးကွက်များ' : 'Markets shown when reporting prices'}
+            </p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
+        </div>
+
+        <div className="overflow-y-auto max-h-[65dvh] px-5 py-4 space-y-3">
+          {/* Add new market */}
+          <div className="flex gap-2">
+            <input
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addMarket()}
+              placeholder={lang === 'mm' ? 'ဈေးကွက် အမည်ထည့်ပါ...' : 'Market name...'}
+              className="input-dark flex-1 font-myanmar text-sm"
+              maxLength={30}
+            />
+            <button
+              onClick={addMarket}
+              disabled={!newName.trim() || saving}
+              className="btn-primary px-4 text-sm disabled:opacity-50"
+            >
+              <Plus size={16} />
+            </button>
+          </div>
+
+          {/* Market list */}
+          {loading ? (
+            <div className="space-y-2">
+              {[1,2,3].map(n => <div key={n} className="h-12 rounded-xl shimmer" />)}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {list.map(m => (
+                <div key={m.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+                  m.is_active ? 'bg-white/5 border-white/10' : 'bg-white/2 border-white/5 opacity-50'
+                }`}>
+                  <span className="text-lg">🏪</span>
+                  <p className={`flex-1 text-sm font-myanmar ${m.is_active ? 'text-white' : 'text-white/40 line-through'}`}>
+                    {m.name}
+                  </p>
+                  <span className="text-[9px] text-white/30">{m.city}</span>
+                  {/* Toggle active */}
+                  <button
+                    onClick={() => toggleMarket(m.id, m.is_active)}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs transition-colors ${
+                      m.is_active
+                        ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                        : 'bg-white/8 text-white/30 hover:bg-white/12'
+                    }`}
+                    title={m.is_active ? 'Hide' : 'Show'}
+                  >
+                    {m.is_active ? '✓' : '○'}
+                  </button>
+                  {/* Delete */}
+                  <button
+                    onClick={() => deleteMarket(m.id)}
+                    className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center text-xs transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="text-[9px] text-white/25 font-myanmar text-center pt-1">
+            {lang === 'mm'
+              ? '✓ = ပြသမည် • ○ = မပြ • ဖျက်ရင် ဒေတာပါ ပျောက်မည်'
+              : '✓ = visible • ○ = hidden • Delete removes permanently'}
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -198,7 +406,7 @@ function AddItemModal({ onClose, onAdded, lang }) {
 }
 
 // ── Price Row ─────────────────────────────────────────────────
-function PriceRow({ item, lang, onReport, onDelete, onVerify, isAdmin }) {
+function PriceRow({ item, lang, onReport, onEdit, onDelete, onVerify, isAdmin }) {
   const [showTrend, setShowTrend] = useState(false)
   const hasData = item.median_price > 0
   const weekPct = item.pct_change_week
@@ -241,6 +449,11 @@ function PriceRow({ item, lang, onReport, onDelete, onVerify, isAdmin }) {
           {isAdmin && hasData && (
             <button onClick={() => onVerify(item)} title="Verify this price" className="w-7 h-7 rounded-lg bg-gold-500/15 border border-gold-500/25 flex items-center justify-center hover:bg-gold-500/25 transition-colors">
               <CheckCircle size={13} className="text-gold-400" />
+            </button>
+          )}
+          {isAdmin && onEdit && (
+            <button onClick={() => onEdit(item)} title="Edit item" className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center hover:bg-blue-500/20 transition-colors">
+              <Pencil size={11} className="text-blue-400" />
             </button>
           )}
           {isAdmin && (
@@ -296,18 +509,27 @@ export default function MarketPricePage() {
   const { user, isModerator } = useAuth()
   useSEO({ title: lang === 'mm' ? 'ဈေးနှုန်းဘုတ်' : 'Market Price Board' })
 
-  const [prices, setPrices]   = useState([])
-  const [catFilter, setCat]   = useState('all')
-  const [loading, setLoading] = useState(true)
-  const [lastUpdate, setLast] = useState(null)
+  const [prices, setPrices]         = useState([])
+  const [catFilter, setCat]         = useState('all')
+  const [loading, setLoading]       = useState(true)
+  const [lastUpdate, setLast]       = useState(null)
   const [reportTarget, setReport]   = useState(null)
   const [showAddItem, setShowAdd]   = useState(false)
-  const [toast, setToast]     = useState(null)
+  const [toast, setToast]           = useState(null)
   const [recentReports, setRecent]  = useState([])
   const [collapsedCats, setCollapsed] = useState({})
+  const [markets, setMarkets]       = useState(DEFAULT_MARKETS)
+  const [showManageMarkets, setShowManageMarkets] = useState(false)
   const channelRef = useRef(null)
 
   const showToast = (type, msg) => { setToast({ type, msg }); setTimeout(() => setToast(null), 3500) }
+
+  // Load markets from DB
+  useEffect(() => {
+    supabase.from('markets').select('name').eq('is_active', true).order('sort_order').then(({ data }) => {
+      if (data && data.length > 0) setMarkets(data.map(m => m.name))
+    })
+  }, [])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -355,6 +577,15 @@ export default function MarketPricePage() {
     load()
   }
 
+  const [editTarget, setEditTarget] = useState(null)
+
+  async function handleEditItem(updates) {
+    await supabase.from('price_items').update(updates).eq('id', editTarget.id)
+    setEditTarget(null)
+    showToast('ok', lang === 'mm' ? '✓ ပြင်ဆင်ပြီး' : '✓ Updated')
+    load()
+  }
+
   async function handleDeleteItem(item) {
     if (!confirm(lang === 'mm' ? `"${item.name}" ကို ဖျက်မည်လား?` : `Delete "${item.name}"?`)) return
     await supabase.from('price_items').update({ is_active: false }).eq('id', item.id)
@@ -362,11 +593,20 @@ export default function MarketPricePage() {
     load()
   }
 
-  // Group by category
-  const grouped = CATEGORIES.filter(c => c.id !== 'all').map(cat => ({
-    ...cat,
-    items: prices.filter(p => p.category === cat.id && (catFilter === 'all' || catFilter === cat.id)),
-  })).filter(g => g.items.length > 0)
+  // Group by category → then by subcategory within each category
+  const grouped = CATEGORIES.filter(c => c.id !== 'all').map(cat => {
+    const catItems = prices.filter(p =>
+      p.category === cat.id && (catFilter === 'all' || catFilter === cat.id)
+    )
+    // Group items by subcategory
+    const subMap = {}
+    catItems.forEach(item => {
+      const sub = item.subcategory || ''
+      if (!subMap[sub]) subMap[sub] = []
+      subMap[sub].push(item)
+    })
+    return { ...cat, items: catItems, subgroups: subMap }
+  }).filter(g => g.items.length > 0)
 
   const displayed = catFilter === 'all' ? grouped : grouped.filter(g => g.id === catFilter)
   const totalReports = prices.reduce((s, p) => s + (p.report_count || 0), 0)
@@ -416,24 +656,54 @@ export default function MarketPricePage() {
         ))}
       </div>
 
-      {/* Grouped price list */}
+      {/* Grouped price list — Category → Sub-category */}
       <div className="px-4 space-y-4 mb-4">
         {loading ? [1,2,3,4,5].map(n => <div key={n} className="h-14 rounded-2xl shimmer" />) :
           displayed.map(group => (
             <div key={group.id}>
+              {/* Category header */}
               <button
                 className="flex items-center gap-2 mb-2 w-full text-left"
                 onClick={() => setCollapsed(c => ({...c, [group.id]: !c[group.id]}))}
               >
                 <span className="text-base">{group.icon}</span>
-                <p className="text-[10px] font-display font-bold text-white/60 uppercase tracking-wider flex-1">{lang === 'mm' ? group.mm : group.en}</p>
+                <p className="text-[10px] font-display font-bold text-white/60 uppercase tracking-wider flex-1">
+                  {lang === 'mm' ? group.mm : group.en}
+                </p>
                 <span className="text-[9px] text-white/30 bg-white/6 px-1.5 py-0.5 rounded-full">{group.items.length}</span>
                 {collapsedCats[group.id] ? <ChevronDown size={12} className="text-white/30" /> : <ChevronUp size={12} className="text-white/30" />}
               </button>
+
               {!collapsedCats[group.id] && (
-                <div className="space-y-2">
-                  {group.items.map(item => (
-                    <PriceRow key={item.id} item={item} lang={lang} onReport={setReport} onDelete={handleDeleteItem} onVerify={handleVerify} isAdmin={isModerator} />
+                <div className="space-y-3">
+                  {/* If sub-categories exist, group by them */}
+                  {Object.entries(group.subgroups).map(([sub, items]) => (
+                    <div key={sub || '_nosub'}>
+                      {/* Sub-category label — only show if it has a value and there are multiple subgroups */}
+                      {sub && Object.keys(group.subgroups).filter(k => k).length > 1 && (
+                        <div className="flex items-center gap-2 mb-1.5 ml-1">
+                          <div className="h-px flex-1 bg-white/8" />
+                          <p className="text-[9px] text-white/40 font-myanmar font-semibold px-2">
+                            {sub}
+                          </p>
+                          <div className="h-px flex-1 bg-white/8" />
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        {items.map(item => (
+                          <PriceRow
+                            key={item.id}
+                            item={item}
+                            lang={lang}
+                            onReport={setReport}
+                            onEdit={isModerator ? setEditTarget : null}
+                            onDelete={handleDeleteItem}
+                            onVerify={handleVerify}
+                            isAdmin={isModerator}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -442,12 +712,18 @@ export default function MarketPricePage() {
         }
       </div>
 
-      {/* Add custom item button */}
-      <div className="px-4 mb-4">
+      {/* Admin action buttons */}
+      <div className="px-4 mb-4 space-y-2">
         <button onClick={() => setShowAdd(true)}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-white/15 text-white/40 text-sm hover:border-brand-400/30 hover:text-brand-300 transition-colors">
           <Plus size={16} /> {lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}
         </button>
+        {isModerator && (
+          <button onClick={() => setShowManageMarkets(true)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl border border-white/10 text-white/40 text-xs hover:border-brand-400/30 hover:text-brand-300 transition-colors">
+            🏪 {lang === 'mm' ? 'ဈေးကွက် စီမံမည် (Admin)' : 'Manage Markets (Admin)'}
+          </button>
+        )}
       </div>
 
       {/* Recent reports */}
@@ -483,8 +759,29 @@ export default function MarketPricePage() {
         </p>
       </div>
 
-      {reportTarget && <ReportModal item={reportTarget} lang={lang} onClose={() => setReport(null)} onSubmit={handleSubmitReport} />}
+      {reportTarget && <ReportModal item={reportTarget} lang={lang} markets={markets} onClose={() => setReport(null)} onSubmit={handleSubmitReport} />}
       {showAddItem && <AddItemModal lang={lang} onClose={() => setShowAdd(false)} onAdded={load} />}
+      {showManageMarkets && (
+        <ManageMarketsModal
+          lang={lang}
+          onClose={() => setShowManageMarkets(false)}
+          onUpdated={() => {
+            supabase.from('markets').select('name').eq('is_active', true).order('sort_order').then(({ data }) => {
+              if (data && data.length > 0) setMarkets(data.map(m => m.name))
+            })
+          }}
+        />
+      )}
+
+      {/* Edit Item Modal */}
+      {editTarget && (
+        <EditItemModal
+          item={editTarget}
+          lang={lang}
+          onClose={() => setEditTarget(null)}
+          onSave={handleEditItem}
+        />
+      )}
 
       {toast && (
         <div className={`fixed bottom-28 left-4 right-4 max-w-lg mx-auto z-[300] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl font-myanmar text-sm ${

@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Upload, Download, CheckCircle, XCircle, AlertCircle, FileSpreadsheet } from 'lucide-react'
+import { ArrowLeft, Upload, Download, CheckCircle, XCircle, FileSpreadsheet } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'

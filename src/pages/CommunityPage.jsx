@@ -4,6 +4,16 @@ import { useSEO } from '../hooks/useSEO'
 
 const FEATURES = [
   {
+    path: '/emergency',
+    icon: '🆘',
+    mm: 'အရေးပေါ် ဆက်သွယ်ရေး',
+    en: 'Emergency Contacts',
+    descMm: 'ဆေးရုံ • ရဲ • မီးသတ် • Ambulance — တစ်ချက်နှိပ်ပြီး ဖုန်းခေါ်',
+    descEn: 'Hospital, Police, Fire, Ambulance — one-tap calling',
+    color: 'from-red-600/25 to-red-700/10',
+    border: 'border-red-500/30',
+  },
+  {
     path: '/prices',
     icon: '🛒',
     mm: 'ဈေးနှုန်းဘုတ်',

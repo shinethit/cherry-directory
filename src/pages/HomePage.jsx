@@ -1,18 +1,25 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { TrendingUp, Calendar, Newspaper, Search, CalendarDays } from 'lucide-react'
+import { Calendar, Search, CalendarDays } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI'
 
 const CATEGORIES = [
-  { icon: '🍜', label: 'စားသောက်ဆိုင်' },
-  { icon: '🏥', label: 'ဆေးရုံ' },
-  { icon: '🎓', label: 'ပညာရေး' },
+  { icon: '🍜', label: 'စားသောက်' },
+  { icon: '🏥', label: 'ဆေးရုံ/ကလင်းနစ်' },
+  { icon: '🎓', label: 'ကျောင်း/ပညာ' },
   { icon: '🏨', label: 'တည်းခိုရေး' },
   { icon: '🛍️', label: 'ဈေးဝယ်' },
-  { icon: '🚌', label: 'သွားလာရေး' },
-  { icon: '🏦', label: 'ဘဏ်' },
-  { icon: '💄', label: 'အလှအပ' },
+  { icon: '📚', label: 'Tutor ဆရာ/မ' },
+  { icon: '🧹', label: 'သန့်ရှင်းရေး' },
+  { icon: '🔧', label: 'ရေ/မီးပြင်' },
+  { icon: '📦', label: 'Delivery' },
+  { icon: '🚕', label: 'Taxi' },
+  { icon: '🏠', label: 'အိမ်ငှား/ရောင်း' },
+  { icon: '🚗', label: 'ကား/ဆိုင်ကယ်' },
+  { icon: '🔄', label: 'ပစ္စည်းရောင်းဝယ်' },
+  { icon: '🏦', label: 'ဘဏ်/ငွေကြေး' },
+  { icon: '💄', label: 'အလှပြင်' },
 ]
 
 export default function HomePage() {
@@ -163,7 +170,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Quick Actions */}
+      {/* Quick Actions — 4 buttons */}
       <div className="px-4">
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => navigate('/prices')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
@@ -171,13 +178,6 @@ export default function HomePage() {
             <div className="text-left">
               <p className="text-sm font-display font-semibold text-white">ဈေးနှုန်းဘုတ်</p>
               <p className="text-[10px] text-white/40">Market Prices</p>
-            </div>
-          </button>
-          <button onClick={() => navigate('/power')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
-            <span className="text-2xl">⚡</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">လျှပ်စစ်</p>
-              <p className="text-[10px] text-white/40">Power Status</p>
             </div>
           </button>
           <button onClick={() => navigate('/chat')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
@@ -190,8 +190,16 @@ export default function HomePage() {
           <button onClick={() => navigate('/submit')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
             <span className="text-2xl">➕</span>
             <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">ဆိုင်ထည့်မယ်</p>
-              <p className="text-[10px] text-white/40">Submit listing</p>
+              <p className="text-sm font-display font-semibold text-white">လုပ်ငန်းထည့်မည်</p>
+              <p className="text-[10px] text-white/40">Submit Listing</p>
+            </div>
+          </button>
+          <button onClick={() => navigate('/emergency')}
+            className="p-4 flex items-center gap-3 rounded-2xl bg-gradient-to-br from-red-600/25 to-red-700/10 border border-red-500/30 hover:border-red-500/50 transition-colors">
+            <span className="text-2xl">🆘</span>
+            <div className="text-left">
+              <p className="text-sm font-display font-semibold text-white">အရေးပေါ်</p>
+              <p className="text-[10px] text-red-400/70">Emergency</p>
             </div>
           </button>
         </div>

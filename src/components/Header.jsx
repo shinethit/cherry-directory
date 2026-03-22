@@ -50,8 +50,8 @@ export default function Header() {
 
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center border border-gold-500/30 shadow-lg shadow-brand-900/50">
-            <span className="text-lg">🍒</span>
+          <div className="w-11 h-11 rounded-2xl overflow-hidden border border-gold-500/40 shadow-lg shadow-brand-900/50 flex-shrink-0 bg-[#2a0050]">
+            <img src="/logo.png" alt="Cherry Directory" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="font-display font-bold text-base text-white leading-none tracking-tight">Cherry Directory</h1>

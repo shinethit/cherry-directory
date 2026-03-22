@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Phone, MessageCircle, Globe, MapPin, Star, Send, CheckCircle, ExternalLink, Bookmark, BookmarkCheck, Flag, Edit3, UtensilsCrossed } from 'lucide-react'
+import { ArrowLeft, Phone, MessageCircle, MapPin, Star, Send, CheckCircle, ExternalLink, Bookmark, BookmarkCheck, Flag, Edit3, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -23,7 +23,9 @@ export default function ListingDetailPage() {
   const [myComment, setMyComment] = useState('')
   const [activeImg, setActiveImg] = useState(0)
   const [submitting, setSubmitting] = useState(false)
-  const [claimStatus, setClaimStatus] = useState(null) // null | 'pending' | 'approved'
+  const [claimStatus, setClaimStatus] = useState(null)
+  const [myVote, setMyVote] = useState(false)    // has current user voted
+  const [voteLoading, setVoteLoading] = useState(false)
 
   useSEO({
     title: listing ? (lang === 'mm' ? listing.name_mm || listing.name : listing.name) : 'Business',
@@ -43,14 +45,32 @@ export default function ListingDetailPage() {
       setReviews(r || [])
       supabase.from('listings').update({ view_count: (l?.view_count || 0) + 1 }).eq('id', id)
 
-      // Check claim status
       if (profile) {
-        const { data: claim } = await supabase.from('listing_claims').select('status').eq('listing_id', id).eq('user_id', profile.id).maybeSingle()
+        const [{ data: claim }, { data: vote }] = await Promise.all([
+          supabase.from('listing_claims').select('status').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
+          supabase.from('listing_votes').select('id').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
+        ])
         if (claim) setClaimStatus(claim.status)
+        setMyVote(!!vote)
       }
     }
     load()
   }, [id, profile])
+
+  async function toggleVote() {
+    if (!isLoggedIn || voteLoading) return
+    setVoteLoading(true)
+    if (myVote) {
+      await supabase.from('listing_votes').delete().match({ listing_id: id, user_id: profile.id })
+      setMyVote(false)
+      setListing(l => ({ ...l, community_votes: Math.max(0, (l.community_votes || 0) - 1) }))
+    } else {
+      await supabase.from('listing_votes').insert({ listing_id: id, user_id: profile.id })
+      setMyVote(true)
+      setListing(l => ({ ...l, community_votes: (l.community_votes || 0) + 1 }))
+    }
+    setVoteLoading(false)
+  }
 
   async function submitReview() {
     if (!isLoggedIn || myRating === 0) return
@@ -137,10 +157,23 @@ export default function ListingDetailPage() {
               </div>
               {listing.name_mm && lang === 'en' && <p className="text-sm text-white/50 font-myanmar">{listing.name_mm}</p>}
 
-              {/* Verified badge — show prominently under name */}
+              {/* Verified badge — 3 types */}
               {listing.is_verified && (
-                <div className="mt-2">
-                  <VerifiedOwnerBadge />
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  {listing.verify_type === 'owner' || (!listing.verify_type && listing.is_verified) ? (
+                    <VerifiedOwnerBadge />
+                  ) : listing.verify_type === 'community' ? (
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs font-semibold">
+                      👥 Community Verified
+                      {listing.community_votes > 0 && <span className="text-blue-300/60">({listing.community_votes})</span>}
+                    </span>
+                  ) : listing.verify_type === 'cherry' ? (
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-600/20 border border-brand-400/30 text-brand-300 text-xs font-semibold">
+                      🍒 Cherry Directory Verified
+                    </span>
+                  ) : (
+                    <VerifiedOwnerBadge />
+                  )}
                 </div>
               )}
 
@@ -296,8 +329,94 @@ export default function ListingDetailPage() {
           </div>
         ) : null}
 
+        {/* ── Community Vote (for unverified listings) ─────── */}
+        {!listing.is_verified && isLoggedIn && listing.owner_id !== profile?.id && (
+          <div className="card-dark rounded-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-display font-semibold text-white">
+                  👥 {lang === 'mm' ? 'ဤဆိုင် တကယ်ရှိသလား?' : 'Confirm this business?'}
+                </p>
+                <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
+                  {lang === 'mm'
+                    ? `Member ${listing.community_votes || 0}/10 ဦး အတည်ပြုပြီး`
+                    : `${listing.community_votes || 0}/10 members confirmed`}
+                </p>
+              </div>
+              <button
+                onClick={toggleVote}
+                disabled={voteLoading}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-all ${
+                  myVote
+                    ? 'bg-blue-500/25 border-blue-500/40 text-blue-400'
+                    : 'bg-white/6 border-white/15 text-white/60 hover:border-blue-500/30 hover:text-blue-400'
+                }`}
+              >
+                {voteLoading
+                  ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                  : myVote ? '✓' : '+'
+                }
+                {myVote
+                  ? (lang === 'mm' ? 'အတည်ပြုပြီး' : 'Confirmed')
+                  : (lang === 'mm' ? 'အတည်ပြုမည်' : 'Confirm')
+                }
+              </button>
+            </div>
+            {/* Progress bar to 10 */}
+            <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all"
+                style={{ width: `${Math.min(100, ((listing.community_votes || 0) / 10) * 100)}%` }}
+              />
+            </div>
+            <p className="text-[9px] text-white/25 font-myanmar">
+              {lang === 'mm'
+                ? 'Member ၁၀ ဦး အတည်ပြုပါက Community Verified badge ရမည်'
+                : '10 member confirmations = Community Verified badge'}
+            </p>
+          </div>
+        )}
 
-        {/* Reactions */}
+        {/* Community Vote — Members can vouch for this listing */}
+        {isLoggedIn && !listing.is_verified && (
+          <div className="card-dark p-4 rounded-2xl space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-display font-semibold text-white">
+                  👥 {lang === 'mm' ? 'Community စစ်ဆေးခြင်း' : 'Community Verify'}
+                </p>
+                <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
+                  {lang === 'mm'
+                    ? `Member ${listing.community_votes || 0}/10 ဦး အတည်ပြုပြီး`
+                    : `${listing.community_votes || 0}/10 members confirmed`}
+                </p>
+              </div>
+              <button
+                onClick={toggleVote}
+                disabled={voteLoading}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                  myVote
+                    ? 'bg-blue-500/20 border-blue-500/40 text-blue-400'
+                    : 'bg-white/5 border-white/15 text-white/60 hover:border-blue-500/30 hover:text-blue-400'
+                }`}
+              >
+                {myVote ? '✓ ' : ''}{lang === 'mm' ? 'ဆိုင်မှန်ကန်' : 'Vouch'}
+              </button>
+            </div>
+            {/* Progress bar */}
+            <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded-full transition-all"
+                style={{ width: `${Math.min(100, ((listing.community_votes || 0) / 10) * 100)}%` }}
+              />
+            </div>
+            <p className="text-[9px] text-white/25 font-myanmar">
+              {lang === 'mm'
+                ? '10 ဦး အတည်ပြုပြီးပါက Community Verified badge အလိုအလျောက် ရမည်'
+                : '10 member vouches = automatic Community Verified badge'}
+            </p>
+          </div>
+        )}
         <div>
           <p className="text-xs text-white/40 mb-2 font-display font-semibold uppercase tracking-wider">{t('reactions')}</p>
           <ReactionBar targetType="listing" targetId={id} />

@@ -198,7 +198,7 @@ export default function ProfilePage() {
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-4 gap-2">
         {[
-          { icon: Building2,    label: lang === 'mm' ? 'ဆိုင်' : 'Listings',  value: myStats.listings,  action: () => navigate('/directory') },
+          { icon: Building2,    label: lang === 'mm' ? 'လုပ်ငန်း' : 'Listings',  value: myStats.listings,  action: () => navigate('/directory') },
           { icon: Star,         label: 'Reviews',                               value: myStats.reviews   },
           { icon: BookMarked,   label: lang === 'mm' ? 'Saved' : 'Saved',      value: myStats.bookmarks, action: () => navigate('/bookmarks') },
           { icon: Trophy,       label: 'Points',                                value: profile?.points || 0, highlight: true },
@@ -273,7 +273,7 @@ export default function ProfilePage() {
         {[
           { icon: Trophy,    label: 'Top Contributors', labelMm: 'Top Contributors', path: '/leaderboard', color: 'text-gold-400' },
           { icon: BookMarked,label: 'Saved Items',      labelMm: 'Saved Items',      path: '/bookmarks',  color: 'text-brand-300' },
-          { icon: Building2, label: 'Add Listing',      labelMm: 'ဆိုင် ထည့်မယ်',  path: '/submit',     color: 'text-brand-300' },
+          { icon: Building2, label: 'Add Listing',      labelMm: 'လုပ်ငန်းထည့်မည်',  path: '/submit',     color: 'text-brand-300' },
           ...(isModerator ? [{ icon: Shield, label: 'Admin Panel', labelMm: 'Admin Panel', path: '/admin', color: 'text-amber-400' }] : []),
         ].map(({ icon: Icon, label, labelMm, path, color }) => (
           <button key={path} onClick={() => navigate(path)} className="w-full flex items-center gap-3 p-4 card-dark rounded-2xl hover:bg-white/8 transition-colors">

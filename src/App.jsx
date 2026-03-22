@@ -29,6 +29,8 @@ import JobBoardPage      from './pages/JobBoardPage'
 import NoticeBoardPage   from './pages/NoticeBoardPage'
 import { WeatherAlertPage, DonationPage, HealthServicePage } from './pages/CommunityFeaturePages'
 import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
+import EmergencyPage from './pages/EmergencyPage'
+import CategoryManagerPage from './pages/CategoryManagerPage'
 
 function ProtectedRoute({ children, require: requireRole }) {
   const { isLoggedIn, isAdmin, isModerator, loading } = useAuth()
@@ -78,12 +80,14 @@ export default function App() {
         <Route path="submit"      element={<ProtectedRoute><SubmitListingPage /></ProtectedRoute>} />
         {/* Admin */}
         <Route path="bulk-import" element={<ProtectedRoute require="moderator"><BulkImportPage /></ProtectedRoute>} />
-        <Route path="admin"       element={<ProtectedRoute require="moderator"><AdminPage /></ProtectedRoute>} />
+        <Route path="admin"            element={<ProtectedRoute require="moderator"><AdminPage /></ProtectedRoute>} />
+        <Route path="admin/categories" element={<ProtectedRoute require="moderator"><CategoryManagerPage /></ProtectedRoute>} />
         {/* Info pages */}
-        <Route path="about"   element={<AboutPage />} />
-        <Route path="privacy" element={<PrivacyPage />} />
-        <Route path="terms"   element={<TermsPage />} />
-        <Route path="help"    element={<HelpPage />} />
+        <Route path="about"     element={<AboutPage />} />
+        <Route path="privacy"   element={<PrivacyPage />} />
+        <Route path="terms"     element={<TermsPage />} />
+        <Route path="help"      element={<HelpPage />} />
+        <Route path="emergency" element={<EmergencyPage />} />
       </Route>
     </Routes>
   )

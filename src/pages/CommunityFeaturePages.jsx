@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
-import { Plus, Trash2, AlertTriangle, ArrowLeft, Droplets, Wind, Mountain, Eye } from 'lucide-react'
+import { Plus, Trash2, ArrowLeft, Droplets, Eye } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────
 // WEATHER ALERT PAGE

@@ -22,7 +22,7 @@ export default function DirectoryPage() {
   const PAGE_SIZE = 20
 
   useEffect(() => {
-    supabase.from('categories').select('*').eq('type', 'directory').order('sort_order').then(({ data }) => setCategories(data || []))
+    supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
   }, [])
 
   const loadListings = useCallback(async (reset = true) => {
@@ -142,7 +142,7 @@ export default function DirectoryPage() {
       {/* Results count */}
       <div className="px-4 py-2 flex items-center justify-between flex-wrap gap-1">
         <p className="text-[11px] text-white/40">
-          {loading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ဆိုင် တွေ့ရှိ`}
+          {loading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ရလဒ်`}
         </p>
         <div className="flex items-center gap-1.5 flex-wrap">
           {verifiedOnly && (

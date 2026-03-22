@@ -12,7 +12,7 @@ import { isOnline, timeAgo } from '../hooks/usePresence'
 const TABS = [
   { id: 'points',   labelMm: 'Points',   labelEn: 'Points',   icon: Trophy },
   { id: 'reviews',  labelMm: 'Reviews',  labelEn: 'Reviews',  icon: Star },
-  { id: 'listings', labelMm: 'ဆိုင်',   labelEn: 'Listings', icon: Building2 },
+  { id: 'listings', labelMm: 'လုပ်ငန်း',   labelEn: 'Listings', icon: Building2 },
 ]
 
 const PERIODS = [
@@ -47,7 +47,7 @@ function ptsUnit(tab, period, lang) {
   const suffix = period !== 'all' ? (lang === 'mm' ? '/ကာလ' : '') : ''
   if (tab === 'points')   return `pts${suffix}`
   if (tab === 'reviews')  return lang === 'mm' ? 'review' : 'reviews'
-  return lang === 'mm' ? 'ဆိုင်' : 'listings'
+  return lang === 'mm' ? 'လုပ်ငန်း' : 'listings'
 }
 
 // ── Online dot ───────────────────────────────────────────────
@@ -310,7 +310,7 @@ export default function LeaderboardPage() {
               </p>
               <p className="text-xs text-white/25 mt-1 font-myanmar">
                 {lang === 'mm'
-                  ? 'Review ရေး၊ ဆိုင် တင်ပြ၊ Chat လုပ်ပြီး Points ရယူပါ'
+                  ? 'Review ရေး၊ လုပ်ငန်း တင်ပြ၊ Chat လုပ်ပြီး Points ရယူပါ'
                   : 'Write reviews, submit listings, or chat to earn points'}
               </p>
             </div>

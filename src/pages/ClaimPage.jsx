@@ -45,7 +45,7 @@ export default function ClaimPage() {
       .maybeSingle()
 
     if (existing) {
-      setError(existing.status === 'pending' ? 'ဤဆိုင်အတွက် Claim တင်ပြီးဖြစ်သည်' : 'Claim ထပ်မံ မတင်နိုင်ပါ')
+      setError(existing.status === 'pending' ? 'ဤလုပ်ငန်းအတွက် Claim တင်ပြီးဖြစ်သည်' : 'Claim ထပ်မံ မတင်နိုင်ပါ')
       setSubmitting(false)
       return
     }
@@ -67,7 +67,7 @@ export default function ClaimPage() {
       <CheckCircle size={56} className="text-green-400 mb-4" />
       <h2 className="font-display font-bold text-2xl text-white mb-2">{t('claim_sent')}</h2>
       <p className="text-white/50 font-myanmar mb-6">{t('claim_note')}</p>
-      <button onClick={() => navigate(`/directory/${id}`)} className="btn-primary">ဆိုင်ကို ပြန်သွားမည်</button>
+      <button onClick={() => navigate(`/directory/${id}`)} className="btn-primary">ပြန်သွားမည်</button>
     </div>
   )
 
@@ -90,8 +90,8 @@ export default function ClaimPage() {
             <div>
               <h3 className="font-display font-semibold text-white text-sm">Business Claim ဆိုသည်မှာ</h3>
               <p className="text-xs text-white/50 mt-1 font-myanmar leading-relaxed">
-                Cherry Directory ထဲရှိ ဤဆိုင်သည် သင်၏ ဆိုင်ဖြစ်ကြောင်း Admin ထံ verify လျှောက်ထားခြင်းဖြစ်သည်။
-                Verify ပြီးသောဆိုင်တွင် ✓ badge ပေါ်မည်ဖြစ်ပြီး Info ကို သင်ကိုယ်တိုင် ပြင်ဆင်နိုင်မည်ဖြစ်သည်။
+                Cherry Directory ထဲရှိ ဤလုပ်ငန်းသည် သင်၏ လုပ်ငန်းဖြစ်ကြောင်း Admin ထံ verify လျှောက်ထားခြင်းဖြစ်သည်။
+                Verify ပြီးသောလုပ်ငန်းတွင် ✓ badge ပေါ်မည်ဖြစ်ပြီး Info ကို သင်ကိုယ်တိုင် ပြင်ဆင်နိုင်မည်ဖြစ်သည်။
               </p>
             </div>
           </div>
@@ -135,7 +135,7 @@ export default function ClaimPage() {
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}
-              placeholder="ဆိုင်ရှင်ဖြစ်ကြောင်း သက်သေ / မှတ်ချက်..."
+              placeholder="ပိုင်ဆိုင်ကြောင်း သက်သေ / မှတ်ချက်..."
               className="input-dark resize-none h-20 font-myanmar"
             />
           </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Fuel, RefreshCw, CheckCircle, XCircle, AlertCircle, Users } from 'lucide-react'
+import { Fuel, RefreshCw, CheckCircle, AlertCircle, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'

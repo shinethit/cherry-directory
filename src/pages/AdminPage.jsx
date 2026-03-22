@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import AnalyticsChart from '../components/AnalyticsChart'
 import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { useSEO } from '../hooks/useSEO'
-import { isOnline, timeAgo } from '../hooks/usePresence'
+import { timeAgo } from '../hooks/usePresence'
 
 const TABS = [
   { id: 'analytics', label: 'Analytics',  icon: BarChart2    },
@@ -21,7 +21,7 @@ const TABS = [
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  const { isAdmin } = useAuth()
+  const { isAdmin, isSuperAdmin } = useAuth()
   useSEO({ title: 'Admin Panel' })
   const [tab, setTab]       = useState('analytics')
   const [data, setData]     = useState([])
@@ -148,12 +148,20 @@ export default function AdminPage() {
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
           <h1 className="font-display font-bold text-lg text-white">Admin Panel</h1>
         </div>
-        <button
-          onClick={() => navigate('/bulk-import')}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600/20 border border-brand-400/30 text-brand-300 text-xs font-display font-semibold hover:bg-brand-600/30 transition-colors"
-        >
-          <Upload size={13} /> Bulk Import
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/admin/categories')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/8 border border-white/12 text-white/60 text-xs font-display font-semibold hover:bg-white/12 transition-colors"
+          >
+            📂 Categories
+          </button>
+          <button
+            onClick={() => navigate('/bulk-import')}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600/20 border border-brand-400/30 text-brand-300 text-xs font-display font-semibold hover:bg-brand-600/30 transition-colors"
+          >
+            <Upload size={13} /> Bulk Import
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -292,6 +300,26 @@ export default function AdminPage() {
                       ⭐ {item.is_featured ? 'Unfeature' : 'Feature'}
                     </button>
                   )}
+                  {/* Cherry Directory Verify — Admin/Mod can set verify_type = 'cherry' */}
+                  {item.status === 'approved' && (
+                    <button
+                      onClick={async () => {
+                        const isCherry = item.verify_type === 'cherry'
+                        await supabase.from('listings').update({
+                          verify_type: isCherry ? 'none' : 'cherry',
+                          is_verified: !isCherry,
+                        }).eq('id', item.id)
+                        loadTab()
+                      }}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs border transition-colors ${
+                        item.verify_type === 'cherry'
+                          ? 'bg-brand-600/30 border-brand-400/50 text-brand-300'
+                          : 'bg-white/5 border-white/10 text-white/40 hover:border-brand-400/30 hover:text-brand-300'
+                      }`}
+                    >
+                      🍒 {item.verify_type === 'cherry' ? 'Cherry Verified ✓' : 'Cherry Verify'}
+                    </button>
+                  )}
                   <button onClick={() => navigate(`/directory/${item.id}`)} className="flex items-center gap-1 px-3 py-1.5 bg-white/5 border border-white/10 rounded-xl text-xs text-white/50"><Eye size={12} /> View</button>
                 </div>
               </div>
@@ -428,10 +456,11 @@ export default function AdminPage() {
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
-                        item.role === 'admin' ? 'bg-amber-500/15 text-amber-400 border-amber-500/20'
+                        item.role === 'super_admin' ? 'bg-gold-500/20 text-gold-400 border-gold-500/30'
+                        : item.role === 'admin'     ? 'bg-amber-500/15 text-amber-400 border-amber-500/20'
                         : item.role === 'moderator' ? 'bg-brand-600/20 text-brand-300 border-brand-400/20'
                         : 'bg-white/8 text-white/40 border-white/10'
-                      }`}>{item.role}</span>
+                      }`}>{item.role === 'super_admin' ? '⭐ ' : ''}{item.role}</span>
                       <span className="text-[9px] text-white/30">
                         {item.is_online ? '🟢 Online' : item.last_seen
                           ? `Last: ${new Date(item.last_seen).toLocaleDateString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
@@ -440,8 +469,11 @@ export default function AdminPage() {
                     </div>
                   </div>
 
-                  {/* Role selector */}
-                  {isAdmin && (
+                  {/* Role selector — rules:
+                      super_admin: can assign any role including admin/super_admin
+                      admin: can only assign member/moderator (not admin/super_admin)
+                  */}
+                  {isAdmin && item.role !== 'super_admin' && (
                     <select
                       value={item.role}
                       onChange={e => setUserRole(item.id, e.target.value)}
@@ -449,8 +481,18 @@ export default function AdminPage() {
                     >
                       <option value="member">Member</option>
                       <option value="moderator">Moderator</option>
-                      <option value="admin">Admin</option>
+                      {/* Only super_admin can assign admin or super_admin */}
+                      {isSuperAdmin && <option value="admin">Admin</option>}
+                      {isSuperAdmin && <option value="super_admin">⭐ Super Admin</option>}
+                      {/* Regular admin sees current role if it's admin (read-only display) */}
+                      {!isSuperAdmin && item.role === 'admin' && <option value="admin" disabled>Admin (read-only)</option>}
                     </select>
+                  )}
+                  {/* Super Admin badge — not editable by anyone except another super_admin */}
+                  {item.role === 'super_admin' && !isSuperAdmin && (
+                    <span className="text-[9px] font-bold px-2 py-1 rounded-full bg-gold-500/20 text-gold-400 border border-gold-500/30 flex-shrink-0">
+                      ⭐ Super Admin
+                    </span>
                   )}
                 </div>
 

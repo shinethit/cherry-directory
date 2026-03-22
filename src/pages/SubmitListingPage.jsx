@@ -25,7 +25,7 @@ export default function SubmitListingPage() {
   const navigate = useNavigate()
   const { profile } = useAuth()
   const { t, lang } = useLang()
-  useSEO({ title: lang === 'mm' ? 'ဆိုင် ထည့်မယ်' : 'Submit Listing' })
+  useSEO({ title: lang === 'mm' ? 'လုပ်ငန်း / ဝန်ဆောင်မှု ထည့်မည်' : 'Submit Listing' })
 
   const [categories, setCategories] = useState([])
   const [form, setForm] = useState({
@@ -44,7 +44,7 @@ export default function SubmitListingPage() {
   const [locationLoading, setLocationLoading] = useState(false)
 
   useEffect(() => {
-    supabase.from('categories').select('*').eq('type', 'directory').order('sort_order').then(({ data }) => setCategories(data || []))
+    supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
   }, [])
 
   function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
@@ -143,13 +143,26 @@ export default function SubmitListingPage() {
         </Field>
 
         <Field label={t('name_mm_label')}>
-          <input type="text" value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဆိုင်အမည်..." />
+          <input type="text" value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="လုပ်ငန်း / ဝန်ဆောင်မှု အမည်..." />
         </Field>
 
         <Field label={t('category_label')} required>
           <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="input-dark" required>
             <option value="">{t('category_placeholder')}</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name_mm || c.name}</option>)}
+            {/* Top-level categories as optgroups, with their subs */}
+            {categories.filter(c => !c.parent_id).map(parent => {
+              const subs = categories.filter(c => c.parent_id === parent.id)
+              if (subs.length === 0) {
+                return <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name}</option>
+              }
+              return (
+                <optgroup key={parent.id} label={`${parent.icon} ${parent.name_mm || parent.name}`}>
+                  {subs.map(sub => (
+                    <option key={sub.id} value={sub.id}>  {sub.icon} {sub.name_mm || sub.name}</option>
+                  ))}
+                </optgroup>
+              )
+            })}
           </select>
         </Field>
 

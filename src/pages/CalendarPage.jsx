@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, MapPin, Clock, Users, CheckCircle, Star, Plus, Edit3 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, MapPin, Clock, CheckCircle, Star, Plus, Edit3 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'

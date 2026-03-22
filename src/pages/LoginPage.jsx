@@ -52,8 +52,8 @@ export default function LoginPage() {
       <div className="flex-1 px-4 pb-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center border border-gold-500/30 shadow-xl mx-auto mb-4">
-            <span className="text-3xl">🍒</span>
+          <div className="w-24 h-24 rounded-3xl overflow-hidden border-2 border-gold-500/40 shadow-2xl shadow-brand-900/60 mx-auto mb-4 bg-[#2a0050]">
+            <img src="/logo.png" alt="Cherry Directory" className="w-full h-full object-contain" />
           </div>
           <h2 className="font-display font-bold text-2xl text-white">Cherry Directory</h2>
           <p className="text-white/40 text-sm mt-1 font-myanmar">

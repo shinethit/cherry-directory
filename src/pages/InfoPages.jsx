@@ -37,12 +37,13 @@ export function AboutPage() {
   return (
     <InfoLayout title="About Us" titleMm="ကျွန်ုပ်တို့အကြောင်း">
       <div className="card-dark rounded-3xl p-6 text-center space-y-3">
-        <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-brand-500 to-brand-800 flex items-center justify-center border border-gold-500/30 mx-auto">
-          <span className="text-3xl">🍒</span>
+        <div className="w-40 h-40 rounded-3xl overflow-hidden border-2 border-gold-500/40 shadow-2xl shadow-brand-900/60 mx-auto bg-[#2a0050]">
+          <img src="/logo.png" alt="Cherry Directory" className="w-full h-full object-contain" />
         </div>
         <h2 className="font-display font-bold text-xl text-white">Cherry Directory</h2>
         <p className="text-sm text-brand-300">တောင်ကြီးမြို့ • Taunggyi</p>
-        <p className="text-white/50 text-xs">Version 2.0</p>
+        <p className="text-white/50 text-xs">Version 2.0 • Since 2026</p>
+        <p className="text-white/30 text-xs italic">by Shine Thit</p>
       </div>
 
       <Section titleMm="Cherry Directory ဆိုသည်မှာ">

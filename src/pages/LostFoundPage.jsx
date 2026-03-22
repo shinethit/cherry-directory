@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Phone, MapPin, Clock, CheckCircle, AlertTriangle, ArrowLeft } from 'lucide-react'
+import { Plus, Phone, MapPin, CheckCircle, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
