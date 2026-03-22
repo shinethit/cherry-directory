@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -14,7 +15,7 @@ export const POINTS = {
 export function usePoints() {
   const { user } = useAuth()
 
-  async function award({ action, refTable, refId, note }) {
+  const award = useCallback(async ({ action, refTable, refId, note }) => {
     if (!user) return
     const pts = POINTS[action]
     if (!pts) return
@@ -40,9 +41,9 @@ export function usePoints() {
       ref_id: refId || null,
       note: note || null,
     })
-  }
+  }, [user])
 
-  async function getMyPoints() {
+  const getMyPoints = useCallback(async () => {
     if (!user) return 0
     const { data } = await supabase
       .from('profiles')
@@ -50,9 +51,9 @@ export function usePoints() {
       .eq('id', user.id)
       .single()
     return data?.points || 0
-  }
+  }, [user])
 
-  async function getHistory(limit = 20) {
+  const getHistory = useCallback(async (limit = 20) => {
     if (!user) return []
     const { data } = await supabase
       .from('user_points')
@@ -61,7 +62,7 @@ export function usePoints() {
       .order('created_at', { ascending: false })
       .limit(limit)
     return data || []
-  }
+  }, [user])
 
   return { award, getMyPoints, getHistory, POINTS }
 }

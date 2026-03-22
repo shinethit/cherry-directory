@@ -6,7 +6,7 @@ import { useLang } from '../contexts/LangContext'
 import { usePWA } from '../hooks/usePWA'
 import { useSEO } from '../hooks/useSEO'
 import { usePoints } from '../hooks/usePoints'
-import { usePresence, timeAgo } from '../hooks/usePresence'
+import { timeAgo } from '../hooks/usePresence'
 import { uploadImage } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
 
@@ -24,7 +24,6 @@ export default function ProfilePage() {
   const { installable, installApp, pushEnabled, enablePush, disablePush } = usePWA()
   const { getHistory } = usePoints()
   useSEO({ title: 'Profile' })
-  usePresence()  // start online tracking
 
   const [editing, setEditing]     = useState(false)
   const [name, setName]           = useState(profile?.full_name || '')
@@ -40,17 +39,22 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!user) return
     async function load() {
-      const [{ count: l }, { count: r }, { count: b }, { count: rv }, pts] = await Promise.all([
-        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('submitted_by', user.id),
-        supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-        getHistory(5),
-      ])
-      setMyStats({ listings: l || 0, reviews: r || 0, bookmarks: b || 0, rsvps: rv || 0 })
-      setRecentPoints(pts)
+      try {
+        const [{ count: l }, { count: r }, { count: b }, { count: rv }, pts] = await Promise.all([
+          supabase.from('listings').select('*', { count: 'exact', head: true }).eq('submitted_by', user.id),
+          supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+          getHistory(5),
+        ])
+        setMyStats({ listings: l || 0, reviews: r || 0, bookmarks: b || 0, rsvps: rv || 0 })
+        setRecentPoints(pts)
+      } catch (err) {
+        console.warn('Profile stats load failed:', err)
+      }
     }
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   async function handleAvatarChange(e) {

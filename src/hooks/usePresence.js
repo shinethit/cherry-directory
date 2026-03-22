@@ -14,42 +14,52 @@ export function usePresence() {
     if (!user) return
 
     async function startSession() {
-      // Create session row
-      const device = navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
-      const { data } = await supabase
-        .from('user_sessions')
-        .insert({ user_id: user.id, device })
-        .select()
-        .single()
-      sessionRef.current = data?.id
+      try {
+        const device = navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop'
+        const { data } = await supabase
+          .from('user_sessions')
+          .insert({ user_id: user.id, device })
+          .select()
+          .single()
+        sessionRef.current = data?.id
 
-      // Mark online
-      await supabase
-        .from('profiles')
-        .update({ is_online: true, last_seen: new Date().toISOString() })
-        .eq('id', user.id)
+        await supabase
+          .from('profiles')
+          .update({ is_online: true, last_seen: new Date().toISOString() })
+          .eq('id', user.id)
+      } catch (err) {
+        console.warn('Presence startSession failed:', err)
+      }
     }
 
     async function ping() {
       if (!sessionRef.current) return
-      const now = new Date().toISOString()
-      await Promise.all([
-        supabase.from('user_sessions').update({ last_ping: now }).eq('id', sessionRef.current),
-        supabase.from('profiles').update({ last_seen: now, is_online: true }).eq('id', user.id),
-      ])
+      try {
+        const now = new Date().toISOString()
+        await Promise.all([
+          supabase.from('user_sessions').update({ last_ping: now }).eq('id', sessionRef.current),
+          supabase.from('profiles').update({ last_seen: now, is_online: true }).eq('id', user.id),
+        ])
+      } catch (err) {
+        console.warn('Presence ping failed:', err)
+      }
     }
 
     async function endSession() {
       if (!sessionRef.current) return
-      const now = new Date().toISOString()
-      await Promise.all([
-        supabase.from('user_sessions').update({ ended_at: now }).eq('id', sessionRef.current),
-        supabase.from('profiles').update({ is_online: false, last_seen: now }).eq('id', user.id),
-      ])
+      try {
+        const now = new Date().toISOString()
+        await Promise.all([
+          supabase.from('user_sessions').update({ ended_at: now }).eq('id', sessionRef.current),
+          supabase.from('profiles').update({ is_online: false, last_seen: now }).eq('id', user.id),
+        ])
+      } catch (err) {
+        console.warn('Presence endSession failed:', err)
+      }
     }
 
     startSession()
-    timerRef.current = setInterval(ping, PING_INTERVAL)
+    timerRef.current = setInterval(() => ping().catch(console.warn), PING_INTERVAL)
 
     const handleUnload      = () => endSession()
     const handleVisibility  = () => {

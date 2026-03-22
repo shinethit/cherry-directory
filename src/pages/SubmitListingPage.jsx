@@ -51,15 +51,23 @@ export default function SubmitListingPage() {
 
   async function handleLogoUpload(file) {
     setLogoUploading(true)
-    const url = await uploadImage(file, 'listings/logos')
-    setLogo(url)
+    try {
+      const url = await uploadImage(file, 'listings/logos')
+      setLogo(url)
+    } catch (err) {
+      console.warn('Logo upload failed:', err)
+    }
     setLogoUploading(false)
   }
 
   async function handleCoverUpload(file) {
     setCoverUploading(true)
-    const url = await uploadImage(file, 'listings/covers')
-    setCoverImg(url)
+    try {
+      const url = await uploadImage(file, 'listings/covers')
+      setCoverImg(url)
+    } catch (err) {
+      console.warn('Cover upload failed:', err)
+    }
     setCoverUploading(false)
   }
 
@@ -80,17 +88,21 @@ export default function SubmitListingPage() {
     e.preventDefault()
     if (!form.name || !form.category_id) return
     setSubmitting(true)
-    await supabase.from('listings').insert({
-      ...form,
-      latitude: form.latitude ? parseFloat(form.latitude) : null,
-      longitude: form.longitude ? parseFloat(form.longitude) : null,
-      logo_url: logo,
-      cover_url: coverImg,
-      images: [],            // gallery starts empty on submit; owner can add later via edit
-      submitted_by: profile.id,
-      status: 'pending',
-    })
-    setDone(true)
+    try {
+      await supabase.from('listings').insert({
+        ...form,
+        latitude: form.latitude ? parseFloat(form.latitude) : null,
+        longitude: form.longitude ? parseFloat(form.longitude) : null,
+        logo_url: logo,
+        cover_url: coverImg,
+        images: [],
+        submitted_by: profile.id,
+        status: 'pending',
+      })
+      setDone(true)
+    } catch (err) {
+      console.warn('Submit listing failed:', err)
+    }
     setSubmitting(false)
   }
 

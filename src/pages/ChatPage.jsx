@@ -95,13 +95,17 @@ export default function ChatPage() {
     setInput('')
     setReplyTo(null)
 
-    await supabase.from('chat_messages').insert({
-      room_id: activeRoom.id,
-      user_id: user?.id || null,
-      guest_name: !isLoggedIn ? guestName : null,
-      content,
-      reply_to: replyTo?.id || null,
-    })
+    try {
+      await supabase.from('chat_messages').insert({
+        room_id: activeRoom.id,
+        user_id: user?.id || null,
+        guest_name: !isLoggedIn ? guestName : null,
+        content,
+        reply_to: replyTo?.id || null,
+      })
+    } catch (err) {
+      console.warn('Send message failed:', err)
+    }
   }
 
   function saveGuestName() {

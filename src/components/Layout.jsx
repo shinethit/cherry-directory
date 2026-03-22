@@ -1,6 +1,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Home, Search, CalendarDays, Users, Newspaper, ShieldCheck, Plus } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { usePresence } from '../hooks/usePresence'
 import Header from './Header'
 
 const NAV = [
@@ -16,6 +17,7 @@ export default function Layout() {
   const location   = useLocation()
   const { isLoggedIn, isModerator } = useAuth()
   const lang = localStorage.getItem('cd_lang') || 'mm'
+  usePresence()  // app-wide online tracking
 
   // Community sub-paths count as /community active
   const communityPaths = ['/community','/prices','/power','/fuel','/lost-found','/jobs','/bus','/notices','/weather','/donations','/tours']
