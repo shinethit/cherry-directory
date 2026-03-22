@@ -1,260 +1,48 @@
 <!DOCTYPE html>
-<html lang="my" class="notranslate">
+<html lang="my">
 <head>
-    <meta charset="UTF-8">
-    <meta name="google" content="notranslate">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cherry Directory</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
-    <link rel="manifest" href="manifest.json">
-    <link rel="apple-touch-icon" href="CDST_Logo.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="CDST_Logo.png">
+  <!-- Primary Meta -->
+  <title>Cherry Directory — တောင်ကြီး</title>
+  <meta name="description" content="တောင်ကြီးမြို့ ၏ Business Directory — ဆိုင်များ၊ သတင်းများ၊ ဖြစ်ရပ်များ တစ်နေရာတည်းတွင်" />
+  <meta name="keywords" content="Taunggyi, တောင်ကြီး, business directory, Myanmar, ဆိုင်ရှာ, Cherry Directory" />
+  <meta name="robots" content="index, follow" />
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-    
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+  <!-- Open Graph (Facebook / Viber / Telegram share preview) -->
+  <meta property="og:title" content="Cherry Directory — တောင်ကြီး" />
+  <meta property="og:description" content="တောင်ကြီးမြို့ ဆိုင်များ၊ သတင်းများ၊ ဖြစ်ရပ်များ" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://cherry-directory.vercel.app" />
+  <meta property="og:image" content="https://cherry-directory.vercel.app/og-default.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:site_name" content="Cherry Directory" />
+  <meta property="og:locale" content="my_MM" />
 
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Pyidaungsu:wght@400;700&display=swap');
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        
-        body { font-family: 'Pyidaungsu', 'Inter', sans-serif; padding-bottom: 100px; background-color: #fafafa; overflow-x: hidden; }
-        .page { display: none; }
-        .active-page { display: block; animation: fadeIn 0.4s ease; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; } }
-        
-        #bottomNav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000; height: 65px; background: #37006a; display: flex; justify-content: space-around; align-items: center; border-top: 1px solid rgba(212,175,55,0.3); }
-        .search-circle { width: 55px; height: 55px; background: linear-gradient(135deg, #4b0082 0%, #37006a 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; position: absolute; top: -25px; border: 4px solid #fafafa; box-shadow: 0 4px 15px rgba(0,0,0,0.2); color: #FFD700; font-size: 20px; transition: 0.2s; }
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Cherry Directory — တောင်ကြီး" />
+  <meta name="twitter:description" content="တောင်ကြီးမြို့ ဆိုင်များ၊ သတင်းများ" />
+  <meta name="twitter:image" content="https://cherry-directory.vercel.app/og-default.png" />
 
-        .purple-gradient { background: linear-gradient(135deg, #37006a 0%, #5e0a9e 100%); }
-        .h-badge { background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-size: 6px; font-weight: 800; color: #fff; }
-        .header-trend-box { width: 65px; height: 30px; }
+  <!-- PWA -->
+  <meta name="theme-color" content="#280040" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Cherry Dir" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-        .group-header { font-size: 10px; font-weight: 800; color: #37006a; background: #eee5ff; padding: 5px 12px; border-radius: 6px; display: inline-block; margin-top: 15px; border-left: 3px solid #D4AF37; text-transform: uppercase; }
-        .logo-box { width: 3.8rem; height: 3.8rem; border-radius: 1.1rem; background: white; border: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 3px 10px rgba(0,0,0,0.05); }
-        .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
-    </style>
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Pyidaungsu:wght@400;700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
 </head>
 <body>
-
-    <header class="purple-gradient text-white shadow-md rounded-b-[30px] border-b-2 border-[#D4AF37]">
-        <div class="bg-black/10 px-4 py-1.5 flex justify-between items-center text-[9px] font-mono text-[#FFD700]">
-            <span id="fullDate">LOADING...</span>
-            <span id="timeClock" class="font-bold text-white uppercase">--:-- --</span>
-        </div>
-        
-        <div class="p-4 flex items-start justify-between">
-            <div class="flex items-center gap-3">
-                <img src="CDST_Logo.png" class="w-11 h-11 rounded-xl border border-[#FFD700]/30 shadow-md">
-                <div class="text-left leading-tight">
-                    <h1 class="text-md font-bold tracking-widest uppercase">Cherry Directory</h1>
-                    <div class="flex gap-1.5 mt-1">
-                        <span class="h-badge"><i class="fa fa-globe-asia text-blue-400 text-[5px]"></i> <span id="h-country">...</span></span>
-                        <span class="h-badge"><i class="fa fa-mobile-alt text-green-400 text-[5px]"></i> <span id="h-device">...</span></span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex flex-col items-end gap-1">
-                <div class="header-trend-box"><canvas id="headerTrend"></canvas></div>
-                <div class="flex items-center gap-2">
-                    <span class="text-[6px] text-gray-300 font-bold uppercase tracking-wider">Visitors</span>
-                    <b id="h-visitors" class="text-[11px] font-black text-white font-mono">...</b>
-                </div>
-            </div>
-        </div>
-        <div class="px-4 pb-3 text-center"><span id="headerSyncStatus" class="text-[6px] text-green-400 font-bold uppercase tracking-widest">READY | 100% SYNC</span></div>
-    </header>
-
-    <div class="max-w-4xl mx-auto p-4">
-        <section id="homePage" class="page active-page">
-            <div class="sticky top-0 z-50 bg-[#fafafa]/95 backdrop-blur-md py-3 flex items-center justify-between border-b">
-                <h3 class="text-[#37006a] font-bold text-xs uppercase">News & Events</h3>
-                <select id="homeCatSelect" onchange="renderEvents()" class="p-2 rounded-xl border text-[9px] font-bold outline-none shadow-sm min-w-[120px]"></select>
-            </div>
-            <div id="announcementList" class="pb-10 pt-4"></div>
-        </section>
-        
-        <section id="knowledgePage" class="page">
-            <div class="sticky top-0 z-50 bg-[#fafafa]/95 backdrop-blur-md py-3 flex items-center justify-between border-b">
-                <h3 class="text-[#37006a] font-bold text-xs uppercase">Knowledge Library</h3>
-                <select id="knowCatSelect" onchange="renderKnowledge()" class="p-2 rounded-xl border text-[9px] font-bold outline-none shadow-sm min-w-[120px]"></select>
-            </div>
-            <div id="knowledgeList" class="pb-10 pt-4"></div>
-        </section>
-
-        <section id="directoryPage" class="page">
-            <div class="sticky top-0 z-50 bg-[#fafafa]/95 backdrop-blur-md py-3 space-y-2 border-b">
-                <div class="relative"><input type="text" id="searchInput" onkeyup="handleSearch()" placeholder="ဆိုင်ရှာရန်..." class="w-full p-3 pl-10 rounded-2xl border text-xs shadow-sm outline-none"><i class="fa fa-search absolute left-4 top-3.5 text-gray-300 text-xs"></i></div>
-                <div class="grid grid-cols-2 gap-2">
-                    <select id="citySelect" onchange="updateFilters('city')" class="p-2.5 rounded-xl border text-[9px] font-bold bg-white outline-none shadow-sm"></select>
-                    <select id="catSelect" onchange="updateFilters('cat')" class="p-2.5 rounded-xl border text-[9px] font-bold bg-white outline-none shadow-sm"></select>
-                    <select id="typeSelect" onchange="updateFilters('type')" class="p-2.5 rounded-xl border text-[9px] font-bold bg-white outline-none shadow-sm"></select>
-                    <select id="wardSelect" onchange="updateFilters('ward')" class="p-2.5 rounded-xl border text-[9px] font-bold bg-white outline-none shadow-sm"></select>
-                </div>
-            </div>
-            <div id="directoryList" class="pb-10 pt-4"></div>
-        </section>
-
-        <section id="contactPage" class="page space-y-4">
-            <div class="bg-white p-6 rounded-2xl border shadow-sm">
-                <h3 class="text-[10px] font-bold text-gray-400 mb-6 uppercase text-center border-b pb-2">Business Data Analytics</h3>
-                <div class="space-y-12">
-                    <div><canvas id="categoryChart"></canvas></div>
-                    <div><canvas id="cityChart"></canvas></div>
-                </div>
-            </div>
-            <div class="p-4 grid grid-cols-2 gap-3">
-                <button onclick="toggleChatAdmin()" class="bg-black text-white p-4 rounded-xl text-[9px] font-bold shadow-lg active:scale-95 transition">Admin Mode</button>
-                <button onclick="localStorage.clear(); window.location.reload(true);" class="bg-gray-100 text-gray-500 p-4 rounded-xl text-[9px] font-bold">Reset System</button>
-            </div>
-        </section>
-
-        <section id="detailPage" class="fixed inset-0 bg-[#fafafa] z-[10001] overflow-y-auto hidden">
-            <div class="sticky top-0 bg-white/95 backdrop-blur-md p-4 shadow-sm z-50 flex items-center border-b">
-                <button onclick="closeDetail()" class="w-10 h-10 rounded-full bg-gray-100 text-black flex items-center justify-center shadow-sm"><i class="fa fa-arrow-left"></i></button>
-                <span class="ml-4 font-bold text-black truncate text-xs uppercase flex-1" id="detailHeader">Details</span>
-            </div>
-            <div id="detailContent" class="p-6 max-w-2xl mx-auto pb-10"></div>
-        </section>
-    </div>
-
-    <nav id="bottomNav">
-        <button onclick="showPage('home')" class="nav-item flex flex-col items-center w-12 text-[#FFD700]" id="nav-home"><i class="fa fa-home text-xl mb-1"></i><span class="text-[7px] font-bold">Home</span></button>
-        <button onclick="showPage('knowledge')" class="nav-item flex flex-col items-center w-12 text-gray-400" id="nav-knowledge"><i class="fa fa-book-open text-xl mb-1"></i><span class="text-[7px] font-bold">Knowledge</span></button>
-        <div class="relative w-14 h-12 flex justify-center"><button onclick="showPage('directory')" id="nav-directory" class="search-circle"><i class="fa fa-search"></i></button><span class="text-[7px] font-bold text-gray-400 mt-9 text-center">Search</span></div>
-        <button onclick="showPage('chat')" class="nav-item flex flex-col items-center w-12 text-gray-400" id="nav-chat"><i class="fa fa-comments text-xl mb-1"></i><span class="text-[7px] font-bold">Chat</span></button>
-        <button onclick="showPage('contact')" class="nav-item flex flex-col items-center w-12 text-gray-400" id="nav-contact"><i class="fa fa-user-shield text-xl mb-1"></i><span class="text-[7px] font-bold">Admin</span></button>
-    </nav>
-
-    
-
-    <script>
-        const SHEET_ID = '1rMGmfDW5AsBZGJJw5H8HyavOQiIuMr-pPvXpShktYxQ';
-        const GIDS = { events: '0', dir: '1267218282', admin: '626044868', know: '1899326424' };
-        const BASE_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json`;
-        let db, eventsData = [], dirData = [], knowData = [];
-        let filters = { city: 'All', cat: 'All', type: 'All', ward: 'All' };
-        let activeCharts = { cat: null, city: null, trend: null };
-
-        // DIRECT VERCEL API FETCH
-        async function fetchVercelAnalytics() {
-            try {
-                const res = await fetch('/api/stats');
-                const d = await res.json();
-                
-                document.getElementById('h-visitors').innerText = d.visitors.toLocaleString();
-                document.getElementById('h-country').innerText = d.topCountry;
-                document.getElementById('h-device').innerText = d.topDevice;
-
-                const ctx = document.getElementById('headerTrend').getContext('2d');
-                if (activeCharts.trend) activeCharts.trend.destroy();
-                activeCharts.trend = new Chart(ctx, {
-                    type: 'line',
-                    data: { labels: d.trend, datasets: [{ data: d.trend, borderColor: '#FFD700', borderWidth: 2, fill: false, tension: 0.4, pointRadius: 0 }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: false } }, scales: { x: { display: false }, y: { display: false } } }
-                });
-            } catch(e) {
-                console.error("Vercel API failed. Check api/stats.js and Environment Variables.");
-            }
-        }
-
-        async function loadAll() {
-            try {
-                const [e, d, k] = await Promise.all([
-                    fetch(`${BASE_URL}&gid=${GIDS.events}`).then(r => r.text()),
-                    fetch(`${BASE_URL}&gid=${GIDS.dir}`).then(r => r.text()),
-                    fetch(`${BASE_URL}&gid=${GIDS.know}`).then(r => r.text())
-                ]);
-                eventsData = parseSheet(e).map((r,idx) => ({ uid: 'ev-'+idx, cat: r.c[0]?.v || 'News', title: r.c[1]?.v, desc: r.c[2]?.v, fromDate: r.c[3]?.v || '-', toDate: r.c[4]?.v || '-', logo: r.c[8]?.v, imgs: [r.c[9]?.v, r.c[10]?.v, r.c[11]?.v].filter(Boolean) }));
-                dirData = parseSheet(d).map((r,idx) => ({ uid: 'dr-'+idx, name: r.c[0]?.v, cat: r.c[1]?.v || 'Misc', type: r.c[2]?.v || 'General', city: r.c[6]?.v || 'Taunggyi', ward: r.c[5]?.v || 'Other', logo: r.c[13]?.v, rating: r.c[19]?.v, ph1: r.c[7]?.v, ph2: r.c[8]?.v, viber: r.c[10]?.v, tg: r.c[11]?.v, addr: r.c[4]?.v, note: r.c[20]?.v, desc: r.c[3]?.v, imgs: [r.c[14]?.v, r.c[15]?.v, r.c[16]?.v].filter(Boolean) }));
-                knowData = parseSheet(k).map((r, idx) => ({ id: 'kn-'+idx, date: r.c[1]?.v || '-', author: r.c[2]?.v || 'Admin', title: r.c[3]?.v, content: r.c[4]?.v, cat: r.c[5]?.v || 'General', img: r.c[6]?.v, imgs: [r.c[6]?.v, r.c[7]?.v, r.c[8]?.v].filter(Boolean) }));
-                
-                initFilters(); renderEvents(); renderKnowledge(); renderDirectory(); renderAdminCharts();
-                document.getElementById('headerSyncStatus').innerText = `Home: ${eventsData.length} | Knowledge: ${knowData.length} | Directory: ${dirData.length} | 100% SYNC`;
-            } catch(err) { console.error(err); }
-        }
-
-        function parseSheet(t) { return JSON.parse(t.substr(47).slice(0, -2)).table.rows.filter(r => r.c[0]?.v && !["title", "name", "အမည်", "ခေါင်းစဉ်"].includes(r.c[0].v.toString().toLowerCase().trim())); }
-        
-        function initFilters() {
-            const setSel = (id, vals) => document.getElementById(id).innerHTML = `<option value="All">All Categories</option>` + [...new Set(vals)].map(v => `<option value="${v}">${v}</option>`).join('');
-            setSel('homeCatSelect', eventsData.map(x => x.cat)); setSel('knowCatSelect', knowData.map(x => x.cat));
-            const fill = (id, vals, key) => document.getElementById(id).innerHTML = `<option value="All">${key}: ALL</option>` + [...new Set(vals)].map(v => `<option value="${v}">${v}</option>`).join('');
-            fill('citySelect', dirData.map(x => x.city), 'CITY'); fill('catSelect', dirData.map(x => x.cat), 'CAT'); fill('typeSelect', dirData.map(x => x.type), 'TYPE'); fill('wardSelect', dirData.map(x => x.ward), 'WARD');
-        }
-
-        function renderEvents() {
-            const cat = document.getElementById('homeCatSelect').value;
-            let f = eventsData.filter(i => (cat === 'All' || i.cat === cat));
-            const groups = [...new Set(f.map(x => x.cat))];
-            document.getElementById('announcementList').innerHTML = groups.map(g => `<div><span class="group-header">${g}</span><div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">${f.filter(x=>x.cat===g).reverse().map(i => `<div onclick="openDetail('event', '${i.uid}')" class="bg-white rounded-2xl p-5 shadow-sm border flex flex-col items-center text-center h-full"><div class="logo-box"><img src="${fixDriveLink(i.logo)}" onerror="this.src='CDST_Logo.png'"></div><h4 class="font-bold text-[#37006a] text-xs uppercase mt-3 line-clamp-2 h-8">${i.title}</h4><p class="text-[8px] text-gray-400 mt-2 border-t pt-2 w-full uppercase font-bold">${i.fromDate}</p></div>`).join('')}</div></div>`).join('');
-        }
-
-        function renderKnowledge() {
-            const cat = document.getElementById('knowCatSelect').value;
-            let f = knowData.filter(i => (cat === 'All' || i.cat === cat));
-            const groups = [...new Set(f.map(x => x.cat))];
-            document.getElementById('knowledgeList').innerHTML = groups.map(g => `<div><span class="group-header">${g}</span><div class="grid grid-cols-2 gap-3 mt-3">${f.filter(x=>x.cat===g).reverse().map(i => `<div onclick="openDetail('know', '${i.id}')" class="bg-white rounded-2xl p-4 shadow-sm border flex flex-col items-center text-center h-full"><img src="${fixDriveLink(i.img)}" class="w-16 h-16 rounded-xl object-cover border mb-3" onerror="this.src='CDST_Logo.png'"><h4 class="font-bold text-[#37006a] text-[10px] leading-tight line-clamp-2 uppercase">${i.title}</h4><p class="text-[7px] text-gray-400 mt-2 border-t pt-2 w-full font-bold uppercase">${i.date}</p></div>`).join('')}</div></div>`).join('');
-        }
-
-        function renderDirectory() {
-            const t = document.getElementById('searchInput').value.toLowerCase();
-            let f = dirData.filter(i => (filters.city === 'All' || i.city === filters.city) && (filters.cat === 'All' || i.cat === filters.cat) && (filters.type === 'All' || i.type === filters.type) && (filters.ward === 'All' || i.ward === filters.ward) && (i.name.toLowerCase().includes(t)));
-            const groups = [...new Set(f.map(x => x.cat))];
-            document.getElementById('directoryList').innerHTML = groups.map(g => `<div><span class="group-header">${g}</span><div class="grid grid-cols-2 gap-4 mt-3">${f.filter(x=>x.cat===g).map(i => `<div onclick="openDetail('dir', '${i.uid}')" class="dir-card p-4 flex flex-col items-center text-center"><div class="logo-box"><img src="${fixDriveLink(i.logo)}" onerror="this.src='CDST_Logo.png'"></div><h4 class="font-bold text-[#37006a] text-[10px] uppercase mt-2 h-8 line-clamp-2">${i.name}</h4><div class="text-[8px] text-[#D4AF37] border-t pt-2 w-full mt-2 font-bold uppercase">${i.city} | ${i.ward}</div></div>`).join('')}</div></div>`).join('');
-        }
-
-        function updateFilters(type) { filters[type] = document.getElementById(type + 'Select').value; renderDirectory(); }
-
-        function renderAdminCharts() {
-            if(!dirData.length) return;
-            const draw = (id, dataObj, key) => {
-                const ctx = document.getElementById(id).getContext('2d');
-                if(activeCharts[key]) activeCharts[key].destroy();
-                activeCharts[key] = new Chart(ctx, {
-                    type: 'doughnut', plugins: [ChartDataLabels],
-                    data: { labels: Object.keys(dataObj), datasets: [{ data: Object.values(dataObj), backgroundColor: ['#000', '#333', '#666', '#999', '#ccc'], borderWidth: 1 }] },
-                    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 7 } } }, datalabels: { color: '#fff', font: { weight: 'bold', size: 9 }, formatter: v => v } } }
-                });
-            };
-            const cats = {}, cities = {};
-            dirData.forEach(i => { cats[i.cat] = (cats[i.cat]||0)+1; cities[i.city] = (cities[i.city]||0)+1; });
-            draw('categoryChart', cats, 'cat'); draw('cityChart', cities, 'city');
-        }
-
-        function openDetail(type, uid) {
-            const content = document.getElementById('detailContent');
-            document.getElementById('bottomNav').style.display = 'none'; 
-            let i = type==='event' ? eventsData.find(x => x.uid === uid) : type==='know' ? knowData.find(x => x.id === uid) : dirData.find(x => x.uid === uid);
-            if(!i) return;
-            currentPostID = uid; document.getElementById('detailHeader').innerText = i.title || i.name;
-            const rR = (l, v, icon) => `<div class="border-b border-gray-100 py-4 flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-black text-xs"><i class="fa ${icon}"></i></div><div class="flex-1"><p class="text-[8px] text-gray-400 font-bold uppercase mb-0.5">${l}</p><div class="text-black font-bold text-xs">${v || '-'}</div></div></div>`;
-
-            if(type==='dir') {
-                content.innerHTML = `<div class="space-y-4"><div class="bg-white rounded-3xl p-8 shadow-sm border-b-4 border-black text-center"><div class="detail-logo-large"><img src="${fixDriveLink(i.logo)}" onerror="this.src='CDST_Logo.png'"></div><h2 class="text-sm font-bold text-black uppercase">${i.name}</h2></div><div class="bg-white p-7 rounded-2xl shadow-sm">${rR('Detail', i.desc, 'fa-info-circle')}${rR('Location', i.city + ' | ' + i.ward, 'fa-map-marker-alt')}${rR('Address', i.addr, 'fa-home')}</div><div class="gallery-vertical">${i.imgs.map(img => `<img src="${fixDriveLink(img)}">`).join('')}</div></div>`;
-            } else {
-                content.innerHTML = `<div class="space-y-4"><div class="detail-logo-large"><img src="${fixDriveLink(i.logo || i.img)}" onerror="this.src='CDST_Logo.png'"></div><div class="bg-white p-8 rounded-2xl shadow-sm"><h2 class="text-sm font-bold text-black mb-5 uppercase leading-relaxed">${i.title}</h2><div class="post-content">${i.desc||i.content}</div></div><div class="gallery-vertical">${i.imgs.map(img => `<img src="${fixDriveLink(img)}">`).join('')}</div></div>`;
-            }
-            document.getElementById('detailPage').classList.remove('hidden'); document.body.style.overflow = 'hidden';
-        }
-
-        function showPage(p) { document.querySelectorAll('.page').forEach(page => page.classList.remove('active-page')); document.getElementById(p + 'Page').classList.add('active-page'); document.querySelectorAll('.nav-item').forEach(btn => { btn.classList.remove('text-[#FFD700]'); btn.classList.add('text-gray-400'); }); const activeBtn = document.getElementById('nav-' + p); if(activeBtn) activeBtn.classList.add('text-[#FFD700]'); window.scrollTo(0,0); }
-        function closeDetail() { document.getElementById('detailPage').classList.add('hidden'); document.body.style.overflow = 'auto'; document.getElementById('bottomNav').style.display = 'flex'; }
-        function handleSearch() { renderDirectory(); }
-        function fixDriveLink(u) { if (!u || u === "" || u === "-") return 'CDST_Logo.png'; const m = u.match(/(?:id=|\/d\/|folders\/)([a-zA-Z0-9_-]{25,})/); return m ? `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1000` : u; }
-        
-        window.onload = () => {
-            const config = { apiKey: "AIzaSyBNcYd3ggUFzI9IX3dzwcpF3a2OvR9_Li4", authDomain: "cherry-directory.firebaseapp.com", databaseURL: "https://cherry-directory-default-rtdb.firebaseio.com", projectId: "cherry-directory", storageBucket: "cherry-directory.firebasestorage.app", messagingSenderId: "61677443166", appId: "1:61677443166:web:11f75ba5c5fbcd53643ccf" };
-            if(!firebase.apps.length) firebase.initializeApp(config);
-            db = firebase.database(); loadAll(); fetchVercelAnalytics();
-            setInterval(() => { if(navigator.onLine) { loadAll(); fetchVercelAnalytics(); } }, 900000);
-        };
-        setInterval(() => { const now = new Date(); document.getElementById('timeClock').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}); document.getElementById('fullDate').innerText = now.toLocaleDateString([], {weekday: 'short', day: '2-digit', month: 'short', year: 'numeric'}); }, 1000);
-    </script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
