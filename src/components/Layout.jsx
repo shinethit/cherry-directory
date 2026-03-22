@@ -3,6 +3,7 @@ import { Home, Search, CalendarDays, Users, Newspaper, ShieldCheck, Plus } from 
 import { useAuth } from '../contexts/AuthContext'
 import { usePresence } from '../hooks/usePresence'
 import Header from './Header'
+import PWAInstallBanner from './PWAInstallBanner'
 
 const NAV = [
   { path: '/',           icon: Home,         labelMm: 'ပင်မ',      labelEn: 'Home'      },
@@ -69,6 +70,8 @@ export default function Layout() {
           <ShieldCheck size={20} className="text-white" />
         </button>
       )}
+
+      <PWAInstallBanner />
     </div>
   )
 }

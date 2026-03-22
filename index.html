@@ -10,22 +10,22 @@
   <meta name="keywords" content="Taunggyi, တောင်ကြီး, business directory, Myanmar, ဆိုင်ရှာ, Cherry Directory" />
   <meta name="robots" content="index, follow" />
 
-  <!-- Open Graph (Facebook / Viber / Telegram share preview) -->
+  <!-- Open Graph -->
   <meta property="og:title" content="Cherry Directory — တောင်ကြီး" />
   <meta property="og:description" content="တောင်ကြီးမြို့ ဆိုင်များ၊ သတင်းများ၊ ဖြစ်ရပ်များ" />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://cherry-directory.vercel.app" />
-  <meta property="og:image" content="https://cherry-directory.vercel.app/logo.png" />
-  <meta property="og:image:width" content="1080" />
-  <meta property="og:image:height" content="1080" />
+  <meta property="og:url" content="https://taunggyi-directory.vercel.app" />
+  <meta property="og:image" content="https://taunggyi-directory.vercel.app/og-default.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta property="og:site_name" content="Cherry Directory" />
   <meta property="og:locale" content="my_MM" />
 
   <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Cherry Directory — တောင်ကြီး" />
   <meta name="twitter:description" content="တောင်ကြီးမြို့ ဆိုင်များ၊ သတင်းများ" />
-  <meta name="twitter:image" content="https://cherry-directory.vercel.app/logo.png" />
+  <meta name="twitter:image" content="https://taunggyi-directory.vercel.app/og-default.png" />
 
   <!-- PWA -->
   <meta name="theme-color" content="#280040" />
@@ -33,15 +33,37 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Cherry Dir" />
   <link rel="manifest" href="/manifest.json" />
-  <link rel="apple-touch-icon" href="/logo.png" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/logo.png" />
-  <link rel="icon" type="image/png" sizes="192x192" href="/logo.png" />
-  <link rel="icon" type="image/png" sizes="512x512" href="/logo.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="96x96"  href="/icons/icon-96.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+
+  <!-- Preload critical assets so logo/icons appear instantly -->
+  <link rel="preload" href="/icons/icon-192.png" as="image" />
+  <link rel="preload" href="/apple-touch-icon.png" as="image" />
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Pyidaungsu:wght@400;700&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet" />
+
+  <!-- Splash screen background while app loads -->
+  <style>
+    html, body { margin: 0; background: #0d0015; }
+    #root:empty::before {
+      content: '';
+      display: block;
+      width: 64px;
+      height: 64px;
+      background: url('/icons/icon-192.png') center/contain no-repeat;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 20px;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:.6} 50%{opacity:1} }
+  </style>
 </head>
 <body>
   <div id="root"></div>

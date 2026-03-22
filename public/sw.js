@@ -1,11 +1,19 @@
-const CACHE_NAME = 'cherry-dir-v2'
-const STATIC_CACHE = 'cherry-static-v2'
+const CACHE_NAME = 'cherry-dir-v3'
+const STATIC_CACHE = 'cherry-static-v3'
 
 // Static assets to pre-cache
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/logo.png',
+  '/favicon.png',
+  '/apple-touch-icon.png',
+  '/icons/icon-72.png',
+  '/icons/icon-96.png',
+  '/icons/icon-128.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
 ]
 
 // Install: pre-cache static shell

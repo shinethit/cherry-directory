@@ -143,21 +143,22 @@ export default function AdminPage() {
 
   return (
     <div className="pb-8">
-      <div className="flex items-center justify-between px-4 py-3">
+      {/* Header — stacks on narrow screens */}
+      <div className="px-4 py-3 space-y-2">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
+          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0"><ArrowLeft size={18} className="text-white" /></button>
           <h1 className="font-display font-bold text-lg text-white">Admin Panel</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex gap-2">
           <button
             onClick={() => navigate('/admin/categories')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/8 border border-white/12 text-white/60 text-xs font-display font-semibold hover:bg-white/12 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white/8 border border-white/12 text-white/60 text-xs font-display font-semibold"
           >
             📂 Categories
           </button>
           <button
             onClick={() => navigate('/bulk-import')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600/20 border border-brand-400/30 text-brand-300 text-xs font-display font-semibold hover:bg-brand-600/30 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600/20 border border-brand-400/30 text-brand-300 text-xs font-display font-semibold"
           >
             <Upload size={13} /> Bulk Import
           </button>
@@ -578,15 +579,15 @@ export default function AdminPage() {
 
                   {/* Show changed fields */}
                   {changedFields.length > 0 && (
-                    <div className="border-t border-white/6 pt-2 space-y-1">
+                    <div className="border-t border-white/6 pt-2 space-y-1 overflow-hidden">
                       {changedFields.slice(0, 4).map(field => {
                         const change = item.changes[field]
                         return (
-                          <div key={field} className="flex items-start gap-2 text-[10px]">
-                            <span className="font-mono text-white/30 flex-shrink-0 min-w-[80px]">{field}</span>
-                            <span className="text-red-400/70 line-through truncate max-w-[80px]">{String(change.before ?? '—').slice(0, 20)}</span>
-                            <span className="text-white/20">→</span>
-                            <span className="text-green-400/70 truncate max-w-[80px]">{String(change.after ?? '—').slice(0, 20)}</span>
+                          <div key={field} className="flex items-start gap-2 text-[10px] overflow-hidden">
+                            <span className="font-mono text-white/30 flex-shrink-0 w-[72px] truncate">{field}</span>
+                            <span className="text-red-400/70 line-through truncate flex-1">{String(change.before ?? '—').slice(0, 20)}</span>
+                            <span className="text-white/20 flex-shrink-0">→</span>
+                            <span className="text-green-400/70 truncate flex-1">{String(change.after ?? '—').slice(0, 20)}</span>
                           </div>
                         )
                       })}
