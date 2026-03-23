@@ -143,6 +143,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
             : lang === 'mm' ? '📤 တင်ပြမည်' : '📤 Submit'}
         </button>
         <p className="text-[9px] text-white/25 text-center font-myanmar">Guest ပါ တင်ပြနိုင် • ၁၀ မိနစ် Cooldown</p>
+        </div>
       </div>
     </div>
   )
