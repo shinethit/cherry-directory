@@ -4,6 +4,7 @@ import { Plus, Phone, MapPin, ArrowLeft, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../hooks/useAppConfig'
 import { useSEO } from '../hooks/useSEO'
 
 const JOB_CATS = [
@@ -196,7 +197,7 @@ export default function JobBoardPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">💼 {lang === 'mm' ? 'အလုပ်ကြော်ငြာ' : 'Job Board'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'တောင်ကြီးမြို့ Local Jobs' : 'Local jobs in Taunggyi'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} Local Jobs` : `Local jobs`}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0">
           <Plus size={14} /> Post Job
@@ -208,8 +209,7 @@ export default function JobBoardPage() {
           <select
             value={catFilter}
             onChange={e => setCatFilter(e.target.value)}
-            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-4 py-2.5 pr-10 outline-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+            className="select-dark"
           >
             {JOB_CATS.map(c => (
               <option key={c.id} value={c.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>

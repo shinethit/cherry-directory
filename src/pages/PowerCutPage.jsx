@@ -227,8 +227,7 @@ export default function PowerCutPage() {
             <select
               value={townFilter}
               onChange={e => setTownFilter(e.target.value)}
-              className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-4 py-2.5 pr-10 outline-none"
-              style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+              className="select-dark"
             >
               {towns.map(t => (
                 <option key={t} value={t} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>

@@ -364,8 +364,7 @@ export default function CategoryManagerPage() {
       <div className="px-4 mb-3">
         <div className="relative">
           <select value={typeFilter} onChange={e => setType(e.target.value)}
-            className="w-full appearance-none border border-white/12 text-white text-sm font-semibold rounded-xl px-4 py-2.5 pr-10 outline-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+            className="select-dark font-semibold">
             {[
               { v: 'directory', mm: '📍 Directory' },
               { v: 'news',      mm: '📰 News'      },

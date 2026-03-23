@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../hooks/useAppConfig'
 import { useSEO } from '../hooks/useSEO'
 
 const FEATURES = [
@@ -58,8 +59,8 @@ const FEATURES = [
     icon: '💼',
     mm: 'အလုပ်ကြော်ငြာ',
     en: 'Job Board',
-    descMm: 'တောင်ကြီးမြို့ Local Jobs — ဝန်ထမ်းရှာ/အလုပ်ရှာ',
-    descEn: 'Local jobs in Taunggyi — hire or find work',
+    descMm: 'Local Jobs — ဝန်ထမ်းရှာ/အလုပ်ရှာ',
+    descEn: 'Local jobs — hire or find work',
     color: 'from-purple-600/20 to-purple-700/10',
     border: 'border-purple-500/20',
   },
@@ -68,7 +69,7 @@ const FEATURES = [
     icon: '🚌',
     mm: 'ကားထွက်ချိန်',
     en: 'Bus Schedule',
-    descMm: 'ပင်လုံ/ကလော/ရန်ကုန် ကား ထွက်ချိန် Community Report',
+    descMm: 'ကား ထွက်ချိန် Community Report',
     descEn: 'Bus departure times — community reported',
     color: 'from-sky-600/20 to-sky-700/10',
     border: 'border-sky-500/20',
@@ -98,8 +99,8 @@ const FEATURES = [
     icon: '🌧️',
     mm: 'မိုးလေဝသ/ရေကြီး သတိပေးချက်',
     en: 'Weather & Flood Alerts',
-    descMm: 'Inle Lake ရေမြင့် / မိုးလေဝသ သတိပေးချက်',
-    descEn: 'Inle Lake levels & weather warnings',
+    descMm: 'မိုးလေဝသ / ရေကြီး သတိပေးချက်',
+    descEn: 'Weather & flood warnings',
     color: 'from-cyan-600/20 to-cyan-700/10',
     border: 'border-cyan-500/20',
   },
@@ -118,8 +119,8 @@ const FEATURES = [
     icon: '🏔️',
     mm: 'Tour Guide / Trekking',
     en: 'Tour Guide / Trekking',
-    descMm: 'Kalaw Trekking / Inle Boat Trip Guide တွေ',
-    descEn: 'Kalaw trekking & Inle boat tour guides',
+    descMm: 'Trekking / Boat Trip Guide တွေ',
+    descEn: 'Local trekking & boat tour guides',
     color: 'from-teal-600/20 to-teal-700/10',
     border: 'border-teal-500/20',
   },
@@ -128,6 +129,7 @@ const FEATURES = [
 export default function CommunityPage() {
   const navigate = useNavigate()
   const { lang } = useLang()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'Community' : 'Community' })
 
   return (
@@ -135,7 +137,7 @@ export default function CommunityPage() {
       <div className="px-4 pt-4 pb-3">
         <h1 className="font-display font-bold text-xl text-white">🏘️ {lang === 'mm' ? 'Community' : 'Community'}</h1>
         <p className="text-xs text-white/40 mt-0.5 font-myanmar">
-          {lang === 'mm' ? 'တောင်ကြီးမြို့ Community Features' : 'Taunggyi community tools'}
+          {lang === 'mm' ? `${config.app_city || 'မြို့'} Community Features` : `${config.app_city || ''} community tools`}
         </p>
       </div>
 

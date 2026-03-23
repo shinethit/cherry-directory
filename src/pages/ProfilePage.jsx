@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { LogOut, Edit3, Crown, Shield, User, BookMarked, Star, Building2, Bell, BellOff, Download, Trophy, Clock, ChevronRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../hooks/useAppConfig'
 import { usePWA } from '../hooks/usePWA'
 import { useSEO } from '../hooks/useSEO'
 import { usePoints } from '../hooks/usePoints'
@@ -318,7 +319,7 @@ export default function ProfilePage() {
           ))}
         </div>
         <p className="text-center text-[10px] text-white/20 mt-4 mb-2">
-          Cherry Directory v2.0 • Taunggyi © {new Date().getFullYear()}
+          {config.app_name || 'Cherry Directory'} • {config.app_city || 'Taunggyi'} © {new Date().getFullYear()}
         </p>
       </div>
     </div>

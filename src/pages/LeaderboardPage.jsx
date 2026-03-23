@@ -249,8 +249,7 @@ export default function LeaderboardPage() {
       <div className="px-4 mb-1">
         <div className="relative">
           <select value={period} onChange={e => setPeriod(e.target.value)}
-            className="w-full appearance-none border border-white/12 text-white text-sm font-display font-bold rounded-xl px-4 py-2.5 pr-10 outline-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+            className="select-dark font-display font-bold">
             {PERIODS.map(p => (
               <option key={p.id} value={p.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
                 {lang === 'mm' ? p.labelMm : p.labelEn}
@@ -280,8 +279,7 @@ export default function LeaderboardPage() {
       <div className="px-4 mb-4">
         <div className="relative">
           <select value={tab} onChange={e => setTab(e.target.value)}
-            className="w-full appearance-none border border-white/12 text-white text-sm font-semibold rounded-xl px-4 py-2.5 pr-10 outline-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+            className="select-dark font-semibold">
             {TABS.map(({ id, labelMm, labelEn }) => (
               <option key={id} value={id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
                 {lang === 'mm' ? labelMm : labelEn}

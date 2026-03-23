@@ -273,8 +273,7 @@ export default function NewsPage() {
           <select
             value={type}
             onChange={e => setType(e.target.value)}
-            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-4 py-2.5 pr-10 outline-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+            className="select-dark"
           >
             {TYPES.map(t => (
               <option key={t.value} value={t.value} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>

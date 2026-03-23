@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../hooks/useAppConfig'
 import { useSEO } from '../hooks/useSEO'
 
 // ── Shared layout ─────────────────────────────────────────────
@@ -33,6 +34,7 @@ function Section({ title, titleMm, children }) {
 // ── About Us ─────────────────────────────────────────────────
 export function AboutPage() {
   const { lang } = useLang()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'ကျွန်ုပ်တို့အကြောင်း' : 'About Us' })
   return (
     <InfoLayout title="About Us" titleMm="ကျွန်ုပ်တို့အကြောင်း">
@@ -41,18 +43,18 @@ export function AboutPage() {
           <img src="/logo.png" alt="Cherry Directory" className="w-full h-full object-contain" />
         </div>
         <h2 className="font-display font-bold text-xl text-white">Cherry Directory</h2>
-        <p className="text-sm text-brand-300">တောင်ကြီးမြို့ • Taunggyi</p>
+        <p className="text-sm text-brand-300">{config.app_city || "တောင်ကြီးမြို့"}</p>
         <p className="text-white/50 text-xs">Version 2.0 • Since 2026</p>
         <p className="text-white/30 text-xs italic">by Shine Thit</p>
       </div>
 
       <Section titleMm="Cherry Directory ဆိုသည်မှာ">
-        <p>Cherry Directory သည် တောင်ကြီးမြို့နှင့် ပတ်ဝန်းကျင် ဒေသတွင် နေထိုင်သော ပြည်သူများ၏ နေ့စဉ်ဘဝ လိုအပ်ချက်များကို ဖြည့်ဆည်းရန် ဖန်တီးထားသော Community Platform တစ်ခုဖြစ်ပါသည်။</p>
+        <p>Cherry Directory သည် ဒေသတွင် နေထိုင်သော ပြည်သူများ၏ နေ့စဉ်ဘဝ လိုအပ်ချက်များကို ဖြည့်ဆည်းရန် ဖန်တီးထားသော Community Platform တစ်ခုဖြစ်ပါသည်။</p>
         <p>လုပ်ငန်းရှာဖွေခြင်း၊ သတင်းများ ကြည့်ရှုခြင်း၊ ဖြစ်ရပ်များ ပါဝင်ဆင်နှဲခြင်းမှ စတင်ပြီး ဒေသတွင်း ဈေးနှုန်းများ၊ လျှပ်စစ်အခြေအနေ၊ ဓာတ်ဆီရရှိနိုင်မှု ကဲ့သို့သော Community-sourced Data တွေကိုပါ Real-time တွင် ကြည့်ရှုနိုင်ပါသည်။</p>
       </Section>
 
       <Section titleMm="ကျွန်ုပ်တို့၏ ရည်မှန်းချက်">
-        <p>တောင်ကြီးမြို့သူ မြို့သားများ တစ်ဦးနှင့်တစ်ဦး ချိတ်ဆက်ပြီး ဒေသတွင်း သတင်းအချက်အလက်များကို မျှဝေနိုင်ရေး၊ ဒေသ စီးပွားရေး ဖွံ့ဖြိုးတိုးတက်ရေး၊ Community Spirit ကို ပိုမိုခိုင်မာအောင် ဆောင်ရွက်ပေးနိုင်ရန် ဖြစ်ပါသည်။</p>
+        <p>မြို့သူ မြို့သားများ တစ်ဦးနှင့်တစ်ဦး ချိတ်ဆက်ပြီး ဒေသတွင်း သတင်းအချက်အလက်များကို မျှဝေနိုင်ရေး၊ ဒေသ စီးပွားရေး ဖွံ့ဖြိုးတိုးတက်ရေး၊ Community Spirit ကို ပိုမိုခိုင်မာအောင် ဆောင်ရွက်ပေးနိုင်ရန် ဖြစ်ပါသည်။</p>
       </Section>
 
       <Section titleMm="ဆိုင်ပိုင်ရှင်များအတွက်">
@@ -64,7 +66,7 @@ export function AboutPage() {
       </Section>
 
       <div className="card-dark rounded-2xl p-4 text-center space-y-2">
-        <p className="text-xs text-white/40">Built with ❤️ for Taunggyi</p>
+        <p className="text-xs text-white/40">Built with ❤️ for {config.app_city || "our city"}</p>
         <p className="text-xs text-white/30">© {new Date().getFullYear()} Cherry Directory. All rights reserved.</p>
       </div>
     </InfoLayout>

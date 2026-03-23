@@ -3,6 +3,7 @@ import { Phone, Plus, Pencil, Trash2, X, Save, Clock, DollarSign } from 'lucide-
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../hooks/useAppConfig'
 import { useSEO } from '../hooks/useSEO'
 
 // ── Category config ───────────────────────────────────────────
@@ -111,7 +112,7 @@ const BLANK = {
   category: 'hospital', name: '', name_mm: '',
   phone_1: '', phone_2: '', phone_3: '',
   address: '', address_mm: '', note_mm: '',
-  township: 'Taunggyi', is_24h: false, is_free: false, sort_order: 0,
+  township: '', is_24h: false, is_free: false, sort_order: 0,
 }
 
 function ContactForm({ initial, onClose, onSaved, lang }) {
@@ -176,11 +177,11 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အမည် (မြန်မာ)' : 'Name (Myanmar)'} *</label>
-            <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: တောင်ကြီး ပြည်သူ့ဆေးရုံ" />
+            <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ပြည်သူ့ဆေးရုံ" />
           </div>
           <div className="col-span-2">
             <label className="block text-xs text-white/50 mb-1.5">Name (English)</label>
-            <input value={form.name} onChange={e => set('name', e.target.value)} className="input-dark" placeholder="e.g. Taunggyi General Hospital" />
+            <input value={form.name} onChange={e => set('name', e.target.value)} className="input-dark" placeholder="e.g. General Hospital" />
           </div>
         </div>
 
@@ -279,7 +280,7 @@ export default function EmergencyPage() {
             🆘 {lang === 'mm' ? 'အရေးပေါ် ဆက်သွယ်ရေး' : 'Emergency Contacts'}
           </h1>
           <p className="text-xs text-white/40 mt-0.5 font-myanmar">
-            {lang === 'mm' ? 'တောင်ကြီးမြို့ • တစ်ချက်နှိပ်ပြီး ဖုန်းခေါ်နိုင်' : 'Taunggyi • One-tap calling'}
+            {lang === 'mm' ? `${config.app_city || 'မြို့'} • တစ်ချက်နှိပ်ပြီး ဖုန်းခေါ်နိုင်` : 'One-tap calling'}
           </p>
         </div>
         {isModerator && (
@@ -319,8 +320,7 @@ export default function EmergencyPage() {
           <select
             value={catFilter}
             onChange={e => setCatFilter(e.target.value)}
-            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-4 py-2.5 pr-10 outline-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+            className="select-dark"
           >
             {CATS.map(cat => (
               <option key={cat.id} value={cat.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>

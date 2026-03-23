@@ -161,7 +161,7 @@ export default function SubmitListingPage() {
         </Field>
 
         <Field label={t('category_label')} required>
-          <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="input-dark" required>
+          <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark" required>
             <option value="">{t('category_placeholder')}</option>
             {/* Top-level categories as optgroups, with their subs */}
             {categories.filter(c => !c.parent_id).map(parent => {
@@ -201,7 +201,7 @@ export default function SubmitListingPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('city_label')}>
-              <select value={form.city} onChange={e => set('city', e.target.value)} className="input-dark">
+              <select value={form.city} onChange={e => set('city', e.target.value)} className="select-dark">
                 <option value="">-- ရွေးပါ --</option>
                 {(config.cities || []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>

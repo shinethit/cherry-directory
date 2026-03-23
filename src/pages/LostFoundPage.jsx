@@ -278,8 +278,7 @@ export default function LostFoundPage() {
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value)}
-            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-3 py-2.5 pr-8 outline-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+            className="select-dark"
           >
             {TYPES.map(t => (
               <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
@@ -293,8 +292,7 @@ export default function LostFoundPage() {
           <select
             value={catFilter}
             onChange={e => setCatFilter(e.target.value)}
-            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-3 py-2.5 pr-8 outline-none"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+            className="select-dark"
           >
             {CATS.map(c => (
               <option key={c.id} value={c.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>

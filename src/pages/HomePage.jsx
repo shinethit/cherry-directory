@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Calendar, Search, CalendarDays } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI'
+import { useAppConfig } from '../hooks/useAppConfig'
 
 const CATEGORIES = [
   { icon: '🍜', label: 'စားသောက်' },
@@ -24,6 +25,7 @@ const CATEGORIES = [
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const config = useAppConfig()
   const [posts, setPosts] = useState([])
   const [featured, setFeatured] = useState([])
   const [upcomingEvents, setUpcomingEvents] = useState([])
@@ -53,7 +55,7 @@ export default function HomePage() {
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
           <div className="relative">
-            <p className="text-gold-400 text-xs font-display font-semibold tracking-widest uppercase mb-1">တောင်ကြီးမြို့</p>
+            <p className="text-gold-400 text-xs font-display font-semibold tracking-widest uppercase mb-1">{config.app_city || 'တောင်ကြီးမြို့'}</p>
             <h2 className="font-display font-bold text-2xl text-white leading-tight mb-3">
               Cherry<br />Directory 🍒
             </h2>
@@ -221,7 +223,7 @@ export default function HomePage() {
             </button>
           ))}
         </div>
-        <p className="text-center text-[9px] text-white/15 mt-2">Cherry Directory v2 • Taunggyi</p>
+        <p className="text-center text-[9px] text-white/15 mt-2">{config.app_name || 'Cherry Directory'} • {config.app_city || 'Taunggyi'}</p>
       </div>
     </div>
   )

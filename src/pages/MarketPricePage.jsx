@@ -18,7 +18,7 @@ const CATEGORIES = [
   { id: 'other',     mm: 'အခြား',            en: 'Other',      icon: '📦' },
 ]
 // Default markets — shown if DB has none yet
-const DEFAULT_MARKETS = ['ပြည်သူ့ဈေး', 'ပင်လုံဈေး', 'မြို့သစ်ဈေး', 'အောင်မင်္ဂလာဈေး', 'အခြား']
+const DEFAULT_MARKETS = [] // loaded from DB only
 const REPORT_COOLDOWN = 10 * 60 * 1000
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -52,11 +52,11 @@ function PctBadge({ pct, label, lang }) {
 
 // ── Report modal ──────────────────────────────────────────────
 // Gas station names for fuel category reports
-const FUEL_STATIONS = ['ဆိုင်မြောင်းဓာတ်ဆီ', 'မြို့မဓာတ်ဆီ', 'Asia ဓာတ်ဆီ', 'Grand ဓာတ်ဆီ', 'ကလော ဓာတ်ဆီ', 'အခြား']
+const FUEL_STATIONS = [] // loaded from fuel_stations table
 
-function ReportModal({ item, onClose, onSubmit, lang, markets = DEFAULT_MARKETS }) {
+function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations = [] }) {
   const isFuel = item.category === 'fuel'
-  const locations = isFuel ? FUEL_STATIONS : markets
+  const locations = isFuel ? fuelStations : markets
 
   const [price, setPrice]   = useState('')
   const [market, setMarket] = useState(locations[0] || '')
@@ -117,7 +117,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = DEFAULT_MARKETS 
             <select
               value={market}
               onChange={e => setMarket(e.target.value)}
-              className="w-full appearance-none bg-white/8 border border-white/12 text-white text-sm font-myanmar rounded-xl px-4 py-2.5 pr-10 outline-none"
+              className="select-dark"
             >
               {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
             </select>
@@ -495,17 +495,19 @@ export default function MarketPricePage() {
   const [toast, setToast]           = useState(null)
   const [recentReports, setRecent]  = useState([])
   const [collapsedCats, setCollapsed] = useState({})
-  const [markets, setMarkets]       = useState(DEFAULT_MARKETS)
+  const [markets, setMarkets]       = useState([])
+  const [fuelStations, setFuelStations] = useState([])
   const [showManageMarkets, setShowManageMarkets] = useState(false)
   const channelRef = useRef(null)
 
   const showToast = (type, msg) => { setToast({ type, msg }); setTimeout(() => setToast(null), 3500) }
 
-  // Load markets from DB
+  // Load markets + fuel stations from DB
   useEffect(() => {
-    supabase.from('markets').select('name').eq('is_active', true).order('sort_order').then(({ data }) => {
-      if (data && data.length > 0) setMarkets(data.map(m => m.name))
-    })
+    supabase.from('markets').select('name').eq('is_active', true).order('sort_order')
+      .then(({ data }) => { if (data) setMarkets(data.map(m => m.name)) })
+    supabase.from('fuel_stations').select('name, name_mm').eq('is_active', true).order('sort_order')
+      .then(({ data }) => { if (data) setFuelStations(data.map(s => s.name_mm || s.name)) })
   }, [])
 
   const load = useCallback(async () => {
@@ -629,7 +631,7 @@ export default function MarketPricePage() {
           <select
             value={catFilter}
             onChange={e => setCat(e.target.value)}
-            className="w-full appearance-none bg-white/8 border border-white/12 text-white text-sm font-display font-semibold rounded-xl px-4 py-2.5 pr-10 outline-none"
+            className="select-dark font-display font-semibold"
           >
             {CATEGORIES.map(cat => (
               <option key={cat.id} value={cat.id}>
@@ -744,7 +746,7 @@ export default function MarketPricePage() {
         </p>
       </div>
 
-      {reportTarget && <ReportModal item={reportTarget} lang={lang} markets={markets} onClose={() => setReport(null)} onSubmit={handleSubmitReport} />}
+      {reportTarget && <ReportModal item={reportTarget} lang={lang} markets={markets} fuelStations={fuelStations} onClose={() => setReport(null)} onSubmit={handleSubmitReport} />}
       {showAddItem && <AddItemModal lang={lang} onClose={() => setShowAdd(false)} onAdded={load} />}
       {showManageMarkets && (
         <ManageMarketsModal

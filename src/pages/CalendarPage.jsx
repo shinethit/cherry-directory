@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, MapPin, Clock, CheckCircle, Star, Plus, Edit
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../hooks/useAppConfig'
 import { useSEO } from '../hooks/useSEO'
 import { getOptimizedUrl } from '../lib/cloudinary'
 
@@ -201,6 +202,7 @@ function EventCard({ event, compact = false }) {
 export default function CalendarPage() {
   const navigate = useNavigate()
   const { lang } = useLang()
+  const config = useAppConfig()
   const { isLoggedIn, isModerator, isAdmin, user } = useAuth()
   const MONTHS = lang === 'mm' ? MM_MONTHS : EN_MONTHS
   const DAYS   = lang === 'mm' ? MM_DAYS   : EN_DAYS
@@ -281,7 +283,7 @@ export default function CalendarPage() {
             {lang === 'mm' ? 'ဖြစ်ရပ် Calendar' : 'Event Calendar'}
           </h1>
           <p className="text-xs text-white/40 mt-0.5">
-            {lang === 'mm' ? 'တောင်ကြီးမြို့ ဖြစ်ရပ်များ' : 'Taunggyi events'}
+            {lang === 'mm' ? `${config.app_city || ''} ဖြစ်ရပ်များ` : 'Events'}
           </p>
         </div>
         {/* Create event — Admin / Moderator only */}
