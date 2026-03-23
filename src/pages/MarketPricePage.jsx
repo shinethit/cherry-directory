@@ -59,7 +59,6 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
   const locations = isFuel ? fuelStations : markets
 
   const [price, setPrice]   = useState('')
-  useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [market, setMarket] = useState(locations[0] || '')
   const [notes, setNotes]   = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -152,7 +151,6 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
 // ── Edit Item Modal (Admin/Mod only) ─────────────────────────
 function EditItemModal({ item, onClose, onSave, lang }) {
   const [name, setName]             = useState(item.name || '')
-  useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [nameEn, setNameEn]         = useState(item.name_en || '')
   const [subcategory, setSubcat]    = useState(item.subcategory || '')
   const [unit, setUnit]             = useState(item.unit || '')
@@ -224,7 +222,6 @@ function EditItemModal({ item, onClose, onSave, lang }) {
 // ── Manage Markets Modal (Admin/Mod only) ────────────────────
 function ManageMarketsModal({ onClose, onUpdated, lang }) {
   const [list, setList]         = useState([])
-  useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [newName, setNewName]   = useState('')
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
@@ -324,7 +321,6 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
 function AddItemModal({ onClose, onAdded, lang }) {
   const { user, isModerator, isAdmin } = useAuth()
   const [form, setForm] = useState({ name: '', name_en: '', category: 'other', unit: 'ပိဿာ', unit_en: 'viss', icon: '📦' })
-  useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [submitting, setSubmitting] = useState(false)
   const ICONS = ['📦','🌾','🥬','🍎','🥩','🐟','🫙','⛽','🥛','🍞','🧂','🌶️','🧅','🧄','🥔','🌽','🫘','🍳','🫚','🧋']
   const UNITS = [
