@@ -225,9 +225,9 @@ export default function LeaderboardPage() {
           const idx = normalized.findIndex(u => u.id === me.id)
           setMyRank(idx >= 0 ? idx + 1 : null)
         }
-        } catch (e) { console.warn(e) }
-        setLoading(false)
       }
+      } catch (e) { console.warn(e) }
+      setLoading(false)
     }
     load()
     return () => { cancelled = true }
