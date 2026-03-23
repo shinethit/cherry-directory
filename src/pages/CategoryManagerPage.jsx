@@ -195,8 +195,9 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
 }
 
 // ── Category Row ──────────────────────────────────────────────
-function CategoryRow({ cat, subcats, lang, onEdit, onDelete, onAddSub, onToggle }) {
+function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, onToggle }) {
   const [open, setOpen] = useState(false)
+  const subsOfSub = (id) => (allCats || []).filter(c => c.parent_id === id)
 
   return (
     <div className={`rounded-2xl overflow-hidden border transition-all ${cat.is_active ? 'border-white/10 bg-white/3' : 'border-white/5 bg-white/1 opacity-60'}`}>
@@ -257,9 +258,17 @@ function CategoryRow({ cat, subcats, lang, onEdit, onDelete, onAddSub, onToggle 
                 <p className="text-xs font-display font-semibold text-white/80">
                   {lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}
                 </p>
-                {!sub.is_active && <span className="text-[9px] text-white/25">hidden</span>}
+                <div className="flex items-center gap-1">
+                  {!sub.is_active && <span className="text-[9px] text-white/25">hidden</span>}
+                  {subsOfSub(sub.id).length > 0 && <span className="text-[9px] text-brand-300/70">{subsOfSub(sub.id).length} sub</span>}
+                </div>
               </div>
               <div className="flex items-center gap-1">
+                <button onClick={() => onAddSub(sub)}
+                  className="w-6 h-6 rounded-lg bg-brand-600/15 flex items-center justify-center hover:bg-brand-600/30 transition-colors"
+                  title="Add sub-sub-category">
+                  <Plus size={10} className="text-brand-300" />
+                </button>
                 <button onClick={() => onToggle(sub)}
                   className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
                   {sub.is_active ? <Eye size={10} className="text-white/40" /> : <EyeOff size={10} className="text-white/25" />}
@@ -284,7 +293,7 @@ function CategoryRow({ cat, subcats, lang, onEdit, onDelete, onAddSub, onToggle 
 // ── Main Page ─────────────────────────────────────────────────
 export default function CategoryManagerPage() {
   const { lang }      = useLang()
-  const { isModerator } = useAuth()
+  const { isModerator, isLoggedIn } = useAuth()
   useSEO({ title: 'Category Manager' })
 
   const [cats, setCats]   = useState([])
@@ -419,6 +428,7 @@ export default function CategoryManagerPage() {
               key={cat.id}
               cat={cat}
               subcats={subsOf(cat.id)}
+              allCats={cats}
               lang={lang}
               onEdit={c => setFormData({ initial: c, parentId: c.parent_id, parentName: cats.find(p => p.id === c.parent_id)?.name_mm })}
               onDelete={handleDelete}
