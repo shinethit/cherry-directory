@@ -50,8 +50,8 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+      <div className="flex-1 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
           <div>
@@ -70,7 +70,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
           </button>
         </div>
 
-        <div className="overflow-y-auto max-h-[75dvh] px-5 py-4 space-y-4 pb-24">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 pb-6">
           {/* Icon picker */}
           <div>
             <label className="block text-xs text-white/50 mb-2">Icon</label>

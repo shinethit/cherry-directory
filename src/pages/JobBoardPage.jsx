@@ -92,7 +92,7 @@ function PostJobForm({ onClose, onSuccess, lang }) {
 
   if (!isLoggedIn) return (
     <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70">
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 text-center">
+      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
         <p className="text-white font-myanmar mb-4">အလုပ်ကြော်ငြာ တင်ရန် Login လိုအပ်သည်</p>
         <button onClick={() => navigate('/login')} className="btn-primary w-full">Login ဝင်မည်</button>
         <button onClick={onClose} className="btn-ghost w-full mt-2">Cancel</button>

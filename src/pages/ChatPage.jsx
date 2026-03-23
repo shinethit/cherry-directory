@@ -182,7 +182,7 @@ export default function ChatPage() {
       {/* Guest name prompt modal */}
       {showNamePrompt && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowNamePrompt(false)}>
-          <div className="w-full max-w-lg bg-[#1a0030] border border-white/10 rounded-t-3xl p-6" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-lg bg-[#1a0030] border border-white/10 rounded-t-3xl p-6 pb-24" onClick={e => e.stopPropagation()}>
             <h3 className="font-display font-bold text-lg text-white mb-1">နာမည် ထည့်ပါ</h3>
             <p className="text-sm text-white/50 mb-4 font-myanmar">Chat ပြုလုပ်ရန် Guest နာမည် လိုအပ်သည်</p>
             <input
