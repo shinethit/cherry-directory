@@ -91,7 +91,7 @@ function PostJobForm({ onClose, onSuccess, lang }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   if (!isLoggedIn) return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70">
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70">
       <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 text-center">
         <p className="text-white font-myanmar mb-4">အလုပ်ကြော်ငြာ တင်ရန် Login လိုအပ်သည်</p>
         <button onClick={() => navigate('/login')} className="btn-primary w-full">Login ဝင်မည်</button>
@@ -114,7 +114,7 @@ function PostJobForm({ onClose, onSuccess, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
         <h2 className="font-display font-bold text-base text-white">အလုပ်ကြော်ငြာ တင်မည်</h2>

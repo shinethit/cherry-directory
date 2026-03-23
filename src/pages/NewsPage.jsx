@@ -61,7 +61,7 @@ function PostForm({ onClose, onSuccess, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0 z-10">
         <div className="flex items-center gap-3">

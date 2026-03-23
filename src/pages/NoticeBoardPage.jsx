@@ -83,7 +83,7 @@ function PostForm({ onClose, onSuccess, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
         <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကြေညာချက် တင်မည်' : 'Post Notice'}</h2>
@@ -201,7 +201,7 @@ export default function NoticeBoardPage() {
 
       {/* Pending approval panel */}
       {showPending && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
           <div className="flex items-center gap-3 px-4 py-3 glass border-b border-white/8 sticky top-0">
             <button onClick={() => setShowPending(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">Pending Notices ({pendingList.length})</h2>

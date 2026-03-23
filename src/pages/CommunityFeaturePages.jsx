@@ -136,7 +136,7 @@ export function WeatherAlertPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">Report Weather/Flood</h2>
@@ -292,7 +292,7 @@ export function DonationPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Campaign တင်မည်' : 'Create Campaign'}</h2>
@@ -470,7 +470,7 @@ export function HealthServicePage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ဝန်ဆောင်မှု တင်မည်' : 'Post Health Service'}</h2>
@@ -612,7 +612,7 @@ export function BusSchedulePage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကားထွက်ချိန် ထည့်မည်' : 'Add Bus Schedule'}</h2>
@@ -747,7 +747,7 @@ export function ToursPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Tour Guide ထည့်မည်' : 'Add Tour Guide'}</h2>

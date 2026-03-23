@@ -73,7 +73,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-3 pb-2 border-b border-white/8">
@@ -168,7 +168,7 @@ function EditItemModal({ item, onClose, onSave, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
         <h3 className="font-display font-bold text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း ပြင်ဆင်မည်' : 'Edit Item'}</h3>
 
@@ -268,7 +268,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
           <div>
@@ -344,7 +344,7 @@ function AddItemModal({ onClose, onAdded, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="px-5 pt-4 pb-2 border-b border-white/8 flex items-center justify-between">
           <h3 className="font-display font-bold text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}</h3>

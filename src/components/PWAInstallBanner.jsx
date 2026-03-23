@@ -51,7 +51,7 @@ export default function PWAInstallBanner() {
   if (!show) return null
 
   if (isIOSGuide) return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setIsIOSGuide(false)}>
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setIsIOSGuide(false)}>
       <div className="w-full max-w-sm bg-[#1a0028] border border-white/15 rounded-3xl p-5 space-y-3" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-3">
           <img src="/icons/icon-96.png" alt="Cherry Directory" className="w-12 h-12 rounded-2xl" />

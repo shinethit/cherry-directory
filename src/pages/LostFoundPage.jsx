@@ -122,7 +122,7 @@ function PostForm({ onClose, onSuccess, lang }) {
   const setField = (k, v) => set(k, v)
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0 z-10">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
           <ArrowLeft size={18} className="text-white" />
