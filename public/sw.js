@@ -1,5 +1,5 @@
-const CACHE_NAME = 'cherry-dir-v3'
-const STATIC_CACHE = 'cherry-static-v3'
+const CACHE_NAME = 'cherry-dir-v4'
+const STATIC_CACHE = 'cherry-static-v4'
 
 // Static assets to pre-cache
 const PRECACHE_URLS = [
