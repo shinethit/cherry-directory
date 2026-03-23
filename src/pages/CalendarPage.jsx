@@ -34,7 +34,7 @@ function formatDateRange(start, end, lang) {
 
 // ── RSVP Button ───────────────────────────────────────────────
 function RsvpButton({ postId }) {
-  const { isLoggedIn, user } = useAuth()
+  const { isLoggedIn, user, isModerator, isAdmin } = useAuth()
   const navigate = useNavigate()
   const [status, setStatus] = useState(null) // null | 'going' | 'interested'
   const [counts, setCounts] = useState({ going: 0, interested: 0 })

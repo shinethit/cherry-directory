@@ -21,7 +21,7 @@ const TABS = [
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  const { isAdmin, isSuperAdmin } = useAuth()
+  const { isAdmin, isSuperAdmin, user } = useAuth()
   useSEO({ title: 'Admin Panel' })
   const [tab, setTab]       = useState('analytics')
   const [data, setData]     = useState([])

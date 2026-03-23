@@ -165,7 +165,7 @@ function UserRow({ user, rank, tab, lang, period }) {
 export default function LeaderboardPage() {
   const navigate   = useNavigate()
   const { lang }   = useLang()
-  const { user: me } = useAuth()
+  const { user: me, profile } = useAuth()
   useSEO({ title: 'Top Contributors' })
 
   const [tab, setTab]     = useState('points')

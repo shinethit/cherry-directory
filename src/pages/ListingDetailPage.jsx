@@ -14,7 +14,7 @@ import { getOptimizedUrl } from '../lib/cloudinary'
 export default function ListingDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { isLoggedIn, profile, isAdmin, isModerator } = useAuth()
+  const { isLoggedIn, profile, isAdmin, isModerator, user } = useAuth()
   const { t, lang } = useLang()
   const { isBookmarked, toggleBookmark } = useBookmarks()
   const [listing, setListing] = useState(null)

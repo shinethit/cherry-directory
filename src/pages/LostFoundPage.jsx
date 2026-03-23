@@ -87,7 +87,7 @@ function PostCard({ post, lang }) {
 }
 
 function PostForm({ onClose, onSuccess, lang }) {
-  const { user, profile } = useAuth()
+  const { user, profile, isLoggedIn } = useAuth()
   const [form, setForm] = useState({
     type: 'lost', category: 'item', title: '', title_mm: '',
     description_mm: '', location_mm: '', contact_phone: '', contact_name: '',

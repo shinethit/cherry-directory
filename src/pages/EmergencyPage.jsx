@@ -232,8 +232,9 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function EmergencyPage() {
-  const { lang }        = useLang()
-  const config = useAppConfig()
+  const { lang }                    = useLang()
+  const { user, isModerator }       = useAuth()
+  const config                      = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'အရေးပေါ် ဆက်သွယ်ရေး' : 'Emergency Contacts' })
 
   const [contacts, setContacts] = useState([])

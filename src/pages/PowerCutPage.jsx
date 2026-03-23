@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Zap, ZapOff, RefreshCw, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { Zap, ZapOff, RefreshCw, AlertTriangle, CheckCircle, Clock, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
+import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -113,6 +114,7 @@ function AreaCard({ area, lang, onReport }) {
 // ── Main Page ─────────────────────────────────────────────────
 export default function PowerCutPage() {
   const { lang } = useLang()
+  const { isModerator, user } = useAuth()
   useSEO({ title: lang === 'mm' ? 'လျှပ်စစ်အခြေအနေ' : 'Power Status' })
 
   const [areas, setAreas]       = useState([])
@@ -120,6 +122,13 @@ export default function PowerCutPage() {
   const [lastUpdate, setLastUpdate] = useState(null)
   const [toast, setToast]       = useState(null)
   const [townFilter, setTownFilter] = useState('all')
+  const [showManage, setShowManage] = useState(false)
+  const [manageList, setManageList] = useState([])
+  const [manageLoading, setManageLoading] = useState(false)
+  const [newAreaName, setNewAreaName] = useState('')
+  const [newAreaTown, setNewAreaTown] = useState('')
+  const [editAreaId, setEditAreaId] = useState(null)
+  const [editAreaName, setEditAreaName] = useState('')
   const channelRef = useRef(null)
 
   async function load() {
@@ -174,6 +183,37 @@ export default function PowerCutPage() {
   const towns = ['all', ...new Set(areas.map(a => a.township).filter(Boolean))]
   const filtered = townFilter === 'all' ? areas : areas.filter(a => a.township === townFilter)
 
+  async function loadManage() {
+    setManageLoading(true)
+    const { data } = await supabase.from('power_areas').select('*').order('sort_order')
+    setManageList(data || [])
+    setManageLoading(false)
+  }
+
+  async function addArea() {
+    if (!newAreaName.trim()) return
+    await supabase.from('power_areas').insert({
+      name: newAreaName.trim(),
+      township: newAreaTown.trim() || null,
+      sort_order: manageList.length + 1
+    })
+    setNewAreaName(''); setNewAreaTown('')
+    loadManage(); load()
+  }
+
+  async function saveEditArea(id) {
+    if (!editAreaName.trim()) return
+    await supabase.from('power_areas').update({ name: editAreaName.trim() }).eq('id', id)
+    setEditAreaId(null)
+    loadManage(); load()
+  }
+
+  async function deleteArea(id) {
+    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this area?')) return
+    await supabase.from('power_areas').delete().eq('id', id)
+    loadManage(); load()
+  }
+
   const cutCount      = areas.filter(a => a.current_status === 'cut').length
   const restoredCount = areas.filter(a => a.current_status === 'restored').length
   const unknownCount  = areas.filter(a => a.current_status === 'unknown').length
@@ -198,6 +238,13 @@ export default function PowerCutPage() {
           </button>
         </div>
       </div>
+
+      {isModerator && (
+        <button onClick={() => { setShowManage(true); loadManage() }}
+          className="mx-4 mb-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white/50 hover:bg-white/8 hover:text-white/70 transition-colors">
+          <Pencil size={12} /> {lang === 'mm' ? 'ရပ်ကွက် စီမံမည်' : 'Manage Areas'}
+        </button>
+      )}
 
       {/* Summary */}
       <div className="flex gap-2 px-4 mb-4">
@@ -274,6 +321,68 @@ export default function PowerCutPage() {
           ⚠️ {lang === 'mm' ? 'ဤ Data သည် Community Report ဖြစ်ပြီး တိကျမှု 100% ကို မသေချာနိုင်' : 'Community data — accuracy not guaranteed'}
         </p>
       </div>
+
+
+      {/* Manage Areas Modal */}
+      {showManage && (
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+          <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
+            <button onClick={() => setShowManage(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+              <X size={18} className="text-white" />
+            </button>
+            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ရပ်ကွက် စီမံမည်' : 'Manage Areas'}</h2>
+            <div className="w-9" />
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-24">
+            {/* Add new area */}
+            <div className="space-y-2">
+              <input value={newAreaName} onChange={e => setNewAreaName(e.target.value)}
+                placeholder={lang === 'mm' ? 'ရပ်ကွက်အမည်...' : 'Area name...'}
+                className="input-dark font-myanmar w-full" />
+              <div className="flex gap-2">
+                <input value={newAreaTown} onChange={e => setNewAreaTown(e.target.value)}
+                  placeholder={lang === 'mm' ? 'မြို့နယ် (optional)' : 'Township (optional)'}
+                  className="input-dark flex-1" />
+                <button onClick={addArea} disabled={!newAreaName.trim()}
+                  className="btn-primary px-4 disabled:opacity-50">
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="border-t border-white/8 pt-2 space-y-2">
+              {manageLoading ? [1,2,3].map(n => <div key={n} className="h-12 rounded-xl shimmer" />) :
+               manageList.map(area => (
+                <div key={area.id} className="flex items-center gap-2 p-3 rounded-xl bg-white/5 border border-white/8">
+                  {editAreaId === area.id ? (
+                    <>
+                      <input autoFocus value={editAreaName} onChange={e => setEditAreaName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveEditArea(area.id); if (e.key === 'Escape') setEditAreaId(null) }}
+                        className="input-dark flex-1 font-myanmar text-sm py-1.5" />
+                      <button onClick={() => saveEditArea(area.id)} className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-xs font-bold">✓</button>
+                      <button onClick={() => setEditAreaId(null)} className="px-2 py-1.5 bg-white/8 rounded-lg text-white/40 text-xs">✕</button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-myanmar truncate">{area.name}</p>
+                        {area.township && <p className="text-[10px] text-white/40">{area.township}</p>}
+                      </div>
+                      <button onClick={() => { setEditAreaId(area.id); setEditAreaName(area.name) }}
+                        className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center flex-shrink-0">
+                        <Pencil size={11} />
+                      </button>
+                      <button onClick={() => deleteArea(area.id)}
+                        className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0">
+                        <Trash2 size={12} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

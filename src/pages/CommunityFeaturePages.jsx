@@ -26,7 +26,7 @@ const SEV_CFG = {
 
 export function WeatherAlertPage() {
   const { lang } = useLang()
-  const { user, isModerator } = useAuth()
+  const { user, isModerator, profile, isLoggedIn } = useAuth()
   useSEO({ title: lang === 'mm' ? 'မိုးလေဝသ' : 'Weather Alerts' })
 
   const [alerts, setAlerts] = useState([])
@@ -356,7 +356,7 @@ const BLOOD_TYPES = ['A+','A-','B+','B-','O+','O-','AB+','AB-']
 
 export function HealthServicePage() {
   const { lang } = useLang()
-  const { user, isModerator } = useAuth()
+  const { user, isModerator, profile, isLoggedIn } = useAuth()
   useSEO({ title: lang === 'mm' ? 'ကျန်းမာရေးဝန်ဆောင်မှု' : 'Health Services' })
 
   const [items, setItems] = useState([])
@@ -536,7 +536,7 @@ const BUS_ROUTES_DEF = [
 
 export function BusSchedulePage() {
   const { lang } = useLang()
-  const { user, isModerator } = useAuth()
+  const { user, isModerator, profile, isLoggedIn } = useAuth()
   useSEO({ title: lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule' })
 
   const [schedules, setSchedules] = useState([])
@@ -654,7 +654,7 @@ const TOUR_TYPES = [
 
 export function ToursPage() {
   const { lang } = useLang()
-  const { user, isModerator } = useAuth()
+  const { user, isModerator, profile, isLoggedIn } = useAuth()
   useSEO({ title: 'Tour Guide' })
 
   const [tours, setTours] = useState([])

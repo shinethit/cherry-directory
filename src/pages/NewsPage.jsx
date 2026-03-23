@@ -16,7 +16,7 @@ const TYPES = [
 
 // ── Post Form (Admin/Mod only) ─────────────────────────────────
 function PostForm({ onClose, onSuccess, lang }) {
-  const { user, profile } = useAuth()
+  const { user, profile, isModerator } = useAuth()
   const [form, setForm] = useState({
     title: '', title_mm: '', content: '', content_mm: '',
     type: 'announcement', is_pinned: false,

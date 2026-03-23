@@ -74,22 +74,22 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+      <div className="flex-1 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-3 pb-2 border-b border-white/8">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">{item.icon}</span>
-            <div>
-              <p className="font-display font-bold text-white text-sm">{lang === 'mm' ? item.name : (item.name_en || item.name)}</p>
-              <p className="text-[9px] text-white/40">per {lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</p>
-            </div>
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/8">
+          <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span className="text-2xl">{item.icon}</span>
+          <div className="flex-1">
+            <p className="font-display font-bold text-white text-sm">{lang === 'mm' ? item.name : (item.name_en || item.name)}</p>
+            <p className="text-[9px] text-white/40">per {lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
         </div>
 
         {/* Scrollable content */}
-        <div className="overflow-y-auto max-h-[calc(75dvh-80px)] px-5 pt-4 pb-6 space-y-4">
+        <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 space-y-4">
 
         {item.median_price && (
           <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl">
@@ -144,7 +144,6 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
             : lang === 'mm' ? '📤 တင်ပြမည်' : '📤 Submit'}
         </button>
         <p className="text-[9px] text-white/25 text-center font-myanmar">Guest ပါ တင်ပြနိုင် • ၁၀ မိနစ် Cooldown</p>
-        </div>
       </div>
     </div>
   )
@@ -323,7 +322,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
 
 // ── Add Custom Item modal ─────────────────────────────────────
 function AddItemModal({ onClose, onAdded, lang }) {
-  const { user } = useAuth()
+  const { user, isModerator, isAdmin } = useAuth()
   const [form, setForm] = useState({ name: '', name_en: '', category: 'other', unit: 'ပိဿာ', unit_en: 'viss', icon: '📦' })
   useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [submitting, setSubmitting] = useState(false)
