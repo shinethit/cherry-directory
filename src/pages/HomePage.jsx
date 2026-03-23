@@ -4,30 +4,15 @@ import { Calendar, Search, CalendarDays } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI'
 import { useAppConfig } from '../hooks/useAppConfig'
-
-const CATEGORIES = [
-  { icon: '🍜', label: 'စားသောက်' },
-  { icon: '🏥', label: 'ဆေးရုံ/ကလင်းနစ်' },
-  { icon: '🎓', label: 'ကျောင်း/ပညာ' },
-  { icon: '🏨', label: 'တည်းခိုရေး' },
-  { icon: '🛍️', label: 'ဈေးဝယ်' },
-  { icon: '📚', label: 'Tutor ဆရာ/မ' },
-  { icon: '🧹', label: 'သန့်ရှင်းရေး' },
-  { icon: '🔧', label: 'ရေ/မီးပြင်' },
-  { icon: '📦', label: 'Delivery' },
-  { icon: '🚕', label: 'Taxi' },
-  { icon: '🏠', label: 'အိမ်ငှား/ရောင်း' },
-  { icon: '🚗', label: 'ကား/ဆိုင်ကယ်' },
-  { icon: '🔄', label: 'ပစ္စည်းရောင်းဝယ်' },
-  { icon: '🏦', label: 'ဘဏ်/ငွေကြေး' },
-  { icon: '💄', label: 'အလှပြင်' },
-]
+import { useLang } from '../contexts/LangContext'
 
 export default function HomePage() {
   const navigate = useNavigate()
   const config = useAppConfig()
+  const { lang } = useLang()
   const [posts, setPosts] = useState([])
   const [featured, setFeatured] = useState([])
+  const [homeCategories, setHomeCategories] = useState([])
   const [upcomingEvents, setUpcomingEvents] = useState([])
   const [stats, setStats] = useState({ listings: 0, posts: 0 })
   const [loading, setLoading] = useState(true)
@@ -39,11 +24,13 @@ export default function HomePage() {
         const [{ data: postsData }, { data: featuredData }, { count: listingCount }, { data: eventsData }] = await Promise.all([
           supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
           supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
+          supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order').limit(16),
           supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
           supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
         ])
         setPosts(postsData || [])
         setFeatured(featuredData || [])
+        setHomeCategories(catsData || [])
         setUpcomingEvents(eventsData || [])
         setStats({ listings: listingCount || 0 })
         setLoading(false)
@@ -89,21 +76,23 @@ export default function HomePage() {
       </div>
 
       {/* Quick Category Grid */}
-      <div>
-        <SectionHeader title="အမျိုးအစားများ" subtitle="Category" action="အားလုံး" onAction={() => navigate('/directory')} />
-        <div className="px-4 grid grid-cols-4 gap-2">
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat.label}
-              onClick={() => navigate(`/directory?cat=${cat.label}`)}
-              className="flex flex-col items-center gap-1.5 p-3 card-dark hover:bg-white/8 transition-colors rounded-2xl"
-            >
-              <span className="text-2xl">{cat.icon}</span>
-              <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{cat.label}</span>
-            </button>
-          ))}
+      {homeCategories.length > 0 && (
+        <div>
+          <SectionHeader title="အမျိုးအစားများ" subtitle="Category" action="အားလုံး" onAction={() => navigate('/directory')} />
+          <div className="px-4 grid grid-cols-4 gap-2">
+            {homeCategories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => navigate(`/directory?cat=${cat.id}`)}
+                className={`flex flex-col items-center gap-1.5 p-3 card-dark hover:bg-white/8 transition-colors rounded-2xl ${cat.is_featured ? 'border border-amber-500/20' : ''}`}
+              >
+                <span className="text-2xl">{cat.icon}</span>
+                <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Featured Listings */}
       {(loading || featured.length > 0) && (

@@ -13,7 +13,7 @@ const ICONS = [
   '📱','💻','🖨️','🔌','🌿','🌸','🐾','🚑','👮','🔴','📢','📋',
 ]
 
-const BLANK = { name: '', name_mm: '', icon: '📦', type: 'directory', sort_order: 0, parent_id: null, description_mm: '', is_active: true }
+const BLANK = { name: '', name_mm: '', icon: '📦', type: 'directory', sort_order: 0, parent_id: null, description_mm: '', is_active: true, is_featured: false }
 
 // ── Form modal ────────────────────────────────────────────────
 function CategoryForm({ initial, parentId, parentName, allCategories, onClose, onSaved, lang }) {
@@ -39,6 +39,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
       parent_id:      form.parent_id || null,
       description_mm: form.description_mm || null,
       is_active:      form.is_active,
+      is_featured:    form.is_featured || false,
       updated_at:     new Date().toISOString(),
     }
     const { error: err } = isEdit
@@ -165,10 +166,18 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
             </div>
             <div className="flex-1">
               <label className="block text-xs text-white/50 mb-1.5">Status</label>
-              <button onClick={() => set('is_active', !form.is_active)}
-                className={`w-full py-2.5 rounded-xl text-xs font-semibold border transition-colors ${form.is_active ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-white/5 border-white/10 text-white/40'}`}>
-                {form.is_active ? (lang === 'mm' ? '✓ Active' : '✓ Active') : (lang === 'mm' ? '○ Hidden' : '○ Hidden')}
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => set('is_active', !form.is_active)}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${form.is_active ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-white/5 border-white/10 text-white/40'}`}>
+                  {form.is_active ? (lang === 'mm' ? '✓ Active' : '✓ Active') : (lang === 'mm' ? '○ Hidden' : '○ Hidden')}
+                </button>
+                {!form.parent_id && !parentId && (
+                  <button onClick={() => set('is_featured', !form.is_featured)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${form.is_featured ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' : 'bg-white/5 border-white/10 text-white/40'}`}>
+                    {form.is_featured ? '⭐ Home မှာပြ' : '☆ Home မပြ'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -204,6 +213,7 @@ function CategoryRow({ cat, subcats, lang, onEdit, onDelete, onAddSub, onToggle 
               <span className="text-[9px] text-brand-300">{subcats.length} sub</span>
             )}
             {!cat.is_active && <span className="text-[9px] text-white/30">hidden</span>}
+            {cat.is_featured && <span className="text-[9px] text-amber-400">⭐ home</span>}
           </div>
         </div>
 
