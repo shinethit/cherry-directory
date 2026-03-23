@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, MapPin, X } from 'lucide-react'
+import { ArrowLeft, Save, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -44,42 +44,46 @@ export default function EditListingPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: listing }, { data: cats }] = await Promise.all([
-        supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('id', id).single(),
-        supabase.from('categories').select('*').eq('type', 'directory').order('sort_order'),
-      ])
-      if (!listing) { navigate('/directory'); return }
 
-      const allowed = isAdmin || isModerator || listing.owner_id === profile?.id || listing.submitted_by === profile?.id
-      setCanEdit(allowed)
-      setCategories(cats || [])
-      setOriginal(listing)
-      setForm({
-        name: listing.name || '',
-        name_mm: listing.name_mm || '',
-        description: listing.description || '',
-        description_mm: listing.description_mm || '',
-        category_id: listing.category_id || '',
-        business_type: listing.business_type || '',
-        city: listing.city || '',
-        township: listing.township || '',
-        ward: listing.ward || '',
-        address: listing.address || '',
-        address_mm: listing.address_mm || '',
-        phone_1: listing.phone_1 || '',
-        phone_2: listing.phone_2 || '',
-        viber: listing.viber || '',
-        telegram: listing.telegram || '',
-        whatsapp: listing.whatsapp || '',
-        facebook: listing.facebook || '',
-        website: listing.website || '',
-        logo_url: listing.logo_url || '',
-        cover_url: listing.cover_url || '',
-        latitude: listing.latitude?.toString() || '',
-        longitude: listing.longitude?.toString() || '',
-        gallery: listing.images || [],   // load existing gallery images
-      })
-    }
+    try {
+        const [{ data: listing }, { data: cats }] = await Promise.all([
+          supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('id', id).single(),
+          supabase.from('categories').select('*').eq('type', 'directory').order('sort_order'),
+        ])
+        if (!listing) { navigate('/directory'); return }
+
+        const allowed = isAdmin || isModerator || listing.owner_id === profile?.id || listing.submitted_by === profile?.id
+        setCanEdit(allowed)
+        setCategories(cats || [])
+        setOriginal(listing)
+        setForm({
+          name: listing.name || '',
+          name_mm: listing.name_mm || '',
+          description: listing.description || '',
+          description_mm: listing.description_mm || '',
+          category_id: listing.category_id || '',
+          business_type: listing.business_type || '',
+          city: listing.city || '',
+          township: listing.township || '',
+          ward: listing.ward || '',
+          address: listing.address || '',
+          address_mm: listing.address_mm || '',
+          phone_1: listing.phone_1 || '',
+          phone_2: listing.phone_2 || '',
+          viber: listing.viber || '',
+          telegram: listing.telegram || '',
+          whatsapp: listing.whatsapp || '',
+          facebook: listing.facebook || '',
+          website: listing.website || '',
+          logo_url: listing.logo_url || '',
+          cover_url: listing.cover_url || '',
+          latitude: listing.latitude?.toString() || '',
+          longitude: listing.longitude?.toString() || '',
+          gallery: listing.images || [],   // load existing gallery images
+        })
+    
+    } catch (e) { console.warn(e) }
+  }
     load()
   }, [id, profile])
 

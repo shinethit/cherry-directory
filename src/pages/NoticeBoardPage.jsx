@@ -89,7 +89,7 @@ function PostForm({ onClose, onSuccess, lang }) {
         <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကြေညာချက် တင်မည်' : 'Post Notice'}</h2>
         <button onClick={submit} disabled={submitting || (!form.title && !form.title_mm)} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'တင်မည်' : 'Post'}</button>
       </div>
-      <div className="px-4 py-4 space-y-4 pb-8">
+      <div className="px-4 py-4 space-y-4 pb-24">
         <div>
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အမျိုးအစား' : 'Category'}</label>
           <div className="flex gap-2 flex-wrap">
@@ -129,6 +129,7 @@ export default function NoticeBoardPage() {
 
   async function load() {
     setLoading(true)
+    try {
     let q = supabase.from('notices').select('*').eq('status', 'approved').order('is_pinned', { ascending: false }).order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(50)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
     const { data } = await q
@@ -137,6 +138,7 @@ export default function NoticeBoardPage() {
       const { count } = await supabase.from('notices').select('*', { count: 'exact', head: true }).eq('status', 'pending')
       setPendingCount(count || 0)
     }
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
@@ -206,7 +208,7 @@ export default function NoticeBoardPage() {
             <button onClick={() => setShowPending(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">Pending Notices ({pendingList.length})</h2>
           </div>
-          <div className="px-4 py-4 space-y-3">
+          <div className="px-4 py-4 space-y-3 pb-24">
             {pendingList.map(n => (
               <div key={n.id} className="card-dark rounded-2xl p-4 space-y-3">
                 <p className="text-sm font-display font-semibold text-white">{n.title_mm || n.title}</p>

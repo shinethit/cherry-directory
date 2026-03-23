@@ -156,7 +156,7 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
         </button>
       </div>
 
-      <div className="px-4 py-4 space-y-4 pb-12">
+      <div className="px-4 py-4 space-y-4 pb-24">
         {/* Category */}
         <div>
           <label className="block text-xs text-white/50 mb-2">{lang === 'mm' ? 'အမျိုးအစား' : 'Category'}</label>
@@ -233,7 +233,7 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
 // ── Main Page ─────────────────────────────────────────────────
 export default function EmergencyPage() {
   const { lang }        = useLang()
-  const { isModerator } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'အရေးပေါ် ဆက်သွယ်ရေး' : 'Emergency Contacts' })
 
   const [contacts, setContacts] = useState([])
@@ -244,12 +244,14 @@ export default function EmergencyPage() {
 
   async function load() {
     setLoading(true)
+    try {
     const { data } = await supabase
       .from('emergency_contacts')
       .select('*')
       .eq('is_active', true)
       .order('sort_order')
     setContacts(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
@@ -333,7 +335,7 @@ export default function EmergencyPage() {
       </div>
 
       {/* Contact list grouped by category */}
-      <div className="px-4 space-y-5">
+      <div className="px-4 space-y-5 pb-24">
         {loading ? (
           [1,2,3].map(n => <div key={n} className="h-28 rounded-2xl shimmer" />)
         ) : grouped.length === 0 ? (

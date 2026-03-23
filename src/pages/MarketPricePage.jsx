@@ -59,6 +59,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
   const locations = isFuel ? fuelStations : markets
 
   const [price, setPrice]   = useState('')
+  useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [market, setMarket] = useState(locations[0] || '')
   const [notes, setNotes]   = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -88,7 +89,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
         </div>
 
         {/* Scrollable content */}
-        <div className="overflow-y-auto max-h-[70dvh] px-5 pb-24 pt-4 space-y-4">
+        <div className="overflow-y-auto max-h-[calc(75dvh-80px)] px-5 pt-4 pb-6 space-y-4">
 
         {item.median_price && (
           <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl">
@@ -152,6 +153,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
 // ── Edit Item Modal (Admin/Mod only) ─────────────────────────
 function EditItemModal({ item, onClose, onSave, lang }) {
   const [name, setName]             = useState(item.name || '')
+  useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [nameEn, setNameEn]         = useState(item.name_en || '')
   const [subcategory, setSubcat]    = useState(item.subcategory || '')
   const [unit, setUnit]             = useState(item.unit || '')
@@ -223,6 +225,7 @@ function EditItemModal({ item, onClose, onSave, lang }) {
 // ── Manage Markets Modal (Admin/Mod only) ────────────────────
 function ManageMarketsModal({ onClose, onUpdated, lang }) {
   const [list, setList]         = useState([])
+  useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [newName, setNewName]   = useState('')
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
@@ -277,7 +280,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
         </div>
-        <div className="overflow-y-auto max-h-[60dvh] px-5 py-4 pb-24 space-y-3">
+        <div className="overflow-y-auto max-h-[calc(65dvh-80px)] px-5 py-4 space-y-3">
           <div className="flex gap-2">
             <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMarket()}
               placeholder={lang === 'mm' ? 'ဈေးကွက် အမည်ထည့်ပါ...' : 'Market name...'}
@@ -322,6 +325,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
 function AddItemModal({ onClose, onAdded, lang }) {
   const { user } = useAuth()
   const [form, setForm] = useState({ name: '', name_en: '', category: 'other', unit: 'ပိဿာ', unit_en: 'viss', icon: '📦' })
+  useEffect(() => { document.body.classList.add('modal-open'); return () => { document.body.classList.remove('modal-open') } }, [])
   const [submitting, setSubmitting] = useState(false)
   const ICONS = ['📦','🌾','🥬','🍎','🥩','🐟','🫙','⛽','🥛','🍞','🧂','🌶️','🧅','🧄','🥔','🌽','🫘','🍳','🫚','🧋']
   const UNITS = [
@@ -350,7 +354,7 @@ function AddItemModal({ onClose, onAdded, lang }) {
         <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}</h2>
         <button onClick={submit} disabled={!form.name || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
 
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ပစ္စည်းအမည် (မြန်မာ)' : 'Item Name (Myanmar)'} *</label>
           <input autoFocus value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} className="input-dark font-myanmar" placeholder="ဥပမာ: သကြားလုံး" />

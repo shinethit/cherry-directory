@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trophy, Star, Building2, MessageCircle, CalendarCheck, Medal, ChevronRight } from 'lucide-react'
+import { Trophy, Star, Building2, MessageCircle, CalendarCheck, Medal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -179,6 +179,7 @@ export default function LeaderboardPage() {
     let cancelled = false
     async function load() {
       setLoading(true)
+      try {
       const periodCfg = PERIODS.find(p => p.id === period)
       const orderCol  = tab === 'points' ? 'period_points' : tab === 'reviews' ? 'period_reviews' : 'period_listings'
 
@@ -224,6 +225,7 @@ export default function LeaderboardPage() {
           const idx = normalized.findIndex(u => u.id === me.id)
           setMyRank(idx >= 0 ? idx + 1 : null)
         }
+        } catch (e) { console.warn(e) }
         setLoading(false)
       }
     }

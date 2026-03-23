@@ -22,6 +22,7 @@ export default function ProfilePage() {
   const navigate  = useNavigate()
   const { profile, isAdmin, isModerator, signOut, updateProfile, user } = useAuth()
   const { lang }  = useLang()
+  const config = useAppConfig()
   const { installable, installApp, pushEnabled, enablePush, disablePush } = usePWA()
   const { getHistory } = usePoints()
   useSEO({ title: 'Profile' })

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Save, GripVertical, Eye, EyeOff } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Save, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Zap, ZapOff, RefreshCw, AlertTriangle, CheckCircle, Clock, Plus } from 'lucide-react'
+import { Zap, ZapOff, RefreshCw, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
@@ -124,9 +124,11 @@ export default function PowerCutPage() {
 
   async function load() {
     setLoading(true)
+    try {
     const { data } = await supabase.from('current_power_status').select('*')
     setAreas(data || [])
     setLastUpdate(new Date())
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 

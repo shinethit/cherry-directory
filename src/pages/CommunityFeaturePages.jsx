@@ -39,10 +39,12 @@ export function WeatherAlertPage() {
 
   async function load() {
     setLoading(true)
+    try {
     let q = supabase.from('weather_alerts').select('*, reporter:profiles(full_name, nickname)').eq('status', 'active').order('severity', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
     if (typeFilter !== 'all') q = q.eq('type', typeFilter)
     const { data } = await q
     setAlerts(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
@@ -142,7 +144,7 @@ export function WeatherAlertPage() {
             <h2 className="font-display font-bold text-base text-white">Report Weather/Flood</h2>
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : 'Post'}</button>
           </div>
-          <div className="px-4 py-4 space-y-4 pb-8">
+          <div className="px-4 py-4 space-y-4 pb-24">
             <div>
               <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
               <div className="flex gap-2 flex-wrap">
@@ -195,13 +197,14 @@ export function DonationPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ title_mm: '', description_mm: '', category: 'community', target_amount: '', contact_name: '', contact_phone: '', kbz_pay: '', wave_pay: '', bank_name: '', bank_account: '', bank_holder: '', is_urgent: false })
   const [submitting, setSubmitting] = useState(false)
-  const set = (k, v) => setForm(f => ({...f, [k]: v}))
-
-  async function load() {
+  const set = (k, v) => setForm(f =
     setLoading(true)
+    try {
     let q = supabase.from('donations').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
+    } catch (e) { console.warn(e) }
     const { data } = await q; setItems(data || []); setLoading(false)
+   q; setItems(data || []); setLoading(false)
   }
   useEffect(() => { load() }, [catFilter])
 
@@ -298,7 +301,7 @@ export function DonationPage() {
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Campaign တင်မည်' : 'Create Campaign'}</h2>
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : 'Post'}</button>
           </div>
-          <div className="px-4 py-4 space-y-4 pb-8">
+          <div className="px-4 py-4 space-y-4 pb-24">
             <div>
               <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
               <div className="flex gap-2 flex-wrap">
@@ -368,13 +371,14 @@ export function HealthServicePage() {
   const [submitting, setSubmitting] = useState(false)
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
   function toggleBloodType(bt) {
-    setForm(f => ({...f, blood_types_needed: f.blood_types_needed.includes(bt) ? f.blood_types_needed.filter(b => b !== bt) : [...f.blood_types_needed, bt]}))
-  }
-
-  async function load() {
+    setForm(f => ({...f, blood_types_needed: f.blood_types_needed.includes(bt) ? f.blood_types_ne
     setLoading(true)
+    try {
     let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('start_date', { ascending: true }).limit(30)
     if (typeFilter !== 'all') q = q.eq('type', typeFilter)
+    } catch (e) { console.warn(e) }
+    const { data } = await q; setItems(data || []); setLoading(false)
+  'type', typeFilter)
     const { data } = await q; setItems(data || []); setLoading(false)
   }
   useEffect(() => { load() }, [typeFilter])
@@ -476,7 +480,7 @@ export function HealthServicePage() {
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ဝန်ဆောင်မှု တင်မည်' : 'Post Health Service'}</h2>
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'တင်မည်' : 'Post'}</button>
           </div>
-          <div className="px-4 py-4 space-y-4 pb-8">
+          <div className="px-4 py-4 space-y-4 pb-24">
             <div>
               <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
               <div className="flex gap-2 flex-wrap">
@@ -543,10 +547,12 @@ export function BusSchedulePage() {
 
   async function load() {
     setLoading(true)
-    let q = supabase.from('bus_departures').select('*').order('departure_time', { ascending: true })
-    if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-    const { data } = await q
-    setSchedules(data || [])
+    try {
+      let q = supabase.from('bus_departures').select('*').order('departure_time', { ascending: true })
+      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
+      const { data, error } = await q
+      if (!error) setSchedules(data || [])
+    } catch(e) { }
     setLoading(false)
   }
   useEffect(() => { load() }, [typeFilter])
@@ -554,12 +560,16 @@ export function BusSchedulePage() {
   async function submit() {
     if (!form.route_mm || !form.departure_time) return
     setSubmitting(true)
-    await supabase.from('bus_departures').insert({ ...form, price: form.price ? parseInt(form.price) : null, reporter_id: user?.id || null })
-    setSubmitting(false); setShowForm(false); load()
+    try {
+      await supabase.from('bus_departures').insert({ ...form, price: form.price ? parseInt(form.price) : null, reporter_id: user?.id || null })
+      setShowForm(false); load()
+    } catch(e) { }
+    setSubmitting(false)
   }
 
   async function deleteSchedule(id) {
-    await supabase.from('bus_departures').delete().eq('id', id); load()
+    try { await supabase.from('bus_departures').delete().eq('id', id) } catch(e) {}
+    load()
   }
 
   return (
@@ -618,7 +628,7 @@ export function BusSchedulePage() {
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကားထွက်ချိန် ထည့်မည်' : 'Add Bus Schedule'}</h2>
             <button onClick={submit} disabled={!form.route_mm || !form.departure_time || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
           </div>
-          <div className="px-4 py-4 space-y-4 pb-8">
+          <div className="px-4 py-4 space-y-4 pb-24">
             <div><label className="block text-xs text-white/50 mb-1.5">လမ်းကြောင်း (မြန်မာ) *</label><input value={form.route_mm} onChange={e => set('route_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: တောင်ကြီး → ရန်ကုန်" /></div>
             <div>
               <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
@@ -669,10 +679,12 @@ export function ToursPage() {
 
   async function load() {
     setLoading(true)
-    let q = supabase.from('tour_guides').select('*').eq('is_active', true).order('created_at', { ascending: false })
-    if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-    const { data } = await q
-    setTours(data || [])
+    try {
+      let q = supabase.from('tour_guides').select('*').eq('is_active', true).order('created_at', { ascending: false })
+      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
+      const { data, error } = await q
+      if (!error) setTours(data || [])
+    } catch(e) { }
     setLoading(false)
   }
   useEffect(() => { load() }, [typeFilter])
@@ -680,12 +692,16 @@ export function ToursPage() {
   async function submit() {
     if (!form.title_mm) return
     setSubmitting(true)
-    await supabase.from('tour_guides').insert({ ...form, price_from: form.price_from ? parseInt(form.price_from) : null, price_to: form.price_to ? parseInt(form.price_to) : null, reporter_id: user?.id || null })
-    setSubmitting(false); setShowForm(false); load()
+    try {
+      await supabase.from('tour_guides').insert({ ...form, price_from: form.price_from ? parseInt(form.price_from) : null, price_to: form.price_to ? parseInt(form.price_to) : null, reporter_id: user?.id || null })
+      setShowForm(false); load()
+    } catch(e) { }
+    setSubmitting(false)
   }
 
   async function deleteTour(id) {
-    await supabase.from('tour_guides').delete().eq('id', id); load()
+    try { await supabase.from('tour_guides').delete().eq('id', id) } catch(e) {}
+    load()
   }
 
   return (
@@ -753,7 +769,7 @@ export function ToursPage() {
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Tour Guide ထည့်မည်' : 'Add Tour Guide'}</h2>
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
           </div>
-          <div className="px-4 py-4 space-y-4 pb-8">
+          <div className="px-4 py-4 space-y-4 pb-24">
             <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: Kalaw Trekking 3 Days 2 Nights" /></div>
             <div>
               <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>

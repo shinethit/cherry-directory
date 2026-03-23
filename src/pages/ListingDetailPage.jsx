@@ -37,23 +37,27 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: l }, { data: r }] = await Promise.all([
-        supabase.from('listings').select('*, category:categories(name, name_mm, icon), owner:profiles!owner_id(full_name, avatar_url)').eq('id', id).single(),
-        supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(20),
-      ])
-      setListing(l)
-      setReviews(r || [])
-      supabase.from('listings').update({ view_count: (l?.view_count || 0) + 1 }).eq('id', id)
 
-      if (profile) {
-        const [{ data: claim }, { data: vote }] = await Promise.all([
-          supabase.from('listing_claims').select('status').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
-          supabase.from('listing_votes').select('id').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
+    try {
+        const [{ data: l }, { data: r }] = await Promise.all([
+          supabase.from('listings').select('*, category:categories(name, name_mm, icon), owner:profiles!owner_id(full_name, avatar_url)').eq('id', id).single(),
+          supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(20),
         ])
-        if (claim) setClaimStatus(claim.status)
-        setMyVote(!!vote)
-      }
-    }
+        setListing(l)
+        setReviews(r || [])
+        supabase.from('listings').update({ view_count: (l?.view_count || 0) + 1 }).eq('id', id)
+
+        if (profile) {
+          const [{ data: claim }, { data: vote }] = await Promise.all([
+            supabase.from('listing_claims').select('status').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
+            supabase.from('listing_votes').select('id').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
+          ])
+          if (claim) setClaimStatus(claim.status)
+          setMyVote(!!vote)
+        }
+    
+    } catch (e) { console.warn(e) }
+  }
     load()
   }, [id, profile])
 

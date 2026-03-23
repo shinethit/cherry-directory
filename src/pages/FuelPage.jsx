@@ -131,9 +131,11 @@ export default function FuelPage() {
 
   async function load() {
     setLoading(true)
+    try {
     const { data } = await supabase.from('current_fuel_status').select('*')
     setStations(groupByStation(data || []))
     setLastUpdate(new Date())
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 

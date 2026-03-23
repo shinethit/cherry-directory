@@ -114,7 +114,7 @@ function PostJobForm({ onClose, onSuccess, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto pb-24">
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
         <h2 className="font-display font-bold text-base text-white">အလုပ်ကြော်ငြာ တင်မည်</h2>
@@ -122,7 +122,7 @@ function PostJobForm({ onClose, onSuccess, lang }) {
           {submitting ? '...' : 'Post'}
         </button>
       </div>
-      <div className="px-4 py-4 space-y-4 pb-8">
+      <div className="px-4 py-4 space-y-4 pb-24">
         <div><label className="block text-xs text-white/50 mb-1.5">ရာထူး/အလုပ် (မြန်မာ) *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကော်ဖီဆိုင် Cashier လိုသည်" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">ကုမ္ပဏီ/လုပ်ငန်းအမည်</label><input value={form.company_mm} onChange={e => set('company_mm', e.target.value)} className="input-dark font-myanmar" /></div>
         <div>
@@ -173,6 +173,7 @@ function PostJobForm({ onClose, onSuccess, lang }) {
 
 export default function JobBoardPage() {
   const { lang } = useLang()
+  const config = useAppConfig()
   const { isLoggedIn } = useAuth()
   useSEO({ title: lang === 'mm' ? 'အလုပ်ကြော်ငြာ' : 'Job Board' })
 
@@ -183,10 +184,12 @@ export default function JobBoardPage() {
 
   async function load() {
     setLoading(true)
+    try {
     let q = supabase.from('jobs').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(50)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
     const { data } = await q
     setJobs(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 

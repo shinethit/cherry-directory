@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, SlidersHorizontal, X, ShieldCheck, ChevronDown } from 'lucide-react'
+import { Search, X, ShieldCheck, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useAppConfig } from '../hooks/useAppConfig'

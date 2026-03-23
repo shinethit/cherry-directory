@@ -165,12 +165,16 @@ export default function MenuPage() {
 
   useEffect(() => {
     async function load() {
-      const { data: l } = await supabase.from('listings').select('id, name, name_mm, owner_id, submitted_by').eq('id', id).single()
-      if (!l) { navigate('/directory'); return }
-      setListing(l)
-      setCanEdit(isAdmin || isModerator || l.owner_id === profile?.id || l.submitted_by === profile?.id)
-      loadMenu()
-    }
+
+    try {
+        const { data: l } = await supabase.from('listings').select('id, name, name_mm, owner_id, submitted_by').eq('id', id).single()
+        if (!l) { navigate('/directory'); return }
+        setListing(l)
+        setCanEdit(isAdmin || isModerator || l.owner_id === profile?.id || l.submitted_by === profile?.id)
+        loadMenu()
+    
+    } catch (e) { console.warn(e) }
+  }
     load()
   }, [id, profile])
 

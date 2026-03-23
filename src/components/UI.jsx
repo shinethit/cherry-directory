@@ -1,4 +1,4 @@
-import { Star, MapPin, Phone, CheckCircle, Bookmark, BookmarkCheck } from 'lucide-react'
+import { Star, MapPin, Bookmark, BookmarkCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getOptimizedUrl } from '../lib/cloudinary'

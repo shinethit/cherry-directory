@@ -16,15 +16,19 @@ function RsvpSection({ postId }) {
 
   useEffect(() => {
     async function load() {
-      const [{ data: all }, { data: mine }] = await Promise.all([
-        supabase.from('event_rsvps').select('status').eq('post_id', postId),
-        user ? supabase.from('event_rsvps').select('status').eq('post_id', postId).eq('user_id', user.id).maybeSingle() : Promise.resolve({ data: null }),
-      ])
-      const c = { going: 0, interested: 0 }
-      ;(all || []).forEach(r => { if (r.status in c) c[r.status]++ })
-      setCounts(c)
-      setStatus(mine?.status || null)
-    }
+
+    try {
+        const [{ data: all }, { data: mine }] = await Promise.all([
+          supabase.from('event_rsvps').select('status').eq('post_id', postId),
+          user ? supabase.from('event_rsvps').select('status').eq('post_id', postId).eq('user_id', user.id).maybeSingle() : Promise.resolve({ data: null }),
+        ])
+        const c = { going: 0, interested: 0 }
+        ;(all || []).forEach(r => { if (r.status in c) c[r.status]++ })
+        setCounts(c)
+        setStatus(mine?.status || null)
+    
+    } catch (e) { console.warn(e) }
+  }
     load()
   }, [postId, user])
 

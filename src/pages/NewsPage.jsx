@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, Image as ImageIcon, Pin } from 'lucide-react'
+import { Plus, X as ImageIcon, Pin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -84,7 +84,7 @@ function PostForm({ onClose, onSuccess, lang }) {
         </button>
       </div>
 
-      <div className="px-4 py-4 space-y-4 pb-12">
+      <div className="px-4 py-4 space-y-4 pb-24">
         {/* Type selector */}
         <div>
           <label className="block text-xs text-white/50 mb-2">အမျိုးအစား</label>
@@ -219,6 +219,7 @@ export default function NewsPage() {
 
   async function load() {
     setLoading(true)
+    try {
 
     let postsQuery = supabase
       .from('posts')
@@ -243,6 +244,7 @@ export default function NewsPage() {
 
     setPinned(pinnedData || [])
     setPosts(postsData || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
@@ -299,7 +301,7 @@ export default function NewsPage() {
       )}
 
       {/* Posts list */}
-      <div className="px-4 space-y-3">
+      <div className="px-4 space-y-3 pb-24">
         {loading ? (
           [1,2,3].map(n => <Skeleton key={n} className="h-48" />)
         ) : posts.length === 0 ? (

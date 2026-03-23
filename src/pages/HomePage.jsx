@@ -34,18 +34,22 @@ export default function HomePage() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: postsData }, { data: featuredData }, { count: listingCount }, { data: eventsData }] = await Promise.all([
-        supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
-        supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
-        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
-      ])
-      setPosts(postsData || [])
-      setFeatured(featuredData || [])
-      setUpcomingEvents(eventsData || [])
-      setStats({ listings: listingCount || 0 })
-      setLoading(false)
-    }
+
+    try {
+        const [{ data: postsData }, { data: featuredData }, { count: listingCount }, { data: eventsData }] = await Promise.all([
+          supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
+          supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
+          supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+          supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
+        ])
+        setPosts(postsData || [])
+        setFeatured(featuredData || [])
+        setUpcomingEvents(eventsData || [])
+        setStats({ listings: listingCount || 0 })
+        setLoading(false)
+    
+    } catch (e) { console.warn(e) }
+  }
     load()
   }, [])
 

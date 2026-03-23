@@ -135,7 +135,7 @@ function PostForm({ onClose, onSuccess, lang }) {
         </button>
       </div>
 
-      <div className="px-4 py-4 space-y-4 pb-8">
+      <div className="px-4 py-4 space-y-4 pb-24">
         {/* Type */}
         <div className="flex gap-2">
           {[{v:'lost',mm:'ပျောက်ဆုံး',en:'Lost',color:'red'},{v:'found',mm:'တွေ့ရှိ',en:'Found',color:'green'}].map(t => (
@@ -238,11 +238,13 @@ export default function LostFoundPage() {
 
   async function load() {
     setLoading(true)
+    try {
     let q = supabase.from('lost_found').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('reported_at', { ascending: false }).limit(50)
     if (typeFilter !== 'all') q = q.eq('type', typeFilter)
     if (catFilter !== 'all')  q = q.eq('category', catFilter)
     const { data } = await q
     setPosts(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
