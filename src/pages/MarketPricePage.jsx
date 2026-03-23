@@ -108,21 +108,27 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
           {price && <p className="text-center text-xs text-brand-300 mt-1 font-mono">{parseInt(price).toLocaleString()} Ks</p>}
         </div>
 
-        {/* Location — dropdown to prevent overflow; label changes for fuel */}
+        {/* Location — dropdown or text input */}
         <div>
           <label className="block text-xs text-white/50 mb-1.5">
             {isFuel ? (lang === 'mm' ? '⛽ ဓာတ်ဆီဆိုင်' : '⛽ Station') : (lang === 'mm' ? '🏪 ဈေးကွက်' : '🏪 Market')}
           </label>
-          <div className="relative">
-            <select
+          {locations.length > 0 ? (
+            <div className="relative">
+              <select value={market} onChange={e => setMarket(e.target.value)} className="select-dark">
+                {locations.map(loc => <option key={loc} value={loc} style={{ backgroundColor: '#1a0030' }}>{loc}</option>)}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+            </div>
+          ) : (
+            <input
+              type="text"
               value={market}
               onChange={e => setMarket(e.target.value)}
-              className="select-dark"
-            >
-              {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-            </select>
-            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
-          </div>
+              placeholder={isFuel ? (lang === 'mm' ? 'ဓာတ်ဆီဆိုင် အမည်...' : 'Station name...') : (lang === 'mm' ? 'ဈေးကွက် အမည်...' : 'Market name...')}
+              className="input-dark font-myanmar text-sm"
+            />
+          )}
         </div>
 
         <div>
@@ -753,9 +759,8 @@ export default function MarketPricePage() {
           lang={lang}
           onClose={() => setShowManageMarkets(false)}
           onUpdated={() => {
-            supabase.from('markets').select('name').eq('is_active', true).order('sort_order').then(({ data }) => {
-              if (data && data.length > 0) setMarkets(data.map(m => m.name))
-            })
+            supabase.from('markets').select('name').eq('is_active', true).order('sort_order')
+              .then(({ data }) => { setMarkets(data ? data.map(m => m.name) : []) })
           }}
         />
       )}

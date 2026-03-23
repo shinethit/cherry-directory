@@ -4,9 +4,11 @@ import { Search, SlidersHorizontal, X, ShieldCheck, ChevronDown } from 'lucide-r
 import { supabase } from '../lib/supabase'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useAppConfig } from '../hooks/useAppConfig'
+import { useLang } from '../contexts/LangContext'
 
 export default function DirectoryPage() {
   const config = useAppConfig()
+  const { lang } = useLang()
   const cities = ['All', ...(config.cities || [])]
   const [searchParams, setSearchParams] = useSearchParams()
   const [listings, setListings] = useState([])
@@ -72,14 +74,6 @@ export default function DirectoryPage() {
 
   function clearFilters() {
     setQ(''); setCity('All'); setCatId(''); setVerifiedOnly(false)
-  }
-
-  function handleTopCatClick(cat) {
-    if (activeTopId === cat.id) {
-      setCatId('')
-    } else {
-      setCatId(cat.id)
-    }
   }
 
   const hasFilters = q || city !== 'All' || catId || verifiedOnly
@@ -154,51 +148,33 @@ export default function DirectoryPage() {
           )}
         </div>
 
-        {/* Top-level category pills — deduplicated */}
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
-          {topCategories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => handleTopCatClick(cat)}
-              className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                activeTopId === cat.id
-                  ? 'bg-brand-600/60 border-brand-400/50 text-brand-200'
-                  : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
-              }`}
-            >
-              {cat.icon} {cat.name_mm || cat.name}
-            </button>
-          ))}
+        {/* Category dropdown */}
+        <div className="relative">
+          <select
+            value={catId}
+            onChange={e => setCatId(e.target.value)}
+            className="select-dark"
+          >
+            <option value="" style={{ backgroundColor: '#1a0030' }}>
+              {lang === 'mm' ? '📂 အမျိုးအစားအားလုံး' : '📂 All Categories'}
+            </option>
+            {topCategories.map(cat => {
+              const subs = categories.filter(c => c.parent_id === cat.id)
+              if (subs.length === 0) {
+                return <option key={cat.id} value={cat.id} style={{ backgroundColor: '#1a0030' }}>{cat.icon} {cat.name_mm || cat.name}</option>
+              }
+              return (
+                <optgroup key={cat.id} label={`${cat.icon} ${cat.name_mm || cat.name}`} style={{ backgroundColor: '#1a0030' }}>
+                  <option value={cat.id} style={{ backgroundColor: '#1a0030' }}>　 အားလုံး</option>
+                  {subs.map(sub => (
+                    <option key={sub.id} value={sub.id} style={{ backgroundColor: '#1a0030' }}>　 {sub.icon} {sub.name_mm || sub.name}</option>
+                  ))}
+                </optgroup>
+              )
+            })}
+          </select>
+          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
         </div>
-
-        {/* Sub-category pills — shown only when parent is selected and has subs */}
-        {subCategories.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
-            <button
-              onClick={() => setCatId(activeTopId)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-[11px] border transition-colors ${
-                catId === activeTopId
-                  ? 'bg-brand-700/60 border-brand-500/40 text-brand-200'
-                  : 'bg-white/4 border-white/8 text-white/40 hover:text-white/70'
-              }`}
-            >
-              အားလုံး
-            </button>
-            {subCategories.map(sub => (
-              <button
-                key={sub.id}
-                onClick={() => setCatId(sub.id)}
-                className={`flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-full text-[11px] border transition-colors ${
-                  catId === sub.id
-                    ? 'bg-brand-700/60 border-brand-500/40 text-brand-200'
-                    : 'bg-white/4 border-white/8 text-white/40 hover:text-white/70'
-                }`}
-              >
-                {sub.icon} {sub.name_mm || sub.name}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Results count */}
