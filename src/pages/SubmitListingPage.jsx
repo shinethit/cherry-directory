@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, MapPin, Plus, X } from 'lucide-react'
+import { ArrowLeft, CheckCircle, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -44,9 +44,6 @@ export default function SubmitListingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [locationLoading, setLocationLoading] = useState(false)
-  const [showAddCat, setShowAddCat] = useState(false)
-  const [newCat, setNewCat] = useState({ name_mm: '', name: '', parent_mm: '', icon: '📦', is_sub: false })
-  const [addingCat, setAddingCat] = useState(false)
 
   useEffect(() => {
     supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
@@ -87,44 +84,6 @@ export default function SubmitListingPage() {
       },
       () => setLocationLoading(false)
     )
-  }
-
-  async function addQuickCategory() {
-    if (!newCat.name_mm.trim()) return
-    setAddingCat(true)
-    try {
-      // Check if user wants a sub-category
-      let parentId = null
-      if (newCat.is_sub && newCat.parent_mm.trim()) {
-        // Find or create parent
-        const existing = categories.find(c => c.name_mm === newCat.parent_mm.trim() && !c.parent_id)
-        if (existing) {
-          parentId = existing.id
-        } else {
-          const { data: newParent } = await supabase.from('categories').insert({
-            name: newCat.parent_mm.trim(), name_mm: newCat.parent_mm.trim(),
-            icon: '📁', type: 'directory', sort_order: 999, is_active: true
-          }).select().single()
-          parentId = newParent?.id
-        }
-      }
-      const { data: newCatData } = await supabase.from('categories').insert({
-        name: newCat.name || newCat.name_mm.trim(),
-        name_mm: newCat.name_mm.trim(),
-        icon: newCat.icon || '📦',
-        type: 'directory',
-        parent_id: parentId,
-        sort_order: 999,
-        is_active: true,
-      }).select().single()
-      // Reload categories and select new one
-      const { data: cats } = await supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order')
-      setCategories(cats || [])
-      if (newCatData) set('category_id', newCatData.id)
-      setNewCat({ name_mm: '', name: '', parent_mm: '', icon: '📦', is_sub: false })
-      setShowAddCat(false)
-    } catch (e) { console.warn(e) }
-    setAddingCat(false)
   }
 
   async function handleSubmit(e) {
@@ -202,91 +161,32 @@ export default function SubmitListingPage() {
         </Field>
 
         <Field label={t('category_label')} required>
-          <div className="flex gap-2">
-            <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark flex-1" required>
-              <option value="">{t('category_placeholder')}</option>
-              {categories.filter(c => !c.parent_id).map(parent => {
-                const subs = categories.filter(c => c.parent_id === parent.id)
-                if (subs.length === 0) {
-                  return <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name}</option>
-                }
-                return (
-                  <optgroup key={parent.id} label={`${parent.icon} ${parent.name_mm || parent.name}`}>
-                    {subs.map(sub => (
-                      <option key={sub.id} value={sub.id}>  {sub.icon} {sub.name_mm || sub.name}</option>
-                    ))}
-                  </optgroup>
-                )
-              })}
-            </select>
-            <button type="button" onClick={() => setShowAddCat(true)}
-              className="w-10 h-10 flex-shrink-0 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center text-white/50 hover:text-brand-300 hover:border-brand-400/30 transition-colors">
-              <Plus size={16} />
-            </button>
-          </div>
-        </Field>
-
-        {/* Quick-add category modal */}
-        {showAddCat && (
-          <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
-              <button onClick={() => setShowAddCat(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0">
-                <X size={18} className="text-white" />
-              </button>
-              <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? '➕ Category ထည့်မည်' : '➕ Add Category'}</h2>
-              <button onClick={addQuickCategory} disabled={!newCat.name_mm.trim() || addingCat}
-                className="btn-primary text-xs px-4 py-2 disabled:opacity-50">
-                {addingCat ? '...' : lang === 'mm' ? 'ထည့်မည်' : 'Add'}
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-              <div>
-                <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'Category အမည် (မြန်မာ) *' : 'Category Name (Myanmar) *'}</label>
-                <input autoFocus value={newCat.name_mm} onChange={e => setNewCat(n => ({...n, name_mm: e.target.value}))}
-                  className="input-dark font-myanmar" placeholder="ဥပမာ: House Hold, Education, Construction" />
-              </div>
-              <div>
-                <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'Category အမည် (English)' : 'Category Name (English)'}</label>
-                <input value={newCat.name} onChange={e => setNewCat(n => ({...n, name: e.target.value}))}
-                  className="input-dark" placeholder="e.g. House Hold, Education" />
-              </div>
-              <div className="flex items-center gap-3 py-2">
-                <button type="button" onClick={() => setNewCat(n => ({...n, is_sub: !n.is_sub}))}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm transition-colors ${newCat.is_sub ? 'bg-brand-600/20 border-brand-400/30 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
-                  {newCat.is_sub ? '✓' : '○'} {lang === 'mm' ? 'Sub-category ဖြစ်သည်' : 'This is a sub-category'}
-                </button>
-              </div>
-              {newCat.is_sub && (
-                <div>
-                  <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'Parent Category (မြန်မာ)' : 'Parent Category'}</label>
-                  <select value={newCat.parent_mm} onChange={e => setNewCat(n => ({...n, parent_mm: e.target.value}))}
-                    className="select-dark">
-                    <option value="">{lang === 'mm' ? 'Parent Category ရွေးပါ...' : 'Select parent...'}</option>
-                    {categories.filter(c => !c.parent_id).map(c => (
-                      <option key={c.id} value={c.name_mm}>{c.icon} {c.name_mm || c.name}</option>
-                    ))}
-                    <option value="__new__">{lang === 'mm' ? '+ အသစ်ထည့်မည်...' : '+ Add new parent...'}</option>
-                  </select>
-                  {newCat.parent_mm === '__new__' && (
-                    <input value="" onChange={e => setNewCat(n => ({...n, parent_mm: e.target.value}))}
-                      className="input-dark font-myanmar mt-2" placeholder={lang === 'mm' ? 'Parent Category အမည်...' : 'Parent category name...'} />
-                  )}
-                </div>
-              )}
-              <div>
-                <label className="block text-xs text-white/50 mb-1.5">Icon</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {['📦','🏠','🔧','💄','👕','🎓','📚','🏥','🚗','🍜','💻','📱','🌿','🎵','🎮','💰','🛍️','✂️','🎭','🏋️'].map(ic => (
-                    <button type="button" key={ic} onClick={() => setNewCat(n => ({...n, icon: ic}))}
-                      className={`w-9 h-9 rounded-lg text-xl flex items-center justify-center ${newCat.icon === ic ? 'bg-brand-600/60 border border-brand-400/50' : 'bg-white/5'}`}>
-                      {ic}
-                    </button>
+          <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark" required>
+            <option value="">{t('category_placeholder')}</option>
+            {categories.filter(c => !c.parent_id).map(parent => {
+              const subs = categories.filter(c => c.parent_id === parent.id)
+              if (subs.length === 0) {
+                return <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name}</option>
+              }
+              return (
+                <optgroup key={parent.id} label={`${parent.icon} ${parent.name_mm || parent.name}`}>
+                  {subs.map(sub => (
+                    <option key={sub.id} value={sub.id}>  {sub.icon} {sub.name_mm || sub.name}</option>
                   ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+                </optgroup>
+              )
+            })}
+          </select>
+          {(profile?.role === 'admin' || profile?.role === 'moderator') && (
+            <p className="text-[10px] text-white/30 mt-1.5 font-myanmar">
+              Category ထပ်ထည့်/ဖျက်ရန် →{' '}
+              <button type="button" onClick={() => navigate('/admin/categories')}
+                className="text-brand-300 hover:text-brand-200 underline">
+                Admin › Categories
+              </button>
+            </p>
+          )}
+        </Field>
 
         <Field label={t('desc_label')}>
           <textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" placeholder={t('desc_placeholder')} />

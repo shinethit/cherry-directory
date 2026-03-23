@@ -6,10 +6,10 @@ import Header from './Header'
 import PWAInstallBanner from './PWAInstallBanner'
 
 const NAV = [
-  { path: '/',           icon: Home,         labelMm: 'ပင်မ',      labelEn: 'Home'      },
   { path: '/news',       icon: Newspaper,    labelMm: 'သတင်း',    labelEn: 'News'      },
-  { path: '/calendar',   icon: CalendarDays, labelMm: 'Calendar',  labelEn: 'Events',   center: true },
   { path: '/community',  icon: Users,        labelMm: 'Community', labelEn: 'Community' },
+  { path: '/',           icon: Home,         labelMm: 'ပင်မ',      labelEn: 'Home',     center: true },
+  { path: '/calendar',   icon: CalendarDays, labelMm: 'Calendar',  labelEn: 'Events'    },
   { path: '/directory',  icon: Search,       labelMm: 'ရှာဖွေ',    labelEn: 'Search'    },
 ]
 
