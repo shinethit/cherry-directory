@@ -245,22 +245,19 @@ export default function LeaderboardPage() {
         <p className="text-xs text-white/40 font-myanmar">{periodLabel(period, lang)}</p>
       </div>
 
-      {/* ── Period scroll pills ── */}
+      {/* ── Period dropdown ── */}
       <div className="px-4 mb-1">
-        <div ref={pillRef} className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-          {PERIODS.map(p => (
-            <button
-              key={p.id}
-              onClick={() => setPeriod(p.id)}
-              className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-display font-bold border transition-all ${
-                period === p.id
-                  ? 'bg-brand-600 border-brand-400/60 text-white shadow-lg shadow-brand-900/30'
-                  : 'bg-white/5 border-white/10 text-white/45 hover:text-white/75 hover:border-white/20'
-              }`}
-            >
-              {lang === 'mm' ? p.labelMm : p.labelEn}
-            </button>
-          ))}
+        <div className="relative">
+          <select value={period} onChange={e => setPeriod(e.target.value)}
+            className="w-full appearance-none border border-white/12 text-white text-sm font-display font-bold rounded-xl px-4 py-2.5 pr-10 outline-none"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+            {PERIODS.map(p => (
+              <option key={p.id} value={p.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                {lang === 'mm' ? p.labelMm : p.labelEn}
+              </option>
+            ))}
+          </select>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
@@ -279,22 +276,20 @@ export default function LeaderboardPage() {
       {/* ── Podium (top 3) ── */}
       {!loading && <Podium users={users} tab={tab} lang={lang} />}
 
-      {/* ── Category tabs ── */}
-      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
-        {TABS.map(({ id, labelMm, labelEn, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold border transition-colors ${
-              tab === id
-                ? 'bg-brand-600/60 border-brand-400/50 text-brand-200'
-                : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
-            }`}
-          >
-            <Icon size={12} />
-            {lang === 'mm' ? labelMm : labelEn}
-          </button>
-        ))}
+      {/* ── Category tabs dropdown ── */}
+      <div className="px-4 mb-4">
+        <div className="relative">
+          <select value={tab} onChange={e => setTab(e.target.value)}
+            className="w-full appearance-none border border-white/12 text-white text-sm font-semibold rounded-xl px-4 py-2.5 pr-10 outline-none"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+            {TABS.map(({ id, labelMm, labelEn }) => (
+              <option key={id} value={id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                {lang === 'mm' ? labelMm : labelEn}
+              </option>
+            ))}
+          </select>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
 
       {/* ── List ── */}

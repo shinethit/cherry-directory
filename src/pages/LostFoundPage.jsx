@@ -272,24 +272,38 @@ export default function LostFoundPage() {
         </button>
       </div>
 
-      {/* Type filter */}
-      <div className="flex gap-2 px-4 mb-3 overflow-x-auto scrollbar-hide">
-        {TYPES.map(t => (
-          <button key={t.id} onClick={() => setTypeFilter(t.id)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold border transition-colors ${typeFilter === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
-            {lang === 'mm' ? t.mm : t.en}
-          </button>
-        ))}
-      </div>
-
-      {/* Category filter */}
-      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
-        {CATS.map(c => (
-          <button key={c.id} onClick={() => setCatFilter(c.id)}
-            className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border transition-colors ${catFilter === c.id ? 'bg-white/12 border-white/20 text-white' : 'bg-white/5 border-white/8 text-white/40'}`}>
-            {c.icon} {lang === 'mm' ? c.mm : c.en}
-          </button>
-        ))}
+      {/* Type + Category filter row */}
+      <div className="flex gap-2 px-4 mb-4">
+        <div className="relative flex-1">
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value)}
+            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-3 py-2.5 pr-8 outline-none"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+          >
+            {TYPES.map(t => (
+              <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                {lang === 'mm' ? t.mm : t.en}
+              </option>
+            ))}
+          </select>
+          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div className="relative flex-1">
+          <select
+            value={catFilter}
+            onChange={e => setCatFilter(e.target.value)}
+            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-3 py-2.5 pr-8 outline-none"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+          >
+            {CATS.map(c => (
+              <option key={c.id} value={c.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                {c.icon} {lang === 'mm' ? c.mm : c.en}
+              </option>
+            ))}
+          </select>
+          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
 
       <div className="px-4 space-y-2">

@@ -314,18 +314,22 @@ export default function EmergencyPage() {
       </div>
 
       {/* Category filter */}
-      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
-        {CATS.map(cat => (
-          <button key={cat.id} onClick={() => setCatFilter(cat.id)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-              catFilter === cat.id
-                ? 'bg-brand-600/60 border-brand-400/50 text-brand-200'
-                : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
-            }`}>
-            <span>{cat.icon}</span>
-            {lang === 'mm' ? cat.mm : cat.en}
-          </button>
-        ))}
+      <div className="px-4 mb-4">
+        <div className="relative">
+          <select
+            value={catFilter}
+            onChange={e => setCatFilter(e.target.value)}
+            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-4 py-2.5 pr-10 outline-none"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+          >
+            {CATS.map(cat => (
+              <option key={cat.id} value={cat.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                {cat.icon} {lang === 'mm' ? cat.mm : cat.en}
+              </option>
+            ))}
+          </select>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
 
       {/* Contact list grouped by category */}

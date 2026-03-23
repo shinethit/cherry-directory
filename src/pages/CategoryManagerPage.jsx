@@ -296,9 +296,8 @@ export default function CategoryManagerPage() {
 
   useEffect(() => { load() }, [load])
 
-  // Split top-level and subs
-  const filtered   = cats.filter(c => c.type === typeFilter || !c.parent_id && typeFilter === 'all')
-  const topLevel   = filtered.filter(c => !c.parent_id && c.type === typeFilter)
+  // Split top-level and subs — fixed to avoid duplicates
+  const topLevel = cats.filter(c => !c.parent_id && c.type === typeFilter)
   const searchedTop = search
     ? topLevel.filter(c => (c.name_mm || '').includes(search) || (c.name || '').toLowerCase().includes(search.toLowerCase()))
     : topLevel
@@ -362,17 +361,21 @@ export default function CategoryManagerPage() {
       </div>
 
       {/* Type filter */}
-      <div className="flex gap-2 px-4 mb-3 overflow-x-auto scrollbar-hide">
-        {[
-          { v: 'directory', mm: '📍 Directory', en: '📍 Directory' },
-          { v: 'news',      mm: '📰 News',      en: '📰 News'      },
-          { v: 'event',     mm: '📅 Event',     en: '📅 Event'     },
-        ].map(t => (
-          <button key={t.v} onClick={() => setType(t.v)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold border transition-colors ${typeFilter === t.v ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
-            {lang === 'mm' ? t.mm : t.en}
-          </button>
-        ))}
+      <div className="px-4 mb-3">
+        <div className="relative">
+          <select value={typeFilter} onChange={e => setType(e.target.value)}
+            className="w-full appearance-none border border-white/12 text-white text-sm font-semibold rounded-xl px-4 py-2.5 pr-10 outline-none"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+            {[
+              { v: 'directory', mm: '📍 Directory' },
+              { v: 'news',      mm: '📰 News'      },
+              { v: 'event',     mm: '📅 Event'     },
+            ].map(t => (
+              <option key={t.v} value={t.v} style={{ backgroundColor: '#1a0030' }}>{t.mm}</option>
+            ))}
+          </select>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
 
       {/* Search */}

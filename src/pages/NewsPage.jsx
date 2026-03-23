@@ -267,21 +267,23 @@ export default function NewsPage() {
         )}
       </div>
 
-      {/* Type filter pills */}
-      <div className="flex gap-2 px-4 overflow-x-auto scrollbar-hide pb-3">
-        {TYPES.map(t => (
-          <button
-            key={t.value}
-            onClick={() => setType(t.value)}
-            className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-semibold border transition-colors ${
-              type === t.value
-                ? 'bg-brand-600/60 border-brand-400/50 text-brand-200'
-                : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
-            }`}
+      {/* Type filter */}
+      <div className="px-4 mb-3">
+        <div className="relative">
+          <select
+            value={type}
+            onChange={e => setType(e.target.value)}
+            className="w-full appearance-none border border-white/12 text-white text-sm rounded-xl px-4 py-2.5 pr-10 outline-none"
+            style={{ backgroundColor: 'rgba(255,255,255,0.06)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
           >
-            {lang === 'mm' ? t.label : t.labelEn}
-          </button>
-        ))}
+            {TYPES.map(t => (
+              <option key={t.value} value={t.value} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                {lang === 'mm' ? t.label : t.labelEn}
+              </option>
+            ))}
+          </select>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
 
       {/* Pinned posts */}

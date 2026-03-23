@@ -60,13 +60,14 @@ export default function Layout() {
         </div>
       </nav>
 
-      {isLoggedIn && (
+      {/* FABs — hidden on submit/edit/admin pages to avoid overlap */}
+      {isLoggedIn && !location.pathname.startsWith('/submit') && !location.pathname.startsWith('/edit') && (
         <button onClick={() => navigate('/submit')} className="fixed bottom-24 right-4 w-12 h-12 rounded-2xl btn-primary flex items-center justify-center shadow-xl shadow-brand-900/50 z-40">
           <Plus size={22} />
         </button>
       )}
-      {isModerator && (
-        <button onClick={() => navigate('/admin')} className="fixed bottom-24 left-4 w-12 h-12 rounded-2xl bg-amber-600/80 flex items-center justify-center shadow-xl z-40">
+      {isModerator && !location.pathname.startsWith('/admin') && !location.pathname.startsWith('/submit') && !location.pathname.startsWith('/edit') && (
+        <button onClick={() => navigate('/admin')} className="fixed bottom-40 left-4 w-12 h-12 rounded-2xl bg-amber-600/80 flex items-center justify-center shadow-xl z-40">
           <ShieldCheck size={20} className="text-white" />
         </button>
       )}
