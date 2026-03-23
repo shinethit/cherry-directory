@@ -109,7 +109,7 @@ function ItemForm({ listingId, categoryId, item, categories, onSave, onCancel })
 
       <div>
         <label className="block text-[10px] text-white/40 mb-1">Category</label>
-        <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="input-dark text-sm py-2">
+        <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark text-sm">
           <option value="">— No category —</option>
           {categories.map(c => <option key={c.id} value={c.id}>{c.name_mm || c.name}</option>)}
         </select>

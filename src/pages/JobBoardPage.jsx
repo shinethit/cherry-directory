@@ -151,7 +151,7 @@ function PostJobForm({ onClose, onSuccess, lang }) {
           <div className="col-span-1"><label className="block text-xs text-white/50 mb-1.5">လစာ Min</label><input type="number" value={form.salary_min} onChange={e => set('salary_min', e.target.value)} className="input-dark" placeholder="150000" /></div>
           <div className="col-span-1"><label className="block text-xs text-white/50 mb-1.5">Max</label><input type="number" value={form.salary_max} onChange={e => set('salary_max', e.target.value)} className="input-dark" /></div>
           <div className="col-span-1"><label className="block text-xs text-white/50 mb-1.5">Unit</label>
-            <select value={form.salary_unit} onChange={e => set('salary_unit', e.target.value)} className="input-dark text-xs">
+            <select value={form.salary_unit} onChange={e => set('salary_unit', e.target.value)} className="select-dark text-xs">
               <option value="day">ရက်</option><option value="week">ပတ်</option><option value="month">လ</option>
             </select>
           </div>

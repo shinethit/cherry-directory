@@ -345,8 +345,12 @@ function AddItemModal({ onClose, onAdded, lang }) {
 
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="font-display font-bold text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}</h3>
+      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 pt-4 pb-2 border-b border-white/8 flex items-center justify-between">
+          <h3 className="font-display font-bold text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}</h3>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
+        </div>
+        <div className="overflow-y-auto max-h-[75dvh] px-5 py-4 space-y-4">
 
         <div>
           <label className="block text-xs text-white/50 mb-1.5">Icon</label>
@@ -363,14 +367,14 @@ function AddItemModal({ onClose, onAdded, lang }) {
 
         <div>
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အမျိုးအစား' : 'Category'}</label>
-          <select value={form.category} onChange={e => setForm(f => ({...f, category: e.target.value}))} className="input-dark">
+          <select value={form.category} onChange={e => setForm(f => ({...f, category: e.target.value}))} className="select-dark">
             {CATEGORIES.filter(c => c.id !== 'all').map(c => <option key={c.id} value={c.id}>{c.icon} {c.mm}</option>)}
           </select>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ယူနစ် (မြန်မာ)' : 'Unit (MM)'}</label>
-            <select value={form.unit} onChange={e => { const u = UNITS.find(u => u.mm === e.target.value); setForm(f => ({...f, unit: e.target.value, unit_en: u?.en || ''})) }} className="input-dark font-myanmar">
+            <select value={form.unit} onChange={e => { const u = UNITS.find(u => u.mm === e.target.value); setForm(f => ({...f, unit: e.target.value, unit_en: u?.en || ''})) }} className="select-dark">
               {UNITS.map(u => <option key={u.mm} value={u.mm}>{u.mm}</option>)}
             </select>
           </div>
@@ -382,6 +386,7 @@ function AddItemModal({ onClose, onAdded, lang }) {
         <div className="flex gap-2">
           <button onClick={submit} disabled={!form.name || submitting} className="btn-primary flex-1">{submitting ? '...' : lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
           <button onClick={onClose} className="btn-ghost px-4">{lang === 'mm' ? 'ပိတ်' : 'Close'}</button>
+        </div>
         </div>
       </div>
     </div>

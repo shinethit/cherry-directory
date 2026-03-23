@@ -28,7 +28,7 @@ import FuelPage          from './pages/FuelPage'
 import LostFoundPage     from './pages/LostFoundPage'
 import JobBoardPage      from './pages/JobBoardPage'
 import NoticeBoardPage   from './pages/NoticeBoardPage'
-import { WeatherAlertPage, DonationPage, HealthServicePage } from './pages/CommunityFeaturePages'
+import { WeatherAlertPage, DonationPage, HealthServicePage, BusSchedulePage, ToursPage } from './pages/CommunityFeaturePages'
 import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
 import EmergencyPage from './pages/EmergencyPage'
 import CategoryManagerPage from './pages/CategoryManagerPage'
@@ -82,6 +82,8 @@ export default function App() {
         <Route path="weather"    element={<WeatherAlertPage />} />
         <Route path="donations"  element={<DonationPage />} />
         <Route path="health"     element={<HealthServicePage />} />
+        <Route path="bus"        element={<BusSchedulePage />} />
+        <Route path="tours"      element={<ToursPage />} />
         {/* User */}
         <Route path="leaderboard" element={<LeaderboardPage />} />
         <Route path="login"       element={<LoginPage />} />

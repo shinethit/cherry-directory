@@ -132,7 +132,7 @@ function PostForm({ onClose, onSuccess, lang }) {
             value={form.title_mm}
             onChange={e => set('title_mm', e.target.value)}
             className="input-dark font-myanmar"
-            placeholder="ဥပမာ: ပင်လုံဈေး မှတ်တမ်း..."
+            placeholder="ဥပမာ: မှတ်တမ်း..."
           />
         </div>
 

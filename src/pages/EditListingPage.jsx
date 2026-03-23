@@ -290,7 +290,7 @@ export default function EditListingPage() {
           <input type="text" value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" />
         </Field>
         <Field label="အမျိုးအစား">
-          <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="input-dark">
+          <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark">
             <option value="">— ရွေးချယ်ရန် —</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name_mm || c.name}</option>)}
           </select>
@@ -349,7 +349,7 @@ export default function EditListingPage() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="မြို့">
-              <select value={form.city} onChange={e => set('city', e.target.value)} className="input-dark">
+              <select value={form.city} onChange={e => set('city', e.target.value)} className="select-dark">
                 {(config.cities || []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </Field>

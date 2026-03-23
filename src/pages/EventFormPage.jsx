@@ -244,14 +244,14 @@ export default function EventFormPage() {
           <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">Settings</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Status">
-              <select value={form.status} onChange={e => set('status', e.target.value)} className="input-dark">
+              <select value={form.status} onChange={e => set('status', e.target.value)} className="select-dark">
                 <option value="published">Published</option>
                 <option value="draft">Draft</option>
                 <option value="archived">Archived</option>
               </select>
             </Field>
             <Field label="Pinned">
-              <select value={form.is_pinned ? 'yes' : 'no'} onChange={e => set('is_pinned', e.target.value === 'yes')} className="input-dark">
+              <select value={form.is_pinned ? 'yes' : 'no'} onChange={e => set('is_pinned', e.target.value === 'yes')} className="select-dark">
                 <option value="no">No</option>
                 <option value="yes">📌 Yes</option>
               </select>
