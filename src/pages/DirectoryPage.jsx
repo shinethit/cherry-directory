@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Search, SlidersHorizontal, X, ShieldCheck } from 'lucide-react'
+import { Search, SlidersHorizontal, X, ShieldCheck, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useAppConfig } from '../hooks/useAppConfig'
@@ -22,8 +22,24 @@ export default function DirectoryPage() {
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 20
 
+  // Top-level categories only — no duplicates
+  const topCategories = categories.filter(c => !c.parent_id)
+
+  // Active category (could be sub)
+  const activeCat = categories.find(c => c.id === catId)
+  // Which top-level is active
+  const activeTopId = activeCat?.parent_id || (activeCat && !activeCat.parent_id ? activeCat.id : null)
+  // Sub-categories of active top-level
+  const subCategories = activeTopId ? categories.filter(c => c.parent_id === activeTopId) : []
+
   useEffect(() => {
-    supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
+    supabase
+      .from('categories')
+      .select('*')
+      .eq('type', 'directory')
+      .eq('is_active', true)
+      .order('sort_order')
+      .then(({ data }) => setCategories(data || []))
   }, [])
 
   const loadListings = useCallback(async (reset = true) => {
@@ -58,13 +74,22 @@ export default function DirectoryPage() {
     setQ(''); setCity('All'); setCatId(''); setVerifiedOnly(false)
   }
 
+  function handleTopCatClick(cat) {
+    if (activeTopId === cat.id) {
+      setCatId('')
+    } else {
+      setCatId(cat.id)
+    }
+  }
+
   const hasFilters = q || city !== 'All' || catId || verifiedOnly
-  const activeCat = categories.find(c => c.id === catId)
 
   return (
     <div className="flex flex-col min-h-full">
-      {/* Search bar */}
-      <div className="sticky top-[97px] z-40 px-4 py-3 space-y-3 glass border-b border-white/8">
+      {/* Sticky filter area */}
+      <div className="sticky top-[97px] z-40 px-4 py-3 space-y-2 glass border-b border-white/8">
+
+        {/* Search input */}
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
           <input
@@ -81,15 +106,9 @@ export default function DirectoryPage() {
           )}
         </div>
 
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-          <button
-            onClick={() => setShowFilters(f => !f)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${showFilters ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/60'}`}
-          >
-            <SlidersHorizontal size={12} /> Filters {hasFilters && '•'}
-          </button>
-
-          {/* Verified Owner filter pill */}
+        {/* Quick filter row */}
+        <div className="flex items-center gap-2">
+          {/* Verified Owner */}
           <button
             onClick={() => setVerifiedOnly(v => !v)}
             className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
@@ -97,45 +116,87 @@ export default function DirectoryPage() {
                 ? 'border-gold-500/50 text-gold-400'
                 : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
             }`}
-            style={verifiedOnly ? {
-              background: 'linear-gradient(135deg, rgba(212,175,55,0.18), rgba(212,175,55,0.08))',
-            } : {}}
+            style={verifiedOnly ? { background: 'linear-gradient(135deg, rgba(212,175,55,0.18), rgba(212,175,55,0.08))' } : {}}
           >
             <ShieldCheck size={12} className={verifiedOnly ? 'text-gold-400' : ''} />
-            Verified Owner
+            Verified
           </button>
 
-          {/* Category pills */}
-          {categories.map(cat => (
+          {/* City dropdown */}
+          <div className="relative flex-shrink-0">
+            <select
+              value={city}
+              onChange={e => setCity(e.target.value)}
+              className={`appearance-none pl-3 pr-7 py-1.5 rounded-full text-xs font-semibold border outline-none transition-colors cursor-pointer ${
+                city !== 'All'
+                  ? 'border-gold-500/40 text-gold-400'
+                  : 'bg-white/5 border-white/10 text-white/60'
+              }`}
+              style={{
+                backgroundColor: city !== 'All' ? 'rgba(212,175,55,0.15)' : 'rgba(255,255,255,0.05)',
+                fontFamily: 'Pyidaungsu, DM Sans, sans-serif'
+              }}
+            >
+              {cities.map(c => (
+                <option key={c} value={c} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                  {c === 'All' ? '📍 ခပ်သိမ်း' : c}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+          </div>
+
+          {/* Clear all */}
+          {hasFilters && (
+            <button onClick={clearFilters} className="flex-shrink-0 w-6 h-6 rounded-full bg-white/8 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        {/* Top-level category pills — deduplicated */}
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
+          {topCategories.map(cat => (
             <button
               key={cat.id}
-              onClick={() => setCatId(catId === cat.id ? '' : cat.id)}
-              className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${catId === cat.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'}`}
+              onClick={() => handleTopCatClick(cat)}
+              className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                activeTopId === cat.id
+                  ? 'bg-brand-600/60 border-brand-400/50 text-brand-200'
+                  : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
+              }`}
             >
               {cat.icon} {cat.name_mm || cat.name}
             </button>
           ))}
         </div>
 
-        {/* Expanded filters */}
-        {showFilters && (
-          <div className="space-y-2 pt-1">
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-              {cities.map(c => (
-                <button
-                  key={c}
-                  onClick={() => setCity(c)}
-                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs border transition-colors ${city === c ? 'bg-gold-500/20 border-gold-500/40 text-gold-400' : 'bg-white/5 border-white/10 text-white/50'}`}
-                >
-                  {c === 'All' ? '📍 ခပ်သိမ်း' : c}
-                </button>
-              ))}
-            </div>
-            {hasFilters && (
-              <button onClick={clearFilters} className="text-xs text-brand-300 hover:text-brand-200 transition-colors">
-                ✕ Filter ဖယ်ရှားရန်
+        {/* Sub-category pills — shown only when parent is selected and has subs */}
+        {subCategories.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
+            <button
+              onClick={() => setCatId(activeTopId)}
+              className={`flex-shrink-0 px-3 py-1 rounded-full text-[11px] border transition-colors ${
+                catId === activeTopId
+                  ? 'bg-brand-700/60 border-brand-500/40 text-brand-200'
+                  : 'bg-white/4 border-white/8 text-white/40 hover:text-white/70'
+              }`}
+            >
+              အားလုံး
+            </button>
+            {subCategories.map(sub => (
+              <button
+                key={sub.id}
+                onClick={() => setCatId(sub.id)}
+                className={`flex-shrink-0 flex items-center gap-1 px-3 py-1 rounded-full text-[11px] border transition-colors ${
+                  catId === sub.id
+                    ? 'bg-brand-700/60 border-brand-500/40 text-brand-200'
+                    : 'bg-white/4 border-white/8 text-white/40 hover:text-white/70'
+                }`}
+              >
+                {sub.icon} {sub.name_mm || sub.name}
               </button>
-            )}
+            ))}
           </div>
         )}
       </div>
@@ -157,7 +218,7 @@ export default function DirectoryPage() {
         </div>
       </div>
 
-      {/* Listing grid */}
+      {/* Listings */}
       <div className="px-4 space-y-2 pb-6">
         {loading && listings.length === 0
           ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
@@ -166,7 +227,6 @@ export default function DirectoryPage() {
           : listings.map(l => <ListingCard key={l.id} listing={l} />)
         }
 
-        {/* Load more */}
         {listings.length < total && !loading && (
           <button
             onClick={() => { setPage(p => p + 1); loadListings(false) }}
