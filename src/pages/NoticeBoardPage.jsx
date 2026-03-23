@@ -195,7 +195,7 @@ export default function NoticeBoardPage() {
         </div>
       </div>
 
-      <div className="px-4 space-y-2">
+      <div className="px-4 space-y-2 pb-24">
         {loading ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />) :
          notices.length === 0 ? <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">📋</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ကြေညာချက် မရှိသေး' : 'No notices yet'}</p></div> :
          notices.map(n => <NoticeCard key={n.id} notice={n} lang={lang} isMod={isModerator} onDelete={deleteNotice} />)}

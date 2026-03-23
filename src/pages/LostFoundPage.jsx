@@ -306,7 +306,7 @@ export default function LostFoundPage() {
         </div>
       </div>
 
-      <div className="px-4 space-y-2">
+      <div className="px-4 space-y-2 pb-24">
         {loading
           ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />)
           : posts.length === 0

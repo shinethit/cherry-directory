@@ -250,7 +250,7 @@ export function DonationPage() {
         </div>
       </div>
 
-      <div className="px-4 space-y-3">
+      <div className="px-4 space-y-3 pb-24">
         {loading ? [1,2].map(n => <div key={n} className="h-36 rounded-2xl shimmer" />) :
          items.length === 0 ? <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">❤️</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Campaign မရှိသေး' : 'No campaigns yet'}</p></div> :
          items.map(d => {
@@ -709,7 +709,7 @@ export function ToursPage() {
           <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
-      <div className="px-4 space-y-3">
+      <div className="px-4 space-y-3 pb-24">
         {loading ? [1,2,3].map(n => <div key={n} className="h-28 rounded-2xl shimmer" />) :
          tours.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center">

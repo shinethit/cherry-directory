@@ -75,11 +75,6 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
       <div className="flex-1 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
-          <p className="font-display font-bold text-white">{lang === 'mm' ? '✏️ ကုန်ပစ္စည်း ပြင်ဆင်မည်' : '✏️ Edit Item'}</p>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
-        </div>
-        {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/8">
           <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
@@ -90,9 +85,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
             <p className="text-[9px] text-white/40">per {lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</p>
           </div>
         </div>
-
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-5 pt-4 pb-6 space-y-4">
+        <div className="flex-1 overflow-y-auto px-5 pt-4 space-y-4">
 
         {item.median_price && (
           <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl">
@@ -141,12 +134,13 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
         </div>
 
         {error && <p className="text-xs text-red-400">{error}</p>}
-
-        <button onClick={submit} disabled={!price || submitting} className="btn-primary w-full">
-          {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />...</span>
-            : lang === 'mm' ? '📤 တင်ပြမည်' : '📤 Submit'}
-        </button>
-        <p className="text-[9px] text-white/25 text-center font-myanmar">Guest ပါ တင်ပြနိုင် • ၁၀ မိနစ် Cooldown</p>
+        </div>
+        <div className="px-5 py-3 border-t border-white/8">
+          <button onClick={submit} disabled={!price || submitting} className="btn-primary w-full">
+            {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />...</span>
+              : lang === 'mm' ? '📤 တင်ပြမည်' : '📤 Submit'}
+          </button>
+          <p className="text-[9px] text-white/25 text-center font-myanmar mt-1">Guest ပါ တင်ပြနိုင် • ၁၀ မိနစ် Cooldown</p>
         </div>
       </div>
     </div>
@@ -178,8 +172,7 @@ function EditItemModal({ item, onClose, onSave, lang }) {
           <p className="font-display font-bold text-white">{lang === 'mm' ? '✏️ ကုန်ပစ္စည်း ပြင်ဆင်မည်' : '✏️ Edit Item'}</p>
           <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 pb-6">
-        <h3 className="font-display font-bold text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း ပြင်ဆင်မည်' : 'Edit Item'}</h3>
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
 
         {/* Icon picker */}
         <div>
@@ -217,13 +210,12 @@ function EditItemModal({ item, onClose, onSave, lang }) {
             <input value={unitEn} onChange={e => setUnitEn(e.target.value)} className="input-dark text-sm" placeholder="tin" />
           </div>
         </div>
-
-        <div className="flex gap-2 pt-1">
+        </div>
+        <div className="px-6 py-3 border-t border-white/8 flex gap-2">
           <button onClick={save} disabled={!name || !unit || saving} className="btn-primary flex-1">
             {saving ? '...' : lang === 'mm' ? '✓ သိမ်းမည်' : '✓ Save'}
           </button>
           <button onClick={onClose} className="btn-ghost px-4">{lang === 'mm' ? 'ပိတ်' : 'Close'}</button>
-        </div>
         </div>
       </div>
     </div>
@@ -287,7 +279,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 pb-6">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 pb-24">
           <div className="flex gap-2">
             <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMarket()}
               placeholder={lang === 'mm' ? 'ဈေးကွက် အမည်ထည့်ပါ...' : 'Market name...'}
