@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, X, Eye, Building2, Newspaper, Users, MessageCircle, BarChart2, Flag, ShieldCheck, Upload, ScrollText, Radio } from 'lucide-react'
+import { ArrowLeft, Check, X, Eye, Building2, Newspaper, Users, MessageCircle, BarChart2, Flag, ShieldCheck, Upload, ScrollText, Radio, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import AnalyticsChart from '../components/AnalyticsChart'
@@ -157,10 +157,16 @@ export default function AdminPage() {
             📂 Categories
           </button>
           <button
+            onClick={() => navigate('/admin/settings')}
+            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white/8 border border-white/12 text-white/60 text-xs font-display font-semibold"
+          >
+            ⚙️ Settings
+          </button>
+          <button
             onClick={() => navigate('/bulk-import')}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600/20 border border-brand-400/30 text-brand-300 text-xs font-display font-semibold"
           >
-            <Upload size={13} /> Bulk Import
+            <Upload size={13} /> Import
           </button>
         </div>
       </div>
@@ -182,15 +188,24 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 px-4 mb-4 overflow-x-auto scrollbar-hide">
-        {TABS.map(({ id, label, icon: Icon }) => (
-          <button key={id} onClick={() => setTab(id)} className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-display font-semibold transition-colors ${tab === id ? 'bg-brand-600/60 text-brand-200' : 'text-white/50 hover:text-white/80'}`}>
-            <Icon size={13} /> {label}
-            {id === 'claims' && stats.claims > 0 && <span className="bg-amber-500/80 text-white text-[9px] px-1.5 rounded-full">{stats.claims}</span>}
-            {id === 'listings' && stats.pending > 0 && <span className="bg-amber-500/80 text-white text-[9px] px-1.5 rounded-full">{stats.pending}</span>}
-          </button>
-        ))}
+      {/* Tab selector — dropdown on mobile to prevent overflow */}
+      <div className="px-4 mb-4">
+        <div className="relative">
+          <select
+            value={tab}
+            onChange={e => setTab(e.target.value)}
+            className="w-full appearance-none bg-brand-600/20 border border-brand-400/30 text-brand-200 text-sm font-display font-semibold rounded-xl px-4 py-2.5 pr-10 outline-none"
+          >
+            {TABS.map(({ id, label }) => (
+              <option key={id} value={id}>
+                {label}
+                {id === 'claims'   && stats.claims  > 0 ? ` (${stats.claims})`  : ''}
+                {id === 'listings' && stats.pending > 0 ? ` (${stats.pending})` : ''}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-brand-300 pointer-events-none" />
+        </div>
       </div>
 
       <div className="px-4">
@@ -368,7 +383,7 @@ export default function AdminPage() {
                 {item.status === 'approved' && (
                   <div className="flex items-center gap-2 text-xs text-white/30">
                     <ShieldCheck size={12} className="text-gold-500" />
-                    <span>Verified by Owner badge တပ်ဆင်ပြီး — ဆိုင်ကို စစ်ဆေးနိုင်</span>
+                    <span>Verified by Owner badge တပ်ဆင်ပြီး — လုပ်ငန်းကို စစ်ဆေးနိုင်</span>
                     <button onClick={() => navigate(`/directory/${item.listing_id}`)} className="ml-auto text-brand-400 hover:text-brand-300 flex items-center gap-1">
                       <Eye size={11} /> View
                     </button>

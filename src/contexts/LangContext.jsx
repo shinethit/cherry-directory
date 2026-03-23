@@ -19,7 +19,7 @@ export const T = {
   featured_title: { mm: 'Featured လုပ်ငန်းများ', en: 'Featured Listings' },
   news_title: { mm: 'သတင်းနှင့် ဖြစ်ရပ်များ', en: 'News & Events' },
   public_chat: { mm: 'ပြောဆိုရေး', en: 'Public Chat' },
-  submit_listing: { mm: 'ဆိုင်ထည့်မယ်', en: 'Add Listing / Service' },
+  submit_listing: { mm: 'လုပ်ငန်းထည့်မယ်', en: 'Add Listing / Service' },
   // Directory
   search_placeholder: { mm: 'လုပ်ငန်း / ဝန်ဆောင်မှု ရှာရန်...', en: 'Search business...' },
   results_found: { mm: 'တွေ့ရှိ', en: 'found' },
@@ -96,7 +96,7 @@ export const T = {
   cancel: { mm: 'Cancel', en: 'Cancel' },
   saving: { mm: 'Saving...', en: 'Saving...' },
   logout: { mm: 'Logout ထွက်မည်', en: 'Sign Out' },
-  add_listing: { mm: 'ဆိုင် ထည့်မယ်', en: 'Add Listing / Service' },
+  add_listing: { mm: 'လုပ်ငန်း ထည့်မယ်', en: 'Add Listing / Service' },
   admin_panel: { mm: 'Admin Panel', en: 'Admin Panel' },
   // Misc
   verified: { mm: 'Verified', en: 'Verified' },
@@ -107,7 +107,7 @@ export const T = {
   ok: { mm: 'OK', en: 'OK' },
   // Claim
   claim_title: { mm: 'ဆိုင် Claim လုပ်မည်', en: 'Claim Your Business' },
-  claim_desc: { mm: 'ဤဆိုင်သည် သင်၏ ဆိုင်ဖြစ်ကြောင်း Admin ထံ လျှောက်ထားမည်', en: 'Request ownership verification of this listing' },
+  claim_desc: { mm: 'ဤလုပ်ငန်းသည် သင်၏ လုပ်ငန်းဖြစ်ကြောင်း Admin ထံ လျှောက်ထားမည်', en: 'Request ownership verification of this listing' },
   claim_phone: { mm: 'Verification ဖုန်းနံပါတ်', en: 'Your contact number for verification' },
   claim_note: { mm: 'Admin မှ စစ်ဆေးပြီး ၁-၂ ရက်အတွင်း အကြောင်းပြန်မည်', en: 'Admin will verify and respond within 1-2 days' },
   claim_submit: { mm: 'Claim လျှောက်မည်', en: 'Submit Claim' },

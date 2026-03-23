@@ -329,8 +329,8 @@ export default function LeaderboardPage() {
         <div className="space-y-2.5">
           {[
             { icon: Star,          pts: '+5',  mm: 'Review ရေးသည်',    en: 'Write a review'     },
-            { icon: Building2,     pts: '+10', mm: 'ဆိုင် Submit',      en: 'Submit a listing'   },
-            { icon: Trophy,        pts: '+20', mm: 'ဆိုင် Approved',    en: 'Listing approved'   },
+            { icon: Building2,     pts: '+10', mm: "လုပ်ငန်း Submit",      en: 'Submit a listing'   },
+            { icon: Trophy,        pts: '+20', mm: "လုပ်ငန်း Approved",    en: 'Listing approved'   },
             { icon: CalendarCheck, pts: '+2',  mm: 'Event RSVP',        en: 'RSVP to event'      },
             { icon: MessageCircle, pts: '+1',  mm: 'Chat message',      en: 'Chat (max 10/day)'  },
           ].map(({ icon: Icon, pts, mm, en }) => (

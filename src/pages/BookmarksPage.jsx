@@ -34,7 +34,7 @@ export default function BookmarksPage() {
 
       <div className="flex gap-2 px-4 mb-4">
         {[
-          { id: 'listings', label: 'ဆိုင်များ', icon: Building2, count: listings.length },
+          { id: 'listings', label: 'လုပ်ငန်းများ', icon: Building2, count: listings.length },
           { id: 'posts', label: 'သတင်းများ', icon: Newspaper, count: posts.length },
         ].map(({ id, label, icon: Icon, count }) => (
           <button
@@ -52,7 +52,7 @@ export default function BookmarksPage() {
           <p className="text-white/40 text-sm text-center py-12">Loading...</p>
         ) : tab === 'listings' ? (
           listings.length === 0
-            ? <EmptyState icon="🔖" title="Saved ဆိုင် မရှိသေး" message="Directory မှ ဆိုင်တွေကို Bookmark လုပ်ပါ" />
+            ? <EmptyState icon="🔖" title="Saved လုပ်ငန်း မရှိသေး" message="Directory မှ လုပ်ငန်းတွေကို Bookmark လုပ်ပါ" />
             : listings.map(l => <ListingCard key={l.id} listing={l} />)
         ) : (
           posts.length === 0

@@ -127,7 +127,7 @@ export default function BulkImportPage() {
         name_mm: row.name_mm?.trim() || null,
         description_mm: row.description_mm?.trim() || null,
         category_id: catId,
-        city: row.city?.trim() || 'Taunggyi',
+        city: row.city?.trim() || '',
         township: row.township?.trim() || null,
         ward: row.ward?.trim() || null,
         address_mm: row.address_mm?.trim() || null,
@@ -178,7 +178,7 @@ export default function BulkImportPage() {
         </button>
         <div>
           <h1 className="font-display font-bold text-lg text-white">Bulk Import</h1>
-          <p className="text-[10px] text-white/40">CSV ဖြင့် ဆိုင်များ တစ်ပြိုင်တည်း ထည့်သွင်းမည်</p>
+          <p className="text-[10px] text-white/40">CSV ဖြင့် လုပ်ငန်းများ တစ်ပြိုင်တည်း ထည့်သွင်းမည်</p>
         </div>
       </div>
 
@@ -280,7 +280,7 @@ export default function BulkImportPage() {
               {importing ? (
                 <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Import လုပ်နေသည်...</>
               ) : (
-                <><Upload size={15} /> {preview.rows.length} ဆိုင် Import လုပ်မည်</>
+                <><Upload size={15} /> {preview.rows.length} လုပ်ငန်း Import လုပ်မည်</>
               )}
             </button>
           </div>
@@ -309,7 +309,7 @@ export default function BulkImportPage() {
             {results.success > 0 && (
               <div className="flex items-center gap-2 text-green-400 text-sm">
                 <CheckCircle size={16} />
-                <span className="font-myanmar">{results.success} ဆိုင် Directory ထဲ ထည့်သွင်းပြီး</span>
+                <span className="font-myanmar">{results.success} လုပ်ငန်း Directory ထဲ ထည့်သွင်းပြီး</span>
               </div>
             )}
 

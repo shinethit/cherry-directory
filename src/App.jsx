@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import HomePage          from './pages/HomePage'
@@ -31,6 +32,13 @@ import { WeatherAlertPage, DonationPage, HealthServicePage } from './pages/Commu
 import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
 import EmergencyPage from './pages/EmergencyPage'
 import CategoryManagerPage from './pages/CategoryManagerPage'
+import AppSettingsPage    from './pages/AppSettingsPage'
+
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [pathname])
+  return null
+}
 
 function ProtectedRoute({ children, require: requireRole }) {
   const { isLoggedIn, isAdmin, isModerator, loading } = useAuth()
@@ -43,7 +51,9 @@ function ProtectedRoute({ children, require: requireRole }) {
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<HomePage />} />
         {/* Directory */}
@@ -82,6 +92,7 @@ export default function App() {
         <Route path="bulk-import" element={<ProtectedRoute require="moderator"><BulkImportPage /></ProtectedRoute>} />
         <Route path="admin"            element={<ProtectedRoute require="moderator"><AdminPage /></ProtectedRoute>} />
         <Route path="admin/categories" element={<ProtectedRoute require="moderator"><CategoryManagerPage /></ProtectedRoute>} />
+        <Route path="admin/settings"   element={<ProtectedRoute require="admin"><AppSettingsPage /></ProtectedRoute>} />
         {/* Info pages */}
         <Route path="about"     element={<AboutPage />} />
         <Route path="privacy"   element={<PrivacyPage />} />
@@ -90,5 +101,6 @@ export default function App() {
         <Route path="emergency" element={<EmergencyPage />} />
       </Route>
     </Routes>
+    </>
   )
 }

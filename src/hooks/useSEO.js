@@ -6,7 +6,7 @@ const SITE_NAME = 'Cherry Directory — တောင်ကြီး'
 export function useSEO({ title, description, image, url, type = 'website' } = {}) {
   useEffect(() => {
     const fullTitle = title ? `${title} | ${SITE_NAME}` : SITE_NAME
-    const fullDesc = description || 'တောင်ကြီးမြို့ ၏ Business Directory — ဆိုင်များ၊ သတင်းများ၊ ဖြစ်ရပ်များ'
+    const fullDesc = description || 'တောင်ကြီးမြို့ ၏ Business Directory — လုပ်ငန်းများ၊ သတင်းများ၊ ဖြစ်ရပ်များ'
     const fullUrl = url ? `${BASE_URL}${url}` : BASE_URL
     const fullImage = image || `${BASE_URL}/og-default.png`
 

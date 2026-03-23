@@ -7,8 +7,9 @@ import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { useAppConfig } from '../hooks/useAppConfig'
 
-const CITIES = ['Taunggyi', 'Kalaw', 'Pindaya', 'Nyaungshwe', 'Loikaw', 'Other']
+
 
 function Field({ label, children, required }) {
   return (
@@ -27,13 +28,14 @@ export default function SubmitListingPage() {
   const { t, lang } = useLang()
   useSEO({ title: lang === 'mm' ? 'လုပ်ငန်း / ဝန်ဆောင်မှု ထည့်မည်' : 'Submit Listing' })
 
+  const config = useAppConfig()
   const [categories, setCategories] = useState([])
   const [form, setForm] = useState({
     name: '', name_mm: '', description_mm: '', description: '',
-    category_id: '', city: 'Taunggyi', township: '', ward: '',
+    category_id: '', city: '', township: '', ward: '',
     address: '', address_mm: '', phone_1: '', phone_2: '',
     viber: '', telegram: '', whatsapp: '', facebook: '', website: '',
-    latitude: '', longitude: '',
+    latitude: '', longitude: '', business_type: 'shop',
   })
   const [logo, setLogo] = useState(null)
   const [coverImg, setCoverImg] = useState(null)
@@ -200,11 +202,32 @@ export default function SubmitListingPage() {
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('city_label')}>
               <select value={form.city} onChange={e => set('city', e.target.value)} className="input-dark">
-                {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="">-- ရွေးပါ --</option>
+                {(config.cities || []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </Field>
             <Field label="Township">
               <input type="text" value={form.township} onChange={e => set('township', e.target.value)} className="input-dark" placeholder="Township..." />
+            </Field>
+          </div>
+
+          {/* Business type */}
+          <div className="mt-3">
+            <Field label="လုပ်ငန်းအမျိုးအစား">
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { value: 'shop',    label: '🏪 ဆိုင်',          desc: 'ရုပ်ပိုင်းဆိုင်ရာ' },
+                  { value: 'service', label: '🛠 ဝန်ဆောင်မှု',    desc: 'ဆက်သွယ်မှုဖြင့်' },
+                  { value: 'home',    label: '🏠 အိမ်မှ',          desc: 'Home-based' },
+                ].map(opt => (
+                  <button key={opt.value} type="button"
+                    onClick={() => set('business_type', opt.value)}
+                    className={`p-2.5 rounded-xl border text-center transition-colors ${form.business_type === opt.value ? 'bg-brand-600/50 border-brand-400/60 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
+                    <p className="text-sm">{opt.label}</p>
+                    <p className="text-[9px] text-white/40 mt-0.5">{opt.desc}</p>
+                  </button>
+                ))}
+              </div>
             </Field>
           </div>
 

@@ -3,10 +3,11 @@ import { useSearchParams } from 'react-router-dom'
 import { Search, SlidersHorizontal, X, ShieldCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
-
-const CITIES = ['All', 'Taunggyi', 'Kalaw', 'Pindaya', 'Nyaungshwe', 'Loikaw']
+import { useAppConfig } from '../hooks/useAppConfig'
 
 export default function DirectoryPage() {
+  const config = useAppConfig()
+  const cities = ['All', ...(config.cities || [])]
   const [searchParams, setSearchParams] = useSearchParams()
   const [listings, setListings] = useState([])
   const [categories, setCategories] = useState([])
@@ -68,7 +69,7 @@ export default function DirectoryPage() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
           <input
             type="text"
-            placeholder="ဆိုင်အမည် ရှာရန်..."
+            placeholder="လုပ်ငန်းအမည် ရှာရန်..."
             value={q}
             onChange={e => setQ(e.target.value)}
             className="input-dark pl-9 pr-10 text-sm"
@@ -120,7 +121,7 @@ export default function DirectoryPage() {
         {showFilters && (
           <div className="space-y-2 pt-1">
             <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-              {CITIES.map(c => (
+              {cities.map(c => (
                 <button
                   key={c}
                   onClick={() => setCity(c)}
@@ -161,7 +162,7 @@ export default function DirectoryPage() {
         {loading && listings.length === 0
           ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
           : listings.length === 0
-          ? <EmptyState icon="🔍" title="ဆိုင် မတွေ့ပါ" message="ရှာဖွေမှုကို ပြောင်းလဲကြည့်ပါ" />
+          ? <EmptyState icon="🔍" title="လုပ်ငန်း မတွေ့ပါ" message="ရှာဖွေမှုကို ပြောင်းလဲကြည့်ပါ" />
           : listings.map(l => <ListingCard key={l.id} listing={l} />)
         }
 

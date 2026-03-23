@@ -70,6 +70,8 @@ export function ListingCard({ listing, compact = false }) {
           )}
           <span className="badge bg-brand-700/60 text-brand-200 text-[9px]">{listing.category?.name_mm || listing.category?.name}</span>
           {listing.is_featured && <span className="badge bg-gold-500/20 text-gold-400 text-[9px]">⭐ Featured</span>}
+          {listing.business_type === 'service' && <span className="badge bg-blue-500/15 text-blue-300 text-[9px]">🛠 ဝန်ဆောင်မှု</span>}
+          {listing.business_type === 'home' && <span className="badge bg-green-500/15 text-green-300 text-[9px]">🏠 Home-based</span>}
         </div>
 
         {!compact && (

@@ -101,8 +101,8 @@ export default function ProfilePage() {
 
   const POINT_LABELS = {
     write_review:     { mm: 'Review ရေး',      en: 'Wrote a review'   },
-    submit_listing:   { mm: 'ဆိုင် Submit',     en: 'Submitted listing' },
-    listing_approved: { mm: 'ဆိုင် Approved',   en: 'Listing approved'  },
+    submit_listing:   { mm: "လုပ်ငန်း Submit",     en: 'Submitted listing' },
+    listing_approved: { mm: "လုပ်ငန်း Approved",   en: 'Listing approved'  },
     rsvp_going:       { mm: 'Event RSVP',       en: 'RSVP to event'    },
     chat_message:     { mm: 'Chat message',     en: 'Chat message'     },
     claim_approved:   { mm: 'Claim Approved',   en: 'Claim approved'   },

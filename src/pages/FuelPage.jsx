@@ -190,11 +190,11 @@ export default function FuelPage() {
       <div className="flex gap-2 px-4 mb-4">
         <div className="flex-1 p-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-center">
           <p className="font-display font-bold text-xl text-green-400">{available}</p>
-          <p className="text-[9px] text-green-400/60">{lang === 'mm' ? 'ဆိုင် ရနိုင်' : 'Stations OK'}</p>
+          <p className="text-[9px] text-green-400/60">{lang === 'mm' ? 'ဓာတ်ဆီဆိုင် ရနိုင်' : 'Stations OK'}</p>
         </div>
         <div className="flex-1 p-3 rounded-2xl bg-white/5 border border-white/8 text-center">
           <p className="font-display font-bold text-xl text-white/60">{stations.length}</p>
-          <p className="text-[9px] text-white/30">{lang === 'mm' ? 'ဆိုင်စုစုပေါင်း' : 'Total stations'}</p>
+          <p className="text-[9px] text-white/30">{lang === 'mm' ? 'ဆိုင်ပေါင်း' : 'Total stations'}</p>
         </div>
         <div className="flex-1 p-3 rounded-2xl bg-white/5 border border-white/8 text-center">
           <div className="flex items-center justify-center gap-1">
@@ -213,7 +213,7 @@ export default function FuelPage() {
       <div className="mx-4 card-dark rounded-2xl p-4">
         <p className="text-[10px] text-white/30 font-myanmar">
           ⛽ {lang === 'mm'
-            ? 'Report လုပ်ရန် ဆိုင်ကို နှိပ်ပြဲ့ပြီး ⛽ ကိုနှိပ်ပါ • ၅ မိနစ် Cooldown • ၆ နာရီအတွင်း Report မှ Data ဖြစ်သည်'
+            ? 'Report လုပ်ရန် Station ကို နှိပ်ပြဲ့ပြီး ⛽ ကိုနှိပ်ပါ • ၅ မိနစ် Cooldown • ၆ နာရီအတွင်း Report မှ Data ဖြစ်သည်'
             : 'Tap a station to expand, then tap fuel type to report status • 5 min cooldown • Data from last 6 hours'}
         </p>
       </div>

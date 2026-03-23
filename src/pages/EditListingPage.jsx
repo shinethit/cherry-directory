@@ -8,8 +8,9 @@ import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { useAppConfig } from '../hooks/useAppConfig'
 
-const CITIES = ['Taunggyi', 'Kalaw', 'Pindaya', 'Nyaungshwe', 'Loikaw', 'Other']
+
 
 function Field({ label, children, required }) {
   return (
@@ -28,6 +29,7 @@ export default function EditListingPage() {
   const { profile, isAdmin, isModerator } = useAuth()
   const { lang } = useLang()
   const { log } = useAuditLog()
+  const config = useAppConfig()
   useSEO({ title: 'Edit Listing' })
 
   const [original, setOriginal] = useState(null)
@@ -59,7 +61,7 @@ export default function EditListingPage() {
         description_mm: listing.description_mm || '',
         category_id: listing.category_id || '',
         business_type: listing.business_type || '',
-        city: listing.city || 'Taunggyi',
+        city: listing.city || '',
         township: listing.township || '',
         ward: listing.ward || '',
         address: listing.address || '',
@@ -173,7 +175,7 @@ export default function EditListingPage() {
   if (!canEdit) return (
     <div className="flex flex-col items-center justify-center min-h-[60dvh] px-8 text-center">
       <span className="text-4xl mb-4">🔒</span>
-      <p className="text-white/60 font-myanmar">ဤဆိုင်ကို ပြင်ဆင်ခွင့် မရှိပါ</p>
+      <p className="text-white/60 font-myanmar">ဤလုပ်ငန်းကို ပြင်ဆင်ခွင့် မရှိပါ</p>
       <button onClick={() => navigate(-1)} className="btn-ghost mt-4 text-sm">ပြန်သွားမည်</button>
     </div>
   )
@@ -187,7 +189,7 @@ export default function EditListingPage() {
             <ArrowLeft size={18} className="text-white" />
           </button>
           <div>
-            <h1 className="font-display font-bold text-sm text-white">ဆိုင်ပြင်မည်</h1>
+            <h1 className="font-display font-bold text-sm text-white">လုပ်ငန်းပြင်မည်</h1>
             <p className="text-[10px] text-white/40 truncate max-w-[180px]">{original?.name}</p>
           </div>
         </div>
@@ -281,10 +283,10 @@ export default function EditListingPage() {
         </div>
 
         {/* Basic */}
-        <Field label="ဆိုင်အမည် (English)" required>
+        <Field label="လုပ်ငန်းအမည် (English)" required>
           <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="input-dark" required />
         </Field>
-        <Field label="ဆိုင်အမည် (မြန်မာ)">
+        <Field label="လုပ်ငန်းအမည် (မြန်မာ)">
           <input type="text" value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" />
         </Field>
         <Field label="အမျိုးအစား">
@@ -348,7 +350,7 @@ export default function EditListingPage() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="မြို့">
               <select value={form.city} onChange={e => set('city', e.target.value)} className="input-dark">
-                {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                {(config.cities || []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </Field>
             <Field label="Township">

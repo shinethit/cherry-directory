@@ -25,8 +25,12 @@ export function AuthProvider({ children }) {
   }, [])
 
   async function fetchProfile(userId) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    setProfile(data)
+    try {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
+      if (!error && data) setProfile(data)
+    } catch (err) {
+      console.warn('fetchProfile failed:', err)
+    }
     setLoading(false)
   }
 
@@ -50,9 +54,19 @@ export function AuthProvider({ children }) {
   }
 
   async function updateProfile(updates) {
+    if (!user) throw new Error('Not logged in')
     const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
     if (error) throw error
+    // Optimistic update first, then re-fetch to get server-side computed fields (points, etc.)
     setProfile(prev => ({ ...prev, ...updates }))
+    // Re-fetch in background to sync server state
+    supabase.from('profiles').select('*').eq('id', user.id).single()
+      .then(({ data }) => { if (data) setProfile(data) })
+      .catch(() => {})
+  }
+
+  async function refreshProfile() {
+    if (user) await fetchProfile(user.id)
   }
 
   const isSuperAdmin = profile?.role === 'super_admin'
@@ -61,7 +75,7 @@ export function AuthProvider({ children }) {
   const isLoggedIn   = !!user
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isSuperAdmin, isAdmin, isModerator, isLoggedIn, signUp, signIn, signOut, updateProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, isSuperAdmin, isAdmin, isModerator, isLoggedIn, signUp, signIn, signOut, updateProfile, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   )

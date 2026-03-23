@@ -4,6 +4,7 @@ import { LogIn, Crown, Globe, Download } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { usePWA } from '../hooks/usePWA'
+import { useAppConfig } from '../hooks/useAppConfig'
 
 function Clock() {
   const [time, setTime] = useState(new Date())
@@ -23,6 +24,7 @@ export default function Header() {
   const { isLoggedIn, profile, isAdmin } = useAuth()
   const { lang, toggleLang } = useLang()
   const { installable, installApp } = usePWA()
+  const config = useAppConfig()
   const today = new Date().toLocaleDateString(lang === 'mm' ? 'my-MM' : 'en-US', {
     weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
   })
@@ -50,12 +52,12 @@ export default function Header() {
 
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl overflow-hidden border border-gold-500/40 shadow-lg shadow-brand-900/50 flex-shrink-0 bg-[#2a0050]">
+          <div className="w-11 h-11 rounded-2xl overflow-hidden border border-white/15 shadow-lg shadow-brand-900/50 flex-shrink-0 bg-[#2a0050]">
             <img src="/logo.png" alt="Cherry Directory" className="w-full h-full object-contain" />
           </div>
           <div>
-            <h1 className="font-display font-bold text-base text-white leading-none tracking-tight">Cherry Directory</h1>
-            <p className="text-[10px] text-white/40 font-body mt-0.5">တောင်ကြီးမြို့ • Taunggyi</p>
+            <h1 className="font-display font-bold text-base text-white leading-none tracking-tight">{config.app_name || 'Cherry Directory'}</h1>
+            <p className="text-[10px] text-white/40 font-body mt-0.5">{config.app_city || 'တောင်ကြီးမြို့'}</p>
           </div>
         </div>
 

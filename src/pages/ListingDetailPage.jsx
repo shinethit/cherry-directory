@@ -104,7 +104,7 @@ export default function ListingDetailPage() {
             <button
               onClick={() => navigate(`/directory/${id}/edit`)}
               className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors"
-              title="ဆိုင် ပြင်မည်"
+              title="လုပ်ငန်း ပြင်မည်"
             >
               <Edit3 size={16} className="text-white/60" />
             </button>
@@ -180,6 +180,12 @@ export default function ListingDetailPage() {
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <span className="badge bg-brand-700/60 text-brand-200">{listing.category?.icon} {lang === 'mm' ? listing.category?.name_mm : listing.category?.name}</span>
                 {listing.is_featured && <span className="badge-featured">⭐ Featured</span>}
+                {listing.business_type === 'service' && (
+                  <span className="badge bg-blue-500/15 text-blue-300 border border-blue-500/25">🛠 ဝန်ဆောင်မှု</span>
+                )}
+                {listing.business_type === 'home' && (
+                  <span className="badge bg-green-500/15 text-green-300 border border-green-500/25">🏠 Home-based</span>
+                )}
               </div>
             </div>
           </div>
@@ -335,7 +341,7 @@ export default function ListingDetailPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-display font-semibold text-white">
-                  👥 {lang === 'mm' ? 'ဤဆိုင် တကယ်ရှိသလား?' : 'Confirm this business?'}
+                  👥 {lang === 'mm' ? 'ဤလုပ်ငန်း တကယ်ရှိသလား?' : 'Confirm this business?'}
                 </p>
                 <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
                   {lang === 'mm'
@@ -400,7 +406,7 @@ export default function ListingDetailPage() {
                     : 'bg-white/5 border-white/15 text-white/60 hover:border-blue-500/30 hover:text-blue-400'
                 }`}
               >
-                {myVote ? '✓ ' : ''}{lang === 'mm' ? 'ဆိုင်မှန်ကန်' : 'Vouch'}
+                {myVote ? '✓ ' : ''}{lang === 'mm' ? 'လုပ်ငန်းမှန်ကန်' : 'Vouch'}
               </button>
             </div>
             {/* Progress bar */}

@@ -52,19 +52,15 @@ export default function HomePage() {
       {/* Hero */}
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
-          {/* Background glow */}
-          <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-400/20 rounded-full blur-3xl" />
-          <div className="absolute -bottom-8 -left-8 w-32 h-32 bg-gold-500/10 rounded-full blur-2xl" />
-
           <div className="relative">
             <p className="text-gold-400 text-xs font-display font-semibold tracking-widest uppercase mb-1">တောင်ကြီးမြို့</p>
             <h2 className="font-display font-bold text-2xl text-white leading-tight mb-3">
               Cherry<br />Directory 🍒
             </h2>
-            <p className="text-white/60 text-sm font-myanmar mb-4">မြို့တွင်းဆိုင်များ၊ သတင်းများ၊ ဖြစ်ရပ်များ<br />အားလုံး တစ်နေရာတည်းတွင် ရှာဖွေနိုင်</p>
+            <p className="text-white/60 text-sm font-myanmar mb-4">မြို့တွင်း လုပ်ငန်းများ၊ သတင်းများ၊ ဖြစ်ရပ်များ<br />အားလုံး တစ်နေရာတည်းတွင် ရှာဖွေနိုင်</p>
 
             <button onClick={() => navigate('/directory')} className="btn-primary flex items-center gap-2 text-sm">
-              <Search size={16} /> ဆိုင်ရှာမယ်
+              <Search size={16} /> လုပ်ငန်းရှာမယ်
             </button>
           </div>
 
@@ -72,7 +68,7 @@ export default function HomePage() {
           <div className="relative flex gap-3 mt-4">
             <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
               <p className="font-display font-bold text-lg text-white">{stats.listings.toLocaleString()}</p>
-              <p className="text-[10px] text-white/50">ဆိုင်များ</p>
+              <p className="text-[10px] text-white/50">လုပ်ငန်းများ</p>
             </div>
             <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
               <p className="font-display font-bold text-lg text-white">{posts.length}+</p>
@@ -106,7 +102,7 @@ export default function HomePage() {
       {/* Featured Listings */}
       {(loading || featured.length > 0) && (
         <div>
-          <SectionHeader title="Featured ဆိုင်များ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
+          <SectionHeader title="Featured လုပ်ငန်းများ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
           <div className="px-4 space-y-2">
             {loading
               ? [1,2,3].map(n => <Skeleton key={n} className="h-20" />)

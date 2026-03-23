@@ -48,7 +48,7 @@ export function AboutPage() {
 
       <Section titleMm="Cherry Directory ဆိုသည်မှာ">
         <p>Cherry Directory သည် တောင်ကြီးမြို့နှင့် ပတ်ဝန်းကျင် ဒေသတွင် နေထိုင်သော ပြည်သူများ၏ နေ့စဉ်ဘဝ လိုအပ်ချက်များကို ဖြည့်ဆည်းရန် ဖန်တီးထားသော Community Platform တစ်ခုဖြစ်ပါသည်။</p>
-        <p>ဆိုင်ရှာဖွေခြင်း၊ သတင်းများ ကြည့်ရှုခြင်း၊ ဖြစ်ရပ်များ ပါဝင်ဆင်နှဲခြင်းမှ စတင်ပြီး ဒေသတွင်း ဈေးနှုန်းများ၊ လျှပ်စစ်အခြေအနေ၊ ဓာတ်ဆီရရှိနိုင်မှု ကဲ့သို့သော Community-sourced Data တွေကိုပါ Real-time တွင် ကြည့်ရှုနိုင်ပါသည်။</p>
+        <p>လုပ်ငန်းရှာဖွေခြင်း၊ သတင်းများ ကြည့်ရှုခြင်း၊ ဖြစ်ရပ်များ ပါဝင်ဆင်နှဲခြင်းမှ စတင်ပြီး ဒေသတွင်း ဈေးနှုန်းများ၊ လျှပ်စစ်အခြေအနေ၊ ဓာတ်ဆီရရှိနိုင်မှု ကဲ့သို့သော Community-sourced Data တွေကိုပါ Real-time တွင် ကြည့်ရှုနိုင်ပါသည်။</p>
       </Section>
 
       <Section titleMm="ကျွန်ုပ်တို့၏ ရည်မှန်းချက်">
@@ -56,7 +56,7 @@ export function AboutPage() {
       </Section>
 
       <Section titleMm="ဆိုင်ပိုင်ရှင်များအတွက်">
-        <p>သင်၏ ဆိုင် သို့မဟုတ် လုပ်ငန်းကို Cherry Directory ထဲ ထည့်သွင်းပြီး ပိုမိုသော ဖောက်သည်များကို ဆွဲဆောင်နိုင်ပါသည်။ Business Claim feature ကိုသုံး၍ သင်၏ ဆိုင်ကို Verify လုပ်နိုင်ပြီး Verified Badge ရရှိနိုင်ပါသည်။</p>
+        <p>သင်၏ လုပ်ငန်းကို Cherry Directory ထဲ ထည့်သွင်းပြီး ပိုမိုသော ဖောက်သည်များကို ဆွဲဆောင်နိုင်ပါသည်။ Business Claim feature ကိုသုံး၍ သင်၏ လုပ်ငန်းကို Verify လုပ်နိုင်ပြီး Verified Badge ရရှိနိုင်ပါသည်။</p>
       </Section>
 
       <Section titleMm="Community Contributors">
@@ -86,7 +86,7 @@ export function PrivacyPage() {
           {[
             'Account ဖွင့်သောအခါ Email နှင့် နာမည်',
             'Profile ထဲ ကိုယ်တိုင် ထည့်သွင်းသော Avatar၊ Bio',
-            'ဆိုင် Submit သောအခါ ဆိုင်နှင့် ဆက်သွယ်ရေး အချက်အလက်',
+            'လုပ်ငန်း Submit သောအခါ လုပ်ငန်းနှင့် ဆက်သွယ်ရေး အချက်အလက်',
             'App သုံးစွဲချိန် Last seen timestamp (Online status)',
             'Community Reports: ဈေးနှုန်း၊ လျှပ်စစ်၊ ဓာတ်ဆီ Report data',
             'Chat messages (Public chat room)',
@@ -105,7 +105,7 @@ export function PrivacyPage() {
           {[
             'ငွေပေးချေမှု သို့မဟုတ် ဘဏ်အကောင့် အချက်အလက်',
             'ID Card / Passport မိတ္တူ',
-            'တည်နေရာ (Location) — GPS ကို ဆိုင် Submit မှသာ Optional',
+            'တည်နေရာ (Location) — GPS ကို လုပ်ငန်း Submit မှသာ Optional',
             'Device Contact List',
             'Private Messages (Public Chat သာ ရှိ)',
           ].map((item, i) => (
@@ -165,7 +165,7 @@ export function TermsPage() {
         <ul className="space-y-1.5 ml-2">
           {[
             'ဒေသတွင်း လုပ်ငန်းများ ရှာဖွေကြည့်ရှုခြင်း',
-            'မှန်ကန်သော ဆိုင် Submit နှင့် Review ရေးခြင်း',
+            'မှန်ကန်သော လုပ်ငန်း Submit နှင့် Review ရေးခြင်း',
             'Community ကို အကျိုးဖြစ်ထွန်းစေသော Chat မျှဝေခြင်း',
             'မှန်ကန်သော ဈေးနှုန်း၊ လျှပ်စစ်၊ ဓာတ်ဆီ Report တင်ပြခြင်း',
           ].map((item, i) => <li key={i} className="flex items-start gap-2 text-white/55"><span className="text-green-400 flex-shrink-0 mt-0.5">✓</span><span>{item}</span></li>)}
@@ -176,7 +176,7 @@ export function TermsPage() {
         <ul className="space-y-1.5 ml-2">
           {[
             'မမှန်ကန်သော အချက်အလက်များ တင်ပြခြင်း',
-            'တစ်ပါးသူ ဆိုင်ကို ခွင့်မပြုဘဲ Claim လုပ်ခြင်း',
+            'တစ်ပါးသူ လုပ်ငန်းကို ခွင့်မပြုဘဲ Claim လုပ်ခြင်း',
             'Spam, Fake reviews ရေးသားခြင်း',
             'အခြားသုံးစွဲသူများကို နှောင့်ယှက်ခြင်း၊ စော်ကားခြင်း',
             'Copyright ချိုးဖောက်သော ပစ္စည်းများ တင်ခြင်း',
@@ -186,7 +186,7 @@ export function TermsPage() {
       </Section>
 
       <Section titleMm="Content Ownership">
-        <p>သင် တင်ပြသော ဆိုင်အချက်အလက်၊ Review၊ ပုံများ၏ ပိုင်ဆိုင်မှုသည် သင်နှင့်သာ ဆက်ဆံပါသည်။ Cherry Directory သည် Platform တွင် Display လုပ်ရန် License သာ ရပါသည်။</p>
+        <p>သင် တင်ပြသော လုပ်ငန်းအချက်အလက်၊ Review၊ ပုံများ၏ ပိုင်ဆိုင်မှုသည် သင်နှင့်သာ ဆက်ဆံပါသည်။ Cherry Directory သည် Platform တွင် Display လုပ်ရန် License သာ ရပါသည်။</p>
       </Section>
 
       <Section titleMm="Community Data">
@@ -198,7 +198,7 @@ export function TermsPage() {
       </Section>
 
       <Section titleMm="တာဝန်ကန့်သတ်ချက်">
-        <p>Cherry Directory သည် Community တင်ပြသော Data ၏ တိကျမှု၊ ဆိုင်ပေးသော ဝန်ဆောင်မှုအရည်အသွေး၊ Review မှန်ကန်မှု တို့အတွက် တာဝန်မယူနိုင်ပါ။</p>
+        <p>Cherry Directory သည် Community တင်ပြသော Data ၏ တိကျမှု၊ လုပ်ငန်းပေးသော ဝန်ဆောင်မှုအရည်အသွေး၊ Review မှန်ကန်မှု တို့အတွက် တာဝန်မယူနိုင်ပါ။</p>
       </Section>
     </InfoLayout>
   )
@@ -212,20 +212,20 @@ export function HelpPage() {
   const sections = [
     {
       icon: '🔍',
-      titleMm: 'ဆိုင်ရှာဖွေနည်း',
+      titleMm: 'လုပ်ငန်းရှာဖွေနည်း',
       steps: [
         'Bottom navigation မှ "ရှာဖွေ" icon ကို နှိပ်ပါ',
-        'Search box ထဲ ဆိုင်အမည် ရိုက်ထည့်ပါ',
+        'Search box ထဲ လုပ်ငန်းအမည် ရိုက်ထည့်ပါ',
         'Category, မြို့ နှင့် "Verified Owner" filter ကို သုံး၍ ကျဉ်းမြောင်းနိုင်သည်',
-        'ဆိုင်ကဒ်ကို နှိပ်ပြီး phone/viber/telegram ဖြင့် တိုက်ရိုက် ဆက်သွယ်နိုင်သည်',
+        'Listing ကို နှိပ်ပြီး phone/viber/telegram ဖြင့် တိုက်ရိုက် ဆက်သွယ်နိုင်သည်',
       ],
     },
     {
       icon: '🏢',
-      titleMm: 'ဆိုင်ထည့်နည်း',
+      titleMm: 'လုပ်ငန်းထည့်နည်း',
       steps: [
         'Login ဝင်ရောက်ပြီး ညာဘက်အောက် + Button ကို နှိပ်ပါ',
-        'ဆိုင်အချက်အလက် (အမည်၊ ဖုန်း၊ လိပ်စာ) ဖြည့်ပြီး Submit နှိပ်ပါ',
+        'လုပ်ငန်းအချက်အလက် (အမည်၊ ဖုန်း၊ လိပ်စာ) ဖြည့်ပြီး Submit နှိပ်ပါ',
         'Admin မှ စစ်ဆေးပြီးနောက် Directory ထဲ ပေါ်လာမည်',
         'ဆိုင်ရှင် ဖြစ်ကြောင်း Verify လုပ်ရန် Listing page မှ "ဒါ ကျွန်တော်ဆိုင်" ကို နှိပ်ပါ',
       ],
@@ -265,7 +265,7 @@ export function HelpPage() {
       titleMm: 'Points ရရှိနည်း',
       steps: [
         'Review ရေးသားပါ (+5 pts)',
-        'ဆိုင် Submit ပြီး Approved ဖြစ်ရပါသည် (+10/+20 pts)',
+        'လုပ်ငန်း Submit ပြီး Approved ဖြစ်ရပါသည် (+10/+20 pts)',
         'Event RSVP လုပ်ပါ (+2 pts)',
         'Chat Message ပို့ပါ (+1 pt, max 10/day)',
         'Leaderboard တွင် ကိုယ့် Rank ကြည့်နိုင်သည်',

@@ -51,9 +51,15 @@ function PctBadge({ pct, label, lang }) {
 }
 
 // ── Report modal ──────────────────────────────────────────────
+// Gas station names for fuel category reports
+const FUEL_STATIONS = ['ဆိုင်မြောင်းဓာတ်ဆီ', 'မြို့မဓာတ်ဆီ', 'Asia ဓာတ်ဆီ', 'Grand ဓာတ်ဆီ', 'ကလော ဓာတ်ဆီ', 'အခြား']
+
 function ReportModal({ item, onClose, onSubmit, lang, markets = DEFAULT_MARKETS }) {
+  const isFuel = item.category === 'fuel'
+  const locations = isFuel ? FUEL_STATIONS : markets
+
   const [price, setPrice]   = useState('')
-  const [market, setMarket] = useState(markets[0] || DEFAULT_MARKETS[0])
+  const [market, setMarket] = useState(locations[0] || '')
   const [notes, setNotes]   = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]   = useState('')
@@ -69,7 +75,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = DEFAULT_MARKETS 
   return (
     <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        {/* Drag handle + header */}
+        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-3 pb-2 border-b border-white/8">
           <div className="flex items-center gap-2">
             <span className="text-2xl">{item.icon}</span>
@@ -78,41 +84,44 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = DEFAULT_MARKETS 
               <p className="text-[9px] text-white/40">per {lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</p>
             </div>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white transition-colors">
-            ✕
-          </button>
+          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
         </div>
 
         {/* Scrollable content */}
         <div className="overflow-y-auto max-h-[75dvh] px-5 pb-8 pt-4 space-y-4">
 
-        {/* Current price context */}
         {item.median_price && (
           <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl">
             <span className="text-xs text-white/50">{lang === 'mm' ? 'လက်ရှိ Median:' : 'Current median:'}</span>
             <span className="text-sm font-bold text-white">{fmt(item.median_price)}</span>
-            {item.pct_change_week !== null && (
-              <PctBadge pct={item.pct_change_week} lang={lang} label="vs last week" />
-            )}
+            {item.pct_change_week !== null && <PctBadge pct={item.pct_change_week} lang={lang} label="vs last week" />}
           </div>
         )}
 
         <div>
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဈေးနှုန်း (Ks)' : 'Price (Ks)'} *</label>
           <div className="flex items-center gap-2">
-            <button onClick={() => setPrice(p => String(Math.max(100, parseInt(p||0) - 100)))} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center text-white hover:bg-white/12"><Minus size={16} /></button>
+            <button onClick={() => setPrice(p => String(Math.max(100, parseInt(p||0) - 100)))} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center text-white"><Minus size={16} /></button>
             <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 5000" className="input-dark flex-1 text-center text-lg font-mono font-bold" min="100" />
-            <button onClick={() => setPrice(p => String(parseInt(p||0) + 100))} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center text-white hover:bg-white/12"><Plus size={16} /></button>
+            <button onClick={() => setPrice(p => String(parseInt(p||0) + 100))} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center text-white"><Plus size={16} /></button>
           </div>
           {price && <p className="text-center text-xs text-brand-300 mt-1 font-mono">{parseInt(price).toLocaleString()} Ks</p>}
         </div>
 
+        {/* Location — dropdown to prevent overflow; label changes for fuel */}
         <div>
-          <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဈေးကွက်' : 'Market'}</label>
-          <div className="flex gap-2 flex-wrap">
-            {markets.map(m => (
-              <button key={m} onClick={() => setMarket(m)} className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors font-myanmar ${market === m ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{m}</button>
-            ))}
+          <label className="block text-xs text-white/50 mb-1.5">
+            {isFuel ? (lang === 'mm' ? '⛽ ဓာတ်ဆီဆိုင်' : '⛽ Station') : (lang === 'mm' ? '🏪 ဈေးကွက်' : '🏪 Market')}
+          </label>
+          <div className="relative">
+            <select
+              value={market}
+              onChange={e => setMarket(e.target.value)}
+              className="w-full appearance-none bg-white/8 border border-white/12 text-white text-sm font-myanmar rounded-xl px-4 py-2.5 pr-10 outline-none"
+            >
+              {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
           </div>
         </div>
 
@@ -123,15 +132,12 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = DEFAULT_MARKETS 
 
         {error && <p className="text-xs text-red-400">{error}</p>}
 
-        <div className="flex gap-2">
-          <button onClick={submit} disabled={!price || submitting} className="btn-primary flex-1">
-            {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> ...</span>
-              : lang === 'mm' ? '📤 တင်ပြမည်' : '📤 Submit'}
-          </button>
+        <button onClick={submit} disabled={!price || submitting} className="btn-primary w-full">
+          {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />...</span>
+            : lang === 'mm' ? '📤 တင်ပြမည်' : '📤 Submit'}
+        </button>
+        <p className="text-[9px] text-white/25 text-center font-myanmar">Guest ပါ တင်ပြနိုင် • ၁၀ မိနစ် Cooldown</p>
         </div>
-
-        <p className="text-[9px] text-white/25 text-center font-myanmar">Guest ပါ တင်ပြနိုင် • Outlier ဈေးများ auto-filter • ၁၀ မိနစ် Cooldown</p>
-        </div>{/* end scrollable */}
       </div>
     </div>
   )
@@ -214,6 +220,8 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
   const [newName, setNewName]   = useState('')
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
+  const [editId, setEditId]     = useState(null)
+  const [editName, setEditName] = useState('')
 
   useEffect(() => {
     supabase.from('markets').select('*').order('sort_order').then(({ data }) => {
@@ -225,16 +233,19 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
   async function addMarket() {
     if (!newName.trim()) return
     setSaving(true)
-    await supabase.from('markets').insert({
-      name: newName.trim(),
-      city: 'Taunggyi',
-      sort_order: list.length + 1,
-      is_active: true,
-    })
+    await supabase.from('markets').insert({ name: newName.trim(), city: '', sort_order: list.length + 1, is_active: true })
     setNewName('')
     const { data } = await supabase.from('markets').select('*').order('sort_order')
     setList(data || [])
     setSaving(false)
+    onUpdated()
+  }
+
+  async function saveEdit(id) {
+    if (!editName.trim()) return
+    await supabase.from('markets').update({ name: editName.trim() }).eq('id', id)
+    setList(l => l.map(m => m.id === id ? { ...m, name: editName.trim() } : m))
+    setEditId(null)
     onUpdated()
   }
 
@@ -256,79 +267,45 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
           <div>
             <p className="font-display font-bold text-white">🏪 {lang === 'mm' ? 'ဈေးကွက် စီမံမည်' : 'Manage Markets'}</p>
-            <p className="text-[10px] text-white/40 font-myanmar mt-0.5">
-              {lang === 'mm' ? 'ဈေးနှုန်း Report မှာ ပေါ်မည့် ဈေးကွက်များ' : 'Markets shown when reporting prices'}
-            </p>
+            <p className="text-[10px] text-white/40 font-myanmar mt-0.5">{lang === 'mm' ? 'ဈေးနှုန်း Report မှာ ပေါ်မည့် ဈေးကွက်များ' : 'Markets shown when reporting prices'}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
         </div>
-
         <div className="overflow-y-auto max-h-[65dvh] px-5 py-4 space-y-3">
-          {/* Add new market */}
           <div className="flex gap-2">
-            <input
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addMarket()}
+            <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMarket()}
               placeholder={lang === 'mm' ? 'ဈေးကွက် အမည်ထည့်ပါ...' : 'Market name...'}
-              className="input-dark flex-1 font-myanmar text-sm"
-              maxLength={30}
-            />
-            <button
-              onClick={addMarket}
-              disabled={!newName.trim() || saving}
-              className="btn-primary px-4 text-sm disabled:opacity-50"
-            >
-              <Plus size={16} />
-            </button>
+              className="input-dark flex-1 font-myanmar text-sm" maxLength={30} />
+            <button onClick={addMarket} disabled={!newName.trim() || saving} className="btn-primary px-4 text-sm disabled:opacity-50"><Plus size={16} /></button>
           </div>
-
-          {/* Market list */}
           {loading ? (
-            <div className="space-y-2">
-              {[1,2,3].map(n => <div key={n} className="h-12 rounded-xl shimmer" />)}
-            </div>
+            <div className="space-y-2">{[1,2,3].map(n => <div key={n} className="h-12 rounded-xl shimmer" />)}</div>
           ) : (
             <div className="space-y-2">
               {list.map(m => (
-                <div key={m.id} className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
-                  m.is_active ? 'bg-white/5 border-white/10' : 'bg-white/2 border-white/5 opacity-50'
-                }`}>
-                  <span className="text-lg">🏪</span>
-                  <p className={`flex-1 text-sm font-myanmar ${m.is_active ? 'text-white' : 'text-white/40 line-through'}`}>
-                    {m.name}
-                  </p>
-                  <span className="text-[9px] text-white/30">{m.city}</span>
-                  {/* Toggle active */}
-                  <button
-                    onClick={() => toggleMarket(m.id, m.is_active)}
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs transition-colors ${
-                      m.is_active
-                        ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                        : 'bg-white/8 text-white/30 hover:bg-white/12'
-                    }`}
-                    title={m.is_active ? 'Hide' : 'Show'}
-                  >
-                    {m.is_active ? '✓' : '○'}
-                  </button>
-                  {/* Delete */}
-                  <button
-                    onClick={() => deleteMarket(m.id)}
-                    className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 flex items-center justify-center text-xs transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                <div key={m.id} className={`rounded-xl border ${m.is_active ? 'bg-white/5 border-white/10' : 'bg-white/2 border-white/5 opacity-50'}`}>
+                  {editId === m.id ? (
+                    <div className="flex gap-2 p-2">
+                      <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveEdit(m.id); if (e.key === 'Escape') setEditId(null) }}
+                        className="input-dark flex-1 font-myanmar text-sm py-1.5" maxLength={30} />
+                      <button onClick={() => saveEdit(m.id)} className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-xs font-bold">✓</button>
+                      <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-white/8 rounded-lg text-white/40 text-xs">✕</button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 p-3">
+                      <span className="text-lg">🏪</span>
+                      <p className={`flex-1 text-sm font-myanmar min-w-0 truncate ${m.is_active ? 'text-white' : 'text-white/40 line-through'}`}>{m.name}</p>
+                      <button onClick={() => { setEditId(m.id); setEditName(m.name) }} className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center flex-shrink-0"><Pencil size={11} /></button>
+                      <button onClick={() => toggleMarket(m.id, m.is_active)} className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0 ${m.is_active ? 'bg-green-500/20 text-green-400' : 'bg-white/8 text-white/30'}`}>{m.is_active ? '✓' : '○'}</button>
+                      <button onClick={() => deleteMarket(m.id)} className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0"><Trash2 size={12} /></button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
-
-          <p className="text-[9px] text-white/25 font-myanmar text-center pt-1">
-            {lang === 'mm'
-              ? '✓ = ပြသမည် • ○ = မပြ • ဖျက်ရင် ဒေတာပါ ပျောက်မည်'
-              : '✓ = visible • ○ = hidden • Delete removes permanently'}
-          </p>
+          <p className="text-[9px] text-white/25 font-myanmar text-center pt-1">✓ ပြသမည် • ○ မပြ • ✏️ ပြင် • 🗑 ဖျက်</p>
         </div>
       </div>
     </div>
@@ -646,14 +623,22 @@ export default function MarketPricePage() {
         </div>
       </div>
 
-      {/* Category filter */}
-      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
-        {CATEGORIES.map(cat => (
-          <button key={cat.id} onClick={() => setCat(cat.id)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${catFilter === cat.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'}`}>
-            <span>{cat.icon}</span> {lang === 'mm' ? cat.mm : cat.en}
-          </button>
-        ))}
+      {/* Category filter — dropdown to prevent overflow */}
+      <div className="px-4 mb-4">
+        <div className="relative">
+          <select
+            value={catFilter}
+            onChange={e => setCat(e.target.value)}
+            className="w-full appearance-none bg-white/8 border border-white/12 text-white text-sm font-display font-semibold rounded-xl px-4 py-2.5 pr-10 outline-none"
+          >
+            {CATEGORIES.map(cat => (
+              <option key={cat.id} value={cat.id}>
+                {cat.icon} {lang === 'mm' ? cat.mm : cat.en}
+              </option>
+            ))}
+          </select>
+          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+        </div>
       </div>
 
       {/* Grouped price list — Category → Sub-category */}
