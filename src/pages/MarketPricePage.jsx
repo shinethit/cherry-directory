@@ -88,7 +88,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
         </div>
 
         {/* Scrollable content */}
-        <div className="overflow-y-auto max-h-[75dvh] px-5 pb-8 pt-4 space-y-4">
+        <div className="overflow-y-auto max-h-[70dvh] px-5 pb-24 pt-4 space-y-4">
 
         {item.median_price && (
           <div className="flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl">
@@ -277,7 +277,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
         </div>
-        <div className="overflow-y-auto max-h-[65dvh] px-5 py-4 space-y-3">
+        <div className="overflow-y-auto max-h-[60dvh] px-5 py-4 pb-24 space-y-3">
           <div className="flex gap-2">
             <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMarket()}
               placeholder={lang === 'mm' ? 'ဈေးကွက် အမည်ထည့်ပါ...' : 'Market name...'}
@@ -344,25 +344,16 @@ function AddItemModal({ onClose, onAdded, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 pt-4 pb-2 border-b border-white/8 flex items-center justify-between">
-          <h3 className="font-display font-bold text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}</h3>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
-        </div>
-        <div className="overflow-y-auto max-h-[75dvh] px-5 py-4 space-y-4">
-
-        <div>
-          <label className="block text-xs text-white/50 mb-1.5">Icon</label>
-          <div className="flex gap-1.5 flex-wrap">
-            {ICONS.map(ic => (
-              <button key={ic} onClick={() => setForm(f => ({...f, icon: ic}))} className={`w-8 h-8 rounded-lg text-lg flex items-center justify-center ${form.icon === ic ? 'bg-brand-600/60 border border-brand-400/50' : 'bg-white/5'}`}>{ic}</button>
-            ))}
-          </div>
-        </div>
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015]">
+      <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
+        <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+        <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}</h2>
+        <button onClick={submit} disabled={!form.name || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
 
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ပစ္စည်းအမည် (မြန်မာ)' : 'Item Name (Myanmar)'} *</label>
-          <input value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} className="input-dark font-myanmar" placeholder="ဥပမာ: သကြားလုံး" />
+          <input autoFocus value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} className="input-dark font-myanmar" placeholder="ဥပမာ: သကြားလုံး" />
         </div>
 
         <div>
@@ -383,11 +374,15 @@ function AddItemModal({ onClose, onAdded, lang }) {
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <button onClick={submit} disabled={!form.name || submitting} className="btn-primary flex-1">{submitting ? '...' : lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
-          <button onClick={onClose} className="btn-ghost px-4">{lang === 'mm' ? 'ပိတ်' : 'Close'}</button>
+        <div>
+          <label className="block text-xs text-white/50 mb-1.5">Icon</label>
+          <div className="flex gap-1.5 flex-wrap">
+            {ICONS.map(ic => (
+              <button key={ic} onClick={() => setForm(f => ({...f, icon: ic}))} className={`w-9 h-9 rounded-lg text-xl flex items-center justify-center ${form.icon === ic ? 'bg-brand-600/60 border border-brand-400/50' : 'bg-white/5'}`}>{ic}</button>
+            ))}
+          </div>
         </div>
-        </div>
+
       </div>
     </div>
   )

@@ -70,7 +70,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
           </button>
         </div>
 
-        <div className="overflow-y-auto max-h-[75dvh] px-5 py-4 space-y-4">
+        <div className="overflow-y-auto max-h-[75dvh] px-5 py-4 space-y-4 pb-24">
           {/* Icon picker */}
           <div>
             <label className="block text-xs text-white/50 mb-2">Icon</label>
