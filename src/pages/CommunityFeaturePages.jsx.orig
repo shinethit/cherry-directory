@@ -39,12 +39,10 @@ export function WeatherAlertPage() {
 
   async function load() {
     setLoading(true)
-    try {
     let q = supabase.from('weather_alerts').select('*, reporter:profiles(full_name, nickname)').eq('status', 'active').order('severity', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
     if (typeFilter !== 'all') q = q.eq('type', typeFilter)
     const { data } = await q
     setAlerts(data || [])
-        } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
@@ -82,23 +80,18 @@ export function WeatherAlertPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🌧️ {lang === 'mm' ? 'မိုးလေဝသ/ရေကြီး' : 'Weather & Flood'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'ရေမြင့် • မိုးလေဝသ သတိပေးချက်' : 'Water levels • Weather warnings'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'Inle Lake ရေမြင့် • မိုးလေဝသ သတိပေးချက်' : 'Inle Lake levels • Weather warnings'}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Report</button>
       </div>
 
-      <div className="px-4 mb-4">
-        <div className="relative">
-          <select value={typeFilter} onChange={e => setType(e.target.value)}
-            className="select-dark">
-            {ALERT_TYPES.map(t => (
-              <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
-                {t.icon} {lang === 'mm' ? t.mm : t.en}
-              </option>
-            ))}
-          </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
+      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
+        {ALERT_TYPES.map(t => (
+          <button key={t.id} onClick={() => setType(t.id)}
+            className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border transition-colors ${typeFilter === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
+            {t.icon} {lang === 'mm' ? t.mm : t.en}
+          </button>
+        ))}
       </div>
 
       <div className="px-4 space-y-2">
@@ -144,7 +137,7 @@ export function WeatherAlertPage() {
             <h2 className="font-display font-bold text-base text-white">Report Weather/Flood</h2>
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : 'Post'}</button>
           </div>
-          <div className="px-4 py-4 space-y-4 pb-24">
+          <div className="px-4 py-4 space-y-4 pb-8">
             <div>
               <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
               <div className="flex gap-2 flex-wrap">
@@ -201,11 +194,9 @@ export function DonationPage() {
 
   async function load() {
     setLoading(true)
-    try {
     let q = supabase.from('donations').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
-    const { data } = await q; setItems(data || []);     } catch (e) { console.warn(e) }
-    setLoading(false)
+    const { data } = await q; setItems(data || []); setLoading(false)
   }
   useEffect(() => { load() }, [catFilter])
 
@@ -236,18 +227,12 @@ export function DonationPage() {
         {isLoggedIn && <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Post</button>}
       </div>
 
-      <div className="px-4 mb-4">
-        <div className="relative">
-          <select value={catFilter} onChange={e => setCat(e.target.value)}
-            className="select-dark">
-            {DON_CATS.map(c => (
-              <option key={c.id} value={c.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
-                {c.icon} {lang === 'mm' ? c.mm : c.en}
-              </option>
-            ))}
-          </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
+      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
+        {DON_CATS.map(c => (
+          <button key={c.id} onClick={() => setCat(c.id)} className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border ${catFilter === c.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
+            {c.icon} {lang === 'mm' ? c.mm : c.en}
+          </button>
+        ))}
       </div>
 
       <div className="px-4 space-y-3">
@@ -302,7 +287,7 @@ export function DonationPage() {
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Campaign တင်မည်' : 'Create Campaign'}</h2>
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : 'Post'}</button>
           </div>
-          <div className="px-4 py-4 space-y-4 pb-24">
+          <div className="px-4 py-4 space-y-4 pb-8">
             <div>
               <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
               <div className="flex gap-2 flex-wrap">
@@ -377,11 +362,9 @@ export function HealthServicePage() {
 
   async function load() {
     setLoading(true)
-    try {
     let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('start_date', { ascending: true }).limit(30)
     if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-    const { data } = await q; setItems(data || []);     } catch (e) { console.warn(e) }
-    setLoading(false)
+    const { data } = await q; setItems(data || []); setLoading(false)
   }
   useEffect(() => { load() }, [typeFilter])
 
@@ -411,18 +394,12 @@ export function HealthServicePage() {
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Post</button>
       </div>
 
-      <div className="px-4 mb-4">
-        <div className="relative">
-          <select value={typeFilter} onChange={e => setType(e.target.value)}
-            className="select-dark">
-            {HEALTH_TYPES.map(t => (
-              <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
-                {t.icon} {lang === 'mm' ? t.mm : t.en}
-              </option>
-            ))}
-          </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
+      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
+        {HEALTH_TYPES.map(t => (
+          <button key={t.id} onClick={() => setType(t.id)} className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border ${typeFilter === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
+            {t.icon} {lang === 'mm' ? t.mm : t.en}
+          </button>
+        ))}
       </div>
 
       <div className="px-4 space-y-2">
@@ -482,7 +459,7 @@ export function HealthServicePage() {
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ဝန်ဆောင်မှု တင်မည်' : 'Post Health Service'}</h2>
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'တင်မည်' : 'Post'}</button>
           </div>
-          <div className="px-4 py-4 space-y-4 pb-24">
+          <div className="px-4 py-4 space-y-4 pb-8">
             <div>
               <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
               <div className="flex gap-2 flex-wrap">
@@ -518,252 +495,6 @@ export function HealthServicePage() {
             <button onClick={() => set('is_urgent', !form.is_urgent)} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${form.is_urgent ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
               ⚡ {lang === 'mm' ? 'Urgent — သွေးလိုအပ်/အခြေအနေ ဆိုးရွားနေ' : 'Mark as Urgent'}
             </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
-// BUS SCHEDULE PAGE
-// ─────────────────────────────────────────────────────────────
-const BUS_ROUTES_DEF = [
-  { id: 'all', mm: 'အားလုံး', en: 'All', icon: '🚌' },
-  { id: 'local', mm: 'မြို့တွင်း', en: 'Local', icon: '🏙️' },
-  { id: 'long_distance', mm: 'အဝေး', en: 'Long Distance', icon: '🛣️' },
-]
-
-export function BusSchedulePage() {
-  const { lang } = useLang()
-  const { user, isModerator } = useAuth()
-  useSEO({ title: lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule' })
-
-  const [schedules, setSchedules] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [typeFilter, setType] = useState('all')
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ route_mm: '', departure_time: '', arrival_time: '', price: '', contact_phone: '', notes_mm: '', type: 'long_distance' })
-  const [submitting, setSubmitting] = useState(false)
-  const set = (k, v) => setForm(f => ({...f, [k]: v}))
-
-  async function load() {
-    setLoading(true)
-    try {
-      let q = supabase.from('bus_departures').select('*').order('departure_time', { ascending: true })
-      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-      const { data, error } = await q
-      if (!error) setSchedules(data || [])
-    } catch (e) { console.warn(e) }
-    setLoading(false)
-  }
-  useEffect(() => { load() }, [typeFilter])
-
-  async function submit() {
-    if (!form.route_mm || !form.departure_time) return
-    setSubmitting(true)
-    try {
-      await supabase.from('bus_departures').insert({ ...form, price: form.price ? parseInt(form.price) : null, reporter_id: user?.id || null })
-      setShowForm(false); load()
-    } catch (e) { console.warn(e) }
-    setSubmitting(false)
-  }
-
-  async function deleteSchedule(id) {
-    try { await supabase.from('bus_departures').delete().eq('id', id) } catch (e) {}
-    load()
-  }
-
-  return (
-    <div className="pb-8">
-      <div className="px-4 pt-4 pb-3 flex items-start justify-between">
-        <div>
-          <h1 className="font-display font-bold text-xl text-white">🚌 {lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'ကားထွက်ချိန် Community Report' : 'Community reported bus schedules'}</p>
-        </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
-      </div>
-      <div className="px-4 mb-4">
-        <div className="relative">
-          <select value={typeFilter} onChange={e => setType(e.target.value)} className="select-dark">
-            {BUS_ROUTES_DEF.map(t => <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030' }}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>)}
-          </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
-      </div>
-      <div className="px-4 space-y-2">
-        {loading ? [1,2,3].map(n => <div key={n} className="h-20 rounded-2xl shimmer" />) :
-         schedules.length === 0 ? (
-           <div className="flex flex-col items-center py-12 text-center">
-             <span className="text-4xl mb-3">🚌</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ကားထွက်ချိန် မရှိသေး' : 'No schedules yet'}</p>
-           </div>
-         ) :
-         schedules.map(s => (
-           <div key={s.id} className="card-dark rounded-2xl p-4">
-             <div className="flex items-start justify-between gap-2">
-               <div className="flex-1">
-                 <p className="font-display font-semibold text-sm text-white font-myanmar">{s.route_mm}</p>
-                 <div className="flex items-center gap-3 mt-1 flex-wrap">
-                   {s.departure_time && <span className="text-xs text-brand-300">🕐 {s.departure_time}</span>}
-                   {s.arrival_time && <span className="text-xs text-white/50">→ {s.arrival_time}</span>}
-                   {s.price && <span className="text-xs text-gold-400 font-mono">{Number(s.price).toLocaleString()} Ks</span>}
-                 </div>
-                 {s.notes_mm && <p className="text-xs text-white/40 mt-1 font-myanmar">{s.notes_mm}</p>}
-                 {s.contact_phone && <a href={`tel:${s.contact_phone}`} className="text-xs text-green-400 mt-1 block">📞 {s.contact_phone}</a>}
-               </div>
-               {isModerator && <button onClick={() => deleteSchedule(s.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400"><Trash2 size={12} /></button>}
-             </div>
-           </div>
-         ))}
-      </div>
-      {showForm && (
-        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015]">
-          <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
-            <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
-            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကားထွက်ချိန် ထည့်မည်' : 'Add Bus Schedule'}</h2>
-            <button onClick={submit} disabled={!form.route_mm || !form.departure_time || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
-          </div>
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-            <div><label className="block text-xs text-white/50 mb-1.5">လမ်းကြောင်း *</label><input value={form.route_mm} onChange={e => set('route_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: တောင်ကြီး → ရန်ကုန်" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">ထွက်ချိန် *</label><input type="time" value={form.departure_time} onChange={e => set('departure_time', e.target.value)} className="input-dark" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ရောက်ချိန်</label><input type="time" value={form.arrival_time} onChange={e => set('arrival_time', e.target.value)} className="input-dark" /></div>
-            </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ဈေးနှုန်း (Ks)</label><input type="number" value={form.price} onChange={e => set('price', e.target.value)} className="input-dark font-mono" /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark" placeholder="09..." /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">မှတ်ချက်</label><input value={form.notes_mm} onChange={e => set('notes_mm', e.target.value)} className="input-dark font-myanmar" /></div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
-// TOURS PAGE
-// ─────────────────────────────────────────────────────────────
-const TOUR_TYPES = [
-  { id: 'all',      mm: 'အားလုံး',    en: 'All',       icon: '🏔️' },
-  { id: 'trekking', mm: 'Trekking',   en: 'Trekking',  icon: '🥾' },
-  { id: 'boat',     mm: 'လှေ/ရေ',     en: 'Boat Tour', icon: '⛵' },
-  { id: 'cultural', mm: 'ယဉ်ကျေးမှု', en: 'Cultural',  icon: '🏛️' },
-  { id: 'day_trip', mm: 'Day Trip',   en: 'Day Trip',  icon: '🌄' },
-  { id: 'other',    mm: 'အခြား',      en: 'Other',     icon: '📍' },
-]
-
-export function ToursPage() {
-  const { lang } = useLang()
-  const { user, isModerator } = useAuth()
-  useSEO({ title: 'Tour Guide' })
-
-  const [tours, setTours] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [typeFilter, setType] = useState('all')
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ title_mm: '', description_mm: '', type: 'trekking', price_from: '', price_to: '', duration_mm: '', contact_name: '', contact_phone: '', facebook: '', languages: '' })
-  const [submitting, setSubmitting] = useState(false)
-  const set = (k, v) => setForm(f => ({...f, [k]: v}))
-
-  async function load() {
-    setLoading(true)
-    try {
-      let q = supabase.from('tour_guides').select('*').eq('is_active', true).order('created_at', { ascending: false })
-      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-      const { data, error } = await q
-      if (!error) setTours(data || [])
-    } catch (e) { console.warn(e) }
-    setLoading(false)
-  }
-  useEffect(() => { load() }, [typeFilter])
-
-  async function submit() {
-    if (!form.title_mm) return
-    setSubmitting(true)
-    try {
-      await supabase.from('tour_guides').insert({ ...form, price_from: form.price_from ? parseInt(form.price_from) : null, price_to: form.price_to ? parseInt(form.price_to) : null, reporter_id: user?.id || null })
-      setShowForm(false); load()
-    } catch (e) { console.warn(e) }
-    setSubmitting(false)
-  }
-
-  async function deleteTour(id) {
-    try { await supabase.from('tour_guides').delete().eq('id', id) } catch (e) {}
-    load()
-  }
-
-  return (
-    <div className="pb-8">
-      <div className="px-4 pt-4 pb-3 flex items-start justify-between">
-        <div>
-          <h1 className="font-display font-bold text-xl text-white">🏔️ Tour Guide / Trekking</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'Trekking / Boat Trip Guide တွေ' : 'Local trekking & boat tour guides'}</p>
-        </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
-      </div>
-      <div className="px-4 mb-4">
-        <div className="relative">
-          <select value={typeFilter} onChange={e => setType(e.target.value)} className="select-dark">
-            {TOUR_TYPES.map(t => <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030' }}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>)}
-          </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
-      </div>
-      <div className="px-4 space-y-3">
-        {loading ? [1,2,3].map(n => <div key={n} className="h-28 rounded-2xl shimmer" />) :
-         tours.length === 0 ? (
-           <div className="flex flex-col items-center py-12 text-center">
-             <span className="text-4xl mb-3">🏔️</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Tour Guide မရှိသေး' : 'No guides yet'}</p>
-           </div>
-         ) :
-         tours.map(t => {
-           const tt = TOUR_TYPES.find(x => x.id === t.type)
-           return (
-             <div key={t.id} className="card-dark rounded-2xl p-4 space-y-2">
-               <div className="flex items-start justify-between gap-2">
-                 <div className="flex-1">
-                   <div className="flex items-center gap-2 mb-1">
-                     <span>{tt?.icon}</span>
-                     <span className="text-[9px] text-brand-300 bg-brand-600/15 border border-brand-400/20 px-1.5 py-0.5 rounded-full font-bold">{lang === 'mm' ? tt?.mm : tt?.en}</span>
-                   </div>
-                   <h3 className="font-display font-semibold text-sm text-white font-myanmar">{t.title_mm}</h3>
-                   {t.description_mm && <p className="text-xs text-white/50 mt-1 font-myanmar line-clamp-2">{t.description_mm}</p>}
-                   <div className="flex items-center gap-3 mt-1.5 flex-wrap text-[10px]">
-                     {(t.price_from || t.price_to) && <span className="text-gold-400 font-mono">{t.price_from ? Number(t.price_from).toLocaleString() : '?'}{t.price_to ? ` – ${Number(t.price_to).toLocaleString()}` : '+'} Ks</span>}
-                     {t.duration_mm && <span className="text-white/40 font-myanmar">⏱ {t.duration_mm}</span>}
-                   </div>
-                 </div>
-                 {isModerator && <button onClick={() => deleteTour(t.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 flex-shrink-0"><Trash2 size={12} /></button>}
-               </div>
-               <div className="flex gap-3">
-                 {t.contact_phone && <a href={`tel:${t.contact_phone}`} className="text-xs text-green-400">📞 {t.contact_phone}</a>}
-                 {t.facebook && <a href={t.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400">FB →</a>}
-               </div>
-             </div>
-           )
-         })}
-      </div>
-      {showForm && (
-        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015]">
-          <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
-            <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
-            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Tour Guide ထည့်မည်' : 'Add Tour Guide'}</h2>
-            <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
-          </div>
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">ဈေး စတင် (Ks)</label><input type="number" value={form.price_from} onChange={e => set('price_from', e.target.value)} className="input-dark font-mono" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ဈေး အများဆုံး (Ks)</label><input type="number" value={form.price_to} onChange={e => set('price_to', e.target.value)} className="input-dark font-mono" /></div>
-            </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ကြာချိန်</label><input value={form.duration_mm} onChange={e => set('duration_mm', e.target.value)} className="input-dark font-myanmar" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">Guide အမည်</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar text-sm" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark text-sm" placeholder="09..." /></div>
-            </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">Facebook</label><input value={form.facebook} onChange={e => set('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." /></div>
           </div>
         </div>
       )}
