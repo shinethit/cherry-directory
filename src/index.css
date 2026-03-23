@@ -94,6 +94,20 @@
   .input-dark::placeholder { color: rgba(255,255,255,0.3); }
   .input-dark:focus { border-color: rgba(162, 0, 230, 0.6); box-shadow: 0 0 0 3px rgba(162,0,230,0.1); }
 
+  /* Fix select dropdown font & color */
+  select.input-dark {
+    font-family: 'Pyidaungsu', 'DM Sans', sans-serif;
+    color: white;
+    appearance: auto;
+    -webkit-appearance: auto;
+  }
+  select.input-dark option,
+  select.input-dark optgroup {
+    font-family: 'Pyidaungsu', 'DM Sans', sans-serif;
+    background-color: #1a0030;
+    color: white;
+  }
+
   .badge {
     display: inline-flex;
     align-items: center;
