@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { Fuel, RefreshCw, CheckCircle, AlertCircle, Users } from 'lucide-react'
+import { Fuel, RefreshCw, CheckCircle, AlertCircle, Users, Plus, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
+import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 
 const FUEL_TYPES = ['petrol92','petrol95','diesel','lpg']
@@ -119,14 +120,139 @@ function StationCard({ station, lang, onReport }) {
   )
 }
 
+
+// ── Manage Fuel Stations Modal ────────────────────────────────
+function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
+  const [list, setList] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [editName, setEditName] = useState('')
+  const [form, setForm] = useState({ name: '', name_mm: '', township: '', address: '' })
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  async function load() {
+    setLoading(true)
+    const { data } = await supabase.from('fuel_stations').select('*').order('sort_order')
+    setList(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  async function addStation() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    await supabase.from('fuel_stations').insert({
+      name: form.name.trim(),
+      name_mm: form.name_mm.trim() || form.name.trim(),
+      township: form.township.trim() || null,
+      address: form.address.trim() || null,
+      sort_order: list.length + 1,
+    })
+    setForm({ name: '', name_mm: '', township: '', address: '' })
+    await load()
+    setSaving(false)
+    onUpdated()
+  }
+
+  async function saveEdit(id) {
+    if (!editName.trim()) return
+    await supabase.from('fuel_stations').update({ name: editName.trim(), name_mm: editName.trim() }).eq('id', id)
+    setEditId(null)
+    load(); onUpdated()
+  }
+
+  async function deleteStation(id) {
+    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this station?')) return
+    await supabase.from('fuel_stations').delete().eq('id', id)
+    load(); onUpdated()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
+        <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0">
+          <X size={18} className="text-white" />
+        </button>
+        <h2 className="font-display font-bold text-base text-white">⛽ {lang === 'mm' ? 'ဓာတ်ဆီဆိုင် စီမံမည်' : 'Manage Fuel Stations'}</h2>
+        <div className="w-9" />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-6">
+        {/* Add new */}
+        <div className="space-y-2 p-3 rounded-2xl bg-white/3 border border-white/8">
+          <p className="text-xs text-white/50 font-display font-semibold">{lang === 'mm' ? '➕ ဆိုင်အသစ်ထည့်မည်' : '➕ Add New Station'}</p>
+          <input autoFocus value={form.name} onChange={e => set('name', e.target.value)}
+            placeholder={lang === 'mm' ? 'ဆိုင်အမည် (English) *' : 'Station name (English) *'}
+            className="input-dark text-sm w-full" />
+          <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)}
+            placeholder={lang === 'mm' ? 'ဆိုင်အမည် (မြန်မာ)' : 'Station name (Myanmar)'}
+            className="input-dark font-myanmar text-sm w-full" />
+          <div className="grid grid-cols-2 gap-2">
+            <input value={form.township} onChange={e => set('township', e.target.value)}
+              placeholder={lang === 'mm' ? 'မြို့နယ်' : 'Township'}
+              className="input-dark text-sm" />
+            <input value={form.address} onChange={e => set('address', e.target.value)}
+              placeholder={lang === 'mm' ? 'လိပ်စာ' : 'Address'}
+              className="input-dark font-myanmar text-sm" />
+          </div>
+          <button onClick={addStation} disabled={!form.name.trim() || saving}
+            className="btn-primary w-full text-sm disabled:opacity-50">
+            {saving ? '...' : lang === 'mm' ? 'ထည့်မည်' : 'Add Station'}
+          </button>
+        </div>
+
+        {/* Station list */}
+        <div className="space-y-2">
+          {loading ? [1,2,3].map(n => <div key={n} className="h-14 rounded-xl shimmer" />) :
+           list.length === 0 ? (
+            <p className="text-center text-white/30 text-sm py-8 font-myanmar">{lang === 'mm' ? 'ဆိုင်မရှိသေး' : 'No stations yet'}</p>
+           ) :
+           list.map(s => (
+            <div key={s.id} className="rounded-xl bg-white/5 border border-white/8">
+              {editId === s.id ? (
+                <div className="flex gap-2 p-2">
+                  <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveEdit(s.id); if (e.key === 'Escape') setEditId(null) }}
+                    className="input-dark flex-1 text-sm py-1.5" />
+                  <button onClick={() => saveEdit(s.id)} className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-xs font-bold">✓</button>
+                  <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-white/8 rounded-lg text-white/40 text-xs">✕</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3">
+                  <span className="text-xl flex-shrink-0">⛽</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white font-myanmar truncate">{s.name_mm || s.name}</p>
+                    {s.township && <p className="text-[10px] text-white/40">{s.township}</p>}
+                  </div>
+                  <button onClick={() => { setEditId(s.id); setEditName(s.name_mm || s.name) }}
+                    className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center flex-shrink-0">
+                    <Pencil size={11} />
+                  </button>
+                  <button onClick={() => deleteStation(s.id)}
+                    className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function FuelPage() {
   const { lang } = useLang()
+  const { isModerator } = useAuth()
   useSEO({ title: lang === 'mm' ? 'ဓာတ်ဆီ/ဒီဇယ် အခြေအနေ' : 'Fuel Availability' })
 
   const [stations, setStations] = useState([])
   const [loading, setLoading]   = useState(true)
   const [lastUpdate, setLastUpdate] = useState(null)
   const [toast, setToast]       = useState(null)
+  const [showManage, setShowManage] = useState(false)
   const channelRef = useRef(null)
 
   async function load() {
@@ -188,6 +314,13 @@ export default function FuelPage() {
         </div>
       </div>
 
+      {isModerator && (
+        <button onClick={() => setShowManage(true)}
+          className="mx-4 mb-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white/50 hover:bg-white/8 transition-colors">
+          <Pencil size={12} /> {lang === 'mm' ? '⛽ ဓာတ်ဆီဆိုင် စီမံမည်' : '⛽ Manage Fuel Stations'}
+        </button>
+      )}
+
       {/* Summary */}
       <div className="flex gap-2 px-4 mb-4">
         <div className="flex-1 p-3 rounded-2xl bg-green-500/10 border border-green-500/20 text-center">
@@ -219,6 +352,14 @@ export default function FuelPage() {
             : 'Tap a station to expand, then tap fuel type to report status • 5 min cooldown • Data from last 6 hours'}
         </p>
       </div>
+
+      {showManage && (
+        <ManageFuelStationsModal
+          lang={lang}
+          onClose={() => setShowManage(false)}
+          onUpdated={load}
+        />
+      )}
 
       {toast && (
         <div className={`fixed bottom-28 left-4 right-4 max-w-lg mx-auto z-[300] flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-myanmar ${
