@@ -161,7 +161,7 @@ function PostForm({ onClose, onSuccess, lang }) {
 
         <div>
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label>
-          <input value={form.title_mm} onChange={e => setField('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={lang === 'mm' ? 'ဥပမာ: မဲ့နက်ကြောင်ပျောက် ဒေါ်မေမြ...' : 'e.g. Lost black cat near...'} />
+          <input autoFocus value={form.title_mm} onChange={e => setField('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={lang === 'mm' ? 'ဥပမာ: မဲ့နက်ကြောင်ပျောက် ဒေါ်မေမြ...' : 'e.g. Lost black cat near...'} />
         </div>
 
         <div>

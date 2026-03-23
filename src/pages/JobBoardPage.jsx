@@ -123,7 +123,7 @@ function PostJobForm({ onClose, onSuccess, lang }) {
         </button>
       </div>
       <div className="px-4 py-4 space-y-4 pb-24">
-        <div><label className="block text-xs text-white/50 mb-1.5">ရာထူး/အလုပ် (မြန်မာ) *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကော်ဖီဆိုင် Cashier လိုသည်" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">ရာထူး/အလုပ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကော်ဖီဆိုင် Cashier လိုသည်" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">ကုမ္ပဏီ/လုပ်ငန်းအမည်</label><input value={form.company_mm} onChange={e => set('company_mm', e.target.value)} className="input-dark font-myanmar" /></div>
         <div>
           <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>

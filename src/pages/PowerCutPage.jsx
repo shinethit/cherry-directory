@@ -336,7 +336,7 @@ export default function PowerCutPage() {
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-24">
             {/* Add new area */}
             <div className="space-y-2">
-              <input value={newAreaName} onChange={e => setNewAreaName(e.target.value)}
+              <input autoFocus value={newAreaName} onChange={e => setNewAreaName(e.target.value)}
                 placeholder={lang === 'mm' ? 'ရပ်ကွက်အမည်...' : 'Area name...'}
                 className="input-dark font-myanmar w-full" />
               <div className="flex gap-2">

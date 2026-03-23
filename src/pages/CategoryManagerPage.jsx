@@ -105,7 +105,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
             <label className="block text-xs text-white/50 mb-1.5">
               {lang === 'mm' ? 'Category အမည် (မြန်မာ)' : 'Name (Myanmar)'} *
             </label>
-            <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)}
+            <input autoFocus value={form.name_mm} onChange={e => set('name_mm', e.target.value)}
               className="input-dark font-myanmar" placeholder="ဥပမာ: စားသောက်ဆိုင်" />
           </div>
           <div>

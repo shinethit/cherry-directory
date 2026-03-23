@@ -101,7 +101,7 @@ function PostForm({ onClose, onSuccess, lang }) {
             ))}
           </div>
         </div>
-        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကြေညာချက် ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကြေညာချက် ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အကြောင်းအရာ' : 'Content'}</label><textarea value={form.content_mm} onChange={e => set('content_mm', e.target.value)} className="input-dark font-myanmar resize-none h-28" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ရပ်ကွက်/နေရာ' : 'Ward/Area'}</label><input value={form.ward} onChange={e => set('ward', e.target.value)} className="input-dark font-myanmar" placeholder={lang === 'mm' ? 'ဥပမာ: ဗိုလ်ချုပ်ရပ်ကွက်' : 'e.g. Bogyoke Ward'} /></div>
         <button onClick={() => set('is_urgent', !form.is_urgent)} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${form.is_urgent ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}>

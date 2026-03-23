@@ -177,7 +177,7 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အမည် (မြန်မာ)' : 'Name (Myanmar)'} *</label>
-            <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ပြည်သူ့ဆေးရုံ" />
+            <input autoFocus value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ပြည်သူ့ဆေးရုံ" />
           </div>
           <div className="col-span-2">
             <label className="block text-xs text-white/50 mb-1.5">Name (English)</label>

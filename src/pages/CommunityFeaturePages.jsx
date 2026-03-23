@@ -161,7 +161,7 @@ export function WeatherAlertPage() {
                 ))}
               </div>
             </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ဗိုလ်ချုပ်ရပ်ကွက် ရေကြီးနေ" /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ဗိုလ်ချုပ်ရပ်ကွက် ရေကြီးနေ" /></div>
             <div><label className="block text-xs text-white/50 mb-1.5">အကြောင်းအရာ</label><textarea value={form.content_mm} onChange={e => set('content_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
             <div><label className="block text-xs text-white/50 mb-1.5">နေရာ</label><input value={form.location} onChange={e => set('location', e.target.value)} className="input-dark font-myanmar" /></div>
             {form.type === 'inle_level' && <div><label className="block text-xs text-white/50 mb-1.5">Inle Lake ရေမြင့် (cm)</label><input type="number" value={form.inle_level_cm} onChange={e => set('inle_level_cm', e.target.value)} className="input-dark font-mono" placeholder="e.g. 245" /></div>}
@@ -311,7 +311,7 @@ export function DonationPage() {
                 ))}
               </div>
             </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
             <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-24" /></div>
             <div><label className="block text-xs text-white/50 mb-1.5">ပန်းတိုင် ငွေပမာဏ (Ks)</label><input type="number" value={form.target_amount} onChange={e => set('target_amount', e.target.value)} className="input-dark font-mono" placeholder="e.g. 5000000" /></div>
             <div className="border-t border-white/8 pt-3">
@@ -491,7 +491,7 @@ export function HealthServicePage() {
                 ))}
               </div>
             </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={form.type === 'blood_drive' ? 'ဥပမာ: သွေးလှူဒါန်းပွဲ — မြေနီတောင်ဆေးရုံ' : 'ဥပမာ: အခမဲ့ဆေးခန်း — ဆရာဝန် ၅ ဦး'} /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={form.type === 'blood_drive' ? 'ဥပမာ: သွေးလှူဒါန်းပွဲ — မြေနီတောင်ဆေးရုံ' : 'ဥပမာ: အခမဲ့ဆေးခန်း — ဆရာဝန် ၅ ဦး'} /></div>
             <div><label className="block text-xs text-white/50 mb-1.5">အဖွဲ့အစည်း/ဆေးရုံ</label><input value={form.organizer_mm} onChange={e => set('organizer_mm', e.target.value)} className="input-dark font-myanmar" /></div>
             <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
             {form.type === 'blood_drive' && (
@@ -625,7 +625,7 @@ export function BusSchedulePage() {
             <button onClick={submit} disabled={!form.route_mm || !form.departure_time || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-            <div><label className="block text-xs text-white/50 mb-1.5">လမ်းကြောင်း *</label><input value={form.route_mm} onChange={e => set('route_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: တောင်ကြီး → ရန်ကုန်" /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">လမ်းကြောင်း *</label><input autoFocus value={form.route_mm} onChange={e => set('route_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: တောင်ကြီး → ရန်ကုန်" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-[10px] text-white/40 mb-1">ထွက်ချိန် *</label><input type="time" value={form.departure_time} onChange={e => set('departure_time', e.target.value)} className="input-dark" /></div>
               <div><label className="block text-[10px] text-white/40 mb-1">ရောက်ချိန်</label><input type="time" value={form.arrival_time} onChange={e => set('arrival_time', e.target.value)} className="input-dark" /></div>
@@ -752,7 +752,7 @@ export function ToursPage() {
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
             <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div><label className="block text-[10px] text-white/40 mb-1">ဈေး စတင် (Ks)</label><input type="number" value={form.price_from} onChange={e => set('price_from', e.target.value)} className="input-dark font-mono" /></div>

@@ -128,7 +128,7 @@ function PostForm({ onClose, onSuccess, lang }) {
           <label className="block text-xs text-white/50 mb-1.5">
             ခေါင်းစဉ် (မြန်မာ) <span className="text-brand-400">*</span>
           </label>
-          <input
+          <input autoFocus
             value={form.title_mm}
             onChange={e => set('title_mm', e.target.value)}
             className="input-dark font-myanmar"

@@ -99,7 +99,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဈေးနှုန်း (Ks)' : 'Price (Ks)'} *</label>
           <div className="flex items-center gap-2">
             <button onClick={() => setPrice(p => String(Math.max(100, parseInt(p||0) - 100)))} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center text-white"><Minus size={16} /></button>
-            <input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 5000" className="input-dark flex-1 text-center text-lg font-mono font-bold" min="100" />
+            <input autoFocus type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 5000" className="input-dark flex-1 text-center text-lg font-mono font-bold" min="100" />
             <button onClick={() => setPrice(p => String(parseInt(p||0) + 100))} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center text-white"><Plus size={16} /></button>
           </div>
           {price && <p className="text-center text-xs text-brand-300 mt-1 font-mono">{parseInt(price).toLocaleString()} Ks</p>}
@@ -195,7 +195,7 @@ function EditItemModal({ item, onClose, onSave, lang }) {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-[10px] text-white/50 mb-1">အမည် (မြန်မာ) *</label>
-            <input value={name} onChange={e => setName(e.target.value)} className="input-dark font-myanmar text-sm" />
+            <input autoFocus value={name} onChange={e => setName(e.target.value)} className="input-dark font-myanmar text-sm" />
           </div>
           <div>
             <label className="block text-[10px] text-white/50 mb-1">Name (English)</label>
@@ -280,7 +280,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 pb-24">
           <div className="flex gap-2">
-            <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMarket()}
+            <input autoFocus value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMarket()}
               placeholder={lang === 'mm' ? 'ဈေးကွက် အမည်ထည့်ပါ...' : 'Market name...'}
               className="input-dark flex-1 font-myanmar text-sm" maxLength={30} />
             <button onClick={addMarket} disabled={!newName.trim() || saving} className="btn-primary px-4 text-sm disabled:opacity-50"><Plus size={16} /></button>
