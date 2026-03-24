@@ -1,3 +1,8 @@
+ရပါတယ်ဗျ။ Code တွေ အများကြီးဆိုတော့ ရှာရတာ မျက်စိလည်သွားတတ်ပါတယ်။ 
+
+သင့်ရဲ့ `FuelPage.jsx` ဖိုင်ထဲက Code အဟောင်းတွေ အကုန်လုံးကို ဖျက်ပြီး၊ အောက်က Code အသစ် အပြည့်အစုံကိုသာ Copy ကူးပြီး Paste ချလိုက်ပါဗျ။ (အောက်ဆုံးထိ Scroll ဆွဲလို့ရတဲ့ အပိုင်းတွေရော၊ "How it works" အပိုင်းပါ အကုန် ထည့်သွင်းပေးထားပါတယ်)။
+
+```jsx
 import { useState, useEffect } from 'react'
 import { RefreshCw, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -625,6 +630,29 @@ export default function FuelPage() {
         </div>
       )}
 
+      {/* ── How it works section ── */}
+      <div className="mx-4 mt-6 card-dark rounded-2xl p-4 bg-white/5 border border-white/8">
+        <p className="text-xs font-display font-bold text-white/50 uppercase tracking-wider mb-3">
+          {lang === 'mm' ? 'ဘယ်လိုအလုပ်လုပ်သလဲ' : 'How it works'}
+        </p>
+        <div className="space-y-2">
+          {[
+            { mm:'ဆီဆိုင်များတွင် ဆီရ/မရ အခြေအနေကို Report လုပ်ပါ',  en:'Report fuel availability at stations' },
+            { mm:'နောက်ဆုံးတင်ထားသော Report ကို အခြေခံပြီး ပြသပါမည်', en:'Status is based on the most recent reports' },
+            { mm:'ဆီအမျိုးအစား (ဥပမာ- 92, Diesel) အလိုက် သီးသန့်တင်နိုင်သည်', en:'Report separately for each fuel type' },
+            { mm:'Guest အနေဖြင့်လည်း အလွယ်တကူ Report တင်ပြနိုင်သည်', en:'Guests can easily submit reports' },
+          ].map((s, i) => (
+            <div key={i} className="flex items-start gap-2.5">
+              <span className="w-5 h-5 rounded-full bg-brand-600/40 text-brand-300 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{i+1}</span>
+              <p className="text-xs text-white/50 font-myanmar">{lang === 'mm' ? s.mm : s.en}</p>
+            </div>
+          ))}
+        </div>
+        <p className="text-[9px] text-white/20 mt-3 font-myanmar border-t border-white/6 pt-3">
+          ⚠️ {lang === 'mm' ? 'ဤ Data သည် Community Report ဖြစ်ပြီး တိကျမှု 100% ကို မသေချာနိုင်' : 'Community data — accuracy not guaranteed'}
+        </p>
+      </div>
+
       {showManage && (
         <ManageFuelStationsModal
           lang={lang}
@@ -642,3 +670,4 @@ export default function FuelPage() {
     </div>
   )
 }
+```
