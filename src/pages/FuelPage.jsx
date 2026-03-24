@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Fuel, RefreshCw, CheckCircle, AlertCircle, Users, Plus, Pencil, Trash2, X } from 'lucide-react'
+import { Fuel, RefreshCw, CheckCircle, AlertCircle, Users, Plus, Pencil, Trash2, X, Clock, FileText } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -38,7 +38,17 @@ function timeAgo(iso, lang) {
 function groupByStation(rows) {
   const map = {}
   for (const row of rows) {
-    if (!map[row.station_id]) map[row.station_id] = { id: row.station_id, name: row.name, name_mm: row.name_mm, township: row.township, address: row.address, fuels: {} }
+    if (!map[row.station_id]) map[row.station_id] = { 
+      id: row.station_id, 
+      name: row.name, 
+      name_mm: row.name_mm, 
+      township: row.township, 
+      address: row.address,
+      notes: row.station_notes,
+      operating_hours: row.operating_hours,
+      phone: row.phone,
+      fuels: {} 
+    }
     map[row.station_id].fuels[row.fuel_id] = row
   }
   return Object.values(map)
@@ -77,7 +87,30 @@ function StationCard({ station, lang, onReport }) {
 
       {/* Expanded fuel detail */}
       {expanded && (
-        <div className="px-4 pb-4 space-y-2 border-t border-white/6 pt-3">
+        <div className="px-4 pb-4 space-y-3 border-t border-white/6 pt-3">
+          {/* Station info */}
+          <div className="space-y-1.5 pb-2 border-b border-white/5">
+            {station.operating_hours && (
+              <div className="flex items-start gap-2 text-[10px]">
+                <Clock size={12} className="text-white/40 mt-0.5 flex-shrink-0" />
+                <span className="text-white/60 font-myanmar">{station.operating_hours}</span>
+              </div>
+            )}
+            {station.phone && (
+              <div className="flex items-start gap-2 text-[10px]">
+                <span className="text-white/40">📞</span>
+                <a href={`tel:${station.phone}`} className="text-blue-400 hover:underline">{station.phone}</a>
+              </div>
+            )}
+            {station.notes && (
+              <div className="flex items-start gap-2 text-[10px]">
+                <FileText size={12} className="text-white/40 mt-0.5 flex-shrink-0" />
+                <span className="text-white/50 font-myanmar">{station.notes}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Fuel types */}
           {FUEL_TYPES.map(ft => {
             const row = station.fuels[ft]
             const st  = STATUS_CFG[row?.status || 'unknown']
@@ -87,7 +120,7 @@ function StationCard({ station, lang, onReport }) {
                 <span className="text-lg flex-shrink-0">{fl.icon}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-display font-semibold text-white">{lang === 'mm' ? fl.mm : fl.en}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <span className={`text-[10px] font-bold ${st.color}`}>{lang === 'mm' ? st.mm : st.en}</span>
                     {row?.queue_level && row.queue_level !== 'none' && (
                       <span className="text-[9px] text-white/40 flex items-center gap-0.5">
@@ -127,9 +160,10 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [editName, setEditName] = useState('')
-  const [form, setForm] = useState({ name: '', name_mm: '', township: '', address: '' })
+  const [editData, setEditData] = useState({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '' })
+  const [form, setForm] = useState({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '' })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const setEdit = (k, v) => setEditData(f => ({ ...f, [k]: v }))
 
   async function load() {
     setLoading(true)
@@ -148,17 +182,29 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
       name_mm: form.name_mm.trim() || form.name.trim(),
       township: form.township.trim() || null,
       address: form.address.trim() || null,
+      phone: form.phone.trim() || null,
+      notes: form.notes.trim() || null,
+      operating_hours: form.operating_hours.trim() || null,
       sort_order: list.length + 1,
+      fuel_types: ['petrol92', 'petrol95', 'diesel', 'lpg'],
     })
-    setForm({ name: '', name_mm: '', township: '', address: '' })
+    setForm({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '' })
     await load()
     setSaving(false)
     onUpdated()
   }
 
   async function saveEdit(id) {
-    if (!editName.trim()) return
-    await supabase.from('fuel_stations').update({ name: editName.trim(), name_mm: editName.trim() }).eq('id', id)
+    if (!editData.name.trim()) return
+    await supabase.from('fuel_stations').update({ 
+      name: editData.name.trim(), 
+      name_mm: editData.name_mm.trim(),
+      township: editData.township.trim() || null,
+      address: editData.address.trim() || null,
+      phone: editData.phone.trim() || null,
+      notes: editData.notes.trim() || null,
+      operating_hours: editData.operating_hours.trim() || null,
+    }).eq('id', id)
     setEditId(null)
     load(); onUpdated()
   }
@@ -196,6 +242,16 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
               placeholder={lang === 'mm' ? 'လိပ်စာ' : 'Address'}
               className="input-dark font-myanmar text-sm" />
           </div>
+          <input value={form.phone} onChange={e => set('phone', e.target.value)}
+            placeholder={lang === 'mm' ? 'ဖုန်းနံပါတ်' : 'Phone number'}
+            className="input-dark text-sm w-full" />
+          <input value={form.operating_hours} onChange={e => set('operating_hours', e.target.value)}
+            placeholder={lang === 'mm' ? 'လုပ်ငန်းအချိန် (e.g., 6:00 AM - 10:00 PM)' : 'Operating hours'}
+            className="input-dark text-sm w-full" />
+          <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+            placeholder={lang === 'mm' ? 'မှတ်ချက်များ' : 'Notes'}
+            className="input-dark font-myanmar text-sm w-full h-16 resize-none"
+          />
           <button onClick={addStation} disabled={!form.name.trim() || saving}
             className="btn-primary w-full text-sm disabled:opacity-50">
             {saving ? '...' : lang === 'mm' ? 'ထည့်မည်' : 'Add Station'}
@@ -209,30 +265,49 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
             <p className="text-center text-white/30 text-sm py-8 font-myanmar">{lang === 'mm' ? 'ဆိုင်မရှိသေး' : 'No stations yet'}</p>
            ) :
            list.map(s => (
-            <div key={s.id} className="rounded-xl bg-white/5 border border-white/8">
+            <div key={s.id} className="rounded-xl bg-white/5 border border-white/8 overflow-hidden">
               {editId === s.id ? (
-                <div className="flex gap-2 p-2">
-                  <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveEdit(s.id); if (e.key === 'Escape') setEditId(null) }}
-                    className="input-dark flex-1 text-sm py-1.5" />
-                  <button onClick={() => saveEdit(s.id)} className="px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-xs font-bold">✓</button>
-                  <button onClick={() => setEditId(null)} className="px-3 py-1.5 bg-white/8 rounded-lg text-white/40 text-xs">✕</button>
+                <div className="p-3 space-y-2">
+                  <input value={editData.name} onChange={e => setEdit('name', e.target.value)}
+                    className="input-dark text-sm w-full" />
+                  <input value={editData.name_mm} onChange={e => setEdit('name_mm', e.target.value)}
+                    className="input-dark font-myanmar text-sm w-full" />
+                  <input value={editData.township} onChange={e => setEdit('township', e.target.value)}
+                    placeholder="Township" className="input-dark text-sm w-full" />
+                  <input value={editData.address} onChange={e => setEdit('address', e.target.value)}
+                    placeholder="Address" className="input-dark text-sm w-full" />
+                  <input value={editData.phone} onChange={e => setEdit('phone', e.target.value)}
+                    placeholder="Phone" className="input-dark text-sm w-full" />
+                  <input value={editData.operating_hours} onChange={e => setEdit('operating_hours', e.target.value)}
+                    placeholder="Operating hours" className="input-dark text-sm w-full" />
+                  <textarea value={editData.notes} onChange={e => setEdit('notes', e.target.value)}
+                    placeholder="Notes" className="input-dark font-myanmar text-sm w-full h-12 resize-none" />
+                  <div className="flex gap-2">
+                    <button onClick={() => saveEdit(s.id)} className="flex-1 px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-xs font-bold">✓ Save</button>
+                    <button onClick={() => setEditId(null)} className="flex-1 px-3 py-1.5 bg-white/8 rounded-lg text-white/40 text-xs">✕ Cancel</button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 p-3">
-                  <span className="text-xl flex-shrink-0">⛽</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white font-myanmar truncate">{s.name_mm || s.name}</p>
-                    {s.township && <p className="text-[10px] text-white/40">{s.township}</p>}
+                <div className="p-3">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white font-myanmar font-semibold">{s.name_mm || s.name}</p>
+                      <p className="text-[10px] text-white/40">{s.address} • {s.township}</p>
+                      {s.operating_hours && <p className="text-[9px] text-white/30 mt-0.5">⏰ {s.operating_hours}</p>}
+                      {s.phone && <p className="text-[9px] text-blue-400 mt-0.5">📞 {s.phone}</p>}
+                      {s.notes && <p className="text-[9px] text-white/40 mt-0.5 font-myanmar">{s.notes}</p>}
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button onClick={() => { setEditId(s.id); setEditData({ name: s.name, name_mm: s.name_mm || '', township: s.township || '', address: s.address || '', phone: s.phone || '', notes: s.notes || '', operating_hours: s.operating_hours || '' }) }}
+                        className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center flex-shrink-0 hover:bg-blue-500/20">
+                        <Pencil size={11} />
+                      </button>
+                      <button onClick={() => deleteStation(s.id)}
+                        className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0 hover:bg-red-500/20">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
-                  <button onClick={() => { setEditId(s.id); setEditName(s.name_mm || s.name) }}
-                    className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center flex-shrink-0">
-                    <Pencil size={11} />
-                  </button>
-                  <button onClick={() => deleteStation(s.id)}
-                    className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0">
-                    <Trash2 size={12} />
-                  </button>
                 </div>
               )}
             </div>

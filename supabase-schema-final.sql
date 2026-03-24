@@ -977,7 +977,12 @@ create table if not exists fuel_stations (
   longitude numeric(10,7),
   phone text,
   sort_order int default 0,
-  is_active boolean default true
+  is_active boolean default true,
+  fuel_types text[] default ARRAY['petrol92', 'petrol95', 'diesel', 'lpg'],  -- Available fuel types
+  notes text,  -- General notes about the station
+  operating_hours text,  -- e.g., "6:00 AM - 10:00 PM"
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
 );
 
 insert into fuel_stations (name, name_mm, address, township, sort_order) values
@@ -1021,7 +1026,7 @@ with latest as (
   order by station_id, fuel_type, reported_at desc
 )
 select
-  fs.id as station_id, fs.name, fs.name_mm, fs.township, fs.address,
+  fs.id as station_id, fs.name, fs.name_mm, fs.township, fs.address, fs.phone, fs.notes as station_notes, fs.operating_hours,
   ft.id as fuel_id, ft.name as fuel_name, ft.name_mm as fuel_name_mm, ft.icon,
   coalesce(l.status, 'unknown') as status,
   l.queue_level, l.price, l.notes, l.reported_at
