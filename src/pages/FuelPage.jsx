@@ -1,8 +1,3 @@
-ရပါတယ်ဗျ။ Code တွေ အများကြီးဆိုတော့ ရှာရတာ မျက်စိလည်သွားတတ်ပါတယ်။ 
-
-သင့်ရဲ့ `FuelPage.jsx` ဖိုင်ထဲက Code အဟောင်းတွေ အကုန်လုံးကို ဖျက်ပြီး၊ အောက်က Code အသစ် အပြည့်အစုံကိုသာ Copy ကူးပြီး Paste ချလိုက်ပါဗျ။ (အောက်ဆုံးထိ Scroll ဆွဲလို့ရတဲ့ အပိုင်းတွေရော၊ "How it works" အပိုင်းပါ အကုန် ထည့်သွင်းပေးထားပါတယ်)။
-
-```jsx
 import { useState, useEffect } from 'react'
 import { RefreshCw, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -123,20 +118,12 @@ function FuelTypesTab({ onChanged }) {
   async function addFuelType() {
     if (!form.name.trim() || !form.name_mm.trim()) return
     setSaving(true)
-    
-    const { error } = await supabase.from('fuel_types').insert({
+    await supabase.from('fuel_types').insert({
       name: form.name.trim(),
       name_mm: form.name_mm.trim(),
       icon: form.icon.trim() || '⛽',
       sort_order: list.length + 1,
     })
-
-    if (error) {
-      alert("Error saving fuel type: " + error.message)
-      setSaving(false)
-      return
-    }
-
     setForm({ name: '', name_mm: '', icon: '⛽' })
     await load()
     onChanged?.()
@@ -145,33 +132,21 @@ function FuelTypesTab({ onChanged }) {
 
   async function saveEdit(id) {
     if (!editData.name.trim() || !editData.name_mm.trim()) return
-    const { error } = await supabase.from('fuel_types').update({
+    await supabase.from('fuel_types').update({
       name: editData.name.trim(),
       name_mm: editData.name_mm.trim(),
       icon: editData.icon.trim() || '⛽',
       sort_order: Number(editData.sort_order) || 0,
     }).eq('id', id)
-
-    if (error) {
-      alert("Error updating fuel type: " + error.message)
-      return
-    }
-
     setEditId(null)
-    await load()
+    load()
     onChanged?.()
   }
 
   async function deleteFuelType(id) {
     if (!window.confirm('ဆီအမျိုးအစားကို ဖျက်မည်လား? ဆိုင်များမှ ဆီပိတ်သွားနိုင်သည်။')) return
-    const { error } = await supabase.from('fuel_types').delete().eq('id', id)
-    
-    if (error) {
-      alert("Error deleting fuel type: " + error.message)
-      return
-    }
-
-    await load()
+    await supabase.from('fuel_types').delete().eq('id', id)
+    load()
     onChanged?.()
   }
 
@@ -277,7 +252,7 @@ function FuelTypesTab({ onChanged }) {
 }
 
 // ─── Manage Modal ────────────────────────────────────────────────────────────
-function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
+function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFuelTypesChanged }) {
   const [modalTab, setModalTab] = useState('stations')
   const [list, setList]         = useState([])
   const [loading, setLoading]   = useState(true)
@@ -301,8 +276,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
   async function addStation() {
     if (!form.name.trim()) return
     setSaving(true)
-    
-    const { error } = await supabase.from('fuel_stations').insert({
+    await supabase.from('fuel_stations').insert({
       name: form.name.trim(),
       name_mm: form.name_mm.trim() || form.name.trim(),
       township: form.township.trim() || null,
@@ -314,22 +288,15 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
       fuel_type_names: form.fuel_type_names,
       is_active: true,
     })
-
-    if (error) {
-      alert("Error adding station: " + error.message)
-      setSaving(false)
-      return
-    }
-
     setForm({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '', fuel_type_names: [] })
     await load()
-    onUpdated()
+    onUpdated()   // ← ချက်ချင်း main page refresh
     setSaving(false)
   }
 
   async function saveEdit(id) {
     if (!editData.name.trim()) return
-    const { error } = await supabase.from('fuel_stations').update({
+    await supabase.from('fuel_stations').update({
       name: editData.name.trim(),
       name_mm: editData.name_mm.trim(),
       township: editData.township?.trim() || null,
@@ -337,29 +304,17 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
       phone: editData.phone?.trim() || null,
       notes: editData.notes?.trim() || null,
       operating_hours: editData.operating_hours?.trim() || null,
-      fuel_type_names: editData.fuel_type_names || [],
+      fuel_type_names: editData.fuel_type_names || [],  // ← fuel data မပျောက်
     }).eq('id', id)
-
-    if (error) {
-      alert("Error updating station: " + error.message)
-      return
-    }
-
     setEditId(null)
-    await load()
+    load()
     onUpdated()
   }
 
   async function deleteStation(id) {
     if (!window.confirm('ဆိုင်ကို ဖျက်မည်လား?')) return
-    const { error } = await supabase.from('fuel_stations').delete().eq('id', id)
-    
-    if (error) {
-      alert("Error deleting station: " + error.message)
-      return
-    }
-
-    await load()
+    await supabase.from('fuel_stations').delete().eq('id', id)
+    load()
     onUpdated()
   }
 
@@ -390,8 +345,8 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
         </button>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
+      {/* Content - pb-36 ထည့်ထားသည် (Nav Bar မဖုံးအောင်) */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-36">
 
         {/* ── Stations Tab ── */}
         {modalTab === 'stations' && (
@@ -527,7 +482,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
 
         {/* ── Fuel Types Tab ── */}
         {modalTab === 'fueltypes' && (
-          <FuelTypesTab onChanged={() => { onUpdated() }} />
+          <FuelTypesTab onChanged={() => { onUpdated(); onFuelTypesChanged?.() }} />
         )}
       </div>
     </div>
@@ -553,7 +508,7 @@ export default function FuelPage() {
       const { data: ftData } = await supabase.from('fuel_types').select('*').order('sort_order')
       setAllFuelTypes(ftData || [])
 
-      // 2. Load ALL active stations directly
+      // 2. Load ALL active stations directly (ဆိုင်အသစ် ချက်ချင်းပေါ်ရန်)
       const { data: stationsRaw } = await supabase
         .from('fuel_stations')
         .select('*')
@@ -563,14 +518,14 @@ export default function FuelPage() {
       // 3. Load current fuel status from view
       const { data: statusData } = await supabase.from('current_fuel_status').select('*')
 
-      // 4. Build lookup
+      // 4. Build lookup: station_id → { fuel_name → row }
       const statusMap = {}
       for (const row of (statusData || [])) {
         if (!statusMap[row.station_id]) statusMap[row.station_id] = {}
         statusMap[row.station_id][row.fuel_id] = row
       }
 
-      // 5. Merge
+      // 5. Merge — every station shows up even if no reports yet
       const merged = (stationsRaw || []).map(s => ({
         id: s.id,
         name: s.name,
@@ -603,7 +558,8 @@ export default function FuelPage() {
   }
 
   return (
-    <div className="pb-32">
+    // pb-36 ထည့်ထားသည် (Nav Bar မဖုံးအောင်)
+    <div className="pb-36">
       <div className="px-4 pt-4 pb-3 flex items-center justify-between">
         <h1 className="font-display font-bold text-xl text-white">⛽ Fuel Status</h1>
         <button onClick={load} className="text-brand-300">
@@ -630,7 +586,7 @@ export default function FuelPage() {
         </div>
       )}
 
-      {/* ── How it works section ── */}
+      {/* ── How it works section လမ်းညွှန် ── */}
       <div className="mx-4 mt-6 card-dark rounded-2xl p-4 bg-white/5 border border-white/8">
         <p className="text-xs font-display font-bold text-white/50 uppercase tracking-wider mb-3">
           {lang === 'mm' ? 'ဘယ်လိုအလုပ်လုပ်သလဲ' : 'How it works'}
@@ -659,6 +615,7 @@ export default function FuelPage() {
           allFuelTypes={allFuelTypes}
           onClose={() => setShowManage(false)}
           onUpdated={load}
+          onFuelTypesChanged={load}
         />
       )}
 
@@ -670,4 +627,3 @@ export default function FuelPage() {
     </div>
   )
 }
-```
