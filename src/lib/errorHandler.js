@@ -1,4 +1,5 @@
-import * as Sentry from 'sentry-react';
+import React from 'react';
+import * as Sentry from '@sentry/react';
 
 /**
  * Initialize Sentry for error tracking
