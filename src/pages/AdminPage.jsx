@@ -11,8 +11,8 @@ import { timeAgo } from '../hooks/usePresence'
 const TABS = [
   { id: 'analytics', label: 'Analytics',  icon: BarChart2    },
   { id: 'live',      label: 'Live Users', icon: Radio        },
-  { id: 'listings',  label: 'Listings',   icon: Building2    },
-  { id: 'claims',    label: 'Claims',     icon: Flag         },
+  { id: 'listings',  label: 'Listings',   icon: Building2, showBadge: 'pending' },
+  { id: 'claims',    label: 'Claims',     icon: Flag,      showBadge: 'claims'  },
   { id: 'posts',     label: 'Posts',      icon: Newspaper    },
   { id: 'users',     label: 'Users',      icon: Users        },
   { id: 'chat',      label: 'Chat',       icon: MessageCircle},
@@ -29,10 +29,11 @@ export default function AdminPage() {
   const [chartData, setChartData] = useState({ listings: [], posts: [], users: [] })
   const [loading, setLoading]     = useState(true)
   const [liveUsers, setLiveUsers] = useState([])
+  const [listingFilter, setListingFilter] = useState('pending')
   const liveChannelRef = useRef(null)
 
   useEffect(() => { loadStats() }, [])
-  useEffect(() => { loadTab() }, [tab])
+  useEffect(() => { loadTab() }, [tab, listingFilter])
 
   // Live users realtime — always subscribed when admin panel is open
   useEffect(() => {
@@ -97,7 +98,9 @@ export default function AdminPage() {
     setLoading(true)
     if (tab === 'analytics' || tab === 'live') { setLoading(false); return }
     if (tab === 'listings') {
-      const { data } = await supabase.from('listings').select('*, category:categories(name, name_mm), submitter:profiles!submitted_by(full_name)').order('created_at', { ascending: false }).limit(50)
+      let query = supabase.from('listings').select('*, category:categories(name, name_mm), submitter:profiles!submitted_by(full_name)').order('created_at', { ascending: false }).limit(100)
+      if (listingFilter !== 'all') query = query.eq('status', listingFilter)
+      const { data } = await query
       setData(data || [])
     } else if (tab === 'claims') {
       const { data } = await supabase.from('listing_claims').select('*, listing_id, listing:listings(name, name_mm), claimant:profiles(full_name)').order('created_at', { ascending: false }).limit(50)
@@ -196,11 +199,10 @@ export default function AdminPage() {
             onChange={e => setTab(e.target.value)}
             className="w-full appearance-none bg-brand-600/20 border border-brand-400/30 text-brand-200 text-sm font-display font-semibold rounded-xl px-4 py-2.5 pr-10 outline-none"
           >
-            {TABS.map(({ id, label }) => (
+            {TABS.map(({ id, label, showBadge }) => (
               <option key={id} value={id}>
                 {label}
-                {id === 'claims'   && stats.claims  > 0 ? ` (${stats.claims})`  : ''}
-                {id === 'listings' && stats.pending > 0 ? ` (${stats.pending})` : ''}
+                {showBadge && stats[showBadge] > 0 ? ` (${stats[showBadge]})` : ''}
               </option>
             ))}
           </select>
@@ -295,8 +297,26 @@ export default function AdminPage() {
             </p>
           </div>
         )}
+        {tab === 'listings' && (
+          <div className="grid grid-cols-4 gap-1.5 mb-3">
+            {[['pending','⏳ Pending'],['approved','✅ Approved'],['rejected','❌ Rejected'],['all','📋 All']].map(([val, label]) => (
+              <button key={val} onClick={() => setListingFilter(val)}
+                className={`py-1.5 rounded-xl text-[10px] font-display font-semibold border transition-colors truncate ${
+                  listingFilter === val
+                    ? val === 'pending'  ? 'bg-amber-500/25 border-amber-500/40 text-amber-300'
+                    : val === 'approved' ? 'bg-green-500/20 border-green-500/35 text-green-300'
+                    : val === 'rejected' ? 'bg-red-500/20 border-red-500/35 text-red-300'
+                    : 'bg-brand-600/25 border-brand-400/40 text-brand-200'
+                    : 'bg-white/5 border-white/10 text-white/40'
+                `}>
+                {val === 'pending' && stats.pending > 0 ? `⏳ (${stats.pending})` : label}
+              </button>
+            ))}
+          </div>
+        )}
         {tab === 'listings' && !loading && (
           <div className="space-y-2">
+            {data.length === 0 && <p className="text-white/40 text-sm text-center py-8">Listing မရှိပါ</p>}
             {data.map(item => (
               <div key={item.id} className="card-dark p-4 rounded-2xl space-y-3">
                 <div className="flex items-start justify-between gap-2">
@@ -306,7 +326,7 @@ export default function AdminPage() {
                   </div>
                   <span className={`badge flex-shrink-0 ${statusBadge[item.status] || ''}`}>{item.status}</span>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {item.status === 'pending' && <>
                     <button onClick={() => approveListing(item.id)} className="flex items-center gap-1 px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-xl text-xs text-green-400 hover:bg-green-500/30"><Check size={12} /> Approve</button>
                     <button onClick={() => rejectListing(item.id)} className="flex items-center gap-1 px-3 py-1.5 bg-red-500/20 border border-red-500/30 rounded-xl text-xs text-red-400"><X size={12} /> Reject</button>
@@ -364,16 +384,16 @@ export default function AdminPage() {
                   </div>
                 </div>
                 {item.status === 'pending' && (
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => {
                         if (confirm(`"${item.listing?.name}" ဆိုင်ကို ${item.claimant?.full_name} မှ Claim ကို Approve ပြုလုပ်မည်။\n\n• ဆိုင်တွင် "Verified by Owner" badge ပေါ်မည်\n• ဆိုင်ရှင် info ပြင်ဆင်နိုင်မည်\n\nဆက်မည်လား?`)) {
                           approveClaim(item)
                         }
                       }}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-gold-600/30 to-gold-500/20 border border-gold-500/40 rounded-xl text-xs text-gold-400 hover:from-gold-600/40 hover:to-gold-500/30 transition-all font-semibold"
+                      className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-gold-600/30 to-gold-500/20 border border-gold-500/40 rounded-xl text-xs text-gold-400 hover:from-gold-600/40 hover:to-gold-500/30 transition-all font-semibold"
                     >
-                      <ShieldCheck size={13} /> Approve + Badge တပ်မည်
+                      <ShieldCheck size={13} /> Approve
                     </button>
                     <button onClick={() => rejectClaim(item.id)} className="flex items-center gap-1 px-3 py-2 bg-red-500/15 border border-red-500/25 rounded-xl text-xs text-red-400 hover:bg-red-500/25 transition-colors">
                       <X size={12} /> Reject
@@ -381,10 +401,10 @@ export default function AdminPage() {
                   </div>
                 )}
                 {item.status === 'approved' && (
-                  <div className="flex items-center gap-2 text-xs text-white/30">
-                    <ShieldCheck size={12} className="text-gold-500" />
-                    <span>Verified by Owner badge တပ်ဆင်ပြီး — လုပ်ငန်းကို စစ်ဆေးနိုင်</span>
-                    <button onClick={() => navigate(`/directory/${item.listing_id}`)} className="ml-auto text-brand-400 hover:text-brand-300 flex items-center gap-1">
+                  <div className="flex items-center gap-2 text-xs text-white/30 flex-wrap">
+                    <ShieldCheck size={12} className="text-gold-500 flex-shrink-0" />
+                    <span className="flex-1 min-w-0 truncate">Verified by Owner badge တပ်ဆင်ပြီး</span>
+                    <button onClick={() => navigate(`/directory/${item.listing_id}`)} className="ml-auto text-brand-400 hover:text-brand-300 flex items-center gap-1 flex-shrink-0">
                       <Eye size={11} /> View
                     </button>
                   </div>
@@ -447,7 +467,7 @@ export default function AdminPage() {
 
             {data.map(item => (
               <div key={item.id} className="card-dark p-4 rounded-2xl space-y-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   {/* Avatar + online dot */}
                   <div className="relative flex-shrink-0">
                     <div className="w-10 h-10 rounded-xl bg-brand-700 flex items-center justify-center text-sm font-bold text-white overflow-hidden">
@@ -493,7 +513,7 @@ export default function AdminPage() {
                     <select
                       value={item.role}
                       onChange={e => setUserRole(item.id, e.target.value)}
-                      className="text-xs bg-white/8 border border-white/10 rounded-lg px-2 py-1.5 text-white outline-none flex-shrink-0"
+                      className="text-xs bg-white/8 border border-white/10 rounded-lg px-2 py-1.5 text-white outline-none flex-shrink-0 max-w-[120px]"
                     >
                       <option value="member">Member</option>
                       <option value="moderator">Moderator</option>
@@ -543,8 +563,8 @@ export default function AdminPage() {
           <div className="space-y-2">
             {data.map(item => (
               <div key={item.id} className={`card-dark p-3 rounded-xl flex items-start justify-between gap-2 ${item.is_deleted ? 'opacity-40' : ''}`}>
-                <div className="min-w-0">
-                  <p className="text-[10px] text-brand-300 mb-0.5">{item.user?.full_name || item.guest_name || 'Guest'}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-brand-300 mb-0.5 truncate">{item.user?.full_name || item.guest_name || 'Guest'}</p>
                   <p className="text-xs text-white/70 font-myanmar line-clamp-2">{item.content}</p>
                 </div>
                 {!item.is_deleted && (
@@ -575,9 +595,9 @@ export default function AdminPage() {
               return (
                 <div key={item.id} className="card-dark p-4 rounded-2xl space-y-2">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 flex-wrap min-w-0">
-                      <span className={`badge border text-[9px] font-bold ${actionColor}`}>{item.action}</span>
-                      <span className="text-[10px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded font-mono">{item.target_table}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0 flex-1">
+                      <span className={`badge border text-[9px] font-bold flex-shrink-0 ${actionColor}`}>{item.action}</span>
+                      <span className="text-[10px] text-white/40 bg-white/5 px-1.5 py-0.5 rounded font-mono flex-shrink-0">{item.target_table}</span>
                       {item.target_name && <span className="text-xs text-white/70 font-display font-semibold truncate">{item.target_name}</span>}
                     </div>
                     <span className="text-[9px] text-white/25 flex-shrink-0 tabular-nums">

@@ -39,12 +39,12 @@ function PctBadge({ pct, label, lang }) {
   const abs = Math.abs(pct)
   if (abs < 0.5) return <span className="flex items-center gap-0.5 text-white/30 text-[9px]"><Minus size={10} /> 0%</span>
   if (pct > 0) return (
-    <span className="flex items-center gap-0.5 text-red-400 text-[9px] font-bold" title={label}>
+    <span className="flex items-center gap-0.5 text-green-400 text-[9px] font-bold" title={label}>
       <TrendingUp size={10} /> +{abs.toFixed(1)}%
     </span>
   )
   return (
-    <span className="flex items-center gap-0.5 text-green-400 text-[9px] font-bold" title={label}>
+    <span className="flex items-center gap-0.5 text-red-400 text-[9px] font-bold" title={label}>
       <TrendingDown size={10} /> -{abs.toFixed(1)}%
     </span>
   )
@@ -96,13 +96,15 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
         )}
 
         <div>
-          <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဈေးနှုန်း (Ks)' : 'Price (Ks)'} *</label>
+          <label className="block text-xs text-white/50 mb-1.5">
+            {lang === 'mm' ? 'ဈေးနှုန်း' : 'Price'} — <span className="text-brand-300 font-semibold">Ks / {lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</span> *
+          </label>
           <div className="flex items-center gap-2">
             <button onClick={() => setPrice(p => String(Math.max(100, parseInt(p||0) - 100)))} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center text-white"><Minus size={16} /></button>
             <input autoFocus type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 5000" className="input-dark flex-1 text-center text-lg font-mono font-bold" min="100" />
             <button onClick={() => setPrice(p => String(parseInt(p||0) + 100))} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center text-white"><Plus size={16} /></button>
           </div>
-          {price && <p className="text-center text-xs text-brand-300 mt-1 font-mono">{parseInt(price).toLocaleString()} Ks</p>}
+          {price && <p className="text-center text-xs text-brand-300 mt-1 font-mono">{parseInt(price).toLocaleString()} Ks / {lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</p>}
         </div>
 
         {/* Location — dropdown or text input */}
@@ -398,10 +400,10 @@ function PriceRow({ item, lang, onReport, onEdit, onDelete, onVerify, isAdmin })
 
   return (
     <div className="card-dark rounded-2xl overflow-hidden">
-      <div className="flex items-center gap-3 p-3.5 hover:bg-white/3 transition-colors">
+      <div className="flex items-center gap-2 p-3.5 hover:bg-white/3 transition-colors">
         <button onClick={() => hasData && setShowTrend(s => !s)} className="text-xl flex-shrink-0">{item.icon}</button>
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 overflow-hidden">
           <div className="flex items-center gap-1.5 flex-wrap">
             <p className="text-sm font-display font-semibold text-white truncate">{lang === 'mm' ? item.name : (item.name_en || item.name)}</p>
             {item.is_custom && <span className="text-[8px] bg-brand-600/20 text-brand-300 border border-brand-400/20 px-1 rounded">custom</span>}
@@ -419,35 +421,35 @@ function PriceRow({ item, lang, onReport, onEdit, onDelete, onVerify, isAdmin })
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 flex-shrink-0">
           {hasData ? (
             <div className="text-right">
               <p className="font-display font-bold text-base text-white">{Number(item.median_price).toLocaleString()}</p>
               <p className="text-[9px] text-white/30">Ks/{lang === 'mm' ? item.unit : (item.unit_en || item.unit)}</p>
             </div>
           ) : (
-            <button onClick={() => onReport(item)} className="text-[10px] text-brand-300 font-semibold">{lang === 'mm' ? 'တင်ပါ' : 'Report'}</button>
+            <button onClick={() => onReport(item)} className="text-[10px] text-brand-300 font-semibold whitespace-nowrap">{lang === 'mm' ? 'တင်ပါ' : 'Report'}</button>
           )}
 
-          {/* Admin actions */}
+          {/* Admin actions — compact icon buttons to prevent overflow */}
           {isAdmin && hasData && (
-            <button onClick={() => onVerify(item)} title="Verify this price" className="w-7 h-7 rounded-lg bg-gold-500/15 border border-gold-500/25 flex items-center justify-center hover:bg-gold-500/25 transition-colors">
-              <CheckCircle size={13} className="text-gold-400" />
+            <button onClick={() => onVerify(item)} title="Verify this price" className="w-6 h-6 rounded-lg bg-gold-500/15 border border-gold-500/25 flex items-center justify-center hover:bg-gold-500/25 transition-colors flex-shrink-0">
+              <CheckCircle size={11} className="text-gold-400" />
             </button>
           )}
           {isAdmin && onEdit && (
-            <button onClick={() => onEdit(item)} title="Edit item" className="w-7 h-7 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center hover:bg-blue-500/20 transition-colors">
-              <Pencil size={11} className="text-blue-400" />
+            <button onClick={() => onEdit(item)} title="Edit item" className="w-6 h-6 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center hover:bg-blue-500/20 transition-colors flex-shrink-0">
+              <Pencil size={10} className="text-blue-400" />
             </button>
           )}
           {isAdmin && (
-            <button onClick={() => onDelete(item)} title="Delete item" className="w-7 h-7 rounded-lg bg-red-500/10 border border-red-500/15 flex items-center justify-center hover:bg-red-500/20 transition-colors">
-              <Trash2 size={12} className="text-red-400" />
+            <button onClick={() => onDelete(item)} title="Delete item" className="w-6 h-6 rounded-lg bg-red-500/10 border border-red-500/15 flex items-center justify-center hover:bg-red-500/20 transition-colors flex-shrink-0">
+              <Trash2 size={10} className="text-red-400" />
             </button>
           )}
 
           {hasData && (
-            <button onClick={() => onReport(item)} className="w-7 h-7 rounded-xl bg-brand-600/20 border border-brand-400/25 flex items-center justify-center hover:bg-brand-600/35 transition-colors">
+            <button onClick={() => onReport(item)} className="w-7 h-7 rounded-xl bg-brand-600/20 border border-brand-400/25 flex items-center justify-center hover:bg-brand-600/35 transition-colors flex-shrink-0">
               <Plus size={14} className="text-brand-300" />
             </button>
           )}

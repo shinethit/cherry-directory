@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { Fuel, RefreshCw, CheckCircle, AlertCircle, Users, Plus, Pencil, Trash2, X, Clock, FileText } from 'lucide-react'
+import { Fuel, RefreshCw, CheckCircle, AlertCircle, Users, Plus, Pencil, Trash2, X, Clock, FileText, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 
-const FUEL_TYPES = ['petrol92','petrol95','diesel','lpg']
+// All possible fuel types (master list)
+const ALL_FUEL_TYPES = ['petrol92', 'petrol95', 'diesel', 'lpg']
 const FUEL_LABELS = {
   petrol92: { mm: 'ဓာတ်ဆီ (92)', en: 'Petrol 92', icon: '⛽' },
   petrol95: { mm: 'ဓာတ်ဆီ (95)', en: 'Petrol 95', icon: '⛽' },
@@ -34,20 +35,21 @@ function timeAgo(iso, lang) {
   return `${Math.floor(m/60)}${lang === 'mm' ? 'နာရီ' : 'h'}`
 }
 
-// Group rows by station
+// Group rows by station — respects station's fuel_types list
 function groupByStation(rows) {
   const map = {}
   for (const row of rows) {
-    if (!map[row.station_id]) map[row.station_id] = { 
-      id: row.station_id, 
-      name: row.name, 
-      name_mm: row.name_mm, 
-      township: row.township, 
+    if (!map[row.station_id]) map[row.station_id] = {
+      id: row.station_id,
+      name: row.name,
+      name_mm: row.name_mm,
+      township: row.township,
       address: row.address,
       notes: row.station_notes,
       operating_hours: row.operating_hours,
       phone: row.phone,
-      fuels: {} 
+      fuel_types: row.fuel_types || ALL_FUEL_TYPES, // per-station fuel types
+      fuels: {}
     }
     map[row.station_id].fuels[row.fuel_id] = row
   }
@@ -56,8 +58,10 @@ function groupByStation(rows) {
 
 function StationCard({ station, lang, onReport }) {
   const [expanded, setExpanded] = useState(false)
-  const allAvail = FUEL_TYPES.every(ft => station.fuels[ft]?.status === 'available')
-  const anyAvail = FUEL_TYPES.some(ft => station.fuels[ft]?.status === 'available')
+  // Use station's own fuel_types list (not hardcoded ALL_FUEL_TYPES)
+  const stationFuelTypes = station.fuel_types || ALL_FUEL_TYPES
+  const allAvail = stationFuelTypes.every(ft => station.fuels[ft]?.status === 'available')
+  const anyAvail = stationFuelTypes.some(ft => station.fuels[ft]?.status === 'available')
 
   return (
     <div className={`card-dark rounded-2xl overflow-hidden border ${allAvail ? 'border-green-500/20' : anyAvail ? 'border-amber-500/15' : 'border-white/6'}`}>
@@ -68,21 +72,22 @@ function StationCard({ station, lang, onReport }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (station.name_mm || station.name) : station.name}</p>
-          <p className="text-[10px] text-white/40 font-myanmar">{station.address} • {station.township}</p>
+          <p className="text-[10px] text-white/40 font-myanmar truncate">{station.address} • {station.township}</p>
+          {/* Fuel status dots — flex-wrap to prevent overflow */}
           <div className="flex gap-1.5 mt-1.5 flex-wrap">
-            {FUEL_TYPES.map(ft => {
+            {stationFuelTypes.map(ft => {
               const row = station.fuels[ft]
               const st  = STATUS_CFG[row?.status || 'unknown']
               return (
                 <span key={ft} className="flex items-center gap-1 text-[9px] font-bold">
-                  <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                  <span className={st.color}>{FUEL_LABELS[ft].icon}</span>
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${st.dot}`} />
+                  <span className={st.color}>{FUEL_LABELS[ft]?.icon || '⛽'}</span>
                 </span>
               )
             })}
           </div>
         </div>
-        <span className="text-white/30 text-xs mt-1">{expanded ? '▲' : '▼'}</span>
+        <span className="text-white/30 text-xs mt-1 flex-shrink-0">{expanded ? '▲' : '▼'}</span>
       </button>
 
       {/* Expanded fuel detail */}
@@ -98,7 +103,7 @@ function StationCard({ station, lang, onReport }) {
             )}
             {station.phone && (
               <div className="flex items-start gap-2 text-[10px]">
-                <span className="text-white/40">📞</span>
+                <span className="text-white/40 flex-shrink-0">📞</span>
                 <a href={`tel:${station.phone}`} className="text-blue-400 hover:underline">{station.phone}</a>
               </div>
             )}
@@ -110,39 +115,45 @@ function StationCard({ station, lang, onReport }) {
             )}
           </div>
 
-          {/* Fuel types */}
-          {FUEL_TYPES.map(ft => {
+          {/* Fuel types — only show station's own fuel types */}
+          {stationFuelTypes.map(ft => {
             const row = station.fuels[ft]
             const st  = STATUS_CFG[row?.status || 'unknown']
             const fl  = FUEL_LABELS[ft]
+            if (!fl) return null
             return (
-              <div key={ft} className={`flex items-center gap-3 p-3 rounded-xl border ${st.bg}`}>
-                <span className="text-lg flex-shrink-0">{fl.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-display font-semibold text-white">{lang === 'mm' ? fl.mm : fl.en}</p>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    <span className={`text-[10px] font-bold ${st.color}`}>{lang === 'mm' ? st.mm : st.en}</span>
-                    {row?.queue_level && row.queue_level !== 'none' && (
-                      <span className="text-[9px] text-white/40 flex items-center gap-0.5">
-                        <Users size={9} /> {lang === 'mm' ? QUEUE_LABELS[row.queue_level]?.mm : QUEUE_LABELS[row.queue_level]?.en}
-                      </span>
-                    )}
-                    {row?.price && <span className="text-[9px] text-white/40 font-mono">{Number(row.price).toLocaleString()} Ks/L</span>}
-                    {row?.reported_at && <span className="text-[9px] text-white/25">{timeAgo(row.reported_at, lang)}</span>}
+              <div key={ft} className={`rounded-xl border ${st.bg} p-3`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg flex-shrink-0">{fl.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-display font-semibold text-white">{lang === 'mm' ? fl.mm : fl.en}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className={`text-[10px] font-bold ${st.color}`}>{lang === 'mm' ? st.mm : st.en}</span>
+                      {row?.queue_level && row.queue_level !== 'none' && (
+                        <span className="text-[9px] text-white/40 flex items-center gap-0.5">
+                          <Users size={9} /> {lang === 'mm' ? QUEUE_LABELS[row.queue_level]?.mm : QUEUE_LABELS[row.queue_level]?.en}
+                        </span>
+                      )}
+                      {row?.price && <span className="text-[9px] text-white/40 font-mono">{Number(row.price).toLocaleString()} Ks/L</span>}
+                      {row?.reported_at && <span className="text-[9px] text-white/25">{timeAgo(row.reported_at, lang)}</span>}
+                    </div>
+                    {row?.notes && <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">{row.notes}</p>}
                   </div>
-                  {row?.notes && <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">{row.notes}</p>}
-                </div>
-                <div className="flex flex-col gap-1 flex-shrink-0">
-                  {['available','limited','unavailable'].map(s => (
-                    <button key={s} onClick={() => onReport(station, ft, s)}
-                      className={`text-[8px] font-bold px-2 py-1 rounded-lg border transition-colors ${
-                        row?.status === s ? STATUS_CFG[s].bg + ' ' + STATUS_CFG[s].color : 'bg-white/5 border-white/10 text-white/30 hover:text-white/60'
-                      }`}>
-                      {s === 'available' ? (lang === 'mm' ? 'ရ' : 'Yes') :
-                       s === 'limited'   ? (lang === 'mm' ? 'နည်း' : 'Few') :
-                                           (lang === 'mm' ? 'မရ' : 'No')}
-                    </button>
-                  ))}
+                  {/* Report buttons — stacked vertically, flex-shrink-0 to prevent overflow */}
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    {['available', 'limited', 'unavailable'].map(s => (
+                      <button key={s} onClick={() => onReport(station, ft, s)}
+                        className={`text-[8px] font-bold px-2 py-1 rounded-lg border transition-colors whitespace-nowrap ${
+                          row?.status === s
+                            ? STATUS_CFG[s].bg + ' ' + STATUS_CFG[s].color
+                            : 'bg-white/5 border-white/10 text-white/30 hover:text-white/60'
+                        }`}>
+                        {s === 'available' ? (lang === 'mm' ? 'ရ' : 'Yes') :
+                         s === 'limited'   ? (lang === 'mm' ? 'နည်း' : 'Few') :
+                                             (lang === 'mm' ? 'မရ' : 'No')}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )
@@ -160,10 +171,35 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [editData, setEditData] = useState({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '' })
-  const [form, setForm] = useState({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '' })
+  const [editData, setEditData] = useState({
+    name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '',
+    fuel_types: [...ALL_FUEL_TYPES]
+  })
+  const [form, setForm] = useState({
+    name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '',
+    fuel_types: [...ALL_FUEL_TYPES]
+  })
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const setEdit = (k, v) => setEditData(f => ({ ...f, [k]: v }))
+
+  // Toggle a fuel type in the form's fuel_types array
+  function toggleFuelType(fuelType, isEdit = false) {
+    if (isEdit) {
+      setEditData(f => ({
+        ...f,
+        fuel_types: f.fuel_types.includes(fuelType)
+          ? f.fuel_types.filter(t => t !== fuelType)
+          : [...f.fuel_types, fuelType]
+      }))
+    } else {
+      setForm(f => ({
+        ...f,
+        fuel_types: f.fuel_types.includes(fuelType)
+          ? f.fuel_types.filter(t => t !== fuelType)
+          : [...f.fuel_types, fuelType]
+      }))
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -176,6 +212,10 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
 
   async function addStation() {
     if (!form.name.trim()) return
+    if (form.fuel_types.length === 0) {
+      alert(lang === 'mm' ? 'လောင်စာဆီ အမျိုးအစားတစ်ခုတော့ ရွေးပါ' : 'Select at least one fuel type')
+      return
+    }
     setSaving(true)
     await supabase.from('fuel_stations').insert({
       name: form.name.trim(),
@@ -186,9 +226,10 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
       notes: form.notes.trim() || null,
       operating_hours: form.operating_hours.trim() || null,
       sort_order: list.length + 1,
-      fuel_types: ['petrol92', 'petrol95', 'diesel', 'lpg'],
+      fuel_types: form.fuel_types,
+      is_active: true,
     })
-    setForm({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '' })
+    setForm({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '', fuel_types: [...ALL_FUEL_TYPES] })
     await load()
     setSaving(false)
     onUpdated()
@@ -196,14 +237,19 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
 
   async function saveEdit(id) {
     if (!editData.name.trim()) return
-    await supabase.from('fuel_stations').update({ 
-      name: editData.name.trim(), 
+    if (editData.fuel_types.length === 0) {
+      alert(lang === 'mm' ? 'လောင်စာဆီ အမျိုးအစားတစ်ခုတော့ ရွေးပါ' : 'Select at least one fuel type')
+      return
+    }
+    await supabase.from('fuel_stations').update({
+      name: editData.name.trim(),
       name_mm: editData.name_mm.trim(),
       township: editData.township.trim() || null,
       address: editData.address.trim() || null,
       phone: editData.phone.trim() || null,
       notes: editData.notes.trim() || null,
       operating_hours: editData.operating_hours.trim() || null,
+      fuel_types: editData.fuel_types,
     }).eq('id', id)
     setEditId(null)
     load(); onUpdated()
@@ -213,6 +259,44 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
     if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this station?')) return
     await supabase.from('fuel_stations').delete().eq('id', id)
     load(); onUpdated()
+  }
+
+  // Fuel type selector component (reusable for add/edit)
+  function FuelTypeSelector({ selected, onToggle }) {
+    return (
+      <div>
+        <label className="block text-[10px] text-white/50 mb-1.5">
+          {lang === 'mm' ? '⛽ ရနိုင်သော လောင်စာဆီ အမျိုးအစားများ' : '⛽ Available Fuel Types'}
+        </label>
+        <div className="grid grid-cols-2 gap-1.5">
+          {ALL_FUEL_TYPES.map(ft => {
+            const fl = FUEL_LABELS[ft]
+            const isSelected = selected.includes(ft)
+            return (
+              <button
+                key={ft}
+                type="button"
+                onClick={() => onToggle(ft)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-semibold transition-colors ${
+                  isSelected
+                    ? 'bg-green-500/20 border-green-500/40 text-green-300'
+                    : 'bg-white/5 border-white/10 text-white/30 hover:text-white/50'
+                }`}
+              >
+                <span className="text-base">{fl.icon}</span>
+                <span className="font-myanmar truncate">{lang === 'mm' ? fl.mm : fl.en}</span>
+                {isSelected && <span className="ml-auto text-green-400 text-[10px]">✓</span>}
+              </button>
+            )
+          })}
+        </div>
+        {selected.length === 0 && (
+          <p className="text-[10px] text-red-400 mt-1 font-myanmar">
+            {lang === 'mm' ? '⚠ အနည်းဆုံး တစ်ခု ရွေးပါ' : '⚠ Select at least one'}
+          </p>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -228,90 +312,188 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang }) {
         {/* Add new */}
         <div className="space-y-2 p-3 rounded-2xl bg-white/3 border border-white/8">
           <p className="text-xs text-white/50 font-display font-semibold">{lang === 'mm' ? '➕ ဆိုင်အသစ်ထည့်မည်' : '➕ Add New Station'}</p>
-          <input autoFocus value={form.name} onChange={e => set('name', e.target.value)}
+          <input
+            autoFocus
+            value={form.name}
+            onChange={e => set('name', e.target.value)}
             placeholder={lang === 'mm' ? 'ဆိုင်အမည် (English) *' : 'Station name (English) *'}
-            className="input-dark text-sm w-full" />
-          <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)}
+            className="input-dark text-sm w-full"
+          />
+          <input
+            value={form.name_mm}
+            onChange={e => set('name_mm', e.target.value)}
             placeholder={lang === 'mm' ? 'ဆိုင်အမည် (မြန်မာ)' : 'Station name (Myanmar)'}
-            className="input-dark font-myanmar text-sm w-full" />
+            className="input-dark font-myanmar text-sm w-full"
+          />
           <div className="grid grid-cols-2 gap-2">
-            <input value={form.township} onChange={e => set('township', e.target.value)}
+            <input
+              value={form.township}
+              onChange={e => set('township', e.target.value)}
               placeholder={lang === 'mm' ? 'မြို့နယ်' : 'Township'}
-              className="input-dark text-sm" />
-            <input value={form.address} onChange={e => set('address', e.target.value)}
+              className="input-dark text-sm"
+            />
+            <input
+              value={form.address}
+              onChange={e => set('address', e.target.value)}
               placeholder={lang === 'mm' ? 'လိပ်စာ' : 'Address'}
-              className="input-dark font-myanmar text-sm" />
+              className="input-dark font-myanmar text-sm"
+            />
           </div>
-          <input value={form.phone} onChange={e => set('phone', e.target.value)}
+          <input
+            value={form.phone}
+            onChange={e => set('phone', e.target.value)}
             placeholder={lang === 'mm' ? 'ဖုန်းနံပါတ်' : 'Phone number'}
-            className="input-dark text-sm w-full" />
-          <input value={form.operating_hours} onChange={e => set('operating_hours', e.target.value)}
+            className="input-dark text-sm w-full"
+          />
+          <input
+            value={form.operating_hours}
+            onChange={e => set('operating_hours', e.target.value)}
             placeholder={lang === 'mm' ? 'လုပ်ငန်းအချိန် (e.g., 6:00 AM - 10:00 PM)' : 'Operating hours'}
-            className="input-dark text-sm w-full" />
-          <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
+            className="input-dark text-sm w-full"
+          />
+          <textarea
+            value={form.notes}
+            onChange={e => set('notes', e.target.value)}
             placeholder={lang === 'mm' ? 'မှတ်ချက်များ' : 'Notes'}
             className="input-dark font-myanmar text-sm w-full h-16 resize-none"
           />
-          <button onClick={addStation} disabled={!form.name.trim() || saving}
-            className="btn-primary w-full text-sm disabled:opacity-50">
+          {/* Fuel type selector */}
+          <FuelTypeSelector
+            selected={form.fuel_types}
+            onToggle={ft => toggleFuelType(ft, false)}
+          />
+          <button
+            onClick={addStation}
+            disabled={!form.name.trim() || saving || form.fuel_types.length === 0}
+            className="btn-primary w-full text-sm disabled:opacity-50"
+          >
             {saving ? '...' : lang === 'mm' ? 'ထည့်မည်' : 'Add Station'}
           </button>
         </div>
 
         {/* Station list */}
         <div className="space-y-2">
-          {loading ? [1,2,3].map(n => <div key={n} className="h-14 rounded-xl shimmer" />) :
-           list.length === 0 ? (
-            <p className="text-center text-white/30 text-sm py-8 font-myanmar">{lang === 'mm' ? 'ဆိုင်မရှိသေး' : 'No stations yet'}</p>
-           ) :
-           list.map(s => (
-            <div key={s.id} className="rounded-xl bg-white/5 border border-white/8 overflow-hidden">
-              {editId === s.id ? (
-                <div className="p-3 space-y-2">
-                  <input value={editData.name} onChange={e => setEdit('name', e.target.value)}
-                    className="input-dark text-sm w-full" />
-                  <input value={editData.name_mm} onChange={e => setEdit('name_mm', e.target.value)}
-                    className="input-dark font-myanmar text-sm w-full" />
-                  <input value={editData.township} onChange={e => setEdit('township', e.target.value)}
-                    placeholder="Township" className="input-dark text-sm w-full" />
-                  <input value={editData.address} onChange={e => setEdit('address', e.target.value)}
-                    placeholder="Address" className="input-dark text-sm w-full" />
-                  <input value={editData.phone} onChange={e => setEdit('phone', e.target.value)}
-                    placeholder="Phone" className="input-dark text-sm w-full" />
-                  <input value={editData.operating_hours} onChange={e => setEdit('operating_hours', e.target.value)}
-                    placeholder="Operating hours" className="input-dark text-sm w-full" />
-                  <textarea value={editData.notes} onChange={e => setEdit('notes', e.target.value)}
-                    placeholder="Notes" className="input-dark font-myanmar text-sm w-full h-12 resize-none" />
-                  <div className="flex gap-2">
-                    <button onClick={() => saveEdit(s.id)} className="flex-1 px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-xs font-bold">✓ Save</button>
-                    <button onClick={() => setEditId(null)} className="flex-1 px-3 py-1.5 bg-white/8 rounded-lg text-white/40 text-xs">✕ Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3">
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-white font-myanmar font-semibold">{s.name_mm || s.name}</p>
-                      <p className="text-[10px] text-white/40">{s.address} • {s.township}</p>
-                      {s.operating_hours && <p className="text-[9px] text-white/30 mt-0.5">⏰ {s.operating_hours}</p>}
-                      {s.phone && <p className="text-[9px] text-blue-400 mt-0.5">📞 {s.phone}</p>}
-                      {s.notes && <p className="text-[9px] text-white/40 mt-0.5 font-myanmar">{s.notes}</p>}
-                    </div>
-                    <div className="flex gap-1 flex-shrink-0">
-                      <button onClick={() => { setEditId(s.id); setEditData({ name: s.name, name_mm: s.name_mm || '', township: s.township || '', address: s.address || '', phone: s.phone || '', notes: s.notes || '', operating_hours: s.operating_hours || '' }) }}
-                        className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center flex-shrink-0 hover:bg-blue-500/20">
-                        <Pencil size={11} />
+          {loading ? [1, 2, 3].map(n => <div key={n} className="h-14 rounded-xl shimmer" />) :
+            list.length === 0 ? (
+              <p className="text-center text-white/30 text-sm py-8 font-myanmar">{lang === 'mm' ? 'ဆိုင်မရှိသေး' : 'No stations yet'}</p>
+            ) :
+            list.map(s => (
+              <div key={s.id} className="rounded-xl bg-white/5 border border-white/8 overflow-hidden">
+                {editId === s.id ? (
+                  <div className="p-3 space-y-2">
+                    <input
+                      value={editData.name}
+                      onChange={e => setEdit('name', e.target.value)}
+                      placeholder="Station name (EN) *"
+                      className="input-dark text-sm w-full"
+                    />
+                    <input
+                      value={editData.name_mm}
+                      onChange={e => setEdit('name_mm', e.target.value)}
+                      placeholder="ဆိုင်အမည် (မြန်မာ)"
+                      className="input-dark font-myanmar text-sm w-full"
+                    />
+                    <input
+                      value={editData.township}
+                      onChange={e => setEdit('township', e.target.value)}
+                      placeholder="Township"
+                      className="input-dark text-sm w-full"
+                    />
+                    <input
+                      value={editData.address}
+                      onChange={e => setEdit('address', e.target.value)}
+                      placeholder="Address"
+                      className="input-dark text-sm w-full"
+                    />
+                    <input
+                      value={editData.phone}
+                      onChange={e => setEdit('phone', e.target.value)}
+                      placeholder="Phone"
+                      className="input-dark text-sm w-full"
+                    />
+                    <input
+                      value={editData.operating_hours}
+                      onChange={e => setEdit('operating_hours', e.target.value)}
+                      placeholder="Operating hours"
+                      className="input-dark text-sm w-full"
+                    />
+                    <textarea
+                      value={editData.notes}
+                      onChange={e => setEdit('notes', e.target.value)}
+                      placeholder="Notes"
+                      className="input-dark font-myanmar text-sm w-full h-12 resize-none"
+                    />
+                    {/* Fuel type selector for edit */}
+                    <FuelTypeSelector
+                      selected={editData.fuel_types}
+                      onToggle={ft => toggleFuelType(ft, true)}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => saveEdit(s.id)}
+                        disabled={editData.fuel_types.length === 0}
+                        className="flex-1 px-3 py-1.5 bg-green-500/20 border border-green-500/30 rounded-lg text-green-400 text-xs font-bold disabled:opacity-50"
+                      >
+                        ✓ Save
                       </button>
-                      <button onClick={() => deleteStation(s.id)}
-                        className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0 hover:bg-red-500/20">
-                        <Trash2 size={12} />
+                      <button
+                        onClick={() => setEditId(null)}
+                        className="flex-1 px-3 py-1.5 bg-white/8 rounded-lg text-white/40 text-xs"
+                      >
+                        ✕ Cancel
                       </button>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                ) : (
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white font-myanmar font-semibold truncate">{s.name_mm || s.name}</p>
+                        <p className="text-[10px] text-white/40 truncate">{s.address} • {s.township}</p>
+                        {s.operating_hours && <p className="text-[9px] text-white/30 mt-0.5">⏰ {s.operating_hours}</p>}
+                        {s.phone && <p className="text-[9px] text-blue-400 mt-0.5">📞 {s.phone}</p>}
+                        {s.notes && <p className="text-[9px] text-white/40 mt-0.5 font-myanmar line-clamp-1">{s.notes}</p>}
+                        {/* Show fuel types as badges */}
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {(s.fuel_types || ALL_FUEL_TYPES).map(ft => (
+                            <span key={ft} className="text-[8px] px-1.5 py-0.5 rounded-full bg-white/8 text-white/50 font-semibold">
+                              {FUEL_LABELS[ft]?.icon} {lang === 'mm' ? FUEL_LABELS[ft]?.mm : FUEL_LABELS[ft]?.en}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => {
+                            setEditId(s.id)
+                            setEditData({
+                              name: s.name,
+                              name_mm: s.name_mm || '',
+                              township: s.township || '',
+                              address: s.address || '',
+                              phone: s.phone || '',
+                              notes: s.notes || '',
+                              operating_hours: s.operating_hours || '',
+                              fuel_types: s.fuel_types || [...ALL_FUEL_TYPES],
+                            })
+                          }}
+                          className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center flex-shrink-0 hover:bg-blue-500/20"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button
+                          onClick={() => deleteStation(s.id)}
+                          className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0 hover:bg-red-500/20"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
+          }
         </div>
       </div>
     </div>
@@ -333,9 +515,9 @@ export default function FuelPage() {
   async function load() {
     setLoading(true)
     try {
-    const { data } = await supabase.from('current_fuel_status').select('*')
-    setStations(groupByStation(data || []))
-    setLastUpdate(new Date())
+      const { data } = await supabase.from('current_fuel_status').select('*')
+      setStations(groupByStation(data || []))
+      setLastUpdate(new Date())
     } catch (e) { console.warn(e) }
     setLoading(false)
   }
@@ -363,18 +545,24 @@ export default function FuelPage() {
     localStorage.setItem(key, String(Date.now()))
     const fl   = FUEL_LABELS[fuelType]
     const st   = STATUS_CFG[status]
-    setToast({ type: status === 'available' ? 'ok' : status === 'limited' ? 'warn' : 'err',
-      msg: `${fl.icon} ${lang === 'mm' ? fl.mm : fl.en} — ${lang === 'mm' ? st.mm : st.en}` })
+    setToast({
+      type: status === 'available' ? 'ok' : status === 'limited' ? 'warn' : 'err',
+      msg: `${fl?.icon || '⛽'} ${lang === 'mm' ? fl?.mm : fl?.en} — ${lang === 'mm' ? st.mm : st.en}`
+    })
     setTimeout(() => setToast(null), 3000)
   }
 
-  const available = stations.filter(s => FUEL_TYPES.some(ft => s.fuels[ft]?.status === 'available')).length
+  // Count stations that have at least one available fuel type
+  const available = stations.filter(s => {
+    const fuelTypes = s.fuel_types || ALL_FUEL_TYPES
+    return fuelTypes.some(ft => s.fuels[ft]?.status === 'available')
+  }).length
 
   return (
     <div className="pb-8">
       <div className="px-4 pt-4 pb-3">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <h1 className="font-display font-bold text-xl text-white">
               ⛽ {lang === 'mm' ? 'ဓာတ်ဆီ/ဒီဇယ် အခြေအနေ' : 'Fuel Status'}
             </h1>
@@ -382,7 +570,7 @@ export default function FuelPage() {
               {lang === 'mm' ? 'Gas Station ဓာတ်ဆီ ရမရ • Real-time' : 'Community-reported fuel availability'}
             </p>
           </div>
-          <button onClick={load} disabled={loading} className="flex items-center gap-1 text-[10px] text-brand-300 mt-1">
+          <button onClick={load} disabled={loading} className="flex items-center gap-1 text-[10px] text-brand-300 mt-1 flex-shrink-0">
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
             {lastUpdate && !loading ? timeAgo(lastUpdate.toISOString(), lang) : '...'}
           </button>
@@ -390,8 +578,10 @@ export default function FuelPage() {
       </div>
 
       {isModerator && (
-        <button onClick={() => setShowManage(true)}
-          className="mx-4 mb-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white/50 hover:bg-white/8 transition-colors">
+        <button
+          onClick={() => setShowManage(true)}
+          className="mx-4 mb-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white/50 hover:bg-white/8 transition-colors"
+        >
           <Pencil size={12} /> {lang === 'mm' ? '⛽ ဓာတ်ဆီဆိုင် စီမံမည်' : '⛽ Manage Fuel Stations'}
         </button>
       )}
@@ -416,8 +606,12 @@ export default function FuelPage() {
       </div>
 
       <div className="px-4 space-y-2 mb-4">
-        {loading ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />) :
-         stations.map(s => <StationCard key={s.id} station={s} lang={lang} onReport={handleReport} />)}
+        {loading
+          ? [1, 2, 3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />)
+          : stations.map(s => (
+              <StationCard key={s.id} station={s} lang={lang} onReport={handleReport} />
+            ))
+        }
       </div>
 
       <div className="mx-4 card-dark rounded-2xl p-4">

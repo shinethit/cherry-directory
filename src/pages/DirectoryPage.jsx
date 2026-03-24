@@ -10,6 +10,17 @@ export default function DirectoryPage() {
   const config = useAppConfig()
   const { lang } = useLang()
   const cities = ['All', ...(config.cities || [])]
+  const cityLabels = {
+    'All': { mm: '📍 ခပ်သိမ်း', en: 'All' },
+    'Taunggyi': { mm: 'တောင်ကြီး', en: 'Taunggyi' },
+    'Kalaw': { mm: 'ကလော', en: 'Kalaw' },
+    'Pindaya': { mm: 'ပင်းတယ', en: 'Pindaya' },
+    'Nyaungshwe': { mm: 'ညောင်ရွှေ', en: 'Nyaungshwe' },
+    'Loikaw': { mm: 'လွိုင်ကော်', en: 'Loikaw' },
+    'Hopong': { mm: 'ဟိုပုံး', en: 'Hopong' },
+    'Aungban': { mm: 'အောင်ပန်း', en: 'Aungban' },
+    'Ywangan': { mm: 'ရွာငံ', en: 'Ywangan' }
+  }
   const [searchParams, setSearchParams] = useSearchParams()
   const [listings, setListings] = useState([])
   const [categories, setCategories] = useState([])
@@ -133,7 +144,7 @@ export default function DirectoryPage() {
             >
               {cities.map(c => (
                 <option key={c} value={c} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
-                  {c === 'All' ? '📍 ခပ်သိမ်း' : c}
+                  {lang === 'mm' ? (cityLabels[c]?.mm || c) : (cityLabels[c]?.en || c)}
                 </option>
               ))}
             </select>
