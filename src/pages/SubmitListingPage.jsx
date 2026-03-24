@@ -124,7 +124,8 @@ export default function SubmitListingPage() {
         cover_url: coverImg,
         images: [],
         submitted_by: profile.id,
-        status: 'pending',  // Requires admin approval before showing in directory
+        status: 'approved',  // Auto-show in directory immediately
+        report_count: 0,
       })
       setDone(true)
     } catch (err) {

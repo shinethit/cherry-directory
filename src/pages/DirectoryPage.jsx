@@ -64,6 +64,7 @@ export default function DirectoryPage() {
       .from('listings')
       .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
       .eq('status', 'approved')
+      .neq('status', 'hidden') // Exclude hidden listings
       .order('is_verified', { ascending: false })
       .order('is_featured', { ascending: false })
       .order('rating_avg', { ascending: false })
