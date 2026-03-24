@@ -153,7 +153,7 @@ function FuelTypesTab({ onChanged }) {
     }
 
     setEditId(null)
-    await load() // Added await here
+    await load()
     onChanged?.()
   }
 
@@ -166,7 +166,7 @@ function FuelTypesTab({ onChanged }) {
       return
     }
 
-    await load() // Added await here
+    await load()
     onChanged?.()
   }
 
@@ -318,7 +318,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
 
     setForm({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '', fuel_type_names: [] })
     await load()
-    onUpdated()   // ← ချက်ချင်း main page refresh
+    onUpdated()
     setSaving(false)
   }
 
@@ -332,7 +332,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
       phone: editData.phone?.trim() || null,
       notes: editData.notes?.trim() || null,
       operating_hours: editData.operating_hours?.trim() || null,
-      fuel_type_names: editData.fuel_type_names || [],  // ← fuel data မပျောက်
+      fuel_type_names: editData.fuel_type_names || [],
     }).eq('id', id)
 
     if (error) {
@@ -341,7 +341,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
     }
 
     setEditId(null)
-    await load() // Added await here
+    await load()
     onUpdated()
   }
 
@@ -354,7 +354,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
       return
     }
 
-    await load() // Added await here
+    await load()
     onUpdated()
   }
 
@@ -386,7 +386,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-8">
+      <div className="flex-1 overflow-y-auto px-4 py-4 pb-32">
 
         {/* ── Stations Tab ── */}
         {modalTab === 'stations' && (
@@ -548,7 +548,7 @@ export default function FuelPage() {
       const { data: ftData } = await supabase.from('fuel_types').select('*').order('sort_order')
       setAllFuelTypes(ftData || [])
 
-      // 2. Load ALL active stations directly (ဆိုင်အသစ် ချက်ချင်းပေါ်ရန်)
+      // 2. Load ALL active stations directly
       const { data: stationsRaw } = await supabase
         .from('fuel_stations')
         .select('*')
@@ -558,14 +558,14 @@ export default function FuelPage() {
       // 3. Load current fuel status from view
       const { data: statusData } = await supabase.from('current_fuel_status').select('*')
 
-      // 4. Build lookup: station_id → { fuel_name → row }
+      // 4. Build lookup
       const statusMap = {}
       for (const row of (statusData || [])) {
         if (!statusMap[row.station_id]) statusMap[row.station_id] = {}
         statusMap[row.station_id][row.fuel_id] = row
       }
 
-      // 5. Merge — every station shows up even if no reports yet
+      // 5. Merge
       const merged = (stationsRaw || []).map(s => ({
         id: s.id,
         name: s.name,
@@ -598,7 +598,7 @@ export default function FuelPage() {
   }
 
   return (
-    <div className="pb-8">
+    <div className="pb-32">
       <div className="px-4 pt-4 pb-3 flex items-center justify-between">
         <h1 className="font-display font-bold text-xl text-white">⛽ Fuel Status</h1>
         <button onClick={load} className="text-brand-300">
