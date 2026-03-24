@@ -118,12 +118,20 @@ function FuelTypesTab({ onChanged }) {
   async function addFuelType() {
     if (!form.name.trim() || !form.name_mm.trim()) return
     setSaving(true)
-    await supabase.from('fuel_types').insert({
+    
+    const { error } = await supabase.from('fuel_types').insert({
       name: form.name.trim(),
       name_mm: form.name_mm.trim(),
       icon: form.icon.trim() || '⛽',
       sort_order: list.length + 1,
     })
+
+    if (error) {
+      alert("Error saving fuel type: " + error.message)
+      setSaving(false)
+      return
+    }
+
     setForm({ name: '', name_mm: '', icon: '⛽' })
     await load()
     onChanged?.()
@@ -132,21 +140,33 @@ function FuelTypesTab({ onChanged }) {
 
   async function saveEdit(id) {
     if (!editData.name.trim() || !editData.name_mm.trim()) return
-    await supabase.from('fuel_types').update({
+    const { error } = await supabase.from('fuel_types').update({
       name: editData.name.trim(),
       name_mm: editData.name_mm.trim(),
       icon: editData.icon.trim() || '⛽',
       sort_order: Number(editData.sort_order) || 0,
     }).eq('id', id)
+
+    if (error) {
+      alert("Error updating fuel type: " + error.message)
+      return
+    }
+
     setEditId(null)
-    load()
+    await load() // Added await here
     onChanged?.()
   }
 
   async function deleteFuelType(id) {
     if (!window.confirm('ဆီအမျိုးအစားကို ဖျက်မည်လား? ဆိုင်များမှ ဆီပိတ်သွားနိုင်သည်။')) return
-    await supabase.from('fuel_types').delete().eq('id', id)
-    load()
+    const { error } = await supabase.from('fuel_types').delete().eq('id', id)
+    
+    if (error) {
+      alert("Error deleting fuel type: " + error.message)
+      return
+    }
+
+    await load() // Added await here
     onChanged?.()
   }
 
@@ -252,7 +272,7 @@ function FuelTypesTab({ onChanged }) {
 }
 
 // ─── Manage Modal ────────────────────────────────────────────────────────────
-function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFuelTypesChanged }) {
+function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes }) {
   const [modalTab, setModalTab] = useState('stations')
   const [list, setList]         = useState([])
   const [loading, setLoading]   = useState(true)
@@ -276,7 +296,8 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
   async function addStation() {
     if (!form.name.trim()) return
     setSaving(true)
-    await supabase.from('fuel_stations').insert({
+    
+    const { error } = await supabase.from('fuel_stations').insert({
       name: form.name.trim(),
       name_mm: form.name_mm.trim() || form.name.trim(),
       township: form.township.trim() || null,
@@ -288,6 +309,13 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
       fuel_type_names: form.fuel_type_names,
       is_active: true,
     })
+
+    if (error) {
+      alert("Error adding station: " + error.message)
+      setSaving(false)
+      return
+    }
+
     setForm({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '', fuel_type_names: [] })
     await load()
     onUpdated()   // ← ချက်ချင်း main page refresh
@@ -296,7 +324,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
 
   async function saveEdit(id) {
     if (!editData.name.trim()) return
-    await supabase.from('fuel_stations').update({
+    const { error } = await supabase.from('fuel_stations').update({
       name: editData.name.trim(),
       name_mm: editData.name_mm.trim(),
       township: editData.township?.trim() || null,
@@ -306,15 +334,27 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
       operating_hours: editData.operating_hours?.trim() || null,
       fuel_type_names: editData.fuel_type_names || [],  // ← fuel data မပျောက်
     }).eq('id', id)
+
+    if (error) {
+      alert("Error updating station: " + error.message)
+      return
+    }
+
     setEditId(null)
-    load()
+    await load() // Added await here
     onUpdated()
   }
 
   async function deleteStation(id) {
     if (!window.confirm('ဆိုင်ကို ဖျက်မည်လား?')) return
-    await supabase.from('fuel_stations').delete().eq('id', id)
-    load()
+    const { error } = await supabase.from('fuel_stations').delete().eq('id', id)
+    
+    if (error) {
+      alert("Error deleting station: " + error.message)
+      return
+    }
+
+    await load() // Added await here
     onUpdated()
   }
 
@@ -482,7 +522,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
 
         {/* ── Fuel Types Tab ── */}
         {modalTab === 'fueltypes' && (
-          <FuelTypesTab onChanged={() => { onUpdated(); onFuelTypesChanged?.() }} />
+          <FuelTypesTab onChanged={() => { onUpdated() }} />
         )}
       </div>
     </div>
@@ -591,7 +631,6 @@ export default function FuelPage() {
           allFuelTypes={allFuelTypes}
           onClose={() => setShowManage(false)}
           onUpdated={load}
-          onFuelTypesChanged={load}
         />
       )}
 
