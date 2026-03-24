@@ -51,6 +51,12 @@ export default function AdminPage() {
     loadListings()
   }
 
+  async function handleDelete(id) {
+    if (!window.confirm('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။')) return
+    await supabase.from('listings').delete().eq('id', id)
+    loadListings()
+  }
+
   async function handleEdit(listing) {
     setEditingId(listing.id)
     setEditForm(listing)
@@ -150,6 +156,7 @@ export default function AdminPage() {
                       <button onClick={() => handleHide(item.id)} className="flex-1 px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><X size={12} /> HIDE</button>
                     )}
                     <button onClick={() => handleEdit(item)} className="flex-1 px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Pencil size={12} /> EDIT</button>
+                    <button onClick={() => handleDelete(item.id)} className="flex-1 px-3 py-1.5 bg-red-600/30 border border-red-600/40 text-red-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Trash2 size={12} /> DELETE</button>
                     <button onClick={() => navigate(`/directory/${item.id}`)} className="flex-1 px-3 py-1.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Eye size={12} /> VIEW</button>
                   </div>
                 </>
