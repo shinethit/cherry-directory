@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   async function fetchProfile(userId) {
-    console.log('🔵 fetchProfile called for userId:', userId)
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -17,115 +16,84 @@ export function AuthProvider({ children }) {
         .eq('id', userId)
         .single()
       
-      if (error) {
-        console.error('🔴 Profile fetch error:', error)
-        setLoading(false)
-        return
+      if (!error && data) {
+        setProfile(data)
       }
-      
-      console.log('🟢 Profile fetched successfully:', data)
-      setProfile(data)
     } catch (err) {
-      console.error('🔴 Profile fetch exception:', err)
+      console.warn('fetchProfile failed:', err)
     } finally {
-      console.log('🟡 Setting loading to false from fetchProfile')
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    console.log('🚀 AuthProvider mounted, initializing...')
-    
     let isMounted = true
 
-    const initialize = async () => {
+    const initializeAuth = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession()
+        const { data: { session } } = await supabase.auth.getSession()
         
-        if (error) {
-          console.error('🔴 getSession error:', error)
-          if (isMounted) setLoading(false)
-          return
-        }
+        if (!isMounted) return
         
-        console.log('🟢 Session:', session?.user?.email || 'No session')
-        
-        if (isMounted) {
-          setUser(session?.user ?? null)
-          if (session?.user) {
-            await fetchProfile(session.user.id)
-          } else {
-            console.log('🟡 No session, setting loading false')
-            setLoading(false)
-          }
+        if (session?.user) {
+          setUser(session.user)
+          await fetchProfile(session.user.id)
+        } else {
+          setLoading(false)
         }
       } catch (err) {
-        console.error('🔴 initialize error:', err)
+        console.error('Auth initialization error:', err)
         if (isMounted) setLoading(false)
       }
     }
 
-    initialize()
+    initializeAuth()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log('🔄 Auth state changed:', _event, session?.user?.email || 'No user')
+      if (!isMounted) return
       
-      if (isMounted) {
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          await fetchProfile(session.user.id)
-        } else {
-          setProfile(null)
-          setLoading(false)
-        }
+      if (session?.user) {
+        setUser(session.user)
+        await fetchProfile(session.user.id)
+      } else {
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
       }
     })
 
     return () => {
-      console.log('🔚 AuthProvider unmounting')
       isMounted = false
       subscription.unsubscribe()
     }
   }, [])
 
   async function signUp({ email, password, fullName }) {
-    console.log('📝 Signing up:', email)
     const { data, error } = await supabase.auth.signUp({
       email, password,
       options: { data: { full_name: fullName } },
     })
-    if (error) {
-      console.error('🔴 Sign up error:', error)
-      throw error
-    }
-    console.log('🟢 Sign up success:', data)
+    if (error) throw error
     return data
   }
 
   async function signIn({ email, password }) {
-    console.log('🔑 Signing in:', email)
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
-      console.error('🔴 Sign in error:', error)
-      throw error
-    }
-    console.log('🟢 Sign in success:', data.user?.email)
+    if (error) throw error
     return data
   }
 
   async function signOut() {
-    console.log('🚪 Signing out')
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut()
+    if (error) console.error('Sign out error:', error)
+    setUser(null)
+    setProfile(null)
   }
 
   async function updateProfile(updates) {
     if (!user) throw new Error('Not logged in')
-    console.log('✏️ Updating profile:', updates)
     const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
-    if (error) {
-      console.error('🔴 Update profile error:', error)
-      throw error
-    }
+    if (error) throw error
     setProfile(prev => ({ ...prev, ...updates }))
     // Re-fetch in background to sync server state
     supabase.from('profiles').select('*').eq('id', user.id).single()
@@ -134,18 +102,13 @@ export function AuthProvider({ children }) {
   }
 
   async function refreshProfile() {
-    if (user) {
-      console.log('🔄 Refreshing profile')
-      await fetchProfile(user.id)
-    }
+    if (user) await fetchProfile(user.id)
   }
 
   const isSuperAdmin = profile?.role === 'super_admin'
   const isAdmin = profile?.role === 'admin' || isSuperAdmin
   const isModerator = profile?.role === 'moderator' || isAdmin
   const isLoggedIn = !!user
-
-  console.log('📊 Auth state - loading:', loading, 'user:', user?.email || 'none', 'profile:', profile?.full_name || 'none')
 
   return (
     <AuthContext.Provider value={{ 
@@ -169,9 +132,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) {
-    console.error('🔴 useAuth called outside of AuthProvider')
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
 }
