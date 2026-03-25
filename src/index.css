@@ -278,38 +278,3 @@
   font-weight: 700;
   color: #fbbf24;
 }
-
-/* ============================================ */
-/* BOTTOM SHEET - FORCE ABOVE EVERYTHING */
-/* ============================================ */
-.bottom-sheet-overlay {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  z-index: 9999999 !important;
-  display: flex !important;
-  align-items: flex-end !important;
-  justify-content: center !important;
-  background: rgba(0, 0, 0, 0.75) !important;
-  backdrop-filter: blur(8px) !important;
-}
-
-.bottom-sheet-panel {
-  position: relative !important;
-  z-index: 10000000 !important;
-  width: 100% !important;
-  max-width: 24rem !important;
-  background: #140020 !important;
-  border-top-left-radius: 1.5rem !important;
-  border-top-right-radius: 1.5rem !important;
-  overflow: hidden !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
-  margin: 0 !important;
-}
-
-/* Lower nav bar z-index */
-nav.fixed.bottom-0 {
-  z-index: 50 !important;
-}
