@@ -41,7 +41,7 @@ export default function AdminPage() {
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 4000) // Error ဖတ်လို့ရအောင် အချိန် 4 စက္ကန့်ထားပေးထားသည်
   }
 
   // ── 1. Load Listings Data ──
@@ -103,7 +103,8 @@ export default function AdminPage() {
   // ── 3. Load Quick Links ──
   async function loadQuickLinks() {
     try {
-      const { data } = await supabase.from('quick_links').select('*').order('sort_order')
+      const { data, error } = await supabase.from('quick_links').select('*').order('sort_order')
+      if (error) console.error(error)
       setQuickLinks(data || [])
     } catch (e) { console.warn(e) }
   }
@@ -161,15 +162,23 @@ export default function AdminPage() {
 
   // ── Quick Links Actions ──
   async function handleSaveLink() {
-    if (!linkForm.title || !linkForm.url) return showToast('Title နဲ့ URL ထည့်ရန်လိုအပ်ပါတယ်', 'error')
+    if (!linkForm.title || !linkForm.url) return showToast('Title နှင့် URL ထည့်ရန်လိုအပ်ပါတယ်', 'error')
     
+    // ID မပါသွားစေရန် ဖယ်ထုတ်ခြင်း (အသစ်ထည့်ရာတွင် Error မတက်စေရန်)
+    const payload = { ...linkForm }
+    delete payload.id
+
     if (editingLink) {
-      await supabase.from('quick_links').update(linkForm).eq('id', editingLink)
+      const { error } = await supabase.from('quick_links').update(payload).eq('id', editingLink)
+      if (error) return showToast(`Database Error: ${error.message}`, 'error') // Error ရှိလျှင် ပြမည်
       showToast('✓ ပြင်ဆင်ပြီးပါပြီ')
     } else {
-      await supabase.from('quick_links').insert([{...linkForm, sort_order: quickLinks.length + 1}])
+      payload.sort_order = quickLinks.length + 1
+      const { error } = await supabase.from('quick_links').insert([payload])
+      if (error) return showToast(`Database Error: ${error.message}`, 'error') // Error ရှိလျှင် ပြမည်
       showToast('✓ အသစ်ထည့်ပြီးပါပြီ')
     }
+    
     setEditingLink(null)
     setLinkForm({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
     loadQuickLinks()
@@ -257,10 +266,10 @@ export default function AdminPage() {
       {tab === 'quicklinks' && (
         <div className="px-4 space-y-4 animate-fade-in">
           {/* Add / Edit Form */}
-          <div className="card-dark p-4 rounded-2xl border border-white/10 space-y-3">
+          <div className="card-dark p-4 rounded-2xl border border-white/10 space-y-3 relative">
             <h3 className="text-sm font-bold text-white mb-2">{editingLink ? '✏️ Edit Link' : '➕ Add New Link'}</h3>
             
-            {/* Template Dropdown အသစ် */}
+            {/* Template Dropdown */}
             <div className="mb-3">
               <label className="text-[10px] text-white/50 mb-1.5 block font-myanmar">အမြန်ရွေးချယ်ရန် (Template)</label>
               <select 
@@ -280,15 +289,17 @@ export default function AdminPage() {
                   } else if (val === 'custom') {
                     setLinkForm({...linkForm, url: ''});
                   }
+                  // Dropdown ကို ရွေးပြီးရင် ပြန် Reset ချပေးမည် (အမြဲရွေးလို့ရအောင်)
+                  e.target.value = '';
                 }}
-                className="input-dark text-xs w-full font-myanmar"
+                className="input-dark text-xs w-full font-myanmar bg-white/5 border border-white/20"
                 style={{ backgroundColor: '#1a0030' }}
               >
                 {PRESET_LINKS.map(p => <option key={p.url || 'none'} value={p.url}>{p.label}</option>)}
               </select>
             </div>
 
-            {/* Inputs များကို ဆက်လက်ထားရှိသည် (ကိုယ်တိုင်ပြင်ဆင်နိုင်ရန်) */}
+            {/* Inputs */}
             <div className="grid grid-cols-2 gap-2 border-t border-white/5 pt-3">
               <input value={linkForm.title} onChange={e => setLinkForm({...linkForm, title: e.target.value})} placeholder="Title (EN)" className="input-dark text-xs" />
               <input value={linkForm.title_mm} onChange={e => setLinkForm({...linkForm, title_mm: e.target.value})} placeholder="Title (MM)" className="input-dark text-xs font-myanmar" />
@@ -323,26 +334,30 @@ export default function AdminPage() {
 
           {/* List of Links */}
           <div className="space-y-2">
-            {quickLinks.map(link => (
-              <div key={link.id} className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${link.is_active ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10 opacity-50'}`}>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{link.icon}</span>
-                  <div>
-                    <p className="text-sm font-bold text-white">{link.title_mm || link.title}</p>
-                    <p className="text-[10px] text-white/40">{link.url}</p>
+            {quickLinks.length === 0 ? (
+              <p className="text-xs text-white/30 text-center py-4">Link များ မရှိသေးပါ</p>
+            ) : (
+              quickLinks.map(link => (
+                <div key={link.id} className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${link.is_active ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10 opacity-50'}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{link.icon}</span>
+                    <div>
+                      <p className="text-sm font-bold text-white">{link.title_mm || link.title}</p>
+                      <p className="text-[10px] text-white/40">{link.url}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] bg-black/30 px-2 py-1 rounded-lg text-white/30 mr-2">Sort: {link.sort_order}</span>
+                    <button onClick={() => { setEditingLink(link.id); setLinkForm(link) }} className="w-8 h-8 flex items-center justify-center bg-blue-500/20 text-blue-400 rounded-xl hover:bg-blue-500/30">
+                      <Pencil size={12} />
+                    </button>
+                    <button onClick={() => handleDeleteLink(link.id)} className="w-8 h-8 flex items-center justify-center bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30">
+                      <Trash2 size={12} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] bg-black/30 px-2 py-1 rounded-lg text-white/30 mr-2">Sort: {link.sort_order}</span>
-                  <button onClick={() => { setEditingLink(link.id); setLinkForm(link) }} className="w-8 h-8 flex items-center justify-center bg-blue-500/20 text-blue-400 rounded-xl hover:bg-blue-500/30">
-                    <Pencil size={12} />
-                  </button>
-                  <button onClick={() => handleDeleteLink(link.id)} className="w-8 h-8 flex items-center justify-center bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30">
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       )}
@@ -439,8 +454,8 @@ export default function AdminPage() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className={`fixed bottom-28 left-4 right-4 z-[300] px-4 py-3 rounded-2xl text-center text-sm font-myanmar border ${
-          toast.type === 'error' ? 'bg-red-500/20 border-red-500/40 text-red-300' : 'bg-green-500/20 border-green-500/40 text-green-300'
+        <div className={`fixed bottom-28 left-4 right-4 z-[300] px-4 py-3 rounded-2xl text-center text-sm font-myanmar border shadow-xl ${
+          toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' : 'bg-green-500/90 border-green-400 text-white'
         }`}>
           {toast.msg}
         </div>
