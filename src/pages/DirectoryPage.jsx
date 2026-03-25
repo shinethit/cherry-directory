@@ -1,177 +1,226 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Search, X, ShieldCheck, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { ListingCard, Skeleton, EmptyState } from '../components/UI'
+import { useAppConfig } from '../hooks/useAppConfig'
 import { useLang } from '../contexts/LangContext'
-import { Search, MapPin, Star, Filter, ArrowLeft } from 'lucide-react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useSEO } from '../hooks/useSEO'
 
-// --- INTERNAL COMPONENT: ListingCard ---
-// ဒီနေရာမှာ Cherry Badge logic ကို ထည့်ထားပါတယ်
-const ListingCard = ({ listing, lang }) => {
-  const navigate = useNavigate()
-  
+export default function DirectoryPage() {
+  const config = useAppConfig()
+  const { lang } = useLang()
+  const cities = ['All', ...(config.cities || [])]
+  const cityLabels = {
+    'All': { mm: '📍 ခပ်သိမ်း', en: 'All' },
+    'Taunggyi': { mm: 'တောင်ကြီး', en: 'Taunggyi' },
+    'Kalaw': { mm: 'ကလော', en: 'Kalaw' },
+    'Pindaya': { mm: 'ပင်းတယ', en: 'Pindaya' },
+    'Nyaungshwe': { mm: 'ညောင်ရွှေ', en: 'Nyaungshwe' },
+    'Loikaw': { mm: 'လွိုင်ကော်', en: 'Loikaw' },
+    'Hopong': { mm: 'ဟိုပုံး', en: 'Hopong' },
+    'Aungban': { mm: 'အောင်ပန်း', en: 'Aungban' },
+    'Ywangan': { mm: 'ရွာငံ', en: 'Ywangan' }
+  }
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [listings, setListings] = useState([])
+  const [categories, setCategories] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+
+  const [q, setQ] = useState(searchParams.get('q') || '')
+  const [city, setCity] = useState(searchParams.get('city') || 'All')
+  const [catId, setCatId] = useState(searchParams.get('cat') || '')
+  const [verifiedOnly, setVerifiedOnly] = useState(searchParams.get('verified') === 'true')
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 20
+
+  // Top-level categories only — no duplicates
+  const topCategories = categories.filter(c => !c.parent_id)
+
+  // Active category (could be sub)
+  const activeCat = categories.find(c => c.id === catId)
+  // Which top-level is active
+  const activeTopId = activeCat?.parent_id || (activeCat && !activeCat.parent_id ? activeCat.id : null)
+
+  useEffect(() => {
+    supabase
+      .from('categories')
+      .select('*')
+      .eq('type', 'directory')
+      .eq('is_active', true)
+      .order('sort_order')
+      .then(({ data }) => setCategories(data || []))
+  }, [])
+
+  const loadListings = useCallback(async (reset = true) => {
+    setLoading(true)
+    const currentPage = reset ? 0 : page
+    if (reset) setPage(0)
+
+    let query = supabase
+      .from('listings')
+      .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
+      .eq('status', 'approved')
+      .neq('status', 'hidden') // Exclude hidden listings
+      .order('is_verified', { ascending: false })
+      .order('is_featured', { ascending: false })
+      .order('rating_avg', { ascending: false })
+      .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
+
+    if (q.trim()) query = query.or(`name.ilike.%${q}%,name_mm.ilike.%${q}%,description.ilike.%${q}%`)
+    if (city !== 'All') query = query.eq('city', city)
+    if (catId) query = query.eq('category_id', catId)
+    if (verifiedOnly) query = query.eq('is_verified', true)
+
+    const { data, count } = await query
+    if (reset) setListings(data || [])
+    else setListings(prev => [...prev, ...(data || [])])
+    setTotal(count || 0)
+    setLoading(false)
+  }, [q, city, catId, verifiedOnly, page])
+
+  useEffect(() => { loadListings(true) }, [q, city, catId, verifiedOnly, loadListings])
+
+  function clearFilters() {
+    setQ(''); setCity('All'); setCatId(''); setVerifiedOnly(false)
+  }
+
+  const hasFilters = q || city !== 'All' || catId || verifiedOnly
+
   return (
-    <div 
-      onClick={() => navigate(`/directory/${listing.id}`)}
-      className="bg-white/5 border border-white/10 rounded-2xl p-3 flex gap-4 cursor-pointer active:scale-95 transition-all"
-    >
-      <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-white/5">
-        <img 
-          src={listing.cover_url || 'https://via.placeholder.com/150'} 
-          className="w-full h-full object-cover"
-          alt={listing.name}
-        />
-      </div>
-      
-      <div className="flex-1 min-w-0 flex flex-col justify-center">
-        <div className="flex items-center gap-2 mb-1">
-          <h3 className="text-white font-bold text-sm truncate font-myanmar">
-            {lang === 'mm' ? (listing.name_mm || listing.name) : listing.name}
-          </h3>
+    <div className="flex flex-col min-h-full">
+      {/* Sticky filter area */}
+      <div className="sticky top-[97px] z-40 px-4 py-3 space-y-2 glass border-b border-white/8 w-full max-w-full overflow-hidden">
 
-          {/* ✅ CHERRY VERIFIED BADGE */}
-          {listing.is_verified && (
-            <div className="flex-shrink-0 flex items-center bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded-full">
-               <span className="text-[10px]">🍒</span>
-               <span className="text-[8px] text-amber-500 font-bold ml-1 uppercase tracking-tighter">Verified</span>
-            </div>
+        {/* Search input */}
+        <div className="relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+          <input
+            type="text"
+            placeholder="လုပ်ငန်းအမည် ရှာရန်..."
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            className="input-dark pl-9 pr-10 text-sm w-full"
+          />
+          {q && (
+            <button onClick={() => setQ('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
+              <X size={14} />
+            </button>
           )}
         </div>
 
-        <div className="flex items-center gap-1 text-white/40 text-[11px] mb-2">
-          <MapPin size={10} />
-          <span className="truncate font-myanmar">
-            {lang === 'mm' ? (listing.address_mm || listing.address) : listing.address}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1">
-            <Star size={10} className="text-amber-400 fill-amber-400" />
-            <span className="text-white/80 text-[10px] font-bold">{listing.avg_rating || '5.0'}</span>
-          </div>
-          <span className="text-[10px] text-white/20">|</span>
-          <span className="text-[10px] text-brand-400 font-medium font-myanmar">
-            {listing.category?.name_mm || 'လုပ်ငန်း'}
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// --- MAIN PAGE COMPONENT ---
-export default function DirectoryPage() {
-  const { lang } = useLang()
-  const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
-  
-  const [listings, setListings] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
-  const [categories, setCategories] = useState([])
-  const [activeCat, setActiveCat] = useState(searchParams.get('cat') || 'all')
-
-  useSEO({ title: lang === 'mm' ? 'စီးပွားရေးလမ်းညွှန်' : 'Business Directory' })
-
-  useEffect(() => {
-    loadCategories()
-  }, [])
-
-  useEffect(() => {
-    loadListings()
-  }, [activeCat, search])
-
-  async function loadCategories() {
-    try {
-      const { data } = await supabase.from('categories').select('*').order('name_en')
-      setCategories(data || [])
-    } catch (e) { console.error(e) }
-  }
-
-  async function loadListings() {
-    setLoading(true)
-    try {
-      let query = supabase
-        .from('listings')
-        .select('*, category:categories(name_mm, name_en)')
-        .eq('status', 'active')
-        .order('is_verified', { ascending: false }) // Verified ဖြစ်တဲ့သူကို အပေါ်မှာအရင်ပြမယ်
-        .order('created_at', { ascending: false })
-
-      if (activeCat !== 'all') {
-        query = query.eq('category_id', activeCat)
-      }
-
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,name_mm.ilike.%${search}%`)
-      }
-
-      const { data } = await query
-      setListings(data || [])
-    } catch (e) { console.error(e) }
-    setLoading(false)
-  }
-
-  return (
-    <div className="pb-20">
-      {/* Header & Search Section */}
-      <div className="glass sticky top-0 z-50 px-4 pt-4 pb-3 space-y-3 border-b border-white/5 bg-[#0d0015]/80 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="text-white/60 p-1 -ml-1"><ArrowLeft size={20}/></button>
-          <h1 className="text-xl font-bold text-white">
-            {lang === 'mm' ? 'လမ်းညွှန်' : 'Directory'}
-          </h1>
-        </div>
-        
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" size={16} />
-          <input 
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white text-sm focus:border-brand-500 outline-none transition-all font-myanmar"
-            placeholder={lang === 'mm' ? 'ရှာဖွေရန်...' : 'Search businesses...'}
-          />
-        </div>
-
-        {/* Categories Scroll */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          <button 
-            onClick={() => setActiveCat('all')}
-            className={`px-4 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
-              activeCat === 'all' ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/20' : 'bg-white/5 text-white/50 border border-white/5'
+        {/* Quick filter row (Added overflow-x-auto and pb-1 to fix overflow) */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 w-full">
+          {/* Verified Owner */}
+          <button
+            onClick={() => setVerifiedOnly(v => !v)}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+              verifiedOnly
+                ? 'border-gold-500/50 text-gold-400'
+                : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
             }`}
+            style={verifiedOnly ? { background: 'linear-gradient(135deg, rgba(212,175,55,0.18), rgba(212,175,55,0.08))' } : {}}
           >
-            {lang === 'mm' ? 'အားလုံး' : 'All'}
+            <ShieldCheck size={12} className={verifiedOnly ? 'text-gold-400' : ''} />
+            Verified
           </button>
-          {categories.map(cat => (
-            <button 
-              key={cat.id}
-              onClick={() => setActiveCat(cat.id)}
-              className={`px-4 py-1.5 rounded-full text-xs whitespace-nowrap transition-all ${
-                activeCat === cat.id ? 'bg-brand-600 text-white shadow-lg shadow-brand-600/20' : 'bg-white/5 text-white/50 border border-white/5 font-myanmar'
+
+          {/* City dropdown */}
+          <div className="relative flex-shrink-0">
+            <select
+              value={city}
+              onChange={e => setCity(e.target.value)}
+              className={`appearance-none pl-3 pr-7 py-1.5 rounded-full text-xs font-semibold border outline-none transition-colors cursor-pointer ${
+                city !== 'All'
+                  ? 'border-gold-500/40 text-gold-400'
+                  : 'bg-white/5 border-white/10 text-white/60'
               }`}
+              style={{
+                backgroundColor: city !== 'All' ? 'rgba(212,175,55,0.15)' : 'rgba(255,255,255,0.05)',
+                fontFamily: 'Pyidaungsu, DM Sans, sans-serif'
+              }}
             >
-              {lang === 'mm' ? cat.name_mm : cat.name_en}
+              {cities.map(c => (
+                <option key={c} value={c} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                  {lang === 'mm' ? (cityLabels[c]?.mm || c) : (cityLabels[c]?.en || c)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+          </div>
+
+          {/* Clear all */}
+          {hasFilters && (
+            <button onClick={clearFilters} className="flex-shrink-0 w-6 h-6 rounded-full bg-white/8 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors">
+              <X size={12} />
             </button>
-          ))}
+          )}
+        </div>
+
+        {/* Category dropdown (Added w-full and truncate to prevent horizontal stretch) */}
+        <div className="relative w-full">
+          <select
+            value={catId}
+            onChange={e => setCatId(e.target.value)}
+            className="select-dark w-full truncate pr-8 appearance-none"
+          >
+            <option value="" style={{ backgroundColor: '#1a0030' }}>
+              {lang === 'mm' ? '📂 အမျိုးအစားအားလုံး' : '📂 All Categories'}
+            </option>
+            {topCategories.map(cat => {
+              const subs = categories.filter(c => c.parent_id === cat.id)
+              if (subs.length === 0) {
+                return <option key={cat.id} value={cat.id} style={{ backgroundColor: '#1a0030' }}>{cat.icon} {cat.name_mm || cat.name}</option>
+              }
+              return (
+                <optgroup key={cat.id} label={`${cat.icon} ${cat.name_mm || cat.name}`} style={{ backgroundColor: '#1a0030' }}>
+                  <option value={cat.id} style={{ backgroundColor: '#1a0030' }}>　 အားလုံး</option>
+                  {subs.map(sub => (
+                    <option key={sub.id} value={sub.id} style={{ backgroundColor: '#1a0030' }}>　 {sub.icon} {sub.name_mm || sub.name}</option>
+                  ))}
+                </optgroup>
+              )
+            })}
+          </select>
+          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
         </div>
       </div>
 
-      {/* Directory Results */}
-      <div className="p-4 space-y-3">
-        {loading ? (
-          [1,2,3,4].map(n => (
-            <div key={n} className="h-24 bg-white/5 rounded-2xl animate-pulse border border-white/5" />
-          ))
-        ) : listings.length > 0 ? (
-          listings.map(item => (
-            <ListingCard key={item.id} listing={item} lang={lang} />
-          ))
-        ) : (
-          <div className="py-20 text-center text-white/20">
-            <p className="font-myanmar">{lang === 'mm' ? 'ရှာဖွေမှုမရှိပါ' : 'No results found'}</p>
-          </div>
+      {/* Results count */}
+      <div className="px-4 py-2 flex items-center justify-between flex-wrap gap-1">
+        <p className="text-[11px] text-white/40">
+          {loading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ရလဒ်`}
+        </p>
+        <div className="flex items-center gap-1.5 flex-wrap max-w-full">
+          {verifiedOnly && (
+            <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border border-gold-500/40 text-gold-400 whitespace-nowrap" style={{ background: 'rgba(212,175,55,0.12)' }}>
+              <ShieldCheck size={9} /> Verified Only
+            </span>
+          )}
+          {activeCat && (
+            <span className="badge bg-brand-700/60 text-brand-200 truncate max-w-[200px]">
+              {activeCat?.icon} {activeCat?.name_mm || activeCat?.name}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Listings (Added pb-36 for Bottom Navigation Bar clearance) */}
+      <div className="px-4 space-y-2 pb-36">
+        {loading && listings.length === 0
+          ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
+          : listings.length === 0
+          ? <EmptyState icon="🔍" title="လုပ်ငန်း မတွေ့ပါ" message="ရှာဖွေမှုကို ပြောင်းလဲကြည့်ပါ" />
+          : listings.map(l => <ListingCard key={l.id} listing={l} />)
+        }
+
+        {listings.length < total && !loading && (
+          <button
+            onClick={() => { setPage(p => p + 1); loadListings(false) }}
+            className="w-full btn-ghost text-sm mt-2"
+          >
+            ထပ်တင်ရန် ({total - listings.length} ကျန်)
+          </button>
         )}
       </div>
     </div>
