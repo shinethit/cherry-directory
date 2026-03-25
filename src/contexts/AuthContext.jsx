@@ -8,31 +8,68 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else setLoading(false)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
-      else { setProfile(null); setLoading(false) }
-    })
-
-    return () => subscription.unsubscribe()
-  }, [])
-
   async function fetchProfile(userId) {
     try {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single()
-      if (!error && data) setProfile(data)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single()
+      
+      if (!error && data) {
+        setProfile(data)
+      } else if (error) {
+        console.warn('fetchProfile error:', error)
+      }
     } catch (err) {
       console.warn('fetchProfile failed:', err)
+    } finally {
+      // ✅ Always set loading to false after profile fetch completes
+      setLoading(false)
     }
-    setLoading(false)
   }
+
+  useEffect(() => {
+    let isMounted = true
+
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        
+        if (!isMounted) return
+        
+        if (session?.user) {
+          setUser(session.user)
+          await fetchProfile(session.user.id)
+        } else {
+          setLoading(false)
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err)
+        if (isMounted) setLoading(false)
+      }
+    }
+
+    initializeAuth()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!isMounted) return
+      
+      if (session?.user) {
+        setUser(session.user)
+        await fetchProfile(session.user.id)
+      } else {
+        setUser(null)
+        setProfile(null)
+        setLoading(false)
+      }
+    })
+
+    return () => {
+      isMounted = false
+      subscription.unsubscribe()
+    }
+  }, [])
 
   async function signUp({ email, password, fullName }) {
     const { data, error } = await supabase.auth.signUp({
@@ -57,7 +94,6 @@ export function AuthProvider({ children }) {
     if (!user) throw new Error('Not logged in')
     const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
     if (error) throw error
-    // Optimistic update first, then re-fetch to get server-side computed fields (points, etc.)
     setProfile(prev => ({ ...prev, ...updates }))
     // Re-fetch in background to sync server state
     supabase.from('profiles').select('*').eq('id', user.id).single()
@@ -70,12 +106,25 @@ export function AuthProvider({ children }) {
   }
 
   const isSuperAdmin = profile?.role === 'super_admin'
-  const isAdmin      = profile?.role === 'admin' || isSuperAdmin
-  const isModerator  = profile?.role === 'moderator' || isAdmin
-  const isLoggedIn   = !!user
+  const isAdmin = profile?.role === 'admin' || isSuperAdmin
+  const isModerator = profile?.role === 'moderator' || isAdmin
+  const isLoggedIn = !!user
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isSuperAdmin, isAdmin, isModerator, isLoggedIn, signUp, signIn, signOut, updateProfile, refreshProfile }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      profile, 
+      loading, 
+      isSuperAdmin, 
+      isAdmin, 
+      isModerator, 
+      isLoggedIn, 
+      signUp, 
+      signIn, 
+      signOut, 
+      updateProfile, 
+      refreshProfile 
+    }}>
       {children}
     </AuthContext.Provider>
   )
