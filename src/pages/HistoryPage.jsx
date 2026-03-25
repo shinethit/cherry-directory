@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Calendar, MapPin, Users, BookOpen, Plus, Edit2, Trash2, Clock, CheckCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -7,6 +7,7 @@ import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { Skeleton } from '../components/UI'
 
 const HISTORY_CATS = [
   { id: 'all',        mm: 'အားလုံး',          en: 'All',         icon: '📜' },
@@ -231,11 +232,11 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
   )
 }
 
-function HistoryDetailPage() {
+// ========== HistoryDetailPage Component ==========
+export function HistoryDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { lang } = useLang()
-  const { isModerator } = useAuth()
   const [post, setPost] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -246,8 +247,18 @@ function HistoryDetailPage() {
     })
   }, [id])
 
-  if (loading) return <div className="p-4"><Skeleton className="h-64" /></div>
-  if (!post) return <div className="p-4 text-center text-white/40">မတွေ့ပါ</div>
+  if (loading) return (
+    <div className="p-4">
+      <Skeleton className="h-64" />
+      <Skeleton className="h-32 mt-4" />
+    </div>
+  )
+  
+  if (!post) return (
+    <div className="p-4 text-center text-white/40">
+      {lang === 'mm' ? 'မတွေ့ပါ' : 'Not found'}
+    </div>
+  )
 
   const cat = HISTORY_CATS.find(c => c.id === post.category) || HISTORY_CATS[0]
 
@@ -318,6 +329,7 @@ function HistoryDetailPage() {
   )
 }
 
+// ========== Main HistoryPage Component ==========
 export default function HistoryPage() {
   const { lang } = useLang()
   const { isModerator } = useAuth()
