@@ -149,27 +149,14 @@ export default function HomePage() {
       {selectedCat && (() => {
         const subs = allCategories.filter(c => c.parent_id === selectedCat.id)
         return (
-          <div 
-            className="fixed inset-0 z-[100000] flex items-end justify-center bg-black/70 backdrop-blur-sm" 
-            onClick={() => setSelectedCat(null)}
-            style={{ zIndex: 100000 }}
-          >
-            <div 
-              className="w-full max-w-lg bg-[#140020] border-t border-white/10 rounded-t-3xl overflow-hidden pb-safe" 
-              onClick={e => e.stopPropagation()}
-              style={{ zIndex: 100001, position: 'relative' }}
-            >
+          <div className="bottom-sheet-root" onClick={() => setSelectedCat(null)}>
+            <div className="bottom-sheet-container" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{selectedCat.icon}</span>
                   <p className="font-display font-bold text-white">{lang === 'mm' ? (selectedCat.name_mm || selectedCat.name) : selectedCat.name}</p>
                 </div>
-                <button 
-                  onClick={() => setSelectedCat(null)} 
-                  className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors"
-                >
-                  ✕
-                </button>
+                <button onClick={() => setSelectedCat(null)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors">✕</button>
               </div>
               <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
                 <button
@@ -216,27 +203,14 @@ export default function HomePage() {
       {selectedSub && (() => {
         const subSubs = allCategories.filter(c => c.parent_id === selectedSub.id)
         return (
-          <div 
-            className="fixed inset-0 z-[100000] flex items-end justify-center bg-black/70 backdrop-blur-sm" 
-            onClick={() => setSelectedSub(null)}
-            style={{ zIndex: 100000 }}
-          >
-            <div 
-              className="w-full max-w-lg bg-[#140020] border-t border-white/10 rounded-t-3xl overflow-hidden pb-safe" 
-              onClick={e => e.stopPropagation()}
-              style={{ zIndex: 100001, position: 'relative' }}
-            >
+          <div className="bottom-sheet-root" onClick={() => setSelectedSub(null)}>
+            <div className="bottom-sheet-container" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{selectedSub.icon}</span>
                   <p className="font-display font-bold text-white">{lang === 'mm' ? (selectedSub.name_mm || selectedSub.name) : selectedSub.name}</p>
                 </div>
-                <button 
-                  onClick={() => setSelectedSub(null)} 
-                  className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors"
-                >
-                  ✕
-                </button>
+                <button onClick={() => setSelectedSub(null)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors">✕</button>
               </div>
               <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
                 <button
