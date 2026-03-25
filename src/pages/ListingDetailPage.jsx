@@ -24,7 +24,7 @@ export default function ListingDetailPage() {
   const [activeImg, setActiveImg] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [claimStatus, setClaimStatus] = useState(null)
-  const [myVote, setMyVote] = useState(false)    // has current user voted
+  const [myVote, setMyVote] = useState(false)
   const [voteLoading, setVoteLoading] = useState(false)
 
   useSEO({
@@ -37,8 +37,7 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     async function load() {
-
-    try {
+      try {
         const [{ data: l }, { data: r }] = await Promise.all([
           supabase.from('listings').select('*, category:categories(name, name_mm, icon), owner:profiles!owner_id(full_name, avatar_url)').eq('id', id).single(),
           supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(20),
@@ -55,9 +54,8 @@ export default function ListingDetailPage() {
           if (claim) setClaimStatus(claim.status)
           setMyVote(!!vote)
         }
-    
-    } catch (e) { console.warn(e) }
-  }
+      } catch (e) { console.warn(e) }
+    }
     load()
   }, [id, profile])
 
@@ -103,7 +101,6 @@ export default function ListingDetailPage() {
           <ArrowLeft size={18} className="text-white" />
         </button>
         <div className="flex items-center gap-2">
-          {/* Edit button — visible to owner/admin */}
           {isLoggedIn && (listing.owner_id === profile?.id || listing.submitted_by === profile?.id || isAdmin || isModerator) && (
             <button
               onClick={() => navigate(`/directory/${id}/edit`)}
@@ -113,7 +110,6 @@ export default function ListingDetailPage() {
               <Edit3 size={16} className="text-white/60" />
             </button>
           )}
-          {/* Menu button — always visible */}
           <button
             onClick={() => navigate(`/directory/${id}/menu`)}
             className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors"
@@ -121,7 +117,6 @@ export default function ListingDetailPage() {
           >
             <UtensilsCrossed size={16} className="text-white/60" />
           </button>
-          {/* Bookmark */}
           <button
             onClick={() => toggleBookmark('listing', id)}
             className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${bookmarked ? 'bg-gold-500/20 text-gold-400' : 'bg-white/8 text-white/50 hover:text-white'}`}
@@ -131,7 +126,6 @@ export default function ListingDetailPage() {
         </div>
       </div>
 
-      {/* Cover images */}
       {cover && (
         <div className="relative h-52 overflow-hidden mx-4 rounded-2xl mb-4">
           <img src={cover} alt={displayName} className="w-full h-full object-cover" />
@@ -147,7 +141,6 @@ export default function ListingDetailPage() {
       )}
 
       <div className="px-4 space-y-4">
-        {/* Header */}
         <div>
           <div className="flex items-start gap-3">
             {listing.logo_url && (
@@ -161,19 +154,20 @@ export default function ListingDetailPage() {
               </div>
               {listing.name_mm && lang === 'en' && <p className="text-sm text-white/50 font-myanmar">{listing.name_mm}</p>}
 
-              {/* Verified badge — 3 types */}
+              {/* Verified Badge - Updated with Cherry Verified */}
               {listing.is_verified && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   {listing.verify_type === 'owner' || (!listing.verify_type && listing.is_verified) ? (
                     <VerifiedOwnerBadge />
+                  ) : listing.verify_type === 'cherry' ? (
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-brand-600/30 to-brand-700/30 border border-brand-400/40">
+                      <span className="text-sm">🍒</span>
+                      <span className="text-xs font-semibold text-brand-300">Cherry Directory Verified</span>
+                    </span>
                   ) : listing.verify_type === 'community' ? (
                     <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs font-semibold">
                       👥 Community Verified
                       {listing.community_votes > 0 && <span className="text-blue-300/60">({listing.community_votes})</span>}
-                    </span>
-                  ) : listing.verify_type === 'cherry' ? (
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-600/20 border border-brand-400/30 text-brand-300 text-xs font-semibold">
-                      🍒 Cherry Directory Verified
                     </span>
                   ) : (
                     <VerifiedOwnerBadge />
@@ -203,7 +197,6 @@ export default function ListingDetailPage() {
           )}
         </div>
 
-        {/* Description */}
         {(listing.description_mm || listing.description) && (
           <div className="card-dark p-4 rounded-2xl">
             <p className="text-sm text-white/70 font-myanmar leading-relaxed">
@@ -212,7 +205,6 @@ export default function ListingDetailPage() {
           </div>
         )}
 
-        {/* Location */}
         {(listing.address_mm || listing.address || listing.ward) && (
           <div className="flex items-start gap-3 card-dark p-4 rounded-2xl">
             <MapPin size={18} className="text-brand-300 flex-shrink-0 mt-0.5" />
@@ -225,7 +217,6 @@ export default function ListingDetailPage() {
           </div>
         )}
 
-        {/* Map */}
         {listing.latitude && listing.longitude && (
           <MapEmbed
             lat={parseFloat(listing.latitude)}
@@ -235,7 +226,6 @@ export default function ListingDetailPage() {
           />
         )}
 
-        {/* Contact buttons */}
         <div className="grid grid-cols-2 gap-2">
           {listing.phone_1 && (
             <a href={`tel:${listing.phone_1}`} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
@@ -269,14 +259,10 @@ export default function ListingDetailPage() {
           )}
         </div>
 
-        {/* ── Verified Owner Panel / Claim button ─────────── */}
         {listing.is_verified && listing.owner ? (
-          /* Show owner card when verified */
           <div className="relative overflow-hidden rounded-2xl border border-gold-500/30 bg-gradient-to-br from-gold-500/10 via-gold-500/5 to-transparent p-4">
-            {/* shimmer bar */}
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-400/60 to-transparent" />
             <div className="flex items-center gap-3">
-              {/* Owner avatar */}
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-500/30 to-gold-600/20 border border-gold-500/40 flex items-center justify-center text-base font-bold text-gold-300 flex-shrink-0">
                 {listing.owner.avatar_url
                   ? <img src={listing.owner.avatar_url} alt="" className="w-full h-full object-cover rounded-xl" />
@@ -295,7 +281,6 @@ export default function ListingDetailPage() {
             </div>
           </div>
         ) : listing.is_verified ? (
-          /* Verified but owner profile not loaded */
           <div className="flex items-center gap-2.5 p-3.5 rounded-2xl border border-gold-500/25 bg-gold-500/8">
             <VerifiedOwnerBadge />
             <span className="text-xs text-white/50 font-myanmar">
@@ -303,7 +288,6 @@ export default function ListingDetailPage() {
             </span>
           </div>
         ) : isLoggedIn && listing.owner_id !== profile?.id ? (
-          /* Not verified — show claim UI */
           <div>
             {claimStatus === 'pending' ? (
               <div className="flex items-center gap-2.5 p-4 card-dark rounded-2xl border border-amber-500/25">
@@ -339,7 +323,6 @@ export default function ListingDetailPage() {
           </div>
         ) : null}
 
-        {/* ── Community Vote (for unverified listings) ─────── */}
         {!listing.is_verified && isLoggedIn && listing.owner_id !== profile?.id && (
           <div className="card-dark rounded-2xl p-4 space-y-2">
             <div className="flex items-center justify-between">
@@ -372,7 +355,6 @@ export default function ListingDetailPage() {
                 }
               </button>
             </div>
-            {/* Progress bar to 10 */}
             <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-500 rounded-full transition-all"
@@ -387,7 +369,6 @@ export default function ListingDetailPage() {
           </div>
         )}
 
-        {/* Community Vote — Members can vouch for this listing */}
         {isLoggedIn && !listing.is_verified && (
           <div className="card-dark p-4 rounded-2xl space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -413,7 +394,6 @@ export default function ListingDetailPage() {
                 {myVote ? '✓ ' : ''}{lang === 'mm' ? 'လုပ်ငန်းမှန်ကန်' : 'Vouch'}
               </button>
             </div>
-            {/* Progress bar */}
             <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
               <div
                 className="h-full bg-blue-500 rounded-full transition-all"
@@ -427,12 +407,12 @@ export default function ListingDetailPage() {
             </p>
           </div>
         )}
+
         <div>
           <p className="text-xs text-white/40 mb-2 font-display font-semibold uppercase tracking-wider">{t('reactions')}</p>
           <ReactionBar targetType="listing" targetId={id} />
         </div>
 
-        {/* Reviews */}
         <div>
           <p className="text-sm font-display font-bold text-white mb-3">{t('reviews_title')} ({reviews.length})</p>
 
