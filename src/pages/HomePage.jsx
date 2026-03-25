@@ -22,15 +22,22 @@ export default function HomePage() {
 
   useEffect(() => {
     async function load() {
-
-    try {
-        const [{ data: postsData }, { data: featuredData }, { count: listingCount }, { data: eventsData }] = await Promise.all([
+      try {
+        // ပြဿနာဖြစ်နေသော Promise.all အပိုင်းကို ပြင်ဆင်ထားပါသည်
+        const [
+          { data: postsData }, 
+          { data: featuredData }, 
+          { data: catsData }, 
+          { count: listingCount }, 
+          { data: eventsData }
+        ] = await Promise.all([
           supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
           supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
           supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
           supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
           supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
         ])
+        
         setPosts(postsData || [])
         setFeatured(featuredData || [])
         const all = catsData || []
@@ -38,16 +45,18 @@ export default function HomePage() {
         setHomeCategories(all.filter(c => !c.parent_id))
         setUpcomingEvents(eventsData || [])
         setStats({ listings: listingCount || 0 })
+      } catch (e) { 
+        console.warn('Load Error:', e) 
+      } finally {
         setLoading(false)
-    
-    } catch (e) { console.warn(e) }
-  }
+      }
+    }
     load()
   }, [])
 
   return (
     <div className="space-y-6 py-4">
-      {/* Hero */}
+      {/* ── 1. Hero Section ── */}
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
           <div className="relative">
@@ -69,7 +78,7 @@ export default function HomePage() {
               <p className="text-[10px] text-white/50">လုပ်ငန်းများ</p>
             </div>
             <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
-              <p className="font-display font-bold text-lg text-white">{posts.length}+</p>
+              <p className="font-display font-bold text-lg text-white">{posts.length > 0 ? `${posts.length}+` : '0'}</p>
               <p className="text-[10px] text-white/50">သတင်းများ</p>
             </div>
             <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
@@ -80,8 +89,47 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Quick Category Grid */}
-      {homeCategories.length === 0 ? (
+      {/* ── 2. Quick Actions (အပေါ်သို့ ရွှေ့ထားသည်) ── */}
+      <div className="px-4">
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => navigate('/prices')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
+            <span className="text-2xl">🛒</span>
+            <div className="text-left">
+              <p className="text-sm font-display font-semibold text-white">ဈေးနှုန်းဘုတ်</p>
+              <p className="text-[10px] text-white/40">Market Prices</p>
+            </div>
+          </button>
+          <button onClick={() => navigate('/chat')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
+            <span className="text-2xl">💬</span>
+            <div className="text-left">
+              <p className="text-sm font-display font-semibold text-white">Public Chat</p>
+              <p className="text-[10px] text-white/40">ပြောဆိုရေး</p>
+            </div>
+          </button>
+          <button onClick={() => navigate('/submit')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
+            <span className="text-2xl">➕</span>
+            <div className="text-left">
+              <p className="text-sm font-display font-semibold text-white">လုပ်ငန်းထည့်မည်</p>
+              <p className="text-[10px] text-white/40">Submit Listing</p>
+            </div>
+          </button>
+          <button onClick={() => navigate('/emergency')}
+            className="p-4 flex items-center gap-3 rounded-2xl bg-gradient-to-br from-red-600/25 to-red-700/10 border border-red-500/30 hover:border-red-500/50 transition-colors">
+            <span className="text-2xl">🆘</span>
+            <div className="text-left">
+              <p className="text-sm font-display font-semibold text-white">အရေးပေါ်</p>
+              <p className="text-[10px] text-red-400/70">Emergency</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {/* ── 3. Quick Category Grid ── */}
+      {loading ? (
+        <div className="px-4 grid grid-cols-4 gap-2">
+          {[1,2,3,4,5,6,7,8].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)}
+        </div>
+      ) : homeCategories.length === 0 ? (
         <div className="px-4 py-8 text-center">
           <p className="text-white/30 text-sm font-myanmar">Category မရှိသေး</p>
           <p className="text-white/20 text-xs mt-1 font-myanmar">Admin &gt; Categories မှ ထည့်နိုင်သည်</p>
@@ -179,7 +227,7 @@ export default function HomePage() {
         )
       })()}
 
-      {/* Featured Listings */}
+      {/* ── 4. Featured Listings ── */}
       {(loading || featured.length > 0) && (
         <div>
           <SectionHeader title="Featured လုပ်ငန်းများ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
@@ -192,18 +240,20 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Latest News & Events */}
-      <div>
-        <SectionHeader title="သတင်းနှင့် ဖြစ်ရပ်များ" subtitle="News & Events" action="အားလုံး" onAction={() => navigate('/news')} />
-        <div className="px-4 space-y-3">
-          {loading
-            ? [1,2].map(n => <Skeleton key={n} className="h-48" />)
-            : posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} />)
-          }
+      {/* ── 5. Latest News & Events ── */}
+      {(loading || posts.length > 0) && (
+        <div>
+          <SectionHeader title="သတင်းနှင့် ဖြစ်ရပ်များ" subtitle="News & Events" action="အားလုံး" onAction={() => navigate('/news')} />
+          <div className="px-4 space-y-3">
+            {loading
+              ? [1,2].map(n => <Skeleton key={n} className="h-48" />)
+              : posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} />)
+            }
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Upcoming Events strip */}
+      {/* ── 6. Upcoming Events strip ── */}
       {(loading || upcomingEvents.length > 0) && (
         <div>
           <SectionHeader
@@ -221,7 +271,6 @@ export default function HomePage() {
                   onClick={() => navigate(`/news/${ev.id}`)}
                   className="card-listing cursor-pointer p-3 flex items-center gap-3"
                 >
-                  {/* Date chip */}
                   <div className="flex-shrink-0 w-11 text-center bg-brand-600/30 border border-brand-400/25 rounded-xl py-1.5">
                     <p className="text-[8px] text-brand-300 font-display font-bold uppercase leading-none">
                       {new Date(ev.event_start).toLocaleDateString('en-US', { month: 'short' })}
@@ -246,46 +295,11 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Quick Actions — 4 buttons */}
-      <div className="px-4">
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => navigate('/prices')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
-            <span className="text-2xl">🛒</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">ဈေးနှုန်းဘုတ်</p>
-              <p className="text-[10px] text-white/40">Market Prices</p>
-            </div>
-          </button>
-          <button onClick={() => navigate('/chat')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
-            <span className="text-2xl">💬</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">Public Chat</p>
-              <p className="text-[10px] text-white/40">ပြောဆိုရေး</p>
-            </div>
-          </button>
-          <button onClick={() => navigate('/submit')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
-            <span className="text-2xl">➕</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">လုပ်ငန်းထည့်မည်</p>
-              <p className="text-[10px] text-white/40">Submit Listing</p>
-            </div>
-          </button>
-          <button onClick={() => navigate('/emergency')}
-            className="p-4 flex items-center gap-3 rounded-2xl bg-gradient-to-br from-red-600/25 to-red-700/10 border border-red-500/30 hover:border-red-500/50 transition-colors">
-            <span className="text-2xl">🆘</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">အရေးပေါ်</p>
-              <p className="text-[10px] text-red-400/70">Emergency</p>
-            </div>
-          </button>
-        </div>
-      </div>
-
       <div className="h-4" />
 
-      {/* Mini footer */}
-      <div className="px-4 pb-2">
-        <div className="flex items-center justify-center gap-4 flex-wrap">
+      {/* ── 7. Mini footer (ပိုကြီးပြီး ထင်ရှားအောင် ပြင်ထားသည်) ── */}
+      <div className="px-4 pb-6">
+        <div className="flex items-center justify-center gap-3 flex-wrap">
           {[
             { path: '/help',    label: '❓ သုံးစွဲနည်း' },
             { path: '/about',   label: '🍒 About'       },
@@ -295,13 +309,15 @@ export default function HomePage() {
             <button
               key={path}
               onClick={() => navigate(path)}
-              className="text-[10px] text-white/25 hover:text-white/50 transition-colors font-myanmar"
+              className="text-xs text-white/60 hover:text-white hover:bg-white/10 transition-colors font-myanmar font-semibold bg-white/5 border border-white/10 px-4 py-2 rounded-full shadow-sm"
             >
               {label}
             </button>
           ))}
         </div>
-        <p className="text-center text-[9px] text-white/15 mt-2">{config.app_name || 'Cherry Directory'} • {config.app_city || 'Taunggyi'}</p>
+        <p className="text-center text-[10px] text-white/30 mt-5 font-display font-medium tracking-wider uppercase">
+          {config.app_name || 'Cherry Directory'} • {config.app_city || 'Taunggyi'}
+        </p>
       </div>
     </div>
   )
