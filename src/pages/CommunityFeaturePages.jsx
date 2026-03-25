@@ -40,15 +40,23 @@ export function WeatherAlertPage() {
   async function load() {
     setLoading(true)
     try {
-    let q = supabase.from('weather_alerts').select('*, reporter:profiles(full_name, nickname)').eq('status', 'active').order('severity', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
-    if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-    const { data } = await q
-    setAlerts(data || [])
-        } catch (e) { console.warn(e) }
+      let q = supabase.from('weather_alerts').select('*, reporter:profiles(full_name, nickname)').eq('status', 'active').order('severity', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
+      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
+      const { data } = await q
+      setAlerts(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [typeFilter])
+  useEffect(() => {
+    load()
+    const channel = supabase
+      .channel('weather-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'weather_alerts' }, load)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'weather_alerts' }, load)
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [typeFilter])
 
   async function submit() {
     if (!form.title_mm) return
@@ -89,8 +97,7 @@ export function WeatherAlertPage() {
 
       <div className="px-4 mb-4">
         <div className="relative">
-          <select value={typeFilter} onChange={e => setType(e.target.value)}
-            className="select-dark">
+          <select value={typeFilter} onChange={e => setType(e.target.value)} className="select-dark">
             {ALERT_TYPES.map(t => (
               <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
                 {t.icon} {lang === 'mm' ? t.mm : t.en}
@@ -202,12 +209,23 @@ export function DonationPage() {
   async function load() {
     setLoading(true)
     try {
-    let q = supabase.from('donations').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
-    if (catFilter !== 'all') q = q.eq('category', catFilter)
-    const { data } = await q; setItems(data || []);     } catch (e) { console.warn(e) }
+      let q = supabase.from('donations').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
+      if (catFilter !== 'all') q = q.eq('category', catFilter)
+      const { data } = await q
+      setItems(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
-  useEffect(() => { load() }, [catFilter])
+
+  useEffect(() => {
+    load()
+    const channel = supabase
+      .channel('donations-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'donations' }, load)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'donations' }, load)
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [catFilter])
 
   async function submit() {
     if (!form.title_mm || !isLoggedIn) return
@@ -238,8 +256,7 @@ export function DonationPage() {
 
       <div className="px-4 mb-4">
         <div className="relative">
-          <select value={catFilter} onChange={e => setCat(e.target.value)}
-            className="select-dark">
+          <select value={catFilter} onChange={e => setCat(e.target.value)} className="select-dark">
             {DON_CATS.map(c => (
               <option key={c.id} value={c.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
                 {c.icon} {lang === 'mm' ? c.mm : c.en}
@@ -378,12 +395,23 @@ export function HealthServicePage() {
   async function load() {
     setLoading(true)
     try {
-    let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('start_date', { ascending: true }).limit(30)
-    if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-    const { data } = await q; setItems(data || []);     } catch (e) { console.warn(e) }
+      let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('start_date', { ascending: true }).limit(30)
+      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
+      const { data } = await q
+      setItems(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
-  useEffect(() => { load() }, [typeFilter])
+
+  useEffect(() => {
+    load()
+    const channel = supabase
+      .channel('health-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'health_services' }, load)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'health_services' }, load)
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [typeFilter])
 
   async function submit() {
     if (!form.title_mm) return
@@ -413,8 +441,7 @@ export function HealthServicePage() {
 
       <div className="px-4 mb-4">
         <div className="relative">
-          <select value={typeFilter} onChange={e => setType(e.target.value)}
-            className="select-dark">
+          <select value={typeFilter} onChange={e => setType(e.target.value)} className="select-dark">
             {HEALTH_TYPES.map(t => (
               <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
                 {t.icon} {lang === 'mm' ? t.mm : t.en}
@@ -450,7 +477,6 @@ export function HealthServicePage() {
 
                {item.description_mm && <p className="text-xs text-white/50 font-myanmar leading-relaxed">{item.description_mm}</p>}
 
-               {/* Blood types */}
                {item.blood_types_needed?.length > 0 && (
                  <div className="flex gap-1.5 flex-wrap">
                    <span className="text-[9px] text-red-400/70 font-myanmar">🩸 လိုအပ်သော သွေးအုပ်စု:</span>
@@ -557,7 +583,16 @@ export function BusSchedulePage() {
     } catch (e) { console.warn(e) }
     setLoading(false)
   }
-  useEffect(() => { load() }, [typeFilter])
+
+  useEffect(() => {
+    load()
+    const channel = supabase
+      .channel('bus-live')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bus_departures' }, load)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bus_departures' }, load)
+      .subscribe()
+    return () => supabase.removeChannel(channel)
+  }, [typeFilter])
 
   async function submit() {
     if (!form.route_mm || !form.departure_time) return
@@ -641,7 +676,7 @@ export function BusSchedulePage() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TOURS PAGE
+// TOURS PAGE (FIXED - with Realtime)
 // ─────────────────────────────────────────────────────────────
 const TOUR_TYPES = [
   { id: 'all',      mm: 'အားလုံး',    en: 'All',       icon: '🏔️' },
@@ -668,28 +703,80 @@ export function ToursPage() {
   async function load() {
     setLoading(true)
     try {
-      let q = supabase.from('tour_guides').select('*').eq('is_active', true).order('created_at', { ascending: false })
-      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
+      let q = supabase
+        .from('tour_guides')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+
+      if (typeFilter !== 'all') {
+        q = q.eq('type', typeFilter)
+      }
+
       const { data, error } = await q
-      if (!error) setTours(data || [])
-    } catch (e) { console.warn(e) }
+      if (error) throw error
+      setTours(data || [])
+    } catch (e) {
+      console.warn('Load tours error:', e)
+    }
     setLoading(false)
   }
-  useEffect(() => { load() }, [typeFilter])
+
+  useEffect(() => {
+    load()
+  }, [typeFilter])
+
+  // Realtime subscription for tours
+  useEffect(() => {
+    const channel = supabase
+      .channel('tours-live')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'tour_guides' },
+        () => load()
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'tour_guides' },
+        () => load()
+      )
+      .on('postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'tour_guides' },
+        () => load()
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [typeFilter])
 
   async function submit() {
     if (!form.title_mm) return
     setSubmitting(true)
     try {
-      await supabase.from('tour_guides').insert({ ...form, price_from: form.price_from ? parseInt(form.price_from) : null, price_to: form.price_to ? parseInt(form.price_to) : null, reporter_id: user?.id || null })
-      setShowForm(false); load()
-    } catch (e) { console.warn(e) }
+      const { error } = await supabase.from('tour_guides').insert({
+        ...form,
+        price_from: form.price_from ? parseInt(form.price_from) : null,
+        price_to: form.price_to ? parseInt(form.price_to) : null,
+        reporter_id: user?.id || null,
+      })
+      if (error) {
+        console.warn('Submit error:', error)
+      }
+      setShowForm(false)
+      load()
+    } catch (e) {
+      console.warn(e)
+    }
     setSubmitting(false)
   }
 
   async function deleteTour(id) {
-    try { await supabase.from('tour_guides').delete().eq('id', id) } catch (e) {}
-    load()
+    try {
+      await supabase.from('tour_guides').delete().eq('id', id)
+      load()
+    } catch (e) {
+      console.warn(e)
+    }
   }
 
   return (
