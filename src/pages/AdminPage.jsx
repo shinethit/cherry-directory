@@ -4,9 +4,21 @@ import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, LayoutDash
 import { supabase } from '../lib/supabase'
 import CategoryManagerPage from './CategoryManagerPage' 
 
+// ─── Quick Link များကို အလွယ်တကူရွေးနိုင်ရန် Template များ ───
+const PRESET_LINKS = [
+  { url: '', label: '-- App ထဲရှိ စာမျက်နှာတစ်ခုကို ရွေးပါ --' },
+  { url: '/prices', label: '🛒 ဈေးနှုန်းဘုတ် (Market Prices)', icon: '🛒', title: 'Market Prices', title_mm: 'ဈေးနှုန်းဘုတ်', subtitle: 'Market Prices', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
+  { url: '/chat', label: '💬 Public Chat (ပြောဆိုရေး)', icon: '💬', title: 'Public Chat', title_mm: 'Public Chat', subtitle: 'ပြောဆိုရေး', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
+  { url: '/submit', label: '➕ လုပ်ငန်းထည့်မည် (Submit Listing)', icon: '➕', title: 'Submit Listing', title_mm: 'လုပ်ငန်းထည့်မည်', subtitle: 'Submit Listing', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
+  { url: '/emergency', label: '🆘 အရေးပေါ် (Emergency)', icon: '🆘', title: 'Emergency', title_mm: 'အရေးပေါ်', subtitle: 'Emergency', css: 'bg-gradient-to-br from-red-600/25 to-red-700/10 border border-red-500/30 text-white hover:border-red-500/50' },
+  { url: '/power', label: '⚡ လျှပ်စစ်အခြေအနေ (Power Status)', icon: '⚡', title: 'Power Status', title_mm: 'လျှပ်စစ်အခြေအနေ', subtitle: 'မီးပျက်/မီးလာ', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
+  { url: '/fuel', label: '⛽ ဓာတ်ဆီအခြေအနေ (Fuel Status)', icon: '⛽', title: 'Fuel Status', title_mm: 'ဓာတ်ဆီအခြေအနေ', subtitle: 'ဆီရ/မရ', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
+  { url: '/news', label: '📰 သတင်းနှင့် ဖြစ်ရပ်များ (News & Events)', icon: '📰', title: 'News & Events', title_mm: 'သတင်းများ', subtitle: 'နောက်ဆုံးရသတင်း', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
+  { url: 'custom', label: '🔗 အခြားလင့်ခ် ကိုယ်တိုင်ထည့်မည် (Custom URL)' }
+]
+
 export default function AdminPage() {
   const navigate = useNavigate()
-  // Tab ၄ ခုထားပါမယ်: 'dashboard', 'listings', 'categories', 'quicklinks'
   const [tab, setTab]                 = useState('dashboard') 
   const [data, setData]               = useState([])
   const [loading, setLoading]         = useState(true)
@@ -155,7 +167,7 @@ export default function AdminPage() {
       await supabase.from('quick_links').update(linkForm).eq('id', editingLink)
       showToast('✓ ပြင်ဆင်ပြီးပါပြီ')
     } else {
-      await supabase.from('quick_links').insert([linkForm])
+      await supabase.from('quick_links').insert([{...linkForm, sort_order: quickLinks.length + 1}])
       showToast('✓ အသစ်ထည့်ပြီးပါပြီ')
     }
     setEditingLink(null)
@@ -241,23 +253,53 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ── Quick Links Tab (NEW) ── */}
+      {/* ── Quick Links Tab ── */}
       {tab === 'quicklinks' && (
         <div className="px-4 space-y-4 animate-fade-in">
           {/* Add / Edit Form */}
           <div className="card-dark p-4 rounded-2xl border border-white/10 space-y-3">
             <h3 className="text-sm font-bold text-white mb-2">{editingLink ? '✏️ Edit Link' : '➕ Add New Link'}</h3>
-            <div className="grid grid-cols-2 gap-2">
+            
+            {/* Template Dropdown အသစ် */}
+            <div className="mb-3">
+              <label className="text-[10px] text-white/50 mb-1.5 block font-myanmar">အမြန်ရွေးချယ်ရန် (Template)</label>
+              <select 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val && val !== 'custom') {
+                    const preset = PRESET_LINKS.find(p => p.url === val);
+                    setLinkForm({
+                      ...linkForm,
+                      title: preset.title,
+                      title_mm: preset.title_mm,
+                      subtitle: preset.subtitle,
+                      icon: preset.icon,
+                      url: preset.url,
+                      css_classes: preset.css
+                    });
+                  } else if (val === 'custom') {
+                    setLinkForm({...linkForm, url: ''});
+                  }
+                }}
+                className="input-dark text-xs w-full font-myanmar"
+                style={{ backgroundColor: '#1a0030' }}
+              >
+                {PRESET_LINKS.map(p => <option key={p.url || 'none'} value={p.url}>{p.label}</option>)}
+              </select>
+            </div>
+
+            {/* Inputs များကို ဆက်လက်ထားရှိသည် (ကိုယ်တိုင်ပြင်ဆင်နိုင်ရန်) */}
+            <div className="grid grid-cols-2 gap-2 border-t border-white/5 pt-3">
               <input value={linkForm.title} onChange={e => setLinkForm({...linkForm, title: e.target.value})} placeholder="Title (EN)" className="input-dark text-xs" />
               <input value={linkForm.title_mm} onChange={e => setLinkForm({...linkForm, title_mm: e.target.value})} placeholder="Title (MM)" className="input-dark text-xs font-myanmar" />
               <input value={linkForm.subtitle} onChange={e => setLinkForm({...linkForm, subtitle: e.target.value})} placeholder="Subtitle" className="input-dark text-xs" />
               <div className="flex gap-2">
-                <input value={linkForm.icon} onChange={e => setLinkForm({...linkForm, icon: e.target.value})} placeholder="Icon (Emoji)" className="input-dark text-xs w-16 text-center" />
-                <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="/url or http://" className="input-dark text-xs flex-1" />
+                <input value={linkForm.icon} onChange={e => setLinkForm({...linkForm, icon: e.target.value})} placeholder="Icon" className="input-dark text-xs w-12 text-center" />
+                <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="URL (e.g. /news)" className="input-dark text-xs flex-1" />
               </div>
               <input value={linkForm.css_classes} onChange={e => setLinkForm({...linkForm, css_classes: e.target.value})} placeholder="Tailwind CSS classes" className="input-dark text-xs col-span-2" />
               <div className="flex items-center gap-2 col-span-2">
-                <label className="text-xs text-white/40">Sort:</label>
+                <label className="text-xs text-white/40">Sort Order:</label>
                 <input type="number" value={linkForm.sort_order} onChange={e => setLinkForm({...linkForm, sort_order: e.target.value})} className="input-dark text-xs w-16 text-center" />
                 <label className="flex items-center gap-2 text-xs text-white/60 ml-4 cursor-pointer">
                   <input type="checkbox" checked={linkForm.is_active} onChange={e => setLinkForm({...linkForm, is_active: e.target.checked})} className="w-4 h-4" />
@@ -265,9 +307,10 @@ export default function AdminPage() {
                 </label>
               </div>
             </div>
+
             <div className="flex gap-2 pt-2">
               <button onClick={handleSaveLink} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-2.5 rounded-xl transition-colors">
-                {editingLink ? 'Update' : 'Save'}
+                {editingLink ? 'Update' : 'Save Link'}
               </button>
               {editingLink && (
                 <button onClick={() => { setEditingLink(null); setLinkForm({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true }) }} 
