@@ -1,108 +1,112 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
-import { useAuth } from './contexts/AuthContext'
-import Layout from './components/Layout'
-import HomePage          from './pages/HomePage'
-import DirectoryPage     from './pages/DirectoryPage'
-import ListingDetailPage from './pages/ListingDetailPage'
-import EditListingPage   from './pages/EditListingPage'
-import MenuPage          from './pages/MenuPage'
-import NewsPage          from './pages/NewsPage'
-import PostDetailPage    from './pages/PostDetailPage'
-import CalendarPage      from './pages/CalendarPage'
-import EventFormPage     from './pages/EventFormPage'
-import ChatPage          from './pages/ChatPage'
-import LoginPage         from './pages/LoginPage'
-import ProfilePage       from './pages/ProfilePage'
-import AdminPage         from './pages/AdminPage'
-import SubmitListingPage from './pages/SubmitListingPage'
-import BulkImportPage    from './pages/BulkImportPage'
-import ClaimPage         from './pages/ClaimPage'
-import BookmarksPage     from './pages/BookmarksPage'
-import LeaderboardPage   from './pages/LeaderboardPage'
-// Community
-import CommunityPage     from './pages/CommunityPage'
-import MarketPricePage   from './pages/MarketPricePage'
-import PowerCutPage      from './pages/PowerCutPage'
-import FuelPage          from './pages/FuelPage'
-import LostFoundPage     from './pages/LostFoundPage'
-import JobBoardPage      from './pages/JobBoardPage'
-import NoticeBoardPage   from './pages/NoticeBoardPage'
-import { WeatherAlertPage, DonationPage, HealthServicePage, BusSchedulePage, ToursPage } from './pages/CommunityFeaturePages'
-import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
-import EmergencyPage from './pages/EmergencyPage'
-import CategoryManagerPage from './pages/CategoryManagerPage'
-import AppSettingsPage    from './pages/AppSettingsPage'
+-- Rentals table (အိမ်ရှင် - အိမ်ငှား)
+CREATE TABLE IF NOT EXISTS rentals (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT,
+  title_mm TEXT,
+  description_mm TEXT,
+  location_mm TEXT,
+  property_type TEXT DEFAULT 'room', -- room, apartment, house, land, shop
+  post_type TEXT DEFAULT 'owner', -- owner, tenant
+  price_monthly INTEGER,
+  price_deposit INTEGER,
+  phone TEXT,
+  contact_name TEXT,
+  images TEXT[],
+  is_urgent BOOLEAN DEFAULT false,
+  status TEXT DEFAULT 'available', -- available, pending, rented
+  user_id UUID REFERENCES profiles(id),
+  poster_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }) }, [pathname])
-  return null
-}
+-- Enable RLS
+ALTER TABLE rentals ENABLE ROW LEVEL SECURITY;
 
-function ProtectedRoute({ children, require: requireRole }) {
-  const { isLoggedIn, isAdmin, isModerator, loading } = useAuth()
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" /></div>
-  if (!isLoggedIn) return <Navigate to="/login" replace />
-  if (requireRole === 'admin'     && !isAdmin)     return <Navigate to="/" replace />
-  if (requireRole === 'moderator' && !isModerator) return <Navigate to="/" replace />
-  return children
-}
+-- RLS Policies
+CREATE POLICY "Anyone can view rentals" ON rentals
+  FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can insert rentals" ON rentals
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Users can update their own rentals" ON rentals
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own rentals" ON rentals
+  FOR DELETE USING (auth.uid() = user_id);
 
-export default function App() {
-  return (
-    <>
-      <ScrollToTop />
-      <Routes>
-      <Route path="/" element={<Layout />}>
-        <Route index element={<HomePage />} />
-        {/* Directory */}
-        <Route path="directory"          element={<DirectoryPage />} />
-        <Route path="directory/:id"      element={<ListingDetailPage />} />
-        <Route path="directory/:id/edit" element={<ProtectedRoute><EditListingPage /></ProtectedRoute>} />
-        <Route path="directory/:id/menu" element={<MenuPage />} />
-        <Route path="claim/:id"          element={<ProtectedRoute><ClaimPage /></ProtectedRoute>} />
-        {/* News */}
-        <Route path="news"     element={<NewsPage />} />
-        <Route path="news/:id" element={<PostDetailPage />} />
-        {/* Calendar */}
-        <Route path="calendar"        element={<CalendarPage />} />
-        <Route path="events/create"   element={<ProtectedRoute require="moderator"><EventFormPage /></ProtectedRoute>} />
-        <Route path="events/edit/:id" element={<ProtectedRoute><EventFormPage /></ProtectedRoute>} />
-        {/* Chat */}
-        <Route path="chat" element={<ChatPage />} />
-        {/* Community Hub */}
-        <Route path="community"  element={<CommunityPage />} />
-        <Route path="prices"     element={<MarketPricePage />} />
-        <Route path="power"      element={<PowerCutPage />} />
-        <Route path="fuel"       element={<FuelPage />} />
-        <Route path="lost-found" element={<LostFoundPage />} />
-        <Route path="jobs"       element={<JobBoardPage />} />
-        <Route path="notices"    element={<NoticeBoardPage />} />
-        <Route path="weather"    element={<WeatherAlertPage />} />
-        <Route path="donations"  element={<DonationPage />} />
-        <Route path="health"     element={<HealthServicePage />} />
-        <Route path="bus"        element={<BusSchedulePage />} />
-        <Route path="tours"      element={<ToursPage />} />
-        {/* User */}
-        <Route path="leaderboard" element={<LeaderboardPage />} />
-        <Route path="login"       element={<LoginPage />} />
-        <Route path="profile"     element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-        <Route path="bookmarks"   element={<ProtectedRoute><BookmarksPage /></ProtectedRoute>} />
-        <Route path="submit"      element={<ProtectedRoute><SubmitListingPage /></ProtectedRoute>} />
-        {/* Admin */}
-        <Route path="bulk-import" element={<ProtectedRoute require="moderator"><BulkImportPage /></ProtectedRoute>} />
-        <Route path="admin"            element={<ProtectedRoute require="moderator"><AdminPage /></ProtectedRoute>} />
-        <Route path="admin/categories" element={<ProtectedRoute require="moderator"><CategoryManagerPage /></ProtectedRoute>} />
-        <Route path="admin/settings"   element={<ProtectedRoute require="admin"><AppSettingsPage /></ProtectedRoute>} />
-        {/* Info pages */}
-        <Route path="about"     element={<AboutPage />} />
-        <Route path="privacy"   element={<PrivacyPage />} />
-        <Route path="terms"     element={<TermsPage />} />
-        <Route path="help"      element={<HelpPage />} />
-        <Route path="emergency" element={<EmergencyPage />} />
-      </Route>
-    </Routes>
-    </>
-  )
-}
+-- Tutoring table (ဆရာ - ကျောင်းသား)
+CREATE TABLE IF NOT EXISTS tutoring (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT,
+  title_mm TEXT,
+  description_mm TEXT,
+  location_mm TEXT,
+  subject TEXT DEFAULT 'math',
+  grade_level TEXT DEFAULT 'high',
+  post_type TEXT DEFAULT 'tutor', -- tutor, student
+  price_hourly INTEGER,
+  price_monthly INTEGER,
+  phone TEXT,
+  contact_name TEXT,
+  availability_schedule TEXT,
+  images TEXT[],
+  is_urgent BOOLEAN DEFAULT false,
+  status TEXT DEFAULT 'available', -- available, pending, booked, unavailable
+  user_id UUID REFERENCES profiles(id),
+  poster_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE tutoring ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view tutoring" ON tutoring
+  FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can insert tutoring" ON tutoring
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Users can update their own tutoring" ON tutoring
+  FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own tutoring" ON tutoring
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- History table (ဒေသဆိုင်ရာ သမိုင်းကြောင်း)
+CREATE TABLE IF NOT EXISTS history (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT,
+  title_mm TEXT,
+  excerpt_mm TEXT,
+  content_mm TEXT,
+  category TEXT DEFAULT 'history',
+  location_mm TEXT,
+  event_date DATE,
+  cover_url TEXT,
+  images TEXT[],
+  author_id UUID REFERENCES profiles(id),
+  author_name TEXT,
+  author_bio TEXT,
+  status TEXT DEFAULT 'published',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE history ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view history" ON history
+  FOR SELECT USING (status = 'published');
+CREATE POLICY "Moderators can insert history" ON history
+  FOR INSERT WITH CHECK (auth.role() IN ('moderator', 'admin'));
+CREATE POLICY "Moderators can update history" ON history
+  FOR UPDATE USING (auth.role() IN ('moderator', 'admin'));
+CREATE POLICY "Moderators can delete history" ON history
+  FOR DELETE USING (auth.role() IN ('moderator', 'admin'));
+
+-- Update jobs table to add post_type and status columns
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS post_type TEXT DEFAULT 'employer';
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'available';
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES profiles(id);
+
+-- Enable Realtime for new tables
+ALTER PUBLICATION supabase_realtime ADD TABLE rentals, tutoring, history;
+
+-- Update existing jobs to have post_type
+UPDATE jobs SET post_type = 'employer' WHERE post_type IS NULL;
+UPDATE jobs SET status = 'available' WHERE status IS NULL;
