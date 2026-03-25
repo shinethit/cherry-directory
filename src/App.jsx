@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { LangProvider } from './contexts/LangContext'
 import { AppConfigProvider } from './contexts/AppConfigContext'
+import { ThemeProvider } from './contexts/ThemeContext'
 
 // Layout
 import BottomNav from './components/BottomNav'
@@ -60,19 +61,18 @@ function ScrollToTop() {
 }
 
 function AppRoutes() {
-  // const { loading } = useAuth()
-  const loading = false  // ← Force loading to false for testing
+  const { loading } = useAuth()
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[#0d0015]">
+      <div className="flex items-center justify-center min-h-screen bg-[#0d0015] dark:bg-[#0d0015]">
         <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0d0015] to-[#1a0030] pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-[#0d0015] to-[#1a0030] dark:from-[#0d0015] dark:to-[#1a0030] pb-20">
       <Header />
       <ScrollToTop />
       <Routes>
@@ -143,11 +143,13 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <LangProvider>
         <AuthProvider>
           <AppConfigProvider>
-            <AppRoutes />
+            <ThemeProvider>
+              <AppRoutes />
+            </ThemeProvider>
           </AppConfigProvider>
         </AuthProvider>
       </LangProvider>

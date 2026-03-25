@@ -8,9 +8,9 @@ console.log('=== APP STARTING ===')
 console.log('Environment:', import.meta.env.MODE)
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+  // <React.StrictMode>
     <ErrorBoundary>
       <App />
     </ErrorBoundary>
-  </React.StrictMode>
+  // </React.StrictMode>
 )

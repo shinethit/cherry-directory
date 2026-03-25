@@ -11,5 +11,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    storageKey: 'cherry-directory-auth',
+  },
   realtime: { params: { eventsPerSecond: 10 } },
 })

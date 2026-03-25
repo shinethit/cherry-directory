@@ -1,14 +1,43 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Search, X, ShieldCheck, ChevronDown } from 'lucide-react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Search, X, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useAppConfig } from '../hooks/useAppConfig'
 import { useLang } from '../contexts/LangContext'
 
 export default function DirectoryPage() {
+  const navigate = useNavigate()
   const config = useAppConfig()
   const { lang } = useLang()
+  const [searchParams, setSearchParams] = useSearchParams()
+  
+  // Level 1: Categories (Top-level)
+  const [categories, setCategories] = useState([])
+  const [selectedCategory, setSelectedCategory] = useState(null)
+  const [categoryLoading, setCategoryLoading] = useState(true)
+  
+  // Level 2: Subcategories
+  const [subcategories, setSubcategories] = useState([])
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null)
+  const [subcategoryLoading, setSubcategoryLoading] = useState(false)
+  
+  // Level 3: Listings
+  const [listings, setListings] = useState([])
+  const [listingsLoading, setListingsLoading] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 20
+  
+  // Direct listings state
+  const [hasDirectListings, setHasDirectListings] = useState(false)
+  const [directCount, setDirectCount] = useState(0)
+  
+  // Filters
+  const [city, setCity] = useState(searchParams.get('city') || 'All')
+  const [verifiedOnly, setVerifiedOnly] = useState(searchParams.get('verified') === 'true')
+  const [q, setQ] = useState(searchParams.get('q') || '')
+  
   const cities = ['All', ...(config.cities || [])]
   const cityLabels = {
     'All': { mm: '📍 ခပ်သိမ်း', en: 'All' },
@@ -21,76 +50,345 @@ export default function DirectoryPage() {
     'Aungban': { mm: 'အောင်ပန်း', en: 'Aungban' },
     'Ywangan': { mm: 'ရွာငံ', en: 'Ywangan' }
   }
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [listings, setListings] = useState([])
-  const [categories, setCategories] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [total, setTotal] = useState(0)
 
-  const [q, setQ] = useState(searchParams.get('q') || '')
-  const [city, setCity] = useState(searchParams.get('city') || 'All')
-  const [catId, setCatId] = useState(searchParams.get('cat') || '')
-  const [verifiedOnly, setVerifiedOnly] = useState(searchParams.get('verified') === 'true')
-  const [page, setPage] = useState(0)
-  const PAGE_SIZE = 20
+  // Get total listings count for a category (including all subcategories)
+  async function getCategoryTotalCount(categoryId) {
+    try {
+      const { data: subcats } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('parent_id', categoryId)
+      
+      const subcatIds = subcats?.map(s => s.id) || []
+      const allCatIds = [categoryId, ...subcatIds]
+      
+      const { count } = await supabase
+        .from('listings')
+        .select('*', { count: 'exact', head: true })
+        .in('category_id', allCatIds)
+        .eq('status', 'approved')
+      
+      return count || 0
+    } catch (e) {
+      console.warn('getCategoryTotalCount error:', e)
+      return 0
+    }
+  }
 
-  // Top-level categories only — no duplicates
-  const topCategories = categories.filter(c => !c.parent_id)
-
-  // Active category (could be sub)
-  const activeCat = categories.find(c => c.id === catId)
-  // Which top-level is active
-  const activeTopId = activeCat?.parent_id || (activeCat && !activeCat.parent_id ? activeCat.id : null)
-
+  // Load top-level categories with counts
   useEffect(() => {
-    supabase
-      .from('categories')
-      .select('*')
-      .eq('type', 'directory')
-      .eq('is_active', true)
-      .order('sort_order')
-      .then(({ data }) => setCategories(data || []))
+    loadCategories()
   }, [])
 
+  async function loadCategories() {
+    setCategoryLoading(true)
+    try {
+      const { data } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('type', 'directory')
+        .eq('is_active', true)
+        .is('parent_id', null)
+        .order('sort_order')
+      
+      const categoriesWithCount = await Promise.all(
+        (data || []).map(async (cat) => {
+          const totalCount = await getCategoryTotalCount(cat.id)
+          return { ...cat, listing_count: totalCount }
+        })
+      )
+      setCategories(categoriesWithCount)
+    } catch (e) { 
+      console.warn('loadCategories error:', e) 
+    }
+    setCategoryLoading(false)
+  }
+
+  // Load subcategories with counts
+  async function loadSubcategories(categoryId) {
+    setSubcategoryLoading(true)
+    setListings([])
+    setSelectedSubcategory(null)
+    try {
+      const { data } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('type', 'directory')
+        .eq('is_active', true)
+        .eq('parent_id', categoryId)
+        .order('sort_order')
+      
+      const subcatsWithCount = await Promise.all(
+        (data || []).map(async (sub) => {
+          const { count } = await supabase
+            .from('listings')
+            .select('*', { count: 'exact', head: true })
+            .eq('category_id', sub.id)
+            .eq('status', 'approved')
+          return { ...sub, listing_count: count || 0 }
+        })
+      )
+      setSubcategories(subcatsWithCount)
+    } catch (e) { 
+      console.warn('loadSubcategories error:', e) 
+    }
+    setSubcategoryLoading(false)
+  }
+
+  // Check for direct listings under category
+  async function checkDirectListings(categoryId) {
+    try {
+      const { count } = await supabase
+        .from('listings')
+        .select('*', { count: 'exact', head: true })
+        .eq('category_id', categoryId)
+        .eq('status', 'approved')
+      
+      setDirectCount(count || 0)
+      setHasDirectListings((count || 0) > 0)
+    } catch (e) {
+      console.warn('checkDirectListings error:', e)
+      setDirectCount(0)
+      setHasDirectListings(false)
+    }
+  }
+
+  // Load subcategories when category is selected
+  useEffect(() => {
+    if (selectedCategory) {
+      loadSubcategories(selectedCategory.id)
+      checkDirectListings(selectedCategory.id)
+    } else {
+      setSubcategories([])
+      setSelectedSubcategory(null)
+      setListings([])
+      setHasDirectListings(false)
+      setDirectCount(0)
+    }
+  }, [selectedCategory])
+
+  // Load listings when subcategory is selected or filters change
+  useEffect(() => {
+    if (selectedSubcategory) {
+      loadListings()
+    } else {
+      setListings([])
+      setTotal(0)
+    }
+  }, [selectedSubcategory, city, verifiedOnly, q, page])
+
   const loadListings = useCallback(async (reset = true) => {
-    setLoading(true)
+    if (!selectedSubcategory) return
+    setListingsLoading(true)
     const currentPage = reset ? 0 : page
     if (reset) setPage(0)
 
-    let query = supabase
-      .from('listings')
-      .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
-      .eq('status', 'approved')
-      .neq('status', 'hidden') // Exclude hidden listings
-      .order('is_verified', { ascending: false })
-      .order('is_featured', { ascending: false })
-      .order('rating_avg', { ascending: false })
-      .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
+    try {
+      let query = supabase
+        .from('listings')
+        .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
+        .eq('status', 'approved')
+        .eq('category_id', selectedSubcategory.id)
+        // Sorting: Review ကောင်းတာတွေ အရင်၊ ပြီးမှ Alphabet
+        .order('rating_avg', { ascending: false, nullsFirst: false })
+        .order('name', { ascending: true })
+        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
 
-    if (q.trim()) query = query.or(`name.ilike.%${q}%,name_mm.ilike.%${q}%,description.ilike.%${q}%`)
-    if (city !== 'All') query = query.eq('city', city)
-    if (catId) query = query.eq('category_id', catId)
-    if (verifiedOnly) query = query.eq('is_verified', true)
+      if (q.trim()) query = query.or(`name.ilike.%${q}%,name_mm.ilike.%${q}%,description.ilike.%${q}%`)
+      if (city !== 'All') query = query.eq('city', city)
+      if (verifiedOnly) query = query.eq('is_verified', true)
 
-    const { data, count } = await query
-    if (reset) setListings(data || [])
-    else setListings(prev => [...prev, ...(data || [])])
-    setTotal(count || 0)
-    setLoading(false)
-  }, [q, city, catId, verifiedOnly, page])
+      const { data, count } = await query
+      
+      if (reset) setListings(data || [])
+      else setListings(prev => [...prev, ...(data || [])])
+      setTotal(count || 0)
+    } catch (e) { 
+      console.warn('loadListings error:', e) 
+    }
+    setListingsLoading(false)
+  }, [selectedSubcategory, city, verifiedOnly, q, page])
 
-  useEffect(() => { loadListings(true) }, [q, city, catId, verifiedOnly, loadListings])
-
-  function clearFilters() {
-    setQ(''); setCity('All'); setCatId(''); setVerifiedOnly(false)
+  function handleCategorySelect(cat) {
+    setSelectedCategory(cat)
+    setSelectedSubcategory(null)
+    setListings([])
+    setPage(0)
   }
 
-  const hasFilters = q || city !== 'All' || catId || verifiedOnly
+  function handleSubcategorySelect(sub) {
+    setSelectedSubcategory(sub)
+    setPage(0)
+  }
 
+  function handleDirectListings() {
+    setSelectedSubcategory({
+      id: selectedCategory.id,
+      icon: selectedCategory.icon,
+      name_mm: selectedCategory.name_mm,
+      name: selectedCategory.name,
+      listing_count: directCount,
+      is_direct: true
+    })
+  }
+
+  function goBack() {
+    if (selectedSubcategory) {
+      setSelectedSubcategory(null)
+      setListings([])
+    } else if (selectedCategory) {
+      setSelectedCategory(null)
+      setSubcategories([])
+    }
+  }
+
+  function clearFilters() {
+    setQ('')
+    setCity('All')
+    setVerifiedOnly(false)
+  }
+
+  const hasFilters = q || city !== 'All' || verifiedOnly
+
+  // Render Category Level
+  if (!selectedCategory) {
+    return (
+      <div className="pb-8">
+        {/* Fixed header - no overlapping */}
+        <div className="sticky top-0 z-40 bg-[#140020] border-b border-white/10">
+          <div className="px-4 py-4">
+            <h1 className="font-display font-bold text-lg text-white">📂 အမျိုးအစားများ</h1>
+            <p className="text-xs text-white/40 font-myanmar mt-1">လုပ်ငန်းအမျိုးအစားကို ရွေးပါ</p>
+          </div>
+        </div>
+
+        <div className="px-4 py-4 space-y-2 pb-24">
+          {categoryLoading ? (
+            [1,2,3,4,5,6].map(n => <Skeleton key={n} className="h-16 rounded-2xl" />)
+          ) : categories.length === 0 ? (
+            <EmptyState icon="📂" title="Category မရှိသေး" message="ပထမဆုံး Category ကို Admin မှ ထည့်ပါ" />
+          ) : (
+            categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => handleCategorySelect(cat)}
+                className="w-full flex items-center justify-between p-4 rounded-2xl card-dark hover:bg-white/8 transition-colors"
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
+                  <span className="text-2xl flex-shrink-0">{cat.icon}</span>
+                  <div className="text-left min-w-0 flex-1 overflow-hidden">
+                    <p className="font-display font-semibold text-white truncate">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</p>
+                    <p className="text-[10px] text-white/40 font-myanmar truncate">{cat.name_mm || cat.name}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                  <span className="bg-brand-600/30 px-2 py-1 rounded-full text-xs font-bold text-brand-300 whitespace-nowrap">
+                    {cat.listing_count} လုပ်ငန်း
+                  </span>
+                  <ChevronRight size={18} className="text-white/30 flex-shrink-0" />
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Render Subcategory Level
+  if (selectedCategory && !selectedSubcategory) {
+    return (
+      <div className="pb-8">
+        <div className="sticky top-0 z-40 bg-[#140020] border-b border-white/10">
+          <div className="px-4 py-3">
+            <button onClick={goBack} className="flex items-center gap-2 mb-2 text-white/60 hover:text-white">
+              <ChevronRight size={16} className="rotate-180" />
+              <span className="text-xs">နောက်သို့</span>
+            </button>
+            <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+              <span className="text-2xl flex-shrink-0">{selectedCategory.icon}</span>
+              <h1 className="font-display font-bold text-lg text-white truncate">{lang === 'mm' ? (selectedCategory.name_mm || selectedCategory.name) : selectedCategory.name}</h1>
+            </div>
+            <p className="text-xs text-white/40 font-myanmar mt-1">အမျိုးအစားခွဲကို ရွေးပါ</p>
+          </div>
+        </div>
+
+        <div className="px-4 py-4 space-y-2 pb-24">
+          {subcategoryLoading ? (
+            [1,2,3,4].map(n => <Skeleton key={n} className="h-16 rounded-2xl" />)
+          ) : (
+            <>
+              {hasDirectListings && (
+                <button
+                  onClick={handleDirectListings}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl card-dark hover:bg-white/8 transition-colors border border-brand-500/30 bg-brand-500/5"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
+                    <span className="text-2xl flex-shrink-0">{selectedCategory.icon}</span>
+                    <div className="text-left min-w-0 flex-1 overflow-hidden">
+                      <p className="font-display font-semibold text-white truncate">အားလုံး</p>
+                      <p className="text-[10px] text-white/40 font-myanmar truncate">All listings</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <span className="bg-brand-600/30 px-2 py-1 rounded-full text-xs font-bold text-brand-300 whitespace-nowrap">
+                      {directCount} လုပ်ငန်း
+                    </span>
+                    <ChevronRight size={18} className="text-white/30 flex-shrink-0" />
+                  </div>
+                </button>
+              )}
+
+              {subcategories.map(sub => (
+                <button
+                  key={sub.id}
+                  onClick={() => handleSubcategorySelect(sub)}
+                  className="w-full flex items-center justify-between p-4 rounded-2xl card-dark hover:bg-white/8 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
+                    <span className="text-2xl flex-shrink-0">{sub.icon}</span>
+                    <div className="text-left min-w-0 flex-1 overflow-hidden">
+                      <p className="font-display font-semibold text-white truncate">{lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}</p>
+                      <p className="text-[10px] text-white/40 font-myanmar truncate">{sub.name_mm || sub.name}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    <span className="bg-brand-600/30 px-2 py-1 rounded-full text-xs font-bold text-brand-300 whitespace-nowrap">
+                      {sub.listing_count} လုပ်ငန်း
+                    </span>
+                    <ChevronRight size={18} className="text-white/30 flex-shrink-0" />
+                  </div>
+                </button>
+              ))}
+
+              {subcategories.length === 0 && !hasDirectListings && (
+                <EmptyState icon="📂" title="လုပ်ငန်းမရှိသေး" message="ဤအမျိုးအစားတွင် လုပ်ငန်းမရှိသေးပါ" />
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Render Listings Level
   return (
     <div className="flex flex-col min-h-full">
-      {/* Sticky filter area */}
-      <div className="sticky top-[97px] z-40 px-4 py-3 space-y-2 glass border-b border-white/8 w-full max-w-full overflow-hidden">
+      <div className="sticky top-0 z-40 bg-[#140020] border-b border-white/10 px-4 py-3 space-y-3">
+        <button onClick={goBack} className="flex items-center gap-2 text-white/60 hover:text-white">
+          <ChevronRight size={16} className="rotate-180" />
+          <span className="text-xs">နောက်သို့</span>
+        </button>
+
+        <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+          <span className="text-2xl flex-shrink-0">{selectedSubcategory.icon}</span>
+          <h1 className="font-display font-bold text-lg text-white truncate">
+            {selectedSubcategory.is_direct 
+              ? (lang === 'mm' ? (selectedCategory?.name_mm || selectedCategory?.name) : selectedCategory?.name)
+              : (lang === 'mm' ? (selectedSubcategory.name_mm || selectedSubcategory.name) : selectedSubcategory.name)
+            }
+          </h1>
+        </div>
 
         {/* Search input */}
         <div className="relative">
@@ -109,9 +407,8 @@ export default function DirectoryPage() {
           )}
         </div>
 
-        {/* Quick filter row (Added overflow-x-auto and pb-1 to fix overflow) */}
+        {/* Quick filter row */}
         <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 w-full">
-          {/* Verified Owner */}
           <button
             onClick={() => setVerifiedOnly(v => !v)}
             className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
@@ -125,7 +422,6 @@ export default function DirectoryPage() {
             Verified
           </button>
 
-          {/* City dropdown */}
           <div className="relative flex-shrink-0">
             <select
               value={city}
@@ -149,72 +445,31 @@ export default function DirectoryPage() {
             <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
           </div>
 
-          {/* Clear all */}
           {hasFilters && (
             <button onClick={clearFilters} className="flex-shrink-0 w-6 h-6 rounded-full bg-white/8 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors">
               <X size={12} />
             </button>
           )}
         </div>
-
-        {/* Category dropdown (Added w-full and truncate to prevent horizontal stretch) */}
-        <div className="relative w-full">
-          <select
-            value={catId}
-            onChange={e => setCatId(e.target.value)}
-            className="select-dark w-full truncate pr-8 appearance-none"
-          >
-            <option value="" style={{ backgroundColor: '#1a0030' }}>
-              {lang === 'mm' ? '📂 အမျိုးအစားအားလုံး' : '📂 All Categories'}
-            </option>
-            {topCategories.map(cat => {
-              const subs = categories.filter(c => c.parent_id === cat.id)
-              if (subs.length === 0) {
-                return <option key={cat.id} value={cat.id} style={{ backgroundColor: '#1a0030' }}>{cat.icon} {cat.name_mm || cat.name}</option>
-              }
-              return (
-                <optgroup key={cat.id} label={`${cat.icon} ${cat.name_mm || cat.name}`} style={{ backgroundColor: '#1a0030' }}>
-                  <option value={cat.id} style={{ backgroundColor: '#1a0030' }}>　 အားလုံး</option>
-                  {subs.map(sub => (
-                    <option key={sub.id} value={sub.id} style={{ backgroundColor: '#1a0030' }}>　 {sub.icon} {sub.name_mm || sub.name}</option>
-                  ))}
-                </optgroup>
-              )
-            })}
-          </select>
-          <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
-        </div>
       </div>
 
       {/* Results count */}
       <div className="px-4 py-2 flex items-center justify-between flex-wrap gap-1">
         <p className="text-[11px] text-white/40">
-          {loading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ရလဒ်`}
+          {listingsLoading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ရလဒ်`}
         </p>
-        <div className="flex items-center gap-1.5 flex-wrap max-w-full">
-          {verifiedOnly && (
-            <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border border-gold-500/40 text-gold-400 whitespace-nowrap" style={{ background: 'rgba(212,175,55,0.12)' }}>
-              <ShieldCheck size={9} /> Verified Only
-            </span>
-          )}
-          {activeCat && (
-            <span className="badge bg-brand-700/60 text-brand-200 truncate max-w-[200px]">
-              {activeCat?.icon} {activeCat?.name_mm || activeCat?.name}
-            </span>
-          )}
-        </div>
       </div>
 
-      {/* Listings (Added pb-36 for Bottom Navigation Bar clearance) */}
+      {/* Listings */}
       <div className="px-4 space-y-2 pb-36">
-        {loading && listings.length === 0
+        {listingsLoading && listings.length === 0
           ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
           : listings.length === 0
           ? <EmptyState icon="🔍" title="လုပ်ငန်း မတွေ့ပါ" message="ရှာဖွေမှုကို ပြောင်းလဲကြည့်ပါ" />
           : listings.map(l => <ListingCard key={l.id} listing={l} />)
         }
 
-        {listings.length < total && !loading && (
+        {listings.length < total && !listingsLoading && (
           <button
             onClick={() => { setPage(p => p + 1); loadListings(false) }}
             className="w-full btn-ghost text-sm mt-2"

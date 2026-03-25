@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search } from 'lucide-react'
+import { Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
+import { useTheme } from '../contexts/ThemeContext'
 
 export default function Header() {
   const navigate = useNavigate()
@@ -11,6 +12,7 @@ export default function Header() {
   const { profile, isLoggedIn, isAdmin, isModerator, signOut } = useAuth()
   const { lang } = useLang()
   const config = useAppConfig()
+  const { darkMode, toggleDarkMode } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
 
@@ -54,17 +56,27 @@ export default function Header() {
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled
-            ? 'bg-[#0a0018]/90 backdrop-blur-lg border-b border-white/10'
+            ? 'bg-[#0a0018]/90 backdrop-blur-lg border-b border-white/10 dark:bg-[#0a0018]/90'
             : 'bg-transparent'
         }`}
       >
         <div className="flex items-center justify-between px-4 py-3">
+          {/* Logo - using actual image from public folder */}
           <button
             onClick={() => navigate('/')}
             className="flex items-center gap-2"
           >
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
-              <span className="text-lg">🍒</span>
+            <div className="w-8 h-8 rounded-xl overflow-hidden bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
+              <img 
+                src="/logo.png" 
+                alt="Cherry Directory Logo" 
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.target.onerror = null
+                  e.target.style.display = 'none'
+                  e.target.parentElement.innerHTML = '<span class="text-lg">🍒</span>'
+                }}
+              />
             </div>
             <div className="hidden sm:block">
               <p className="font-display font-bold text-sm text-white leading-tight">
@@ -75,6 +87,15 @@ export default function Header() {
           </button>
 
           <div className="flex items-center gap-2">
+            {/* Dark Mode Toggle */}
+            <button
+              onClick={toggleDarkMode}
+              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90 transition-colors"
+            >
+              {darkMode ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
+
+            {/* Language Toggle */}
             <button
               onClick={() => {
                 localStorage.setItem('lang', lang === 'mm' ? 'en' : 'mm')
@@ -85,6 +106,7 @@ export default function Header() {
               {lang === 'mm' ? 'EN' : 'မြန်မာ'}
             </button>
 
+            {/* Menu Button */}
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center"

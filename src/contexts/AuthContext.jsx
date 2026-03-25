@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
@@ -7,6 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  const initialized = useRef(false)
 
   async function fetchProfile(userId) {
     try {
@@ -27,11 +28,21 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    // Prevent double initialization in StrictMode
+    if (initialized.current) return
+    initialized.current = true
+
     let isMounted = true
 
     const initializeAuth = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.warn('getSession error:', error)
+          if (isMounted) setLoading(false)
+          return
+        }
         
         if (!isMounted) return
         
@@ -42,7 +53,7 @@ export function AuthProvider({ children }) {
           setLoading(false)
         }
       } catch (err) {
-        console.error('Auth initialization error:', err)
+        console.warn('Auth initialization error:', err)
         if (isMounted) setLoading(false)
       }
     }
