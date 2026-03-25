@@ -1,19 +1,16 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
 import App from './App'
-import { AuthProvider } from './contexts/AuthContext'
-import { LangProvider } from './contexts/LangContext'
 import './index.css'
+import { ErrorBoundary } from './components/ErrorBoundary'
+
+console.log('=== APP STARTING ===')
+console.log('Environment:', import.meta.env.MODE)
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <LangProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </LangProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 )
