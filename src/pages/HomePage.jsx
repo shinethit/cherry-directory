@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, CalendarDays } from 'lucide-react'
+import { Search, CalendarDays, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI'
 import { useAppConfig } from '../hooks/useAppConfig'
@@ -25,10 +25,10 @@ export default function HomePage() {
     async function load() {
       try {
         const [
-          { data: postsData }, 
-          { data: featuredData }, 
-          { data: catsData }, 
-          { count: listingCount }, 
+          { data: postsData },
+          { data: featuredData },
+          { data: catsData },
+          { count: listingCount },
           { data: eventsData },
           { data: linksData }
         ] = await Promise.all([
@@ -39,7 +39,7 @@ export default function HomePage() {
           supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
           supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order')
         ])
-        
+
         setPosts(postsData || [])
         setFeatured(featuredData || [])
         const all = catsData || []
@@ -48,14 +48,22 @@ export default function HomePage() {
         setUpcomingEvents(eventsData || [])
         setStats({ listings: listingCount || 0 })
         setQuickLinks(linksData || [])
-      } catch (e) { 
-        console.warn('Load Error:', e) 
+      } catch (e) {
+        console.warn('Load Error:', e)
       } finally {
         setLoading(false)
       }
     }
     load()
   }, [])
+
+  // Helper to close all sheets and navigate
+  const closeAndNavigate = (url) => {
+    setSelectedCat(null)
+    setSelectedSub(null)
+    // Small delay to let React finish state updates before navigation
+    setTimeout(() => navigate(url), 20)
+  }
 
   return (
     <div className="space-y-6 py-4">
@@ -95,12 +103,12 @@ export default function HomePage() {
       <div className="px-4">
         <div className="grid grid-cols-2 gap-3">
           {loading ? (
-            [1,2,3,4].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)
+            [1, 2, 3, 4].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)
           ) : (
             quickLinks.map(link => (
-              <button 
-                key={link.id} 
-                onClick={() => link.url.startsWith('http') ? window.open(link.url, '_blank') : navigate(link.url)} 
+              <button
+                key={link.id}
+                onClick={() => link.url.startsWith('http') ? window.open(link.url, '_blank') : navigate(link.url)}
                 className={`p-4 flex items-center gap-3 rounded-2xl border transition-colors ${link.css_classes}`}
               >
                 <span className="text-2xl">{link.icon}</span>
@@ -117,7 +125,7 @@ export default function HomePage() {
       {/* Category Grid */}
       {loading ? (
         <div className="px-4 grid grid-cols-4 gap-2">
-          {[1,2,3,4,5,6,7,8].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)}
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)}
         </div>
       ) : homeCategories.length === 0 ? (
         <div className="px-4 py-8 text-center">
@@ -145,104 +153,88 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ========== SUB-CATEGORY BOTTOM SHEET ========== */}
-      {selectedCat && (() => {
-        const subs = allCategories.filter(c => c.parent_id === selectedCat.id)
-        return (
-          <div className="fixed inset-0 z-[999999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setSelectedCat(null)}>
-            <div className="w-full max-w-lg bg-[#140020] border-t border-white/10 rounded-t-3xl overflow-hidden mb-20" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{selectedCat.icon}</span>
-                  <p className="font-display font-bold text-white">{lang === 'mm' ? (selectedCat.name_mm || selectedCat.name) : selectedCat.name}</p>
-                </div>
-                <button onClick={() => setSelectedCat(null)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors">✕</button>
+      {/* ========== CENTERED MODAL FOR SUBCATEGORIES ========== */}
+      {selectedCat && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setSelectedCat(null)}>
+          <div className="w-full max-w-sm bg-[#140020] border border-white/10 rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{selectedCat.icon}</span>
+                <p className="font-display font-bold text-white">{lang === 'mm' ? (selectedCat.name_mm || selectedCat.name) : selectedCat.name}</p>
               </div>
-              <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
-                <button
-                  onClick={() => { 
-                    const catId = selectedCat.id
-                    setSelectedCat(null)
-                    setTimeout(() => navigate(`/directory?cat=${catId}`), 50)
-                  }}
-                  className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
-                >
-                  <span className="text-xl">📋</span>
-                  <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
-                </button>
-                {subs.map(sub => {
-                  const subSubs = allCategories.filter(c => c.parent_id === sub.id)
-                  return (
-                    <button 
-                      key={sub.id}
-                      onClick={() => { 
-                        if (subSubs.length > 0) { 
-                          setSelectedSub(sub)
-                          setSelectedCat(null)
-                        } else { 
-                          const subId = sub.id
-                          setSelectedCat(null)
-                          setTimeout(() => navigate(`/directory?cat=${subId}`), 50)
-                        } 
-                      }}
-                      className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
-                    >
-                      <span className="text-xl">{sub.icon}</span>
-                      <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}</span>
-                      {subSubs.length > 0 && <span className="text-[8px] text-brand-300/70">{subSubs.length} ▸</span>}
-                    </button>
-                  )
-                })}
-              </div>
+              <button onClick={() => setSelectedCat(null)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors">
+                <X size={16} />
+              </button>
             </div>
-          </div>
-        )
-      })()}
-
-      {/* ========== SUB-SUB-CATEGORY BOTTOM SHEET ========== */}
-      {selectedSub && (() => {
-        const subSubs = allCategories.filter(c => c.parent_id === selectedSub.id)
-        return (
-          <div className="fixed inset-0 z-[999999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setSelectedSub(null)}>
-            <div className="w-full max-w-lg bg-[#140020] border-t border-white/10 rounded-t-3xl overflow-hidden mb-20" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{selectedSub.icon}</span>
-                  <p className="font-display font-bold text-white">{lang === 'mm' ? (selectedSub.name_mm || selectedSub.name) : selectedSub.name}</p>
-                </div>
-                <button onClick={() => setSelectedSub(null)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors">✕</button>
-              </div>
-              <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
-                <button
-                  onClick={() => { 
-                    const subId = selectedSub.id
-                    setSelectedSub(null)
-                    setTimeout(() => navigate(`/directory?cat=${subId}`), 50)
-                  }}
-                  className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
-                >
-                  <span className="text-xl">📋</span>
-                  <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
-                </button>
-                {subSubs.map(ss => (
-                  <button 
-                    key={ss.id}
-                    onClick={() => { 
-                      const ssId = ss.id
-                      setSelectedSub(null)
-                      setTimeout(() => navigate(`/directory?cat=${ssId}`), 50)
+            <div className="px-4 py-4 grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
+              <button
+                onClick={() => closeAndNavigate(`/directory?cat=${selectedCat.id}`)}
+                className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
+              >
+                <span className="text-xl">📋</span>
+                <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
+              </button>
+              {allCategories.filter(c => c.parent_id === selectedCat.id).map(sub => {
+                const subSubs = allCategories.filter(c => c.parent_id === sub.id)
+                return (
+                  <button
+                    key={sub.id}
+                    onClick={() => {
+                      if (subSubs.length > 0) {
+                        setSelectedSub(sub)
+                        setSelectedCat(null)
+                      } else {
+                        closeAndNavigate(`/directory?cat=${sub.id}`)
+                      }
                     }}
                     className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
                   >
-                    <span className="text-xl">{ss.icon}</span>
-                    <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (ss.name_mm || ss.name) : ss.name}</span>
+                    <span className="text-xl">{sub.icon}</span>
+                    <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}</span>
+                    {subSubs.length > 0 && <span className="text-[8px] text-brand-300/70">{subSubs.length} ▸</span>}
                   </button>
-                ))}
-              </div>
+                )
+              })}
             </div>
           </div>
-        )
-      })()}
+        </div>
+      )}
+
+      {/* ========== CENTERED MODAL FOR SUB-SUBCATEGORIES ========== */}
+      {selectedSub && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setSelectedSub(null)}>
+          <div className="w-full max-w-sm bg-[#140020] border border-white/10 rounded-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{selectedSub.icon}</span>
+                <p className="font-display font-bold text-white">{lang === 'mm' ? (selectedSub.name_mm || selectedSub.name) : selectedSub.name}</p>
+              </div>
+              <button onClick={() => setSelectedSub(null)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-4 py-4 grid grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto">
+              <button
+                onClick={() => closeAndNavigate(`/directory?cat=${selectedSub.id}`)}
+                className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
+              >
+                <span className="text-xl">📋</span>
+                <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
+              </button>
+              {allCategories.filter(c => c.parent_id === selectedSub.id).map(ss => (
+                <button
+                  key={ss.id}
+                  onClick={() => closeAndNavigate(`/directory?cat=${ss.id}`)}
+                  className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
+                >
+                  <span className="text-xl">{ss.icon}</span>
+                  <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (ss.name_mm || ss.name) : ss.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Featured Listings */}
       {(loading || featured.length > 0) && (
@@ -250,7 +242,7 @@ export default function HomePage() {
           <SectionHeader title="Featured လုပ်ငန်းများ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
           <div className="px-4 space-y-2">
             {loading
-              ? [1,2,3].map(n => <Skeleton key={n} className="h-20" />)
+              ? [1, 2, 3].map(n => <Skeleton key={n} className="h-20" />)
               : featured.map(l => <ListingCard key={l.id} listing={l} compact />)
             }
           </div>
@@ -263,7 +255,7 @@ export default function HomePage() {
           <SectionHeader title="သတင်းနှင့် ဖြစ်ရပ်များ" subtitle="News & Events" action="အားလုံး" onAction={() => navigate('/news')} />
           <div className="px-4 space-y-3">
             {loading
-              ? [1,2].map(n => <Skeleton key={n} className="h-48" />)
+              ? [1, 2].map(n => <Skeleton key={n} className="h-48" />)
               : posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} />)
             }
           </div>
@@ -318,10 +310,10 @@ export default function HomePage() {
       <div className="px-4 pb-6">
         <div className="flex items-center justify-center gap-3 flex-wrap">
           {[
-            { path: '/help',    label: '❓ သုံးစွဲနည်း' },
-            { path: '/about',   label: '🍒 About'       },
-            { path: '/privacy', label: '🔒 Privacy'     },
-            { path: '/terms',   label: '📄 Terms'       },
+            { path: '/help', label: '❓ သုံးစွဲနည်း' },
+            { path: '/about', label: '🍒 About' },
+            { path: '/privacy', label: '🔒 Privacy' },
+            { path: '/terms', label: '📄 Terms' },
           ].map(({ path, label }) => (
             <button
               key={path}
