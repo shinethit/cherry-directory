@@ -1,8 +1,10 @@
 import { NavLink, useLocation } from 'react-router-dom'
-import { Home, Search, Calendar, Users, User, MessageCircle, PlusCircle } from 'lucide-react'
+import { Home, Search, Calendar, Users, User, PlusCircle, Shield } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function BottomNav() {
   const location = useLocation()
+  const { isAdmin, isModerator } = useAuth()
   
   const isActive = (path) => {
     return location.pathname === path || location.pathname.startsWith(path + '/')
@@ -11,8 +13,8 @@ export default function BottomNav() {
   const navItems = [
     { path: '/', icon: Home, label: 'Home' },
     { path: '/directory', icon: Search, label: 'ရှာဖွေ' },
-    { path: '/calendar', icon: Calendar, label: 'Calendar' },
     { path: '/community', icon: Users, label: 'Community' },
+    { path: '/calendar', icon: Calendar, label: 'Calendar' },
     { path: '/profile', icon: User, label: 'Profile' },
   ]
 
@@ -40,15 +42,26 @@ export default function BottomNav() {
           )
         })}
         
-        {/* Quick Add Button */}
-        <NavLink
-          to="/submit"
-          className="flex flex-col items-center gap-0.5 py-1.5 px-3 rounded-2xl transition-all duration-200 text-white/40 hover:text-white/70"
-        >
-          <PlusCircle size={22} className="text-brand-400" />
-          <span className="text-[10px] font-medium">ထည့်</span>
-        </NavLink>
+        {/* Floating Add Button - Position absolute to center */}
+        <div className="relative">
+          <NavLink
+            to="/submit"
+            className="absolute -top-6 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-lg shadow-brand-900/40 border-2 border-white/20 hover:scale-105 transition-transform"
+          >
+            <PlusCircle size={24} className="text-white" />
+          </NavLink>
+        </div>
       </div>
+      
+      {/* Admin Floating Button (Bottom Right) */}
+      {(isAdmin || isModerator) && (
+        <NavLink
+          to="/admin"
+          className="fixed bottom-20 right-4 w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shadow-lg hover:bg-amber-500/30 transition-all z-50"
+        >
+          <Shield size={18} className="text-amber-400" />
+        </NavLink>
+      )}
     </nav>
   )
 }
