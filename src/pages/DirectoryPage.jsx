@@ -25,7 +25,6 @@ export default function DirectoryPage() {
   const [listings, setListings] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showFilters, setShowFilters] = useState(false)
   const [total, setTotal] = useState(0)
 
   const [q, setQ] = useState(searchParams.get('q') || '')
@@ -42,8 +41,6 @@ export default function DirectoryPage() {
   const activeCat = categories.find(c => c.id === catId)
   // Which top-level is active
   const activeTopId = activeCat?.parent_id || (activeCat && !activeCat.parent_id ? activeCat.id : null)
-  // Sub-categories of active top-level
-  const subCategories = activeTopId ? categories.filter(c => c.parent_id === activeTopId) : []
 
   useEffect(() => {
     supabase
@@ -82,7 +79,7 @@ export default function DirectoryPage() {
     setLoading(false)
   }, [q, city, catId, verifiedOnly, page])
 
-  useEffect(() => { loadListings(true) }, [q, city, catId, verifiedOnly])
+  useEffect(() => { loadListings(true) }, [q, city, catId, verifiedOnly, loadListings])
 
   function clearFilters() {
     setQ(''); setCity('All'); setCatId(''); setVerifiedOnly(false)
@@ -93,7 +90,7 @@ export default function DirectoryPage() {
   return (
     <div className="flex flex-col min-h-full">
       {/* Sticky filter area */}
-      <div className="sticky top-[97px] z-40 px-4 py-3 space-y-2 glass border-b border-white/8">
+      <div className="sticky top-[97px] z-40 px-4 py-3 space-y-2 glass border-b border-white/8 w-full max-w-full overflow-hidden">
 
         {/* Search input */}
         <div className="relative">
@@ -103,7 +100,7 @@ export default function DirectoryPage() {
             placeholder="လုပ်ငန်းအမည် ရှာရန်..."
             value={q}
             onChange={e => setQ(e.target.value)}
-            className="input-dark pl-9 pr-10 text-sm"
+            className="input-dark pl-9 pr-10 text-sm w-full"
           />
           {q && (
             <button onClick={() => setQ('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
@@ -112,8 +109,8 @@ export default function DirectoryPage() {
           )}
         </div>
 
-        {/* Quick filter row */}
-        <div className="flex items-center gap-2">
+        {/* Quick filter row (Added overflow-x-auto and pb-1 to fix overflow) */}
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 w-full">
           {/* Verified Owner */}
           <button
             onClick={() => setVerifiedOnly(v => !v)}
@@ -160,12 +157,12 @@ export default function DirectoryPage() {
           )}
         </div>
 
-        {/* Category dropdown */}
-        <div className="relative">
+        {/* Category dropdown (Added w-full and truncate to prevent horizontal stretch) */}
+        <div className="relative w-full">
           <select
             value={catId}
             onChange={e => setCatId(e.target.value)}
-            className="select-dark"
+            className="select-dark w-full truncate pr-8 appearance-none"
           >
             <option value="" style={{ backgroundColor: '#1a0030' }}>
               {lang === 'mm' ? '📂 အမျိုးအစားအားလုံး' : '📂 All Categories'}
@@ -194,20 +191,22 @@ export default function DirectoryPage() {
         <p className="text-[11px] text-white/40">
           {loading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ရလဒ်`}
         </p>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap max-w-full">
           {verifiedOnly && (
-            <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border border-gold-500/40 text-gold-400" style={{ background: 'rgba(212,175,55,0.12)' }}>
+            <span className="flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border border-gold-500/40 text-gold-400 whitespace-nowrap" style={{ background: 'rgba(212,175,55,0.12)' }}>
               <ShieldCheck size={9} /> Verified Only
             </span>
           )}
           {activeCat && (
-            <span className="badge bg-brand-700/60 text-brand-200">{activeCat?.icon} {activeCat?.name_mm || activeCat?.name}</span>
+            <span className="badge bg-brand-700/60 text-brand-200 truncate max-w-[200px]">
+              {activeCat?.icon} {activeCat?.name_mm || activeCat?.name}
+            </span>
           )}
         </div>
       </div>
 
-      {/* Listings */}
-      <div className="px-4 space-y-2 pb-6">
+      {/* Listings (Added pb-36 for Bottom Navigation Bar clearance) */}
+      <div className="px-4 space-y-2 pb-36">
         {loading && listings.length === 0
           ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
           : listings.length === 0
