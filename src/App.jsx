@@ -56,7 +56,7 @@ function ScrollToTop() {
 }
 
 function AppRoutes() {
-  const { user, loading } = useAuth()
+  const { loading } = useAuth()
 
   if (loading) {
     return (
