@@ -26,6 +26,12 @@ export default function Header() {
     setMenuOpen(false)
   }, [location])
 
+  const handleLogout = async () => {
+    await signOut()
+    navigate('/')
+    setMenuOpen(false)
+  }
+
   const menuItems = [
     { path: '/', label: 'Home', icon: Home },
     { path: '/directory', label: 'Directory', icon: Search },
@@ -43,12 +49,6 @@ export default function Header() {
     { path: '/admin/settings', label: 'App Settings', icon: Settings },
   ]
 
-  const handleLogout = async () => {
-    await signOut()
-    navigate('/')
-    setMenuOpen(false)
-  }
-
   return (
     <>
       <header
@@ -59,7 +59,6 @@ export default function Header() {
         }`}
       >
         <div className="flex items-center justify-between px-4 py-3">
-          {/* Logo */}
           <button
             onClick={() => navigate('/')}
             className="flex items-center gap-2"
@@ -75,9 +74,7 @@ export default function Header() {
             </div>
           </button>
 
-          {/* Right side */}
           <div className="flex items-center gap-2">
-            {/* Language toggle */}
             <button
               onClick={() => {
                 localStorage.setItem('lang', lang === 'mm' ? 'en' : 'mm')
@@ -88,7 +85,6 @@ export default function Header() {
               {lang === 'mm' ? 'EN' : 'မြန်မာ'}
             </button>
 
-            {/* Menu button */}
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center"
@@ -99,11 +95,9 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Mobile Menu Overlay */}
       {menuOpen && (
         <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md pt-16" onClick={() => setMenuOpen(false)}>
           <div className="p-4 space-y-2" onClick={e => e.stopPropagation()}>
-            {/* User section */}
             {isLoggedIn && profile && (
               <div className="card-dark p-4 rounded-2xl mb-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-brand-700 flex items-center justify-center overflow-hidden">
@@ -134,7 +128,6 @@ export default function Header() {
               </button>
             )}
 
-            {/* Main menu items */}
             {menuItems.map(item => (
               <Link
                 key={item.path}
@@ -147,7 +140,6 @@ export default function Header() {
               </Link>
             ))}
 
-            {/* Admin section */}
             {(isAdmin || isModerator) && (
               <div className="pt-2 mt-2 border-t border-white/8">
                 <p className="text-[10px] text-amber-400/70 px-3 py-1 font-bold uppercase tracking-wider">Admin</p>
@@ -165,7 +157,6 @@ export default function Header() {
               </div>
             )}
 
-            {/* Info links */}
             <div className="pt-2 mt-2 border-t border-white/8">
               <Link to="/about" className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/8 transition-colors" onClick={() => setMenuOpen(false)}>
                 <span className="text-white/50 text-sm">🍒</span>
@@ -192,7 +183,6 @@ export default function Header() {
         </div>
       )}
 
-      {/* Spacer for fixed header */}
       <div className="h-14" />
     </>
   )
