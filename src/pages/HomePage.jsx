@@ -149,8 +149,8 @@ export default function HomePage() {
       {selectedCat && (() => {
         const subs = allCategories.filter(c => c.parent_id === selectedCat.id)
         return (
-          <div className="bottom-sheet-overlay" onClick={() => setSelectedCat(null)}>
-            <div className="bottom-sheet-panel" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-[999999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setSelectedCat(null)}>
+            <div className="w-full max-w-lg bg-[#140020] border-t border-white/10 rounded-t-3xl overflow-hidden mb-20" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{selectedCat.icon}</span>
@@ -203,8 +203,8 @@ export default function HomePage() {
       {selectedSub && (() => {
         const subSubs = allCategories.filter(c => c.parent_id === selectedSub.id)
         return (
-          <div className="bottom-sheet-overlay" onClick={() => setSelectedSub(null)}>
-            <div className="bottom-sheet-panel" onClick={e => e.stopPropagation()}>
+          <div className="fixed inset-0 z-[999999] flex items-end justify-center bg-black/70 backdrop-blur-sm" onClick={() => setSelectedSub(null)}>
+            <div className="w-full max-w-lg bg-[#140020] border-t border-white/10 rounded-t-3xl overflow-hidden mb-20" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{selectedSub.icon}</span>
