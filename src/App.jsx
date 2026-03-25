@@ -1,112 +1,149 @@
--- Rentals table (အိမ်ရှင် - အိမ်ငှား)
-CREATE TABLE IF NOT EXISTS rentals (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT,
-  title_mm TEXT,
-  description_mm TEXT,
-  location_mm TEXT,
-  property_type TEXT DEFAULT 'room', -- room, apartment, house, land, shop
-  post_type TEXT DEFAULT 'owner', -- owner, tenant
-  price_monthly INTEGER,
-  price_deposit INTEGER,
-  phone TEXT,
-  contact_name TEXT,
-  images TEXT[],
-  is_urgent BOOLEAN DEFAULT false,
-  status TEXT DEFAULT 'available', -- available, pending, rented
-  user_id UUID REFERENCES profiles(id),
-  poster_name TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { LangProvider } from './contexts/LangContext'
+import { AppConfigProvider } from './contexts/AppConfigContext'
 
--- Enable RLS
-ALTER TABLE rentals ENABLE ROW LEVEL SECURITY;
+// Layout
+import BottomNav from './components/BottomNav'
+import Header from './components/Header'
 
--- RLS Policies
-CREATE POLICY "Anyone can view rentals" ON rentals
-  FOR SELECT USING (true);
-CREATE POLICY "Authenticated users can insert rentals" ON rentals
-  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Users can update their own rentals" ON rentals
-  FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete their own rentals" ON rentals
-  FOR DELETE USING (auth.uid() = user_id);
+// Pages
+import HomePage from './pages/HomePage'
+import DirectoryPage from './pages/DirectoryPage'
+import ListingDetailPage from './pages/ListingDetailPage'
+import EditListingPage from './pages/EditListingPage'
+import SubmitListingPage from './pages/SubmitListingPage'
+import MenuPage from './pages/MenuPage'
+import NewsPage from './pages/NewsPage'
+import PostDetailPage from './pages/PostDetailPage'
+import EventFormPage from './pages/EventFormPage'
+import CalendarPage from './pages/CalendarPage'
+import CommunityPage from './pages/CommunityPage'
+import EmergencyPage from './pages/EmergencyPage'
+import MarketPricePage from './pages/MarketPricePage'
+import PowerCutPage from './pages/PowerCutPage'
+import FuelPage from './pages/FuelPage'
+import LostFoundPage from './pages/LostFoundPage'
+import JobBoardPage from './pages/JobBoardPage'
+import BusSchedulePage from './pages/BusSchedulePage'
+import HealthServicePage from './pages/HealthServicePage'
+import NoticeBoardPage from './pages/NoticeBoardPage'
+import WeatherAlertPage from './pages/WeatherAlertPage'
+import DonationPage from './pages/DonationPage'
+import ToursPage from './pages/ToursPage'
+import ChatPage from './pages/ChatPage'
+import ProfilePage from './pages/ProfilePage'
+import LoginPage from './pages/LoginPage'
+import BookmarksPage from './pages/BookmarksPage'
+import LeaderboardPage from './pages/LeaderboardPage'
+import ClaimPage from './pages/ClaimPage'
+import AdminPage from './pages/AdminPage'
+import CategoryManagerPage from './pages/CategoryManagerPage'
+import BulkImportPage from './pages/BulkImportPage'
+import AppSettingsPage from './pages/AppSettingsPage'
+import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
 
--- Tutoring table (ဆရာ - ကျောင်းသား)
-CREATE TABLE IF NOT EXISTS tutoring (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT,
-  title_mm TEXT,
-  description_mm TEXT,
-  location_mm TEXT,
-  subject TEXT DEFAULT 'math',
-  grade_level TEXT DEFAULT 'high',
-  post_type TEXT DEFAULT 'tutor', -- tutor, student
-  price_hourly INTEGER,
-  price_monthly INTEGER,
-  phone TEXT,
-  contact_name TEXT,
-  availability_schedule TEXT,
-  images TEXT[],
-  is_urgent BOOLEAN DEFAULT false,
-  status TEXT DEFAULT 'available', -- available, pending, booked, unavailable
-  user_id UUID REFERENCES profiles(id),
-  poster_name TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+// New Pages
+import RentPage from './pages/RentPage'
+import TutoringPage from './pages/TutoringPage'
+import HistoryPage, { HistoryDetailPage } from './pages/HistoryPage'
 
-ALTER TABLE tutoring ENABLE ROW LEVEL SECURITY;
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+  return null
+}
 
-CREATE POLICY "Anyone can view tutoring" ON tutoring
-  FOR SELECT USING (true);
-CREATE POLICY "Authenticated users can insert tutoring" ON tutoring
-  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
-CREATE POLICY "Users can update their own tutoring" ON tutoring
-  FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can delete their own tutoring" ON tutoring
-  FOR DELETE USING (auth.uid() = user_id);
+function AppRoutes() {
+  const { user, loading } = useAuth()
 
--- History table (ဒေသဆိုင်ရာ သမိုင်းကြောင်း)
-CREATE TABLE IF NOT EXISTS history (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT,
-  title_mm TEXT,
-  excerpt_mm TEXT,
-  content_mm TEXT,
-  category TEXT DEFAULT 'history',
-  location_mm TEXT,
-  event_date DATE,
-  cover_url TEXT,
-  images TEXT[],
-  author_id UUID REFERENCES profiles(id),
-  author_name TEXT,
-  author_bio TEXT,
-  status TEXT DEFAULT 'published',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-[#0d0015]">
+        <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
 
-ALTER TABLE history ENABLE ROW LEVEL SECURITY;
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#0d0015] to-[#1a0030] pb-20">
+      <Header />
+      <ScrollToTop />
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={<HomePage />} />
+        <Route path="/directory" element={<DirectoryPage />} />
+        <Route path="/directory/:id" element={<ListingDetailPage />} />
+        <Route path="/directory/:id/edit" element={<EditListingPage />} />
+        <Route path="/directory/:id/menu" element={<MenuPage />} />
+        <Route path="/submit" element={<SubmitListingPage />} />
+        <Route path="/news" element={<NewsPage />} />
+        <Route path="/news/:id" element={<PostDetailPage />} />
+        <Route path="/events/create" element={<EventFormPage />} />
+        <Route path="/events/edit/:id" element={<EventFormPage />} />
+        <Route path="/calendar" element={<CalendarPage />} />
+        
+        {/* Community Features */}
+        <Route path="/community" element={<CommunityPage />} />
+        <Route path="/emergency" element={<EmergencyPage />} />
+        <Route path="/prices" element={<MarketPricePage />} />
+        <Route path="/power" element={<PowerCutPage />} />
+        <Route path="/fuel" element={<FuelPage />} />
+        <Route path="/lost-found" element={<LostFoundPage />} />
+        <Route path="/jobs" element={<JobBoardPage />} />
+        <Route path="/bus" element={<BusSchedulePage />} />
+        <Route path="/health" element={<HealthServicePage />} />
+        <Route path="/notices" element={<NoticeBoardPage />} />
+        <Route path="/weather" element={<WeatherAlertPage />} />
+        <Route path="/donations" element={<DonationPage />} />
+        <Route path="/tours" element={<ToursPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        
+        {/* New Community Features */}
+        <Route path="/rent" element={<RentPage />} />
+        <Route path="/tutoring" element={<TutoringPage />} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/history/:id" element={<HistoryDetailPage />} />
+        
+        {/* User Routes */}
+        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile/:id" element={<ProfilePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/bookmarks" element={<BookmarksPage />} />
+        <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="/claim/:id" element={<ClaimPage />} />
+        
+        {/* Admin Routes */}
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/categories" element={<CategoryManagerPage />} />
+        <Route path="/admin/bulk-import" element={<BulkImportPage />} />
+        <Route path="/admin/settings" element={<AppSettingsPage />} />
+        
+        {/* Info Pages */}
+        <Route path="/about" element={<AboutPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/help" element={<HelpPage />} />
+        
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <BottomNav />
+    </div>
+  )
+}
 
-CREATE POLICY "Anyone can view history" ON history
-  FOR SELECT USING (status = 'published');
-CREATE POLICY "Moderators can insert history" ON history
-  FOR INSERT WITH CHECK (auth.role() IN ('moderator', 'admin'));
-CREATE POLICY "Moderators can update history" ON history
-  FOR UPDATE USING (auth.role() IN ('moderator', 'admin'));
-CREATE POLICY "Moderators can delete history" ON history
-  FOR DELETE USING (auth.role() IN ('moderator', 'admin'));
-
--- Update jobs table to add post_type and status columns
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS post_type TEXT DEFAULT 'employer';
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'available';
-ALTER TABLE jobs ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES profiles(id);
-
--- Enable Realtime for new tables
-ALTER PUBLICATION supabase_realtime ADD TABLE rentals, tutoring, history;
-
--- Update existing jobs to have post_type
-UPDATE jobs SET post_type = 'employer' WHERE post_type IS NULL;
-UPDATE jobs SET status = 'available' WHERE status IS NULL;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <LangProvider>
+        <AuthProvider>
+          <AppConfigProvider>
+            <AppRoutes />
+          </AppConfigProvider>
+        </AuthProvider>
+      </LangProvider>
+    </BrowserRouter>
+  )
+}
