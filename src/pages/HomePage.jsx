@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Calendar, Search, CalendarDays } from 'lucide-react'
+import { Search, CalendarDays } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI'
 import { useAppConfig } from '../hooks/useAppConfig'
@@ -14,28 +14,30 @@ export default function HomePage() {
   const [featured, setFeatured] = useState([])
   const [homeCategories, setHomeCategories] = useState([])
   const [allCategories, setAllCategories] = useState([])
-  const [selectedCat, setSelectedCat] = useState(null)   // top-level cat clicked
-  const [selectedSub, setSelectedSub] = useState(null)   // sub-cat clicked
+  const [selectedCat, setSelectedCat] = useState(null)
+  const [selectedSub, setSelectedSub] = useState(null)
   const [upcomingEvents, setUpcomingEvents] = useState([])
   const [stats, setStats] = useState({ listings: 0, posts: 0 })
+  const [quickLinks, setQuickLinks] = useState([]) // ← Quick Links အတွက် State အသစ်
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
       try {
-        // ပြဿနာဖြစ်နေသော Promise.all အပိုင်းကို ပြင်ဆင်ထားပါသည်
         const [
           { data: postsData }, 
           { data: featuredData }, 
           { data: catsData }, 
           { count: listingCount }, 
-          { data: eventsData }
+          { data: eventsData },
+          { data: linksData } // ← Quick Links ဆွဲထုတ်ခြင်း
         ] = await Promise.all([
           supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
           supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
           supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
           supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
           supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
+          supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order') // ← Database မှ လှမ်းခေါ်ခြင်း
         ])
         
         setPosts(postsData || [])
@@ -45,6 +47,7 @@ export default function HomePage() {
         setHomeCategories(all.filter(c => !c.parent_id))
         setUpcomingEvents(eventsData || [])
         setStats({ listings: listingCount || 0 })
+        setQuickLinks(linksData || []) // ← သိမ်းဆည်းခြင်း
       } catch (e) { 
         console.warn('Load Error:', e) 
       } finally {
@@ -71,7 +74,6 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Stats */}
           <div className="relative flex gap-3 mt-4">
             <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
               <p className="font-display font-bold text-lg text-white">{stats.listings.toLocaleString()}</p>
@@ -89,38 +91,26 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── 2. Quick Actions (အပေါ်သို့ ရွှေ့ထားသည်) ── */}
+      {/* ── 2. Quick Actions (Database မှ Auto ပြခြင်း) ── */}
       <div className="px-4">
         <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => navigate('/prices')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
-            <span className="text-2xl">🛒</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">ဈေးနှုန်းဘုတ်</p>
-              <p className="text-[10px] text-white/40">Market Prices</p>
-            </div>
-          </button>
-          <button onClick={() => navigate('/chat')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
-            <span className="text-2xl">💬</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">Public Chat</p>
-              <p className="text-[10px] text-white/40">ပြောဆိုရေး</p>
-            </div>
-          </button>
-          <button onClick={() => navigate('/submit')} className="card-dark p-4 flex items-center gap-3 hover:bg-white/8 transition-colors rounded-2xl">
-            <span className="text-2xl">➕</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">လုပ်ငန်းထည့်မည်</p>
-              <p className="text-[10px] text-white/40">Submit Listing</p>
-            </div>
-          </button>
-          <button onClick={() => navigate('/emergency')}
-            className="p-4 flex items-center gap-3 rounded-2xl bg-gradient-to-br from-red-600/25 to-red-700/10 border border-red-500/30 hover:border-red-500/50 transition-colors">
-            <span className="text-2xl">🆘</span>
-            <div className="text-left">
-              <p className="text-sm font-display font-semibold text-white">အရေးပေါ်</p>
-              <p className="text-[10px] text-red-400/70">Emergency</p>
-            </div>
-          </button>
+          {loading ? (
+            [1,2,3,4].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)
+          ) : (
+            quickLinks.map(link => (
+              <button 
+                key={link.id} 
+                onClick={() => link.url.startsWith('http') ? window.open(link.url, '_blank') : navigate(link.url)} 
+                className={`p-4 flex items-center gap-3 rounded-2xl border transition-colors ${link.css_classes}`}
+              >
+                <span className="text-2xl">{link.icon}</span>
+                <div className="text-left">
+                  <p className="text-sm font-display font-semibold">{lang === 'mm' ? (link.title_mm || link.title) : link.title}</p>
+                  <p className="text-[10px] opacity-70">{link.subtitle}</p>
+                </div>
+              </button>
+            ))
+          )}
         </div>
       </div>
 
@@ -297,7 +287,7 @@ export default function HomePage() {
 
       <div className="h-4" />
 
-      {/* ── 7. Mini footer (ပိုကြီးပြီး ထင်ရှားအောင် ပြင်ထားသည်) ── */}
+      {/* ── 7. Mini footer ── */}
       <div className="px-4 pb-6">
         <div className="flex items-center justify-center gap-3 flex-wrap">
           {[
