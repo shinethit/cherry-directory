@@ -287,3 +287,29 @@
   font-weight: 700;
   color: #fbbf24;
 }
+
+/* ============================================ */
+/* BOTTOM SHEET - FORCE HIGHEST Z-INDEX */
+/* ============================================ */
+.bottom-sheet-root {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 999999 !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+.bottom-sheet-container {
+  position: relative !important;
+  z-index: 9999999 !important;
+  width: 100% !important;
+  max-width: 24rem !important;
+  background: #140020 !important;
+  border-top-left-radius: 1.5rem !important;
+  border-top-right-radius: 1.5rem !important;
+  overflow: hidden !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
