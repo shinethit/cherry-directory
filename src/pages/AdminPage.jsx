@@ -132,7 +132,7 @@ export default function AdminPage() {
     if (tab === 'users') loadUsers()
   }, [tab, listingFilter])
 
-  // UPDATED: Cherry Verify function
+  // CHERRY VERIFY - Updated approve function
   async function handleApprove(id) {
     await supabase
       .from('listings')
@@ -142,7 +142,7 @@ export default function AdminPage() {
         verify_type: 'cherry'
       })
       .eq('id', id)
-    showToast('✓ အတည်ပြုပြီးပါပြီ (Cherry Verified)')
+    showToast('✓ အတည်ပြုပြီးပါပြီ (Cherry Verified) 🍒')
     loadListings()
   }
 
@@ -504,16 +504,24 @@ export default function AdminPage() {
 
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
                         {item.status !== 'approved' && (
-                          <button onClick={() => handleApprove(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Check size={12} /> APPROVE</button>
+                          <button onClick={() => handleApprove(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                            <Check size={12} /> APPROVE 🍒
+                          </button>
                         )}
                         {item.status === 'approved' && (
-                          <button onClick={() => handleHide(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><X size={12} /> HIDE</button>
+                          <button onClick={() => handleHide(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                            <X size={12} /> HIDE
+                          </button>
                         )}
-                        <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Pencil size={12} /> EDIT</button>
+                        <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                          <Pencil size={12} /> EDIT
+                        </button>
                         <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-600/30 border border-red-600/40 text-red-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Trash2 size={12} /> {deleting === item.id ? '...' : 'DELETE'}
                         </button>
-                        <button onClick={() => navigate(`/directory/${item.id}`)} className="flex-1 min-w-[55px] px-3 py-1.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Eye size={12} /> VIEW</button>
+                        <button onClick={() => navigate(`/directory/${item.id}`)} className="flex-1 min-w-[55px] px-3 py-1.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                          <Eye size={12} /> VIEW
+                        </button>
                       </div>
                     </>
                   )}
