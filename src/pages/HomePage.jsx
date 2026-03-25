@@ -59,7 +59,7 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6 py-4">
-      {/* ── 1. Hero Section ── */}
+      {/* Hero Section */}
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
           <div className="relative">
@@ -91,7 +91,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── 2. Quick Actions (Database မှ Auto ပြခြင်း) ── */}
+      {/* Quick Actions */}
       <div className="px-4">
         <div className="grid grid-cols-2 gap-3">
           {loading ? (
@@ -114,7 +114,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ── 3. Quick Category Grid ── */}
+      {/* Category Grid */}
       {loading ? (
         <div className="px-4 grid grid-cols-4 gap-2">
           {[1,2,3,4,5,6,7,8].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)}
@@ -145,46 +145,61 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Sub-category bottom sheet - FIXED: higher z-index and proper navigation */}
+      {/* ========== SUB-CATEGORY BOTTOM SHEET ========== */}
       {selectedCat && (() => {
         const subs = allCategories.filter(c => c.parent_id === selectedCat.id)
         return (
-          <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSelectedCat(null)}>
-            <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden pb-safe" onClick={e => e.stopPropagation()}>
+          <div 
+            className="fixed inset-0 z-[100000] flex items-end justify-center bg-black/70 backdrop-blur-sm" 
+            onClick={() => setSelectedCat(null)}
+            style={{ zIndex: 100000 }}
+          >
+            <div 
+              className="w-full max-w-lg bg-[#140020] border-t border-white/10 rounded-t-3xl overflow-hidden pb-safe" 
+              onClick={e => e.stopPropagation()}
+              style={{ zIndex: 100001, position: 'relative' }}
+            >
               <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{selectedCat.icon}</span>
                   <p className="font-display font-bold text-white">{lang === 'mm' ? (selectedCat.name_mm || selectedCat.name) : selectedCat.name}</p>
                 </div>
-                <button onClick={() => setSelectedCat(null)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
+                <button 
+                  onClick={() => setSelectedCat(null)} 
+                  className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors"
+                >
+                  ✕
+                </button>
               </div>
               <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
                 <button
                   onClick={() => { 
-                    setSelectedCat(null);
-                    setTimeout(() => {
-                      navigate(`/directory?cat=${selectedCat.id}`);
-                    }, 10);
+                    const catId = selectedCat.id
+                    setSelectedCat(null)
+                    setTimeout(() => navigate(`/directory?cat=${catId}`), 50)
                   }}
-                  className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
+                  className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
+                >
                   <span className="text-xl">📋</span>
                   <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
                 </button>
                 {subs.map(sub => {
                   const subSubs = allCategories.filter(c => c.parent_id === sub.id)
                   return (
-                    <button key={sub.id}
+                    <button 
+                      key={sub.id}
                       onClick={() => { 
                         if (subSubs.length > 0) { 
-                          setSelectedSub(sub); 
+                          setSelectedSub(sub)
+                          setSelectedCat(null)
                         } else { 
-                          setSelectedCat(null);
-                          setTimeout(() => {
-                            navigate(`/directory?cat=${sub.id}`);
-                          }, 10);
+                          const subId = sub.id
+                          setSelectedCat(null)
+                          setTimeout(() => navigate(`/directory?cat=${subId}`), 50)
                         } 
                       }}
-                      className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
+                      className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
+                    >
                       <span className="text-xl">{sub.icon}</span>
                       <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}</span>
                       {subSubs.length > 0 && <span className="text-[8px] text-brand-300/70">{subSubs.length} ▸</span>}
@@ -197,42 +212,54 @@ export default function HomePage() {
         )
       })()}
 
-      {/* Sub-sub-category bottom sheet - FIXED: higher z-index and proper navigation */}
+      {/* ========== SUB-SUB-CATEGORY BOTTOM SHEET ========== */}
       {selectedSub && (() => {
         const subSubs = allCategories.filter(c => c.parent_id === selectedSub.id)
         return (
-          <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSelectedSub(null)}>
-            <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden pb-safe" onClick={e => e.stopPropagation()}>
+          <div 
+            className="fixed inset-0 z-[100000] flex items-end justify-center bg-black/70 backdrop-blur-sm" 
+            onClick={() => setSelectedSub(null)}
+            style={{ zIndex: 100000 }}
+          >
+            <div 
+              className="w-full max-w-lg bg-[#140020] border-t border-white/10 rounded-t-3xl overflow-hidden pb-safe" 
+              onClick={e => e.stopPropagation()}
+              style={{ zIndex: 100001, position: 'relative' }}
+            >
               <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{selectedSub.icon}</span>
                   <p className="font-display font-bold text-white">{lang === 'mm' ? (selectedSub.name_mm || selectedSub.name) : selectedSub.name}</p>
                 </div>
-                <button onClick={() => setSelectedSub(null)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
+                <button 
+                  onClick={() => setSelectedSub(null)} 
+                  className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:bg-white/15 transition-colors"
+                >
+                  ✕
+                </button>
               </div>
               <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
                 <button
                   onClick={() => { 
-                    setSelectedSub(null);
-                    setSelectedCat(null);
-                    setTimeout(() => {
-                      navigate(`/directory?cat=${selectedSub.id}`);
-                    }, 10);
+                    const subId = selectedSub.id
+                    setSelectedSub(null)
+                    setTimeout(() => navigate(`/directory?cat=${subId}`), 50)
                   }}
-                  className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
+                  className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
+                >
                   <span className="text-xl">📋</span>
                   <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
                 </button>
                 {subSubs.map(ss => (
-                  <button key={ss.id}
+                  <button 
+                    key={ss.id}
                     onClick={() => { 
-                      setSelectedSub(null);
-                      setSelectedCat(null);
-                      setTimeout(() => {
-                        navigate(`/directory?cat=${ss.id}`);
-                      }, 10);
+                      const ssId = ss.id
+                      setSelectedSub(null)
+                      setTimeout(() => navigate(`/directory?cat=${ssId}`), 50)
                     }}
-                    className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
+                    className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
+                  >
                     <span className="text-xl">{ss.icon}</span>
                     <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (ss.name_mm || ss.name) : ss.name}</span>
                   </button>
@@ -243,7 +270,7 @@ export default function HomePage() {
         )
       })()}
 
-      {/* ── 4. Featured Listings ── */}
+      {/* Featured Listings */}
       {(loading || featured.length > 0) && (
         <div>
           <SectionHeader title="Featured လုပ်ငန်းများ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
@@ -256,7 +283,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ── 5. Latest News & Events ── */}
+      {/* News & Events */}
       {(loading || posts.length > 0) && (
         <div>
           <SectionHeader title="သတင်းနှင့် ဖြစ်ရပ်များ" subtitle="News & Events" action="အားလုံး" onAction={() => navigate('/news')} />
@@ -269,7 +296,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ── 6. Upcoming Events strip ── */}
+      {/* Upcoming Events */}
       {(loading || upcomingEvents.length > 0) && (
         <div>
           <SectionHeader
@@ -313,7 +340,7 @@ export default function HomePage() {
 
       <div className="h-4" />
 
-      {/* ── 7. Mini footer ── */}
+      {/* Footer */}
       <div className="px-4 pb-6">
         <div className="flex items-center justify-center gap-3 flex-wrap">
           {[
