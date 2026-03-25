@@ -36,6 +36,7 @@ import AdminPage from './pages/AdminPage'
 import CategoryManagerPage from './pages/CategoryManagerPage'
 import BulkImportPage from './pages/BulkImportPage'
 import AppSettingsPage from './pages/AppSettingsPage'
+import NoticeBoardPage from './pages/NoticeBoardPage'
 import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
 
 // Community Features from CommunityFeaturePages.jsx
