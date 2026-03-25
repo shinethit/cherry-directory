@@ -145,11 +145,11 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Sub-category bottom sheet - FIXED: clear state before navigation */}
+      {/* Sub-category bottom sheet - FIXED: higher z-index and proper navigation */}
       {selectedCat && (() => {
         const subs = allCategories.filter(c => c.parent_id === selectedCat.id)
         return (
-          <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSelectedCat(null)}>
+          <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSelectedCat(null)}>
             <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden pb-safe" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
@@ -161,8 +161,10 @@ export default function HomePage() {
               <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
                 <button
                   onClick={() => { 
-                    navigate(`/directory?cat=${selectedCat.id}`); 
                     setSelectedCat(null);
+                    setTimeout(() => {
+                      navigate(`/directory?cat=${selectedCat.id}`);
+                    }, 10);
                   }}
                   className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
                   <span className="text-xl">📋</span>
@@ -176,8 +178,10 @@ export default function HomePage() {
                         if (subSubs.length > 0) { 
                           setSelectedSub(sub); 
                         } else { 
-                          navigate(`/directory?cat=${sub.id}`); 
                           setSelectedCat(null);
+                          setTimeout(() => {
+                            navigate(`/directory?cat=${sub.id}`);
+                          }, 10);
                         } 
                       }}
                       className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
@@ -193,11 +197,11 @@ export default function HomePage() {
         )
       })()}
 
-      {/* Sub-sub-category bottom sheet - FIXED: clear both states before navigation */}
+      {/* Sub-sub-category bottom sheet - FIXED: higher z-index and proper navigation */}
       {selectedSub && (() => {
         const subSubs = allCategories.filter(c => c.parent_id === selectedSub.id)
         return (
-          <div className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSelectedSub(null)}>
+          <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSelectedSub(null)}>
             <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl overflow-hidden pb-safe" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
                 <div className="flex items-center gap-2">
@@ -209,9 +213,11 @@ export default function HomePage() {
               <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
                 <button
                   onClick={() => { 
-                    navigate(`/directory?cat=${selectedSub.id}`); 
-                    setSelectedSub(null); 
+                    setSelectedSub(null);
                     setSelectedCat(null);
+                    setTimeout(() => {
+                      navigate(`/directory?cat=${selectedSub.id}`);
+                    }, 10);
                   }}
                   className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
                   <span className="text-xl">📋</span>
@@ -220,9 +226,11 @@ export default function HomePage() {
                 {subSubs.map(ss => (
                   <button key={ss.id}
                     onClick={() => { 
-                      navigate(`/directory?cat=${ss.id}`); 
-                      setSelectedSub(null); 
+                      setSelectedSub(null);
                       setSelectedCat(null);
+                      setTimeout(() => {
+                        navigate(`/directory?cat=${ss.id}`);
+                      }, 10);
                     }}
                     className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
                     <span className="text-xl">{ss.icon}</span>
