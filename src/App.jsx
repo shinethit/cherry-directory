@@ -26,12 +26,6 @@ import PowerCutPage from './pages/PowerCutPage'
 import FuelPage from './pages/FuelPage'
 import LostFoundPage from './pages/LostFoundPage'
 import JobBoardPage from './pages/JobBoardPage'
-import BusSchedulePage from './pages/BusSchedulePage'
-import HealthServicePage from './pages/HealthServicePage'
-import NoticeBoardPage from './pages/NoticeBoardPage'
-import WeatherAlertPage from './pages/WeatherAlertPage'
-import DonationPage from './pages/DonationPage'
-import ToursPage from './pages/ToursPage'
 import ChatPage from './pages/ChatPage'
 import ProfilePage from './pages/ProfilePage'
 import LoginPage from './pages/LoginPage'
@@ -43,6 +37,15 @@ import CategoryManagerPage from './pages/CategoryManagerPage'
 import BulkImportPage from './pages/BulkImportPage'
 import AppSettingsPage from './pages/AppSettingsPage'
 import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
+
+// Community Features from CommunityFeaturePages.jsx
+import { 
+  WeatherAlertPage, 
+  DonationPage, 
+  HealthServicePage, 
+  BusSchedulePage, 
+  ToursPage 
+} from './pages/CommunityFeaturePages'
 
 // New Pages
 import RentPage from './pages/RentPage'
@@ -92,13 +95,15 @@ function AppRoutes() {
         <Route path="/fuel" element={<FuelPage />} />
         <Route path="/lost-found" element={<LostFoundPage />} />
         <Route path="/jobs" element={<JobBoardPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        
+        {/* Community Features from CommunityFeaturePages */}
         <Route path="/bus" element={<BusSchedulePage />} />
         <Route path="/health" element={<HealthServicePage />} />
         <Route path="/notices" element={<NoticeBoardPage />} />
         <Route path="/weather" element={<WeatherAlertPage />} />
         <Route path="/donations" element={<DonationPage />} />
         <Route path="/tours" element={<ToursPage />} />
-        <Route path="/chat" element={<ChatPage />} />
         
         {/* New Community Features */}
         <Route path="/rent" element={<RentPage />} />
