@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, LayoutDashboard, List, FolderTree, Users } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+// 👇 CategoryManagerPage ကို Admin ထဲမှာခေါ်သုံးရန် Import လုပ်ပါ (ဖိုင်နာမည်တူ/မတူ စစ်ဆေးပါ)
+import CategoryManagerPage from './CategoryManagerPage' 
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  const [tab, setTab]                 = useState('listings')
+  // Tab ၃ ခုထားပါမယ်: 'dashboard', 'listings', 'categories'
+  const [tab, setTab]                 = useState('dashboard') 
   const [data, setData]               = useState([])
   const [loading, setLoading]         = useState(true)
   const [listingFilter, setListingFilter] = useState('all')
@@ -13,14 +16,19 @@ export default function AdminPage() {
   const [editForm, setEditForm]       = useState({})
   const [reports, setReports]         = useState({})
   const [showReports, setShowReports] = useState(null)
-  const [toast, setToast]             = useState(null)    // ← toast notification
-  const [deleting, setDeleting]       = useState(null)    // ← which id is being deleted
+  const [toast, setToast]             = useState(null)
+  const [deleting, setDeleting]       = useState(null)
+
+  // ── Member Status Stats ──
+  const [stats, setStats] = useState({ total: 0, todayNew: 0, todayActive: 0, online: 0 })
+  const [statsLoading, setStatsLoading] = useState(false)
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3000)
   }
 
+  // ── 1. Load Listings Data ──
   async function loadListings() {
     setLoading(true)
     try {
@@ -32,12 +40,11 @@ export default function AdminPage() {
       if (listingFilter === 'hidden')   query = query.eq('status', 'hidden')
       else if (listingFilter === 'approved') query = query.eq('status', 'approved')
       else if (listingFilter === 'pending')  query = query.eq('status', 'pending')
-      else query = query.neq('status', 'hidden')   // 'all' = everything except hidden
+      else query = query.neq('status', 'hidden')
 
       const { data: rows } = await query
       setData(rows || [])
 
-      // Load report counts
       if (rows) {
         const reportCounts = {}
         for (const listing of rows) {
@@ -53,8 +60,45 @@ export default function AdminPage() {
     setLoading(false)
   }
 
-  useEffect(() => { loadListings() }, [listingFilter])
+  // ── 2. Load Member Stats (Dashboard) ──
+  async function loadDashboardStats() {
+    setStatsLoading(true)
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const todayStr = today.toISOString()
+      
+      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
 
+      // 1. Total Registered
+      const { count: total } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
+      
+      // 2. New Today
+      const { count: todayNew } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr)
+      
+      // 3. Active Today (Requires updated_at or last_seen column in profiles)
+      const { count: todayActive } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', todayStr)
+      
+      // 4. Online Now (Active within last 5 mins)
+      const { count: online } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', fiveMinsAgo)
+
+      setStats({
+        total: total || 0,
+        todayNew: todayNew || 0,
+        todayActive: todayActive || 0,
+        online: online || 0
+      })
+    } catch (e) { console.warn('Stats Error:', e) }
+    setStatsLoading(false)
+  }
+
+  useEffect(() => {
+    if (tab === 'listings') loadListings()
+    if (tab === 'dashboard') loadDashboardStats()
+  }, [tab, listingFilter])
+
+
+  // ── Listing Actions (Approve/Hide/Delete/Save) ──
   async function handleApprove(id) {
     await supabase.from('listings').update({ status: 'approved' }).eq('id', id)
     showToast('✓ အတည်ပြုပြီးပါပြီ')
@@ -67,28 +111,22 @@ export default function AdminPage() {
     loadListings()
   }
 
-  // ─── Delete with cascade ───────────────────────────────────────────────────
   async function handleDelete(id) {
     if (!window.confirm('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။')) return
     setDeleting(id)
     try {
-      // 1. Delete related records first (foreign key cascade safety)
       await supabase.from('listing_reports').delete().eq('listing_id', id)
       await supabase.from('edit_suggestions').delete().eq('listing_id', id)
       await supabase.from('reviews').delete().eq('listing_id', id)
-      // 2. Delete the listing itself
       const { error } = await supabase.from('listings').delete().eq('id', id)
       if (error) throw error
       showToast('🗑️ ဖျက်ပြီးပါပြီ')
       loadListings()
-    } catch (e) {
-      console.error('Delete error:', e)
-      showToast('ဖျက်ရာတွင် အမှားတစ်ခု ဖြစ်သွားသည်', 'error')
-    }
+    } catch (e) { showToast('ဖျက်ရာတွင် အမှားတစ်ခု ဖြစ်သွားသည်', 'error') }
     setDeleting(null)
   }
 
-  async function handleEdit(listing) {
+  function handleEdit(listing) {
     setEditingId(listing.id)
     setEditForm(listing)
   }
@@ -98,157 +136,191 @@ export default function AdminPage() {
     const { error } = await supabase.from('listings').update({
       name, name_mm, description, description_mm, address, phone_1, city, township
     }).eq('id', id)
-    if (error) {
-      showToast('သိမ်းရာတွင် အမှားဖြစ်သည်', 'error')
-      return
-    }
+    if (error) return showToast('သိမ်းရာတွင် အမှားဖြစ်သည်', 'error')
+    
     setEditingId(null)
     showToast('✓ ပြင်ဆင်မှု သိမ်းဆည်းပြီး')
     loadListings()
   }
 
-  if (tab === 'listings') {
-    return (
-      <div className="pb-8">
-        <div className="px-4 py-3 flex items-center gap-3">
+
+  return (
+    <div className="pb-8">
+      {/* ── Admin Header & Top Tabs ── */}
+      <div className="px-4 pt-4 pb-2 border-b border-white/10 mb-4 sticky top-0 bg-[#140020] z-50">
+        <div className="flex items-center gap-3 mb-4">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
             <ArrowLeft size={18} className="text-white" />
           </button>
           <h1 className="font-display font-bold text-lg text-white">Admin Panel</h1>
         </div>
 
-        {/* Filter buttons — includes Pending filter */}
-        <div className="px-4 mb-4 flex gap-2 flex-wrap">
-          {[['all', 'All'], ['approved', 'Approved'], ['pending', 'Pending'], ['hidden', 'Hidden']].map(([val, label]) => (
-            <button key={val} onClick={() => setListingFilter(val)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                listingFilter === val
-                  ? 'bg-brand-600/30 border-brand-400/40 text-brand-200'
-                  : 'bg-white/5 border-white/10 text-white/40'
-              }`}>
-              {label}
-              {val === 'pending' && data.filter(d => d.status === 'pending').length > 0 && listingFilter !== 'pending' && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">
-                  {data.filter(d => d.status === 'pending').length}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+          <button onClick={() => setTab('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/40'}`}>
+            <LayoutDashboard size={14} /> Dashboard
+          </button>
+          <button onClick={() => setTab('listings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/40'}`}>
+            <List size={14} /> Listings
+          </button>
+          <button onClick={() => setTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/40'}`}>
+            <FolderTree size={14} /> Categories
+          </button>
         </div>
-
-        {/* Listings */}
-        <div className="px-4 space-y-2">
-          {loading ? (
-            <p className="text-white/30 text-center py-8">Loading...</p>
-          ) : data.length === 0 ? (
-            <p className="text-white/30 text-center py-8">No listings found</p>
-          ) : (
-            data.map(item => (
-              <div key={item.id} className="bg-white/5 border border-white/8 rounded-2xl p-4">
-                {editingId === item.id ? (
-                  // ── Edit mode ──────────────────────────────────────
-                  <div className="space-y-3">
-                    <input value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})}
-                      className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name" />
-                    <input value={editForm.name_mm || ''} onChange={e => setEditForm({...editForm, name_mm: e.target.value})}
-                      className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm font-myanmar" placeholder="Name (Myanmar)" />
-                    <textarea value={editForm.description || ''} onChange={e => setEditForm({...editForm, description: e.target.value})}
-                      className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Description" rows="3" />
-                    <input value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}
-                      className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Address" />
-                    <input value={editForm.phone_1 || ''} onChange={e => setEditForm({...editForm, phone_1: e.target.value})}
-                      className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Phone" />
-                    <div className="flex gap-2">
-                      <button onClick={() => handleSaveEdit(item.id)}
-                        className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5">
-                        <Save size={14} /> SAVE
-                      </button>
-                      <button onClick={() => setEditingId(null)}
-                        className="flex-1 px-3 py-2 bg-white/8 text-white/40 rounded-lg text-xs font-bold">
-                        CANCEL
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  // ── View mode ──────────────────────────────────────
-                  <>
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{item.name_mm || item.name}</p>
-                        <p className="text-[10px] text-white/40">{item.category?.name_mm || item.category?.name} • {item.city}</p>
-                        <p className="text-[10px] text-white/30 mt-0.5">{item.address}</p>
-                        {item.submitter && (
-                          <p className="text-[9px] text-white/20 mt-0.5">တင်သွင်းသူ: {item.submitter.full_name}</p>
-                        )}
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border flex-shrink-0 ${
-                        item.status === 'approved' ? 'bg-green-500/20 border-green-500/30 text-green-400' :
-                        item.status === 'hidden'   ? 'bg-red-500/20   border-red-500/30   text-red-400' :
-                                                     'bg-amber-500/20 border-amber-500/30 text-amber-400'
-                      }`}>{item.status.toUpperCase()}</span>
-                    </div>
-
-                    {/* Report count badge */}
-                    {reports[item.id] > 0 && (
-                      <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-between">
-                        <span className="text-[10px] text-red-400 font-bold flex items-center gap-1">
-                          <AlertCircle size={12} /> {reports[item.id]} Reports
-                        </span>
-                        <button onClick={() => setShowReports(showReports === item.id ? null : item.id)}
-                          className="text-[9px] text-red-400 hover:text-red-300">
-                          {showReports === item.id ? 'ပိတ်မည်' : 'ကြည့်မည်'}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Action buttons */}
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
-                      {item.status !== 'approved' && (
-                        <button onClick={() => handleApprove(item.id)}
-                          className="flex-1 min-w-[70px] px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1">
-                          <Check size={12} /> APPROVE
-                        </button>
-                      )}
-                      {item.status === 'approved' && (
-                        <button onClick={() => handleHide(item.id)}
-                          className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
-                          <X size={12} /> HIDE
-                        </button>
-                      )}
-                      <button onClick={() => handleEdit(item)}
-                        className="flex-1 min-w-[60px] px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
-                        <Pencil size={12} /> EDIT
-                      </button>
-                      <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id}
-                        className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-600/30 border border-red-600/40 text-red-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
-                        <Trash2 size={12} />
-                        {deleting === item.id ? 'ဖျက်နေသည်...' : 'DELETE'}
-                      </button>
-                      <button onClick={() => navigate(`/directory/${item.id}`)}
-                        className="flex-1 min-w-[55px] px-3 py-1.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
-                        <Eye size={12} /> VIEW
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Toast */}
-        {toast && (
-          <div className={`fixed bottom-28 left-4 right-4 z-[300] px-4 py-3 rounded-2xl text-center text-sm font-myanmar border ${
-            toast.type === 'error'
-              ? 'bg-red-500/20 border-red-500/40 text-red-300'
-              : 'bg-green-500/20 border-green-500/40 text-green-300'
-          }`}>
-            {toast.msg}
-          </div>
-        )}
       </div>
-    )
-  }
 
-  return <div className="p-8 text-center text-white/40">Other tabs coming soon...</div>
+      {/* ── Dashboard Tab (Member Status) ── */}
+      {tab === 'dashboard' && (
+        <div className="px-4 space-y-4 animate-fade-in">
+          <h2 className="text-white font-bold font-display flex items-center gap-2">
+            <Users size={18} className="text-brand-400" /> Member Status
+          </h2>
+          
+          {statsLoading ? (
+             <p className="text-white/30 text-center py-8">Loading stats...</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {/* Total Users */}
+              <div className="card-dark p-4 rounded-2xl border border-white/5">
+                <p className="text-[10px] text-white/40 uppercase tracking-wider font-bold mb-1">Total Registered</p>
+                <p className="text-2xl font-display font-bold text-white">{stats.total}</p>
+              </div>
+
+              {/* Online Users */}
+              <div className="card-dark p-4 rounded-2xl border border-green-500/20 bg-green-500/5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  <p className="text-[10px] text-green-400/70 uppercase tracking-wider font-bold">Online Now</p>
+                </div>
+                <p className="text-2xl font-display font-bold text-green-400">{stats.online}</p>
+              </div>
+
+              {/* Active Today */}
+              <div className="card-dark p-4 rounded-2xl border border-brand-500/20 bg-brand-500/5">
+                <p className="text-[10px] text-brand-300/70 uppercase tracking-wider font-bold mb-1">Active Today</p>
+                <p className="text-2xl font-display font-bold text-brand-300">{stats.todayActive}</p>
+              </div>
+
+              {/* New Today */}
+              <div className="card-dark p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5">
+                <p className="text-[10px] text-blue-300/70 uppercase tracking-wider font-bold mb-1">New Today</p>
+                <p className="text-2xl font-display font-bold text-blue-400">+{stats.todayNew}</p>
+              </div>
+            </div>
+          )}
+          <p className="text-[9px] text-white/20 mt-4 font-myanmar text-center">
+            * Active Today နှင့် Online Now မှန်ကန်ရန် Database တွင် updated_at လိုအပ်ပါသည်။
+          </p>
+        </div>
+      )}
+
+
+      {/* ── Categories Tab ── */}
+      {tab === 'categories' && (
+        <div className="animate-fade-in -mt-4">
+          {/* CategoryManagerPage ကို ဒီနေရာမှာ Component အနေနဲ့ ပြပါမယ် */}
+          <CategoryManagerPage />
+        </div>
+      )}
+
+
+      {/* ── Listings Tab (Your Existing Code) ── */}
+      {tab === 'listings' && (
+        <div className="animate-fade-in">
+          <div className="px-4 mb-4 flex gap-2 flex-wrap">
+            {[['all', 'All'], ['approved', 'Approved'], ['pending', 'Pending'], ['hidden', 'Hidden']].map(([val, label]) => (
+              <button key={val} onClick={() => setListingFilter(val)}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors ${
+                  listingFilter === val
+                    ? 'bg-blue-600/30 border-blue-400/40 text-blue-200'
+                    : 'bg-white/5 border-white/10 text-white/40'
+                }`}>
+                {label}
+                {val === 'pending' && data.filter(d => d.status === 'pending').length > 0 && listingFilter !== 'pending' && (
+                  <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">
+                    {data.filter(d => d.status === 'pending').length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="px-4 space-y-2">
+            {loading ? (
+              <p className="text-white/30 text-center py-8">Loading...</p>
+            ) : data.length === 0 ? (
+              <p className="text-white/30 text-center py-8">No listings found</p>
+            ) : (
+              data.map(item => (
+                <div key={item.id} className="bg-white/5 border border-white/8 rounded-2xl p-4">
+                  {editingId === item.id ? (
+                    // Edit Mode
+                    <div className="space-y-3">
+                      <input value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name" />
+                      <input value={editForm.name_mm || ''} onChange={e => setEditForm({...editForm, name_mm: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm font-myanmar" placeholder="Name (Myanmar)" />
+                      <textarea value={editForm.description || ''} onChange={e => setEditForm({...editForm, description: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Description" rows="3" />
+                      <input value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Address" />
+                      <input value={editForm.phone_1 || ''} onChange={e => setEditForm({...editForm, phone_1: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Phone" />
+                      <div className="flex gap-2">
+                        <button onClick={() => handleSaveEdit(item.id)} className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"><Save size={14} /> SAVE</button>
+                        <button onClick={() => setEditingId(null)} className="flex-1 px-3 py-2 bg-white/8 text-white/40 rounded-lg text-xs font-bold">CANCEL</button>
+                      </div>
+                    </div>
+                  ) : (
+                    // View Mode
+                    <>
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{item.name_mm || item.name}</p>
+                          <p className="text-[10px] text-white/40">{item.category?.name_mm || item.category?.name} • {item.city}</p>
+                          <p className="text-[10px] text-white/30 mt-0.5">{item.address}</p>
+                          {item.submitter && <p className="text-[9px] text-white/20 mt-0.5">တင်သွင်းသူ: {item.submitter.full_name}</p>}
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border flex-shrink-0 ${
+                          item.status === 'approved' ? 'bg-green-500/20 border-green-500/30 text-green-400' :
+                          item.status === 'hidden'   ? 'bg-red-500/20   border-red-500/30   text-red-400' :
+                                                       'bg-amber-500/20 border-amber-500/30 text-amber-400'
+                        }`}>{item.status.toUpperCase()}</span>
+                      </div>
+
+                      {reports[item.id] > 0 && (
+                        <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-between">
+                          <span className="text-[10px] text-red-400 font-bold flex items-center gap-1"><AlertCircle size={12} /> {reports[item.id]} Reports</span>
+                          <button onClick={() => setShowReports(showReports === item.id ? null : item.id)} className="text-[9px] text-red-400 hover:text-red-300">
+                            {showReports === item.id ? 'ပိတ်မည်' : 'ကြည့်မည်'}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+                        {item.status !== 'approved' && (
+                          <button onClick={() => handleApprove(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Check size={12} /> APPROVE</button>
+                        )}
+                        {item.status === 'approved' && (
+                          <button onClick={() => handleHide(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><X size={12} /> HIDE</button>
+                        )}
+                        <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Pencil size={12} /> EDIT</button>
+                        <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-600/30 border border-red-600/40 text-red-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                          <Trash2 size={12} /> {deleting === item.id ? '...' : 'DELETE'}
+                        </button>
+                        <button onClick={() => navigate(`/directory/${item.id}`)} className="flex-1 min-w-[55px] px-3 py-1.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1"><Eye size={12} /> VIEW</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`fixed bottom-28 left-4 right-4 z-[300] px-4 py-3 rounded-2xl text-center text-sm font-myanmar border ${
+          toast.type === 'error' ? 'bg-red-500/20 border-red-500/40 text-red-300' : 'bg-green-500/20 border-green-500/40 text-green-300'
+        }`}>
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  )
 }
