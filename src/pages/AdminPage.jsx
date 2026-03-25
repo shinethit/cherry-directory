@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, LayoutDashboard, List, FolderTree, Users } from 'lucide-react'
+import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-// 👇 CategoryManagerPage ကို Admin ထဲမှာခေါ်သုံးရန် Import လုပ်ပါ (ဖိုင်နာမည်တူ/မတူ စစ်ဆေးပါ)
 import CategoryManagerPage from './CategoryManagerPage' 
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  // Tab ၃ ခုထားပါမယ်: 'dashboard', 'listings', 'categories'
+  // Tab ၄ ခုထားပါမယ်: 'dashboard', 'listings', 'categories', 'quicklinks'
   const [tab, setTab]                 = useState('dashboard') 
   const [data, setData]               = useState([])
   const [loading, setLoading]         = useState(true)
@@ -22,6 +21,11 @@ export default function AdminPage() {
   // ── Member Status Stats ──
   const [stats, setStats] = useState({ total: 0, todayNew: 0, todayActive: 0, online: 0 })
   const [statsLoading, setStatsLoading] = useState(false)
+
+  // ── Quick Links State ──
+  const [quickLinks, setQuickLinks] = useState([])
+  const [editingLink, setEditingLink] = useState(null)
+  const [linkForm, setLinkForm] = useState({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
@@ -60,26 +64,18 @@ export default function AdminPage() {
     setLoading(false)
   }
 
-  // ── 2. Load Member Stats (Dashboard) ──
+  // ── 2. Load Member Stats ──
   async function loadDashboardStats() {
     setStatsLoading(true)
     try {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const todayStr = today.toISOString()
-      
       const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
 
-      // 1. Total Registered
       const { count: total } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
-      
-      // 2. New Today
       const { count: todayNew } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr)
-      
-      // 3. Active Today (Requires updated_at or last_seen column in profiles)
       const { count: todayActive } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', todayStr)
-      
-      // 4. Online Now (Active within last 5 mins)
       const { count: online } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', fiveMinsAgo)
 
       setStats({
@@ -92,13 +88,21 @@ export default function AdminPage() {
     setStatsLoading(false)
   }
 
+  // ── 3. Load Quick Links ──
+  async function loadQuickLinks() {
+    try {
+      const { data } = await supabase.from('quick_links').select('*').order('sort_order')
+      setQuickLinks(data || [])
+    } catch (e) { console.warn(e) }
+  }
+
   useEffect(() => {
     if (tab === 'listings') loadListings()
     if (tab === 'dashboard') loadDashboardStats()
+    if (tab === 'quicklinks') loadQuickLinks()
   }, [tab, listingFilter])
 
-
-  // ── Listing Actions (Approve/Hide/Delete/Save) ──
+  // ── Listing Actions ──
   async function handleApprove(id) {
     await supabase.from('listings').update({ status: 'approved' }).eq('id', id)
     showToast('✓ အတည်ပြုပြီးပါပြီ')
@@ -143,6 +147,28 @@ export default function AdminPage() {
     loadListings()
   }
 
+  // ── Quick Links Actions ──
+  async function handleSaveLink() {
+    if (!linkForm.title || !linkForm.url) return showToast('Title နဲ့ URL ထည့်ရန်လိုအပ်ပါတယ်', 'error')
+    
+    if (editingLink) {
+      await supabase.from('quick_links').update(linkForm).eq('id', editingLink)
+      showToast('✓ ပြင်ဆင်ပြီးပါပြီ')
+    } else {
+      await supabase.from('quick_links').insert([linkForm])
+      showToast('✓ အသစ်ထည့်ပြီးပါပြီ')
+    }
+    setEditingLink(null)
+    setLinkForm({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
+    loadQuickLinks()
+  }
+
+  async function handleDeleteLink(id) {
+    if (!window.confirm('ဖျက်မှာသေချာပြီလား?')) return
+    await supabase.from('quick_links').delete().eq('id', id)
+    showToast('ဖျက်ပြီးပါပြီ')
+    loadQuickLinks()
+  }
 
   return (
     <div className="pb-8">
@@ -165,27 +191,26 @@ export default function AdminPage() {
           <button onClick={() => setTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/40'}`}>
             <FolderTree size={14} /> Categories
           </button>
+          <button onClick={() => setTab('quicklinks')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/40'}`}>
+            <LinkIcon size={14} /> Quick Links
+          </button>
         </div>
       </div>
 
-      {/* ── Dashboard Tab (Member Status) ── */}
+      {/* ── Dashboard Tab ── */}
       {tab === 'dashboard' && (
         <div className="px-4 space-y-4 animate-fade-in">
           <h2 className="text-white font-bold font-display flex items-center gap-2">
             <Users size={18} className="text-brand-400" /> Member Status
           </h2>
-          
           {statsLoading ? (
              <p className="text-white/30 text-center py-8">Loading stats...</p>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              {/* Total Users */}
               <div className="card-dark p-4 rounded-2xl border border-white/5">
                 <p className="text-[10px] text-white/40 uppercase tracking-wider font-bold mb-1">Total Registered</p>
                 <p className="text-2xl font-display font-bold text-white">{stats.total}</p>
               </div>
-
-              {/* Online Users */}
               <div className="card-dark p-4 rounded-2xl border border-green-500/20 bg-green-500/5">
                 <div className="flex items-center gap-1.5 mb-1">
                   <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
@@ -193,14 +218,10 @@ export default function AdminPage() {
                 </div>
                 <p className="text-2xl font-display font-bold text-green-400">{stats.online}</p>
               </div>
-
-              {/* Active Today */}
               <div className="card-dark p-4 rounded-2xl border border-brand-500/20 bg-brand-500/5">
                 <p className="text-[10px] text-brand-300/70 uppercase tracking-wider font-bold mb-1">Active Today</p>
                 <p className="text-2xl font-display font-bold text-brand-300">{stats.todayActive}</p>
               </div>
-
-              {/* New Today */}
               <div className="card-dark p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5">
                 <p className="text-[10px] text-blue-300/70 uppercase tracking-wider font-bold mb-1">New Today</p>
                 <p className="text-2xl font-display font-bold text-blue-400">+{stats.todayNew}</p>
@@ -213,17 +234,77 @@ export default function AdminPage() {
         </div>
       )}
 
-
       {/* ── Categories Tab ── */}
       {tab === 'categories' && (
         <div className="animate-fade-in -mt-4">
-          {/* CategoryManagerPage ကို ဒီနေရာမှာ Component အနေနဲ့ ပြပါမယ် */}
           <CategoryManagerPage />
         </div>
       )}
 
+      {/* ── Quick Links Tab (NEW) ── */}
+      {tab === 'quicklinks' && (
+        <div className="px-4 space-y-4 animate-fade-in">
+          {/* Add / Edit Form */}
+          <div className="card-dark p-4 rounded-2xl border border-white/10 space-y-3">
+            <h3 className="text-sm font-bold text-white mb-2">{editingLink ? '✏️ Edit Link' : '➕ Add New Link'}</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <input value={linkForm.title} onChange={e => setLinkForm({...linkForm, title: e.target.value})} placeholder="Title (EN)" className="input-dark text-xs" />
+              <input value={linkForm.title_mm} onChange={e => setLinkForm({...linkForm, title_mm: e.target.value})} placeholder="Title (MM)" className="input-dark text-xs font-myanmar" />
+              <input value={linkForm.subtitle} onChange={e => setLinkForm({...linkForm, subtitle: e.target.value})} placeholder="Subtitle" className="input-dark text-xs" />
+              <div className="flex gap-2">
+                <input value={linkForm.icon} onChange={e => setLinkForm({...linkForm, icon: e.target.value})} placeholder="Icon (Emoji)" className="input-dark text-xs w-16 text-center" />
+                <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="/url or http://" className="input-dark text-xs flex-1" />
+              </div>
+              <input value={linkForm.css_classes} onChange={e => setLinkForm({...linkForm, css_classes: e.target.value})} placeholder="Tailwind CSS classes" className="input-dark text-xs col-span-2" />
+              <div className="flex items-center gap-2 col-span-2">
+                <label className="text-xs text-white/40">Sort:</label>
+                <input type="number" value={linkForm.sort_order} onChange={e => setLinkForm({...linkForm, sort_order: e.target.value})} className="input-dark text-xs w-16 text-center" />
+                <label className="flex items-center gap-2 text-xs text-white/60 ml-4 cursor-pointer">
+                  <input type="checkbox" checked={linkForm.is_active} onChange={e => setLinkForm({...linkForm, is_active: e.target.checked})} className="w-4 h-4" />
+                  Active
+                </label>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button onClick={handleSaveLink} className="flex-1 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold py-2.5 rounded-xl transition-colors">
+                {editingLink ? 'Update' : 'Save'}
+              </button>
+              {editingLink && (
+                <button onClick={() => { setEditingLink(null); setLinkForm({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true }) }} 
+                  className="flex-1 bg-white/10 text-white/50 text-xs font-bold py-2.5 rounded-xl hover:bg-white/20 transition-colors">
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
 
-      {/* ── Listings Tab (Your Existing Code) ── */}
+          {/* List of Links */}
+          <div className="space-y-2">
+            {quickLinks.map(link => (
+              <div key={link.id} className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${link.is_active ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10 opacity-50'}`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{link.icon}</span>
+                  <div>
+                    <p className="text-sm font-bold text-white">{link.title_mm || link.title}</p>
+                    <p className="text-[10px] text-white/40">{link.url}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] bg-black/30 px-2 py-1 rounded-lg text-white/30 mr-2">Sort: {link.sort_order}</span>
+                  <button onClick={() => { setEditingLink(link.id); setLinkForm(link) }} className="w-8 h-8 flex items-center justify-center bg-blue-500/20 text-blue-400 rounded-xl hover:bg-blue-500/30">
+                    <Pencil size={12} />
+                  </button>
+                  <button onClick={() => handleDeleteLink(link.id)} className="w-8 h-8 flex items-center justify-center bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Listings Tab ── */}
       {tab === 'listings' && (
         <div className="animate-fade-in">
           <div className="px-4 mb-4 flex gap-2 flex-wrap">
