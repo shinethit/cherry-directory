@@ -18,7 +18,7 @@ export default function HomePage() {
   const [selectedSub, setSelectedSub] = useState(null)
   const [upcomingEvents, setUpcomingEvents] = useState([])
   const [stats, setStats] = useState({ listings: 0, posts: 0 })
-  const [quickLinks, setQuickLinks] = useState([]) // ← Quick Links အတွက် State အသစ်
+  const [quickLinks, setQuickLinks] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -30,14 +30,14 @@ export default function HomePage() {
           { data: catsData }, 
           { count: listingCount }, 
           { data: eventsData },
-          { data: linksData } // ← Quick Links ဆွဲထုတ်ခြင်း
+          { data: linksData }
         ] = await Promise.all([
           supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
           supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
           supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
           supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
           supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
-          supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order') // ← Database မှ လှမ်းခေါ်ခြင်း
+          supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order')
         ])
         
         setPosts(postsData || [])
@@ -47,7 +47,7 @@ export default function HomePage() {
         setHomeCategories(all.filter(c => !c.parent_id))
         setUpcomingEvents(eventsData || [])
         setStats({ listings: listingCount || 0 })
-        setQuickLinks(linksData || []) // ← သိမ်းဆည်းခြင်း
+        setQuickLinks(linksData || [])
       } catch (e) { 
         console.warn('Load Error:', e) 
       } finally {
@@ -145,7 +145,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Sub-category bottom sheet */}
+      {/* Sub-category bottom sheet - FIXED: clear state before navigation */}
       {selectedCat && (() => {
         const subs = allCategories.filter(c => c.parent_id === selectedCat.id)
         return (
@@ -160,7 +160,10 @@ export default function HomePage() {
               </div>
               <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
                 <button
-                  onClick={() => { navigate(`/directory?cat=${selectedCat.id}`); setSelectedCat(null) }}
+                  onClick={() => { 
+                    navigate(`/directory?cat=${selectedCat.id}`); 
+                    setSelectedCat(null);
+                  }}
                   className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
                   <span className="text-xl">📋</span>
                   <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
@@ -169,7 +172,14 @@ export default function HomePage() {
                   const subSubs = allCategories.filter(c => c.parent_id === sub.id)
                   return (
                     <button key={sub.id}
-                      onClick={() => { if (subSubs.length > 0) { setSelectedSub(sub); } else { navigate(`/directory?cat=${sub.id}`); setSelectedCat(null) } }}
+                      onClick={() => { 
+                        if (subSubs.length > 0) { 
+                          setSelectedSub(sub); 
+                        } else { 
+                          navigate(`/directory?cat=${sub.id}`); 
+                          setSelectedCat(null);
+                        } 
+                      }}
                       className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
                       <span className="text-xl">{sub.icon}</span>
                       <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}</span>
@@ -183,7 +193,7 @@ export default function HomePage() {
         )
       })()}
 
-      {/* Sub-sub-category bottom sheet */}
+      {/* Sub-sub-category bottom sheet - FIXED: clear both states before navigation */}
       {selectedSub && (() => {
         const subSubs = allCategories.filter(c => c.parent_id === selectedSub.id)
         return (
@@ -198,14 +208,22 @@ export default function HomePage() {
               </div>
               <div className="px-4 py-3 grid grid-cols-3 gap-2 max-h-[50dvh] overflow-y-auto pb-8">
                 <button
-                  onClick={() => { navigate(`/directory?cat=${selectedSub.id}`); setSelectedSub(null); setSelectedCat(null) }}
+                  onClick={() => { 
+                    navigate(`/directory?cat=${selectedSub.id}`); 
+                    setSelectedSub(null); 
+                    setSelectedCat(null);
+                  }}
                   className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
                   <span className="text-xl">📋</span>
                   <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
                 </button>
                 {subSubs.map(ss => (
                   <button key={ss.id}
-                    onClick={() => { navigate(`/directory?cat=${ss.id}`); setSelectedSub(null); setSelectedCat(null) }}
+                    onClick={() => { 
+                      navigate(`/directory?cat=${ss.id}`); 
+                      setSelectedSub(null); 
+                      setSelectedCat(null);
+                    }}
                     className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors">
                     <span className="text-xl">{ss.icon}</span>
                     <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (ss.name_mm || ss.name) : ss.name}</span>
