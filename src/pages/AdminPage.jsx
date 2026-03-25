@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, UserCog, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import CategoryManagerPage from './CategoryManagerPage' 
+import CategoryManagerPage from './CategoryManagerPage'
 
 const PRESET_LINKS = [
   { url: '', label: '-- App ထဲရှိ စာမျက်နှာတစ်ခုကို ရွေးပါ --' },
@@ -18,7 +18,6 @@ const PRESET_LINKS = [
 
 export default function AdminPage() {
   const navigate = useNavigate()
-  // Tab ၅ ခုထားပါမယ်: 'dashboard', 'users', 'listings', 'categories', 'quicklinks'
   const [tab, setTab]                 = useState('dashboard') 
   const [data, setData]               = useState([])
   const [loading, setLoading]         = useState(true)
@@ -30,13 +29,11 @@ export default function AdminPage() {
   const [toast, setToast]             = useState(null)
   const [deleting, setDeleting]       = useState(null)
 
-  // ── Member Stats & Users State ──
   const [stats, setStats] = useState({ total: 0, todayNew: 0, todayActive: 0, online: 0 })
   const [statsLoading, setStatsLoading] = useState(false)
   const [usersList, setUsersList] = useState([])
   const [userSearch, setUserSearch] = useState('')
 
-  // ── Quick Links State ──
   const [quickLinks, setQuickLinks] = useState([])
   const [editingLink, setEditingLink] = useState(null)
   const [linkForm, setLinkForm] = useState({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
@@ -46,7 +43,6 @@ export default function AdminPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
-  // ── 1. Load Listings Data ──
   async function loadListings() {
     setLoading(true)
     try {
@@ -78,7 +74,6 @@ export default function AdminPage() {
     setLoading(false)
   }
 
-  // ── 2. Load Member Stats ──
   async function loadDashboardStats() {
     setStatsLoading(true)
     try {
@@ -102,7 +97,6 @@ export default function AdminPage() {
     setStatsLoading(false)
   }
 
-  // ── 3. Load Users List (NEW) ──
   async function loadUsers() {
     setLoading(true)
     try {
@@ -118,13 +112,12 @@ export default function AdminPage() {
       const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId)
       if (error) throw error
       showToast(`✓ Role ကို ${newRole} သို့ ပြောင်းလဲပြီးပါပြီ`)
-      loadUsers() // Refresh user list
+      loadUsers()
     } catch (e) {
       showToast(`Error: ${e.message}`, 'error')
     }
   }
 
-  // ── 4. Load Quick Links ──
   async function loadQuickLinks() {
     try {
       const { data } = await supabase.from('quick_links').select('*').order('sort_order')
@@ -139,10 +132,17 @@ export default function AdminPage() {
     if (tab === 'users') loadUsers()
   }, [tab, listingFilter])
 
-  // ── Listing Actions ──
+  // UPDATED: Cherry Verify function
   async function handleApprove(id) {
-    await supabase.from('listings').update({ status: 'approved' }).eq('id', id)
-    showToast('✓ အတည်ပြုပြီးပါပြီ')
+    await supabase
+      .from('listings')
+      .update({ 
+        status: 'approved',
+        is_verified: true,
+        verify_type: 'cherry'
+      })
+      .eq('id', id)
+    showToast('✓ အတည်ပြုပြီးပါပြီ (Cherry Verified)')
     loadListings()
   }
 
@@ -184,7 +184,6 @@ export default function AdminPage() {
     loadListings()
   }
 
-  // ── Quick Links Actions ──
   async function handleSaveLink() {
     if (!linkForm.title || !linkForm.url) return showToast('Title နှင့် URL ထည့်ရန်လိုအပ်ပါတယ်', 'error')
     
@@ -214,14 +213,12 @@ export default function AdminPage() {
     loadQuickLinks()
   }
 
-  // User search filter
   const filteredUsers = usersList.filter(u => 
     (u.full_name || '').toLowerCase().includes(userSearch.toLowerCase())
   )
 
   return (
     <div className="pb-8">
-      {/* ── Admin Header & Top Tabs ── */}
       <div className="px-4 pt-4 pb-2 border-b border-white/10 mb-4 sticky top-0 bg-[#140020] z-50">
         <div className="flex items-center gap-3 mb-4">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
@@ -249,7 +246,6 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* ── Dashboard Tab ── */}
       {tab === 'dashboard' && (
         <div className="px-4 space-y-4 animate-fade-in">
           <h2 className="text-white font-bold font-display flex items-center gap-2">
@@ -286,7 +282,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ── Users Tab (NEW) ── */}
       {tab === 'users' && (
         <div className="px-4 space-y-4 animate-fade-in">
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
@@ -342,14 +337,12 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ── Categories Tab ── */}
       {tab === 'categories' && (
         <div className="animate-fade-in -mt-4">
           <CategoryManagerPage />
         </div>
       )}
 
-      {/* ── Quick Links Tab ── */}
       {tab === 'quicklinks' && (
         <div className="px-4 space-y-4 animate-fade-in">
           <div className="card-dark p-4 rounded-2xl border border-white/10 space-y-3 relative">
@@ -444,7 +437,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* ── Listings Tab ── */}
       {tab === 'listings' && (
         <div className="animate-fade-in">
           <div className="px-4 mb-4 flex gap-2 flex-wrap">
@@ -532,7 +524,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Toast Notification */}
       {toast && (
         <div className={`fixed bottom-28 left-4 right-4 z-[300] px-4 py-3 rounded-2xl text-center text-sm font-myanmar border shadow-xl ${
           toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' : 'bg-green-500/90 border-green-400 text-white'
