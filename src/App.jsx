@@ -1,19 +1,3 @@
-function AppRoutes() {
-  console.log('=== AppRoutes rendering ===')
-  
-  const { loading } = useAuth()
-  console.log('Auth loading state:', loading)
-
-  if (loading) {
-    console.log('Still loading, showing spinner...')
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#0d0015]">
-        <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
-
-  console.log('Loading complete, rendering main app')
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -76,7 +60,8 @@ function ScrollToTop() {
 }
 
 function AppRoutes() {
-  const { loading } = useAuth()
+  // const { loading } = useAuth()
+  const loading = false  // ← Force loading to false for testing
 
   if (loading) {
     return (

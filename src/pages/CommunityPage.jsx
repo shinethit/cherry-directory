@@ -4,6 +4,47 @@ import { useAppConfig } from '../hooks/useAppConfig'
 import { useSEO } from '../hooks/useSEO'
 
 const FEATURES = [
+  // ========== ORDERED AS REQUESTED ==========
+  {
+    path: '/history',
+    icon: '📜',
+    mm: 'ဒေသဆိုင်ရာ သမိုင်းကြောင်းများ',
+    en: 'Local History',
+    descMm: 'တောင်ကြီး၊ ကလော၊ အင်းလေး စသည့် ဒေသဆိုင်ရာ သမိုင်း၊ ယဉ်ကျေးမှု၊ သိသင့်သိထိုက်ရာ',
+    descEn: 'History, culture, and knowledge about our region',
+    color: 'from-amber-600/20 to-amber-700/10',
+    border: 'border-amber-500/20',
+  },
+  {
+    path: '/rent',
+    icon: '🏠',
+    mm: 'အိမ်/အခန်း ငှားရမ်းခြင်း',
+    en: 'Rentals',
+    descMm: 'အိမ်ရှင် / အိမ်ငှား — ချိတ်ဆက်ရေး၊ Status ပြောင်းနိုင်',
+    descEn: 'Connect landlords & tenants, status tracking',
+    color: 'from-emerald-600/20 to-emerald-700/10',
+    border: 'border-emerald-500/20',
+  },
+  {
+    path: '/tutoring',
+    icon: '📚',
+    mm: 'ဆရာ/ကျောင်းသား ချိတ်ဆက်ရေး',
+    en: 'Tutoring',
+    descMm: 'ဆရာရှာ၊ ကျောင်းသားရှာ — ဘာသာရပ်၊ အတန်းအလိုက် Filter',
+    descEn: 'Find tutors or students — filter by subject & grade',
+    color: 'from-indigo-600/20 to-indigo-700/10',
+    border: 'border-indigo-500/20',
+  },
+  {
+    path: '/jobs',
+    icon: '💼',
+    mm: 'အလုပ်ကြော်ငြာ',
+    en: 'Job Board',
+    descMm: 'အလုပ်ရှင် / အလုပ်ရှာ — နှစ်ဖက်စလုံးမှ တင်နိုင်',
+    descEn: 'Employers & Job Seekers — post from both sides',
+    color: 'from-purple-600/20 to-purple-700/10',
+    border: 'border-purple-500/20',
+  },
   {
     path: '/emergency',
     icon: '🆘',
@@ -25,16 +66,6 @@ const FEATURES = [
     border: 'border-green-500/20',
   },
   {
-    path: '/power',
-    icon: '⚡',
-    mm: 'လျှပ်စစ်အခြေအနေ',
-    en: 'Power Status',
-    descMm: 'ဓာတ်အားဖြတ်တောက်မှု ရပ်ကွက်အလိုက် ကြည့်ရန်',
-    descEn: 'Power outage status by ward — live',
-    color: 'from-amber-600/20 to-amber-700/10',
-    border: 'border-amber-500/20',
-  },
-  {
     path: '/fuel',
     icon: '⛽',
     mm: 'ဓာတ်ဆီ/ဒီဇယ် ရမရ',
@@ -45,6 +76,17 @@ const FEATURES = [
     border: 'border-orange-500/20',
   },
   {
+    path: '/power',
+    icon: '⚡',
+    mm: 'လျှပ်စစ်အခြေအနေ',
+    en: 'Power Status',
+    descMm: 'ဓာတ်အားဖြတ်တောက်မှု ရပ်ကွက်အလိုက် ကြည့်ရန်',
+    descEn: 'Power outage status by ward — live',
+    color: 'from-amber-600/20 to-amber-700/10',
+    border: 'border-amber-500/20',
+  },
+  // ========== REMAINING FEATURES ==========
+  {
     path: '/lost-found',
     icon: '🔍',
     mm: 'ပျောက်ဆုံးပစ္စည်း',
@@ -53,16 +95,6 @@ const FEATURES = [
     descEn: 'Missing people, animals, and items',
     color: 'from-blue-600/20 to-blue-700/10',
     border: 'border-blue-500/20',
-  },
-  {
-    path: '/jobs',
-    icon: '💼',
-    mm: 'အလုပ်ကြော်ငြာ',
-    en: 'Job Board',
-    descMm: 'အလုပ်ရှင် / အလုပ်ရှာ — နှစ်ဖက်စလုံးမှ တင်နိုင်',
-    descEn: 'Employers & Job Seekers — post from both sides',
-    color: 'from-purple-600/20 to-purple-700/10',
-    border: 'border-purple-500/20',
   },
   {
     path: '/bus',
@@ -124,38 +156,15 @@ const FEATURES = [
     color: 'from-teal-600/20 to-teal-700/10',
     border: 'border-teal-500/20',
   },
-  // NEW: Rental / Housing
   {
-    path: '/rent',
-    icon: '🏠',
-    mm: 'အိမ်/အခန်း ငှားရမ်းခြင်း',
-    en: 'Rentals',
-    descMm: 'အိမ်ရှင် / အိမ်ငှား — ချိတ်ဆက်ရေး၊ Status ပြောင်းနိုင်',
-    descEn: 'Connect landlords & tenants, status tracking',
-    color: 'from-emerald-600/20 to-emerald-700/10',
-    border: 'border-emerald-500/20',
-  },
-  // NEW: Tutoring
-  {
-    path: '/tutoring',
-    icon: '📚',
-    mm: 'ဆရာ/ကျောင်းသား ချိတ်ဆက်ရေး',
-    en: 'Tutoring',
-    descMm: 'ဆရာရှာ၊ ကျောင်းသားရှာ — ဘာသာရပ်၊ အတန်းအလိုက် Filter',
-    descEn: 'Find tutors or students — filter by subject & grade',
-    color: 'from-indigo-600/20 to-indigo-700/10',
-    border: 'border-indigo-500/20',
-  },
-  // NEW: Local History & Knowledge
-  {
-    path: '/history',
-    icon: '📜',
-    mm: 'ဒေသဆိုင်ရာ သမိုင်းကြောင်းများ',
-    en: 'Local History',
-    descMm: 'တောင်ကြီး၊ ကလော၊ အင်းလေး စသည့် ဒေသဆိုင်ရာ သမိုင်း၊ ယဉ်ကျေးမှု၊ သိသင့်သိထိုက်ရာ',
-    descEn: 'History, culture, and knowledge about our region',
-    color: 'from-amber-600/20 to-amber-700/10',
-    border: 'border-amber-500/20',
+    path: '/chat',
+    icon: '💬',
+    mm: 'Public Chat',
+    en: 'Public Chat',
+    descMm: 'အများပြည်သူ ဆွေးနွေးခန်း',
+    descEn: 'Public community chat room',
+    color: 'from-violet-600/20 to-violet-700/10',
+    border: 'border-violet-500/20',
   },
 ]
 
