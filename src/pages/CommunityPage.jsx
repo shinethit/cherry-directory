@@ -59,8 +59,8 @@ const FEATURES = [
     icon: '💼',
     mm: 'အလုပ်ကြော်ငြာ',
     en: 'Job Board',
-    descMm: 'Local Jobs — ဝန်ထမ်းရှာ/အလုပ်ရှာ',
-    descEn: 'Local jobs — hire or find work',
+    descMm: 'အလုပ်ရှင် / အလုပ်ရှာ — နှစ်ဖက်စလုံးမှ တင်နိုင်',
+    descEn: 'Employers & Job Seekers — post from both sides',
     color: 'from-purple-600/20 to-purple-700/10',
     border: 'border-purple-500/20',
   },
@@ -123,6 +123,39 @@ const FEATURES = [
     descEn: 'Local trekking & boat tour guides',
     color: 'from-teal-600/20 to-teal-700/10',
     border: 'border-teal-500/20',
+  },
+  // NEW: Rental / Housing
+  {
+    path: '/rent',
+    icon: '🏠',
+    mm: 'အိမ်/အခန်း ငှားရမ်းခြင်း',
+    en: 'Rentals',
+    descMm: 'အိမ်ရှင် / အိမ်ငှား — ချိတ်ဆက်ရေး၊ Status ပြောင်းနိုင်',
+    descEn: 'Connect landlords & tenants, status tracking',
+    color: 'from-emerald-600/20 to-emerald-700/10',
+    border: 'border-emerald-500/20',
+  },
+  // NEW: Tutoring
+  {
+    path: '/tutoring',
+    icon: '📚',
+    mm: 'ဆရာ/ကျောင်းသား ချိတ်ဆက်ရေး',
+    en: 'Tutoring',
+    descMm: 'ဆရာရှာ၊ ကျောင်းသားရှာ — ဘာသာရပ်၊ အတန်းအလိုက် Filter',
+    descEn: 'Find tutors or students — filter by subject & grade',
+    color: 'from-indigo-600/20 to-indigo-700/10',
+    border: 'border-indigo-500/20',
+  },
+  // NEW: Local History & Knowledge
+  {
+    path: '/history',
+    icon: '📜',
+    mm: 'ဒေသဆိုင်ရာ သမိုင်းကြောင်းများ',
+    en: 'Local History',
+    descMm: 'တောင်ကြီး၊ ကလော၊ အင်းလေး စသည့် ဒေသဆိုင်ရာ သမိုင်း၊ ယဉ်ကျေးမှု၊ သိသင့်သိထိုက်ရာ',
+    descEn: 'History, culture, and knowledge about our region',
+    color: 'from-amber-600/20 to-amber-700/10',
+    border: 'border-amber-500/20',
   },
 ]
 
