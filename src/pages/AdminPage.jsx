@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, Plus } from 'lucide-react'
+import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, UserCog, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import CategoryManagerPage from './CategoryManagerPage' 
 
-// ─── Quick Link များကို အလွယ်တကူရွေးနိုင်ရန် Template များ ───
 const PRESET_LINKS = [
   { url: '', label: '-- App ထဲရှိ စာမျက်နှာတစ်ခုကို ရွေးပါ --' },
   { url: '/prices', label: '🛒 ဈေးနှုန်းဘုတ် (Market Prices)', icon: '🛒', title: 'Market Prices', title_mm: 'ဈေးနှုန်းဘုတ်', subtitle: 'Market Prices', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
@@ -19,6 +18,7 @@ const PRESET_LINKS = [
 
 export default function AdminPage() {
   const navigate = useNavigate()
+  // Tab ၅ ခုထားပါမယ်: 'dashboard', 'users', 'listings', 'categories', 'quicklinks'
   const [tab, setTab]                 = useState('dashboard') 
   const [data, setData]               = useState([])
   const [loading, setLoading]         = useState(true)
@@ -30,9 +30,11 @@ export default function AdminPage() {
   const [toast, setToast]             = useState(null)
   const [deleting, setDeleting]       = useState(null)
 
-  // ── Member Status Stats ──
+  // ── Member Stats & Users State ──
   const [stats, setStats] = useState({ total: 0, todayNew: 0, todayActive: 0, online: 0 })
   const [statsLoading, setStatsLoading] = useState(false)
+  const [usersList, setUsersList] = useState([])
+  const [userSearch, setUserSearch] = useState('')
 
   // ── Quick Links State ──
   const [quickLinks, setQuickLinks] = useState([])
@@ -41,7 +43,7 @@ export default function AdminPage() {
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 4000) // Error ဖတ်လို့ရအောင် အချိန် 4 စက္ကန့်ထားပေးထားသည်
+    setTimeout(() => setToast(null), 4000)
   }
 
   // ── 1. Load Listings Data ──
@@ -100,11 +102,32 @@ export default function AdminPage() {
     setStatsLoading(false)
   }
 
-  // ── 3. Load Quick Links ──
+  // ── 3. Load Users List (NEW) ──
+  async function loadUsers() {
+    setLoading(true)
+    try {
+      const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+      setUsersList(data || [])
+    } catch (e) { console.warn('Load users error:', e) }
+    setLoading(false)
+  }
+
+  async function handleRoleChange(userId, newRole) {
+    if (!window.confirm(`ဒီ User ကို ${newRole.toUpperCase()} Role ပြောင်းပေးမှာ သေချာပြီလား?`)) return
+    try {
+      const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId)
+      if (error) throw error
+      showToast(`✓ Role ကို ${newRole} သို့ ပြောင်းလဲပြီးပါပြီ`)
+      loadUsers() // Refresh user list
+    } catch (e) {
+      showToast(`Error: ${e.message}`, 'error')
+    }
+  }
+
+  // ── 4. Load Quick Links ──
   async function loadQuickLinks() {
     try {
-      const { data, error } = await supabase.from('quick_links').select('*').order('sort_order')
-      if (error) console.error(error)
+      const { data } = await supabase.from('quick_links').select('*').order('sort_order')
       setQuickLinks(data || [])
     } catch (e) { console.warn(e) }
   }
@@ -113,6 +136,7 @@ export default function AdminPage() {
     if (tab === 'listings') loadListings()
     if (tab === 'dashboard') loadDashboardStats()
     if (tab === 'quicklinks') loadQuickLinks()
+    if (tab === 'users') loadUsers()
   }, [tab, listingFilter])
 
   // ── Listing Actions ──
@@ -164,18 +188,17 @@ export default function AdminPage() {
   async function handleSaveLink() {
     if (!linkForm.title || !linkForm.url) return showToast('Title နှင့် URL ထည့်ရန်လိုအပ်ပါတယ်', 'error')
     
-    // ID မပါသွားစေရန် ဖယ်ထုတ်ခြင်း (အသစ်ထည့်ရာတွင် Error မတက်စေရန်)
     const payload = { ...linkForm }
     delete payload.id
 
     if (editingLink) {
       const { error } = await supabase.from('quick_links').update(payload).eq('id', editingLink)
-      if (error) return showToast(`Database Error: ${error.message}`, 'error') // Error ရှိလျှင် ပြမည်
+      if (error) return showToast(`Database Error: ${error.message}`, 'error')
       showToast('✓ ပြင်ဆင်ပြီးပါပြီ')
     } else {
       payload.sort_order = quickLinks.length + 1
       const { error } = await supabase.from('quick_links').insert([payload])
-      if (error) return showToast(`Database Error: ${error.message}`, 'error') // Error ရှိလျှင် ပြမည်
+      if (error) return showToast(`Database Error: ${error.message}`, 'error')
       showToast('✓ အသစ်ထည့်ပြီးပါပြီ')
     }
     
@@ -191,6 +214,11 @@ export default function AdminPage() {
     loadQuickLinks()
   }
 
+  // User search filter
+  const filteredUsers = usersList.filter(u => 
+    (u.full_name || '').toLowerCase().includes(userSearch.toLowerCase())
+  )
+
   return (
     <div className="pb-8">
       {/* ── Admin Header & Top Tabs ── */}
@@ -205,6 +233,9 @@ export default function AdminPage() {
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           <button onClick={() => setTab('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/40'}`}>
             <LayoutDashboard size={14} /> Dashboard
+          </button>
+          <button onClick={() => setTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'users' ? 'bg-pink-600 text-white' : 'bg-white/5 text-white/40'}`}>
+            <UserCog size={14} /> Users
           </button>
           <button onClick={() => setTab('listings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/40'}`}>
             <List size={14} /> Listings
@@ -255,6 +286,62 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* ── Users Tab (NEW) ── */}
+      {tab === 'users' && (
+        <div className="px-4 space-y-4 animate-fade-in">
+          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+            <Search size={16} className="text-white/40" />
+            <input 
+              type="text" 
+              placeholder="နာမည်ဖြင့် ရှာရန်..." 
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              className="bg-transparent border-none outline-none text-sm text-white w-full font-myanmar placeholder:text-white/30"
+            />
+          </div>
+
+          <div className="space-y-2">
+            {loading ? (
+              <p className="text-white/30 text-center py-8">Loading users...</p>
+            ) : filteredUsers.length === 0 ? (
+              <p className="text-white/30 text-center py-8 font-myanmar">User မတွေ့ပါ</p>
+            ) : (
+              filteredUsers.map(user => (
+                <div key={user.id} className="bg-white/5 border border-white/8 rounded-2xl p-4 flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-brand-700 flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0">
+                      {user.avatar_url ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" /> : (user.full_name?.[0] || '?')}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{user.full_name || 'Anonymous'}</p>
+                      <p className="text-[10px] text-white/40 truncate">Joined: {new Date(user.created_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                    <span className="text-xs text-white/50 font-myanmar">Role ပြောင်းရန်:</span>
+                    <select 
+                      value={user.role || 'user'}
+                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                      className={`text-xs px-2 py-1.5 rounded-lg border outline-none font-bold ${
+                        user.role === 'admin' ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' :
+                        user.role === 'moderator' ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' :
+                        'bg-white/5 border-white/10 text-white/60'
+                      }`}
+                      style={{ backgroundColor: '#1a0030' }}
+                    >
+                      <option value="user">User</option>
+                      <option value="moderator">Moderator</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Categories Tab ── */}
       {tab === 'categories' && (
         <div className="animate-fade-in -mt-4">
@@ -265,11 +352,9 @@ export default function AdminPage() {
       {/* ── Quick Links Tab ── */}
       {tab === 'quicklinks' && (
         <div className="px-4 space-y-4 animate-fade-in">
-          {/* Add / Edit Form */}
           <div className="card-dark p-4 rounded-2xl border border-white/10 space-y-3 relative">
             <h3 className="text-sm font-bold text-white mb-2">{editingLink ? '✏️ Edit Link' : '➕ Add New Link'}</h3>
             
-            {/* Template Dropdown */}
             <div className="mb-3">
               <label className="text-[10px] text-white/50 mb-1.5 block font-myanmar">အမြန်ရွေးချယ်ရန် (Template)</label>
               <select 
@@ -289,7 +374,6 @@ export default function AdminPage() {
                   } else if (val === 'custom') {
                     setLinkForm({...linkForm, url: ''});
                   }
-                  // Dropdown ကို ရွေးပြီးရင် ပြန် Reset ချပေးမည် (အမြဲရွေးလို့ရအောင်)
                   e.target.value = '';
                 }}
                 className="input-dark text-xs w-full font-myanmar bg-white/5 border border-white/20"
@@ -299,16 +383,15 @@ export default function AdminPage() {
               </select>
             </div>
 
-            {/* Inputs */}
             <div className="grid grid-cols-2 gap-2 border-t border-white/5 pt-3">
               <input value={linkForm.title} onChange={e => setLinkForm({...linkForm, title: e.target.value})} placeholder="Title (EN)" className="input-dark text-xs" />
               <input value={linkForm.title_mm} onChange={e => setLinkForm({...linkForm, title_mm: e.target.value})} placeholder="Title (MM)" className="input-dark text-xs font-myanmar" />
               <input value={linkForm.subtitle} onChange={e => setLinkForm({...linkForm, subtitle: e.target.value})} placeholder="Subtitle" className="input-dark text-xs" />
               <div className="flex gap-2">
                 <input value={linkForm.icon} onChange={e => setLinkForm({...linkForm, icon: e.target.value})} placeholder="Icon" className="input-dark text-xs w-12 text-center" />
-                <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="URL (e.g. /news)" className="input-dark text-xs flex-1" />
+                <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="URL" className="input-dark text-xs flex-1" />
               </div>
-              <input value={linkForm.css_classes} onChange={e => setLinkForm({...linkForm, css_classes: e.target.value})} placeholder="Tailwind CSS classes" className="input-dark text-xs col-span-2" />
+              <input value={linkForm.css_classes} onChange={e => setLinkForm({...linkForm, css_classes: e.target.value})} placeholder="CSS classes" className="input-dark text-xs col-span-2" />
               <div className="flex items-center gap-2 col-span-2">
                 <label className="text-xs text-white/40">Sort Order:</label>
                 <input type="number" value={linkForm.sort_order} onChange={e => setLinkForm({...linkForm, sort_order: e.target.value})} className="input-dark text-xs w-16 text-center" />
@@ -332,7 +415,6 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* List of Links */}
           <div className="space-y-2">
             {quickLinks.length === 0 ? (
               <p className="text-xs text-white/30 text-center py-4">Link များ မရှိသေးပါ</p>
@@ -392,7 +474,6 @@ export default function AdminPage() {
               data.map(item => (
                 <div key={item.id} className="bg-white/5 border border-white/8 rounded-2xl p-4">
                   {editingId === item.id ? (
-                    // Edit Mode
                     <div className="space-y-3">
                       <input value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name" />
                       <input value={editForm.name_mm || ''} onChange={e => setEditForm({...editForm, name_mm: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm font-myanmar" placeholder="Name (Myanmar)" />
@@ -405,7 +486,6 @@ export default function AdminPage() {
                       </div>
                     </div>
                   ) : (
-                    // View Mode
                     <>
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex-1 min-w-0">
