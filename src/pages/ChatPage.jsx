@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext'
 function ChatBubble({ msg, isMe, onReply }) {
   return (
     <div className={`flex gap-2 mb-3 ${isMe ? 'flex-row-reverse' : ''}`}>
-      {/* Avatar */}
       {!isMe && (
         <div className="w-8 h-8 rounded-full bg-brand-700 flex items-center justify-center text-xs font-bold text-white flex-shrink-0 mt-1">
           {(msg.user?.full_name || msg.guest_name || '?')[0]}
@@ -18,7 +17,6 @@ function ChatBubble({ msg, isMe, onReply }) {
             {msg.user?.full_name || msg.guest_name || 'Guest'}
           </span>
         )}
-        {/* Reply preview */}
         {msg.reply_to && (
           <div className={`text-[10px] text-white/40 mb-1 px-2 py-1 rounded-lg border-l-2 border-brand-400 bg-white/5 ${isMe ? 'self-end' : ''}`}>
             ↩ Reply
@@ -64,18 +62,64 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!activeRoom) return
-    // Load messages
-    supabase.from('chat_messages').select('*, user:profiles(full_name, avatar_url)').eq('room_id', activeRoom.id).order('created_at').limit(100).then(({ data }) => setMessages(data || []))
 
-    // Realtime subscription
-    const channel = supabase.channel(`room-${activeRoom.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `room_id=eq.${activeRoom.id}` }, async (payload) => {
-        const { data } = await supabase.from('chat_messages').select('*, user:profiles(full_name, avatar_url)').eq('id', payload.new.id).single()
-        setMessages(prev => [...prev, data])
-      })
+    let isSubscribed = true
+
+    const loadMessages = async () => {
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('*, user:profiles(full_name, avatar_url)')
+        .eq('room_id', activeRoom.id)
+        .order('created_at', { ascending: true })
+        .limit(100)
+      if (isSubscribed) setMessages(data || [])
+    }
+    loadMessages()
+
+    const channel = supabase
+      .channel(`room-${activeRoom.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `room_id=eq.${activeRoom.id}`,
+        },
+        async (payload) => {
+          const { data: newMsg } = await supabase
+            .from('chat_messages')
+            .select('*, user:profiles(full_name, avatar_url)')
+            .eq('id', payload.new.id)
+            .single()
+          if (newMsg && isSubscribed) setMessages(prev => [...prev, newMsg])
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `room_id=eq.${activeRoom.id}`,
+        },
+        async (payload) => {
+          const { data: updatedMsg } = await supabase
+            .from('chat_messages')
+            .select('*, user:profiles(full_name, avatar_url)')
+            .eq('id', payload.new.id)
+            .single()
+          if (updatedMsg && isSubscribed) {
+            setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m))
+          }
+        }
+      )
       .subscribe()
 
-    return () => supabase.removeChannel(channel)
+    return () => {
+      isSubscribed = false
+      supabase.removeChannel(channel)
+    }
   }, [activeRoom])
 
   useEffect(() => {
@@ -86,25 +130,27 @@ export default function ChatPage() {
     const content = input.trim()
     if (!content) return
 
-    // Guest name check
     if (!isLoggedIn && !guestName) {
       setShowNamePrompt(true)
       return
+    }
+
+    const messageToSend = {
+      room_id: activeRoom.id,
+      user_id: user?.id || null,
+      guest_name: !isLoggedIn ? guestName : null,
+      content,
+      reply_to: replyTo?.id || null,
     }
 
     setInput('')
     setReplyTo(null)
 
     try {
-      await supabase.from('chat_messages').insert({
-        room_id: activeRoom.id,
-        user_id: user?.id || null,
-        guest_name: !isLoggedIn ? guestName : null,
-        content,
-        reply_to: replyTo?.id || null,
-      })
+      const { error } = await supabase.from('chat_messages').insert(messageToSend)
+      if (error) console.error('Send error:', error)
     } catch (err) {
-      console.warn('Send message failed:', err)
+      console.error('Send failed:', err)
     }
   }
 
@@ -117,7 +163,6 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-[calc(100dvh-180px)]">
-      {/* Room tabs */}
       <div className="flex gap-2 px-4 py-2 overflow-x-auto scrollbar-hide border-b border-white/8">
         {rooms.map(room => (
           <button
@@ -130,7 +175,6 @@ export default function ChatPage() {
         ))}
       </div>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-0 pb-24">
         {messages.map(msg => (
           <ChatBubble
@@ -143,7 +187,6 @@ export default function ChatPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Reply bar */}
       {replyTo && (
         <div className="mx-4 mb-2 px-3 py-2 bg-brand-700/30 border border-brand-500/30 rounded-xl flex items-center justify-between">
           <div>
@@ -154,7 +197,6 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Input — text only */}
       <div className="px-4 py-3 border-t border-white/8">
         {!isLoggedIn && guestName && (
           <p className="text-[10px] text-white/30 mb-1.5">Guest: {guestName} • <button onClick={() => setShowNamePrompt(true)} className="text-brand-300 hover:text-brand-200">ပြောင်းရန်</button></p>
@@ -179,7 +221,6 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Guest name prompt modal */}
       {showNamePrompt && (
         <div className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowNamePrompt(false)}>
           <div className="w-full max-w-lg bg-[#1a0030] border border-white/10 rounded-t-3xl p-6 pb-24" onClick={e => e.stopPropagation()}>
