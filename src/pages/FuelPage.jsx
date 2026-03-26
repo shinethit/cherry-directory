@@ -3,6 +3,7 @@ import { RefreshCw, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 
 const STATUS_CFG = {
@@ -560,6 +561,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
 export default function FuelPage() {
   const { lang }       = useLang()
   const { isModerator } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: 'Fuel Availability' })
 
   const [stations, setStations]         = useState([])

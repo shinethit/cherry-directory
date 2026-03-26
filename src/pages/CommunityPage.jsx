@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useLang } from '../contexts/LangContext'
-import { useAppConfig } from '../hooks/useAppConfig'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 
 const FEATURES = [

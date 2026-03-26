@@ -34,7 +34,6 @@ export function ListingCard({ listing, compact = false }) {
     e.stopPropagation()
     if (!isLoggedIn) { navigate('/login'); return }
     setBookmarked(b => !b)
-    // TODO: upsert/delete from bookmarks table
   }
 
   return (
@@ -42,7 +41,7 @@ export function ListingCard({ listing, compact = false }) {
       {/* Logo */}
       <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
         {logo
-          ? <img src={logo} alt={listing.name} className="w-full h-full object-contain" />
+          ? <img src={logo} alt={listing.name} className="w-full h-full object-contain" loading="lazy" />
           : <span className="text-2xl">{listing.category?.icon || '🏢'}</span>}
       </div>
 
@@ -96,7 +95,7 @@ export function PostCard({ post }) {
     <div onClick={() => navigate(`/news/${post.id}`)} className="card-listing cursor-pointer overflow-hidden">
       {cover && (
         <div className="h-40 overflow-hidden">
-          <img src={cover} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+          <img src={cover} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
         </div>
       )}
       <div className="p-4">

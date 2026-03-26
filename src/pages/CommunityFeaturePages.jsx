@@ -1,13 +1,16 @@
-// ── WeatherAlertPage ─────────────────────────────────────────
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'   // ✅ Added
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
-import { Plus, Trash2, ArrowLeft, Droplets, Eye } from 'lucide-react'
+import { Plus, Trash2, ArrowLeft, Droplets, Eye, Phone, MapPin, Calendar, Clock, Edit2 } from 'lucide-react'
+import { ImageUploader } from '../components/UI'
+import { uploadImage } from '../lib/cloudinary'
 
 // ─────────────────────────────────────────────────────────────
-// WEATHER ALERT PAGE
+// WEATHER ALERT PAGE (unchanged, same as before)
 // ─────────────────────────────────────────────────────────────
 const ALERT_TYPES = [
   { id: 'all',         mm: 'အားလုံး',          en: 'All',          icon: '🌤️' },
@@ -27,6 +30,7 @@ const SEV_CFG = {
 export function WeatherAlertPage() {
   const { lang } = useLang()
   const { user, isModerator, profile, isLoggedIn } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'မိုးလေဝသ' : 'Weather Alerts' })
 
   const [alerts, setAlerts] = useState([])
@@ -90,7 +94,7 @@ export function WeatherAlertPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🌧️ {lang === 'mm' ? 'မိုးလေဝသ/ရေကြီး' : 'Weather & Flood'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'ရေမြင့် • မိုးလေဝသ သတိပေးချက်' : 'Water levels • Weather warnings'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ရေမြင့် • မိုးလေဝသ သတိပေးချက်` : 'Water levels • Weather warnings'}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Report</button>
       </div>
@@ -180,7 +184,7 @@ export function WeatherAlertPage() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// DONATION PAGE
+// DONATION PAGE (unchanged)
 // ─────────────────────────────────────────────────────────────
 const DON_CATS = [
   { id: 'all',        mm: 'အားလုံး',        en: 'All',         icon: '❤️' },
@@ -196,6 +200,7 @@ const DON_CATS = [
 export function DonationPage() {
   const { lang } = useLang()
   const { user, profile, isLoggedIn, isModerator } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'လှူဒါန်းမှု' : 'Donations' })
 
   const [items, setItems] = useState([])
@@ -249,7 +254,7 @@ export function DonationPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">❤️ {lang === 'mm' ? 'လှူဒါန်းမှု' : 'Donations'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'ကျောင်း၊ ဘုန်းကြီးကျောင်း၊ Community ငွေကြေးစုဆောင်းမှု' : 'Community fundraising campaigns'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကျောင်း၊ ဘုန်းကြီးကျောင်း၊ Community ငွေကြေးစုဆောင်းမှု` : 'Community fundraising campaigns'}</p>
         </div>
         {isLoggedIn && <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Post</button>}
       </div>
@@ -358,7 +363,7 @@ export function DonationPage() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// HEALTH SERVICE PAGE (Free Clinic + Blood Donation)
+// HEALTH SERVICE PAGE (with edit functionality)
 // ─────────────────────────────────────────────────────────────
 const HEALTH_TYPES = [
   { id: 'all',         mm: 'အားလုံး',       en: 'All',            icon: '🏥' },
@@ -371,31 +376,227 @@ const HEALTH_TYPES = [
 ]
 const BLOOD_TYPES = ['A+','A-','B+','B-','O+','O-','AB+','AB-']
 
-export function HealthServicePage() {
-  const { lang } = useLang()
-  const { user, isModerator, profile, isLoggedIn } = useAuth()
-  useSEO({ title: lang === 'mm' ? 'ကျန်းမာရေးဝန်ဆောင်မှု' : 'Health Services' })
+function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
+  const isOwner = service.poster_id === userId
 
-  const [items, setItems] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [typeFilter, setType] = useState('all')
-  const [showForm, setShowForm] = useState(false)
+  return (
+    <div className={`card-dark rounded-2xl p-4 space-y-2 border-l-4 ${service.type === 'blood_drive' ? 'border-l-red-500/60' : service.type === 'free_clinic' ? 'border-l-green-500/60' : 'border-l-brand-500/40'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="text-base">{HEALTH_TYPES.find(t => t.id === service.type)?.icon}</span>
+            <span className="text-[9px] font-bold text-brand-300 bg-brand-600/15 border border-brand-400/20 px-1.5 py-0.5 rounded-full">
+              {lang === 'mm' ? HEALTH_TYPES.find(t => t.id === service.type)?.mm : HEALTH_TYPES.find(t => t.id === service.type)?.en}
+            </span>
+            {service.is_urgent && <span className="text-[9px] text-red-400 font-bold">⚡ Urgent</span>}
+            {service.is_verified && <span className="text-[9px] text-gold-400">✓ Verified</span>}
+          </div>
+          <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (service.title_mm || service.title) : service.title}</h3>
+          {service.organizer_mm && <p className="text-[10px] text-brand-300 font-myanmar">{service.organizer_mm}</p>}
+          {service.description_mm && <p className="text-xs text-white/50 mt-1 font-myanmar line-clamp-2">{service.description_mm}</p>}
+        </div>
+        {/* Edit & Delete buttons */}
+        {(isOwner || isModerator) && (
+          <div className="flex gap-1">
+            <button onClick={() => onEdit(service)} className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/30">
+              <Edit2 size={12} />
+            </button>
+            <button onClick={() => onDelete(service.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 text-red-400">
+              <Trash2 size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {service.blood_types_needed?.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap">
+          <span className="text-[9px] text-red-400/70 font-myanmar">🩸 လိုအပ်သော သွေးအုပ်စု:</span>
+          {service.blood_types_needed.map(bt => (
+            <span key={bt} className="text-[9px] font-bold text-red-300 bg-red-500/15 border border-red-500/20 px-1.5 py-0.5 rounded-full">{bt}</span>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 flex-wrap text-[10px] text-white/40">
+        {service.location_mm && <span className="font-myanmar">📍 {service.location_mm}</span>}
+        {service.start_date && <span>📅 {new Date(service.start_date).toLocaleDateString()}{service.end_date && service.end_date !== service.start_date ? ` – ${new Date(service.end_date).toLocaleDateString()}` : ''}</span>}
+        {service.start_time && <span>🕐 {service.start_time}{service.end_time ? `–${service.end_time}` : ''}</span>}
+      </div>
+
+      <div className="flex gap-2">
+        {service.contact_phone && <a href={`tel:${service.contact_phone}`} className="text-[10px] text-green-400 flex items-center gap-1">📞 {service.contact_phone}</a>}
+        {service.facebook && <a href={service.facebook} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400">FB Page →</a>}
+      </div>
+    </div>
+  )
+}
+
+function HealthForm({ onClose, onSuccess, lang, editTarget }) {
+  const { user, profile, isLoggedIn } = useAuth()
+  const navigate = useNavigate()
   const [form, setForm] = useState({
     type: 'free_clinic', title: '', title_mm: '', description_mm: '', organizer_mm: '',
     location_mm: '', contact_phone: '', contact_name: '', facebook: '',
     start_date: '', end_date: '', start_time: '', end_time: '',
     blood_types_needed: [], is_urgent: false,
   })
+  const [images, setImages] = useState([])
+  const [imgLoading, setImgLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
+
+  useEffect(() => {
+    if (editTarget) {
+      setForm({
+        type: editTarget.type || 'free_clinic',
+        title: editTarget.title || '',
+        title_mm: editTarget.title_mm || '',
+        description_mm: editTarget.description_mm || '',
+        organizer_mm: editTarget.organizer_mm || '',
+        location_mm: editTarget.location_mm || '',
+        contact_phone: editTarget.contact_phone || '',
+        contact_name: editTarget.contact_name || '',
+        facebook: editTarget.facebook || '',
+        start_date: editTarget.start_date || '',
+        end_date: editTarget.end_date || '',
+        start_time: editTarget.start_time || '',
+        end_time: editTarget.end_time || '',
+        blood_types_needed: editTarget.blood_types_needed || [],
+        is_urgent: editTarget.is_urgent || false,
+      })
+      setImages(editTarget.images || [])
+    }
+  }, [editTarget])
+
   function toggleBloodType(bt) {
     setForm(f => ({...f, blood_types_needed: f.blood_types_needed.includes(bt) ? f.blood_types_needed.filter(b => b !== bt) : [...f.blood_types_needed, bt]}))
   }
 
+  async function handleImageUpload(file) {
+    setImgLoading(true)
+    const url = await uploadImage(file, 'health')
+    setImages(prev => [...prev, url])
+    setImgLoading(false)
+  }
+
+  async function submit() {
+    if (!form.title_mm) return
+    setSubmitting(true)
+
+    const payload = {
+      ...form,
+      start_date: form.start_date || null,
+      end_date: form.end_date || null,
+      start_time: form.start_time || null,
+      end_time: form.end_time || null,
+      images,
+      poster_id: user?.id || null,
+      posted_at: new Date().toISOString(),
+    }
+
+    let error
+    if (editTarget) {
+      error = (await supabase.from('health_services').update(payload).eq('id', editTarget.id)).error
+    } else {
+      error = (await supabase.from('health_services').insert(payload)).error
+    }
+
+    if (error) {
+      console.error('Submit error:', error)
+      alert('Error: ' + error.message)
+    } else {
+      onSuccess()
+    }
+    setSubmitting(false)
+  }
+
+  if (!isLoggedIn) return (
+    <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70">
+      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
+        <p className="text-white font-myanmar mb-4">တင်ရန် Login လိုအပ်သည်</p>
+        <button onClick={() => navigate('/login')} className="btn-primary w-full">Login ဝင်မည်</button>
+        <button onClick={onClose} className="btn-ghost w-full mt-2">Cancel</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
+      <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
+        <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
+        <h2 className="font-display font-bold text-base text-white">{editTarget ? (lang === 'mm' ? 'ပြင်ဆင်မည်' : 'Edit') : (lang === 'mm' ? 'ဝန်ဆောင်မှု တင်မည်' : 'Post Health Service')}</h2>
+        <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : (lang === 'mm' ? 'တင်မည်' : 'Post')}</button>
+      </div>
+      <div className="px-4 py-4 space-y-4 pb-24">
+        <div>
+          <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
+          <div className="flex gap-2 flex-wrap">
+            {HEALTH_TYPES.filter(t => t.id !== 'all').map(t => (
+              <button key={t.id} onClick={() => set('type', t.id)} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border ${form.type === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{t.icon} {t.mm}</button>
+            ))}
+          </div>
+        </div>
+
+        <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={form.type === 'blood_drive' ? 'ဥပမာ: သွေးလှူဒါန်းပွဲ — မြေနီတောင်ဆေးရုံ' : 'ဥပမာ: အခမဲ့ဆေးခန်း — ဆရာဝန် ၅ ဦး'} /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">အဖွဲ့အစည်း/ဆေးရုံ</label><input value={form.organizer_mm} onChange={e => set('organizer_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
+        {form.type === 'blood_drive' && (
+          <div><label className="block text-xs text-white/50 mb-1.5">🩸 လိုအပ်သော သွေးအုပ်စု</label>
+            <div className="flex gap-2 flex-wrap">
+              {BLOOD_TYPES.map(bt => (
+                <button key={bt} onClick={() => toggleBloodType(bt)} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${form.blood_types_needed.includes(bt) ? 'bg-red-500/25 border-red-500/40 text-red-400' : 'bg-white/5 border-white/10 text-white/40'}`}>{bt}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div><label className="block text-xs text-white/50 mb-1.5">နေရာ</label><input value={form.location_mm} onChange={e => set('location_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="block text-[10px] text-white/40 mb-1">Start Date</label><input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} className="input-dark" /></div>
+          <div><label className="block text-[10px] text-white/40 mb-1">End Date</label><input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} className="input-dark" /></div>
+          <div><label className="block text-[10px] text-white/40 mb-1">Start Time</label><input type="time" value={form.start_time} onChange={e => set('start_time', e.target.value)} className="input-dark" /></div>
+          <div><label className="block text-[10px] text-white/40 mb-1">End Time</label><input type="time" value={form.end_time} onChange={e => set('end_time', e.target.value)} className="input-dark" /></div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="block text-[10px] text-white/40 mb-1">ဆက်သွယ်ရမည့်သူ</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar text-sm" /></div>
+          <div><label className="block text-[10px] text-white/40 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark text-sm" placeholder="09..." /></div>
+        </div>
+        <div><label className="block text-xs text-white/50 mb-1.5">Facebook Page</label><input value={form.facebook} onChange={e => set('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." /></div>
+        <div>
+          <label className="block text-xs text-white/50 mb-1.5">ပုံများ (optional)</label>
+          <div className="flex gap-2 flex-wrap">
+            {images.map((url, i) => (
+              <div key={i} className="relative w-16 h-16">
+                <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px]">✕</button>
+              </div>
+            ))}
+            {images.length < 5 && <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />}
+          </div>
+        </div>
+        <button onClick={() => set('is_urgent', !form.is_urgent)} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${form.is_urgent ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
+          ⚡ {lang === 'mm' ? 'Urgent — သွေးလိုအပ်/အခြေအနေ ဆိုးရွားနေ' : 'Mark as Urgent'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export function HealthServicePage() {
+  const { lang } = useLang()
+  const { user, isModerator, isLoggedIn } = useAuth()
+  const config = useAppConfig()
+  useSEO({ title: lang === 'mm' ? 'ကျန်းမာရေးဝန်ဆောင်မှု' : 'Health Services' })
+
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [typeFilter, setType] = useState('all')
+  const [showForm, setShowForm] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
+
   async function load() {
     setLoading(true)
     try {
-      let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('start_date', { ascending: true }).limit(30)
+      let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
       if (typeFilter !== 'all') q = q.eq('type', typeFilter)
       const { data } = await q
       setItems(data || [])
@@ -413,20 +614,10 @@ export function HealthServicePage() {
     return () => supabase.removeChannel(channel)
   }, [typeFilter])
 
-  async function submit() {
-    if (!form.title_mm) return
-    setSubmitting(true)
-    await supabase.from('health_services').insert({ ...form, reporter_id: user?.id || null })
-    setSubmitting(false); setShowForm(false); load()
-  }
-
   async function deleteItem(id) {
-    await supabase.from('health_services').delete().eq('id', id); load()
-  }
-
-  function formatDate(d) {
-    if (!d) return ''
-    return new Date(d).toLocaleDateString(lang === 'mm' ? 'my-MM' : 'en-US', { month: 'short', day: 'numeric' })
+    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    await supabase.from('health_services').delete().eq('id', id)
+    load()
   }
 
   return (
@@ -434,9 +625,9 @@ export function HealthServicePage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🏥 {lang === 'mm' ? 'ကျန်းမာရေးဝန်ဆောင်မှု' : 'Health Services'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'အခမဲ့ဆေးခန်း • သွေးလှူ • ဆေးထိုး' : 'Free clinic • Blood drives • Vaccination'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} အခမဲ့ဆေးခန်း • သွေးလှူ • ဆေးထိုး` : 'Free clinic • Blood drives • Vaccination'}</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Post</button>
+        <button onClick={() => { setEditTarget(null); setShowForm(true) }} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Post</button>
       </div>
 
       <div className="px-4 mb-4">
@@ -457,102 +648,33 @@ export function HealthServicePage() {
          items.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">🏥</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ဝန်ဆောင်မှု မရှိသေး' : 'No services posted'}</p></div>
          ) :
-         items.map(item => {
-           const ht = HEALTH_TYPES.find(t => t.id === item.type)
-           return (
-             <div key={item.id} className={`card-dark rounded-2xl p-4 space-y-2 border-l-4 ${item.type === 'blood_drive' ? 'border-l-red-500/60' : item.type === 'free_clinic' ? 'border-l-green-500/60' : 'border-l-brand-500/40'}`}>
-               <div className="flex items-start justify-between gap-2">
-                 <div className="flex-1">
-                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                     <span className="text-base">{ht?.icon}</span>
-                     <span className="text-[9px] font-bold text-brand-300 bg-brand-600/15 border border-brand-400/20 px-1.5 py-0.5 rounded-full">{lang === 'mm' ? ht?.mm : ht?.en}</span>
-                     {item.is_urgent && <span className="text-[9px] text-red-400 font-bold">⚡ Urgent</span>}
-                     {item.is_verified && <span className="text-[9px] text-gold-400">✓ Verified</span>}
-                   </div>
-                   <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (item.title_mm || item.title) : item.title}</h3>
-                   {item.organizer_mm && <p className="text-[10px] text-brand-300 font-myanmar">{item.organizer_mm}</p>}
-                 </div>
-                 {isModerator && <button onClick={() => deleteItem(item.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 text-red-400 flex-shrink-0"><Trash2 size={12} /></button>}
-               </div>
-
-               {item.description_mm && <p className="text-xs text-white/50 font-myanmar leading-relaxed">{item.description_mm}</p>}
-
-               {item.blood_types_needed?.length > 0 && (
-                 <div className="flex gap-1.5 flex-wrap">
-                   <span className="text-[9px] text-red-400/70 font-myanmar">🩸 လိုအပ်သော သွေးအုပ်စု:</span>
-                   {item.blood_types_needed.map(bt => (
-                     <span key={bt} className="text-[9px] font-bold text-red-300 bg-red-500/15 border border-red-500/20 px-1.5 py-0.5 rounded-full">{bt}</span>
-                   ))}
-                 </div>
-               )}
-
-               <div className="flex items-center gap-3 flex-wrap text-[10px] text-white/40">
-                 {item.location_mm && <span className="font-myanmar">📍 {item.location_mm}</span>}
-                 {item.start_date && <span>📅 {formatDate(item.start_date)}{item.end_date && item.end_date !== item.start_date ? ` – ${formatDate(item.end_date)}` : ''}</span>}
-                 {item.start_time && <span>🕐 {item.start_time}{item.end_time ? `–${item.end_time}` : ''}</span>}
-               </div>
-
-               <div className="flex gap-2">
-                 {item.contact_phone && <a href={`tel:${item.contact_phone}`} className="text-[10px] text-green-400 flex items-center gap-1">📞 {item.contact_phone}</a>}
-                 {item.facebook && <a href={item.facebook} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400">FB Page →</a>}
-               </div>
-             </div>
-           )
-         })}
+         items.map(item => (
+           <HealthCard
+             key={item.id}
+             service={item}
+             lang={lang}
+             isModerator={isModerator}
+             userId={user?.id}
+             onEdit={(item) => { setEditTarget(item); setShowForm(true) }}
+             onDelete={deleteItem}
+           />
+         ))}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
-          <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
-            <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
-            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ဝန်ဆောင်မှု တင်မည်' : 'Post Health Service'}</h2>
-            <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'တင်မည်' : 'Post'}</button>
-          </div>
-          <div className="px-4 py-4 space-y-4 pb-24">
-            <div>
-              <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
-              <div className="flex gap-2 flex-wrap">
-                {HEALTH_TYPES.filter(t => t.id !== 'all').map(t => (
-                  <button key={t.id} onClick={() => set('type', t.id)} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border ${form.type === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{t.icon} {t.mm}</button>
-                ))}
-              </div>
-            </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={form.type === 'blood_drive' ? 'ဥပမာ: သွေးလှူဒါန်းပွဲ — မြေနီတောင်ဆေးရုံ' : 'ဥပမာ: အခမဲ့ဆေးခန်း — ဆရာဝန် ၅ ဦး'} /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">အဖွဲ့အစည်း/ဆေးရုံ</label><input value={form.organizer_mm} onChange={e => set('organizer_mm', e.target.value)} className="input-dark font-myanmar" /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
-            {form.type === 'blood_drive' && (
-              <div><label className="block text-xs text-white/50 mb-1.5">🩸 လိုအပ်သော သွေးအုပ်စု</label>
-                <div className="flex gap-2 flex-wrap">
-                  {BLOOD_TYPES.map(bt => (
-                    <button key={bt} onClick={() => toggleBloodType(bt)} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${form.blood_types_needed.includes(bt) ? 'bg-red-500/25 border-red-500/40 text-red-400' : 'bg-white/5 border-white/10 text-white/40'}`}>{bt}</button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div><label className="block text-xs text-white/50 mb-1.5">နေရာ</label><input value={form.location_mm} onChange={e => set('location_mm', e.target.value)} className="input-dark font-myanmar" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">Start Date</label><input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} className="input-dark" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">End Date</label><input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} className="input-dark" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">Start Time</label><input type="time" value={form.start_time} onChange={e => set('start_time', e.target.value)} className="input-dark" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">End Time</label><input type="time" value={form.end_time} onChange={e => set('end_time', e.target.value)} className="input-dark" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">ဆက်သွယ်ရမည့်သူ</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar text-sm" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark text-sm" placeholder="09..." /></div>
-            </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">Facebook Page</label><input value={form.facebook} onChange={e => set('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." /></div>
-            <button onClick={() => set('is_urgent', !form.is_urgent)} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${form.is_urgent ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
-              ⚡ {lang === 'mm' ? 'Urgent — သွေးလိုအပ်/အခြေအနေ ဆိုးရွားနေ' : 'Mark as Urgent'}
-            </button>
-          </div>
-        </div>
+        <HealthForm
+          lang={lang}
+          editTarget={editTarget}
+          onClose={() => { setShowForm(false); setEditTarget(null) }}
+          onSuccess={() => { setShowForm(false); setEditTarget(null); load() }}
+        />
       )}
     </div>
   )
 }
 
 // ─────────────────────────────────────────────────────────────
-// BUS SCHEDULE PAGE
+// BUS SCHEDULE PAGE (unchanged, same as before)
 // ─────────────────────────────────────────────────────────────
 const BUS_ROUTES_DEF = [
   { id: 'all', mm: 'အားလုံး', en: 'All', icon: '🚌' },
@@ -563,6 +685,7 @@ const BUS_ROUTES_DEF = [
 export function BusSchedulePage() {
   const { lang } = useLang()
   const { user, isModerator, profile, isLoggedIn } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule' })
 
   const [schedules, setSchedules] = useState([])
@@ -614,7 +737,7 @@ export function BusSchedulePage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🚌 {lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'ကားထွက်ချိန် Community Report' : 'Community reported bus schedules'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကားထွက်ချိန် Community Report` : 'Community reported bus schedules'}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
       </div>
@@ -676,7 +799,7 @@ export function BusSchedulePage() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TOURS PAGE (FIXED - with Realtime)
+// TOURS PAGE (unchanged, same as before)
 // ─────────────────────────────────────────────────────────────
 const TOUR_TYPES = [
   { id: 'all',      mm: 'အားလုံး',    en: 'All',       icon: '🏔️' },
@@ -690,6 +813,7 @@ const TOUR_TYPES = [
 export function ToursPage() {
   const { lang } = useLang()
   const { user, isModerator, profile, isLoggedIn } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: 'Tour Guide' })
 
   const [tours, setTours] = useState([])
@@ -784,7 +908,7 @@ export function ToursPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🏔️ Tour Guide / Trekking</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'Trekking / Boat Trip Guide တွေ' : 'Local trekking & boat tour guides'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} Trekking / Boat Trip Guide တွေ` : 'Local trekking & boat tour guides'}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
       </div>

@@ -16,7 +16,25 @@ export async function uploadImage(file, folder = 'general') {
   return data.secure_url
 }
 
-export function getOptimizedUrl(url, { width = 400, quality = 'auto', format = 'auto' } = {}) {
+export function getOptimizedUrl(url, { width = 400, quality = 'auto', format = 'auto', dpr = 'auto' } = {}) {
   if (!url || !url.includes('cloudinary.com')) return url
-  return url.replace('/upload/', `/upload/w_${width},q_${quality},f_${format}/`)
+  
+  // Add dpr for retina displays
+  const transformations = `w_${width},q_${quality},f_${format},dpr_${dpr}`
+  return url.replace('/upload/', `/upload/${transformations}/`)
+}
+
+// Thumbnail for lists (smaller, faster)
+export function getThumbnailUrl(url) {
+  return getOptimizedUrl(url, { width: 150 })
+}
+
+// Card image for listings
+export function getCardImageUrl(url) {
+  return getOptimizedUrl(url, { width: 400 })
+}
+
+// Hero image for detail pages
+export function getHeroImageUrl(url) {
+  return getOptimizedUrl(url, { width: 800, quality: 'auto' })
 }

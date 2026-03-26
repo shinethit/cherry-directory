@@ -3,6 +3,7 @@ import { TrendingUp, TrendingDown, Minus, Plus, RefreshCw, AlertCircle, Trash2, 
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 
 // ── Constants ─────────────────────────────────────────────────
@@ -17,7 +18,7 @@ const CATEGORIES = [
   { id: 'fuel',      mm: 'ဓာတ်ဆီ/ဂတ်',      en: 'Fuel',       icon: '⛽' },
   { id: 'other',     mm: 'အခြား',            en: 'Other',      icon: '📦' },
 ]
-// Default markets — shown if DB has none yet
+// Default markets — loaded from DB only
 const DEFAULT_MARKETS = [] // loaded from DB only
 const REPORT_COOLDOWN = 10 * 60 * 1000
 
@@ -493,6 +494,7 @@ function PriceRow({ item, lang, onReport, onEdit, onDelete, onVerify, isAdmin })
 export default function MarketPricePage() {
   const { lang } = useLang()
   const { user, isModerator } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'ဈေးနှုန်းဘုတ်' : 'Market Price Board' })
 
   const [prices, setPrices]         = useState([])

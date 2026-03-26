@@ -3,6 +3,7 @@ import { Zap, ZapOff, RefreshCw, AlertTriangle, CheckCircle, Clock, Plus, Pencil
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -115,6 +116,7 @@ function AreaCard({ area, lang, onReport }) {
 export default function PowerCutPage() {
   const { lang } = useLang()
   const { isModerator, user } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'လျှပ်စစ်အခြေအနေ' : 'Power Status' })
 
   const [areas, setAreas]       = useState([])

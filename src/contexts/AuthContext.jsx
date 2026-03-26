@@ -22,59 +22,70 @@ export function AuthProvider({ children }) {
       }
     } catch (err) {
       console.warn('fetchProfile failed:', err)
-    } finally {
-      setLoading(false)
     }
   }
 
   useEffect(() => {
-    // Prevent double initialization in StrictMode
     if (initialized.current) return
     initialized.current = true
 
     let isMounted = true
+    let timeoutId = null
 
-    const initializeAuth = async () => {
+    const setLoadingFalse = () => {
+      if (isMounted) {
+        setLoading(false)
+      }
+    }
+
+    // Force loading false after 5 seconds as a safety net
+    timeoutId = setTimeout(() => {
+      console.warn('[Auth] Loading timeout – forcing loading false')
+      setLoadingFalse()
+    }, 5000)
+
+    const loadSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
         
         if (error) {
-          console.warn('getSession error:', error)
-          if (isMounted) setLoading(false)
+          console.warn('[Auth] getSession error:', error)
+          setLoadingFalse()
           return
         }
         
-        if (!isMounted) return
-        
         if (session?.user) {
           setUser(session.user)
-          await fetchProfile(session.user.id)
-        } else {
-          setLoading(false)
+          // Fetch profile in background, don't wait for it to complete
+          fetchProfile(session.user.id).finally(() => {
+            // Profile fetched, no need to set loading again
+          })
         }
+        setLoadingFalse()
       } catch (err) {
-        console.warn('Auth initialization error:', err)
-        if (isMounted) setLoading(false)
+        console.warn('[Auth] Initialization error:', err)
+        setLoadingFalse()
       }
     }
 
-    initializeAuth()
+    loadSession()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!isMounted) return
       
       if (session?.user) {
         setUser(session.user)
-        await fetchProfile(session.user.id)
+        fetchProfile(session.user.id).catch(() => {})
       } else {
         setUser(null)
         setProfile(null)
-        setLoading(false)
       }
+      setLoadingFalse()
     })
 
     return () => {
       isMounted = false
+      if (timeoutId) clearTimeout(timeoutId)
       subscription.unsubscribe()
     }
   }, [])
@@ -106,7 +117,7 @@ export function AuthProvider({ children }) {
     const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
     if (error) throw error
     setProfile(prev => ({ ...prev, ...updates }))
-    // Re-fetch in background to sync server state
+    // background refresh
     supabase.from('profiles').select('*').eq('id', user.id).single()
       .then(({ data }) => { if (data) setProfile(data) })
       .catch(() => {})

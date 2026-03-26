@@ -4,6 +4,7 @@ import { Plus, Phone, MapPin, CheckCircle, AlertTriangle, ArrowLeft } from 'luci
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { getOptimizedUrl } from '../lib/cloudinary'
@@ -88,6 +89,7 @@ function PostCard({ post, lang }) {
 
 function PostForm({ onClose, onSuccess, lang }) {
   const { user, profile, isLoggedIn } = useAuth()
+  const navigate = useNavigate()
   const [form, setForm] = useState({
     type: 'lost', category: 'item', title: '', title_mm: '',
     description_mm: '', location_mm: '', contact_phone: '', contact_name: '',
@@ -228,6 +230,7 @@ function PostForm({ onClose, onSuccess, lang }) {
 export default function LostFoundPage() {
   const { lang } = useLang()
   const { isLoggedIn } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'ပျောက်ဆုံးပစ္စည်း' : 'Lost & Found' })
 
   const [posts, setPosts]     = useState([])
@@ -239,11 +242,11 @@ export default function LostFoundPage() {
   async function load() {
     setLoading(true)
     try {
-    let q = supabase.from('lost_found').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('reported_at', { ascending: false }).limit(50)
-    if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-    if (catFilter !== 'all')  q = q.eq('category', catFilter)
-    const { data } = await q
-    setPosts(data || [])
+      let q = supabase.from('lost_found').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('reported_at', { ascending: false }).limit(50)
+      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
+      if (catFilter !== 'all')  q = q.eq('category', catFilter)
+      const { data } = await q
+      setPosts(data || [])
     } catch (e) { console.warn(e) }
     setLoading(false)
   }

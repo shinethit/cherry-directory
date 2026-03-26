@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { LangProvider } from './contexts/LangContext'
 import { AppConfigProvider } from './contexts/AppConfigContext'
@@ -26,6 +26,7 @@ import MarketPricePage from './pages/MarketPricePage'
 import PowerCutPage from './pages/PowerCutPage'
 import FuelPage from './pages/FuelPage'
 import LostFoundPage from './pages/LostFoundPage'
+import LostFoundDetailPage from './pages/LostFoundDetailPage'
 import JobBoardPage from './pages/JobBoardPage'
 import ChatPage from './pages/ChatPage'
 import ProfilePage from './pages/ProfilePage'
@@ -60,23 +61,41 @@ function ScrollToTop() {
   return null
 }
 
+function LoadingSpinner() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-[#0d0015]">
+      <div className="text-center">
+        <div className="w-10 h-10 border-3 border-brand-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+        <p className="text-white/50 text-sm font-myanmar">Loading...</p>
+      </div>
+    </div>
+  )
+}
+
 function AppRoutes() {
   const { loading } = useAuth()
+  const [timeoutExceeded, setTimeoutExceeded] = useState(false)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[#0d0015] dark:bg-[#0d0015]">
-        <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
+  useEffect(() => {
+    if (!loading) {
+      setTimeoutExceeded(false)
+      return
+    }
+    const timer = setTimeout(() => {
+      console.warn('Auth loading timeout exceeded')
+      setTimeoutExceeded(true)
+    }, 8000)
+    return () => clearTimeout(timer)
+  }, [loading])
+
+  if (loading && !timeoutExceeded) return <LoadingSpinner />
+  if (timeoutExceeded) return <ErrorScreen onRetry={() => window.location.reload()} />
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0d0015] to-[#1a0030] dark:from-[#0d0015] dark:to-[#1a0030] pb-20">
       <Header />
       <ScrollToTop />
       <Routes>
-        {/* Public Routes */}
         <Route path="/" element={<HomePage />} />
         <Route path="/directory" element={<DirectoryPage />} />
         <Route path="/directory/:id" element={<ListingDetailPage />} />
@@ -89,17 +108,16 @@ function AppRoutes() {
         <Route path="/events/edit/:id" element={<EventFormPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         
-        {/* Community Features */}
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/emergency" element={<EmergencyPage />} />
         <Route path="/prices" element={<MarketPricePage />} />
         <Route path="/power" element={<PowerCutPage />} />
         <Route path="/fuel" element={<FuelPage />} />
         <Route path="/lost-found" element={<LostFoundPage />} />
+        <Route path="/lost-found/:id" element={<LostFoundDetailPage />} />
         <Route path="/jobs" element={<JobBoardPage />} />
         <Route path="/chat" element={<ChatPage />} />
         
-        {/* Community Features from CommunityFeaturePages */}
         <Route path="/bus" element={<BusSchedulePage />} />
         <Route path="/health" element={<HealthServicePage />} />
         <Route path="/notices" element={<NoticeBoardPage />} />
@@ -107,13 +125,11 @@ function AppRoutes() {
         <Route path="/donations" element={<DonationPage />} />
         <Route path="/tours" element={<ToursPage />} />
         
-        {/* New Community Features */}
         <Route path="/rent" element={<RentPage />} />
         <Route path="/tutoring" element={<TutoringPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/history/:id" element={<HistoryDetailPage />} />
         
-        {/* User Routes */}
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/:id" element={<ProfilePage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -121,22 +137,32 @@ function AppRoutes() {
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/claim/:id" element={<ClaimPage />} />
         
-        {/* Admin Routes */}
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/admin/categories" element={<CategoryManagerPage />} />
         <Route path="/admin/bulk-import" element={<BulkImportPage />} />
         <Route path="/admin/settings" element={<AppSettingsPage />} />
         
-        {/* Info Pages */}
         <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/help" element={<HelpPage />} />
         
-        {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <BottomNav />
+    </div>
+  )
+}
+
+function ErrorScreen({ onRetry }) {
+  return (
+    <div className="min-h-screen bg-[#0d0015] flex items-center justify-center p-4">
+      <div className="card-dark rounded-2xl p-6 max-w-md text-center border border-red-500/30">
+        <span className="text-5xl mb-4 block">⚠️</span>
+        <h2 className="text-white font-display font-bold text-lg mb-2">Connection Issue</h2>
+        <p className="text-white/50 text-sm font-myanmar mb-4">Unable to connect to server. Please check your internet connection.</p>
+        <button onClick={onRetry} className="btn-primary text-sm py-2 px-6">Retry</button>
+      </div>
     </div>
   )
 }

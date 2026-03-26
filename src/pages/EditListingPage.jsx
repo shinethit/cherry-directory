@@ -8,9 +8,7 @@ import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
-import { useAppConfig } from '../hooks/useAppConfig'
-
-
+import { useAppConfig } from '../contexts/AppConfigContext'
 
 function Field({ label, children, required }) {
   return (
@@ -94,7 +92,7 @@ export default function EditListingPage() {
   const MAX_TOTAL   = 5
 
   function photoCount() {
-    return (form.logo_url ? 1 : 0) + (form.cover_url ? 1 : 0) + (form.gallery || []).length
+    return (form?.logo_url ? 1 : 0) + (form?.cover_url ? 1 : 0) + (form?.gallery || []).length
   }
 
   async function handleLogoUpload(file) {
@@ -116,15 +114,15 @@ export default function EditListingPage() {
   const [galleryUploading, setGalleryUploading] = useState(false)
 
   async function handleGalleryUpload(file) {
-    if ((form.gallery || []).length >= MAX_GALLERY || photoCount() >= MAX_TOTAL) return
+    if ((form?.gallery || []).length >= MAX_GALLERY || photoCount() >= MAX_TOTAL) return
     setGalleryUploading(true)
     const url = await uploadImage(file, 'listings/gallery')
-    set('gallery', [...(form.gallery || []), url])
+    set('gallery', [...(form?.gallery || []), url])
     setGalleryUploading(false)
   }
 
   function removeGalleryPhoto(idx) {
-    set('gallery', (form.gallery || []).filter((_, i) => i !== idx))
+    set('gallery', (form?.gallery || []).filter((_, i) => i !== idx))
   }
 
   function getMyLocation() {
@@ -139,7 +137,7 @@ export default function EditListingPage() {
 
   async function handleSave(e) {
     e.preventDefault()
-    if (!canEdit || !form.name) return
+    if (!canEdit || !form?.name) return
     setSaving(true)
 
     const { gallery, ...formWithoutGallery } = form

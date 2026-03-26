@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, UserCog, Search } from 'lucide-react'
+import { 
+  ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, 
+  LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, 
+  UserCog, Search, RefreshCw, TrendingUp, Activity, FileText, Star,
+  EyeOff, Calendar, Megaphone   // Added missing icons
+} from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import CategoryManagerPage from './CategoryManagerPage'
 
@@ -29,14 +34,27 @@ export default function AdminPage() {
   const [toast, setToast]             = useState(null)
   const [deleting, setDeleting]       = useState(null)
 
-  const [stats, setStats] = useState({ total: 0, todayNew: 0, todayActive: 0, online: 0 })
-  const [statsLoading, setStatsLoading] = useState(false)
+  // Dashboard Stats
+  const [dashboardStats, setDashboardStats] = useState({
+    totalUsers: 0,
+    onlineNow: 0,
+    activeToday: 0,
+    newToday: 0,
+    newLast7Days: 0,
+    listings: { approved: 0, pending: 0, hidden: 0 },
+    posts: { news: 0, events: 0, announcements: 0 },
+    totalReviews: 0,
+    usersByRole: { admin: 0, moderator: 0, member: 0 }
+  })
+  const [statsLoading, setStatsLoading] = useState(true)
+
   const [usersList, setUsersList] = useState([])
   const [userSearch, setUserSearch] = useState('')
 
   const [quickLinks, setQuickLinks] = useState([])
   const [editingLink, setEditingLink] = useState(null)
   const [linkForm, setLinkForm] = useState({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
+  const [linkLoading, setLinkLoading] = useState(false)
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type })
@@ -80,18 +98,61 @@ export default function AdminPage() {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const todayStr = today.toISOString()
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
 
-      const { count: total } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
-      const { count: todayNew } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr)
-      const { count: todayActive } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', todayStr)
-      const { count: online } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', fiveMinsAgo)
+      // Users
+      const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
+      const { count: newToday } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr)
+      const { count: newLast7Days } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo)
+      const { count: activeToday } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', todayStr)
+      const { count: onlineNow } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', fiveMinsAgo)
 
-      setStats({
-        total: total || 0,
-        todayNew: todayNew || 0,
-        todayActive: todayActive || 0,
-        online: online || 0
+      // Users by role
+      const { data: roleCounts } = await supabase
+        .from('profiles')
+        .select('role', { count: 'exact', head: false })
+        .not('role', 'is', null)
+      const usersByRole = { admin: 0, moderator: 0, member: 0 }
+      if (roleCounts) {
+        roleCounts.forEach(p => {
+          if (p.role === 'admin') usersByRole.admin++
+          else if (p.role === 'moderator') usersByRole.moderator++
+          else usersByRole.member++
+        })
+      }
+
+      // Listings by status
+      const { count: approvedListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved')
+      const { count: pendingListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+      const { count: hiddenListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'hidden')
+
+      // Posts by type
+      const { count: newsPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'news')
+      const { count: eventPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'event')
+      const { count: announcementPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'announcement')
+
+      // Reviews
+      const { count: totalReviews } = await supabase.from('reviews').select('*', { count: 'exact', head: true })
+
+      setDashboardStats({
+        totalUsers: totalUsers || 0,
+        onlineNow: onlineNow || 0,
+        activeToday: activeToday || 0,
+        newToday: newToday || 0,
+        newLast7Days: newLast7Days || 0,
+        listings: {
+          approved: approvedListings || 0,
+          pending: pendingListings || 0,
+          hidden: hiddenListings || 0
+        },
+        posts: {
+          news: newsPosts || 0,
+          events: eventPosts || 0,
+          announcements: announcementPosts || 0
+        },
+        totalReviews: totalReviews || 0,
+        usersByRole
       })
     } catch (e) { console.warn('Stats Error:', e) }
     setStatsLoading(false)
@@ -109,20 +170,36 @@ export default function AdminPage() {
   async function handleRoleChange(userId, newRole) {
     if (!window.confirm(`ဒီ User ကို ${newRole.toUpperCase()} Role ပြောင်းပေးမှာ သေချာပြီလား?`)) return
     try {
-      const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId)
+      const { data: updated, error } = await supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('id', userId)
+        .select()
       if (error) throw error
-      showToast(`✓ Role ကို ${newRole} သို့ ပြောင်းလဲပြီးပါပြီ`)
-      loadUsers()
+      if (updated && updated.length > 0) {
+        showToast(`✓ Role ကို ${newRole} သို့ ပြောင်းလဲပြီးပါပြီ`)
+        loadUsers()
+        loadDashboardStats() // refresh stats
+      } else {
+        throw new Error('No rows updated – check RLS policy')
+      }
     } catch (e) {
       showToast(`Error: ${e.message}`, 'error')
     }
   }
 
   async function loadQuickLinks() {
+    setLinkLoading(true)
     try {
-      const { data } = await supabase.from('quick_links').select('*').order('sort_order')
+      const { data, error } = await supabase.from('quick_links').select('*').order('sort_order')
+      if (error) throw error
       setQuickLinks(data || [])
-    } catch (e) { console.warn(e) }
+    } catch (e) {
+      console.error('loadQuickLinks error:', e)
+      showToast('Link များ ရယူရာတွင် အမှားရှိသည်', 'error')
+    } finally {
+      setLinkLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -132,7 +209,6 @@ export default function AdminPage() {
     if (tab === 'users') loadUsers()
   }, [tab, listingFilter])
 
-  // CHERRY VERIFY - Updated approve function
   async function handleApprove(id) {
     await supabase
       .from('listings')
@@ -144,12 +220,14 @@ export default function AdminPage() {
       .eq('id', id)
     showToast('✓ အတည်ပြုပြီးပါပြီ (Cherry Verified) 🍒')
     loadListings()
+    loadDashboardStats()
   }
 
   async function handleHide(id) {
     await supabase.from('listings').update({ status: 'hidden' }).eq('id', id)
     showToast('ဝှက်သိမ်းပြီးပါပြီ')
     loadListings()
+    loadDashboardStats()
   }
 
   async function handleDelete(id) {
@@ -163,6 +241,7 @@ export default function AdminPage() {
       if (error) throw error
       showToast('🗑️ ဖျက်ပြီးပါပြီ')
       loadListings()
+      loadDashboardStats()
     } catch (e) { showToast('ဖျက်ရာတွင် အမှားတစ်ခု ဖြစ်သွားသည်', 'error') }
     setDeleting(null)
   }
@@ -185,32 +264,45 @@ export default function AdminPage() {
   }
 
   async function handleSaveLink() {
-    if (!linkForm.title || !linkForm.url) return showToast('Title နှင့် URL ထည့်ရန်လိုအပ်ပါတယ်', 'error')
-    
+    if (!linkForm.title || !linkForm.url) {
+      showToast('Title နှင့် URL ထည့်ရန်လိုအပ်ပါတယ်', 'error')
+      return
+    }
+
     const payload = { ...linkForm }
     delete payload.id
 
-    if (editingLink) {
-      const { error } = await supabase.from('quick_links').update(payload).eq('id', editingLink)
-      if (error) return showToast(`Database Error: ${error.message}`, 'error')
-      showToast('✓ ပြင်ဆင်ပြီးပါပြီ')
-    } else {
-      payload.sort_order = quickLinks.length + 1
-      const { error } = await supabase.from('quick_links').insert([payload])
-      if (error) return showToast(`Database Error: ${error.message}`, 'error')
-      showToast('✓ အသစ်ထည့်ပြီးပါပြီ')
+    try {
+      if (editingLink) {
+        const { error } = await supabase.from('quick_links').update(payload).eq('id', editingLink)
+        if (error) throw error
+        showToast('✓ ပြင်ဆင်ပြီးပါပြီ')
+      } else {
+        payload.sort_order = quickLinks.length + 1
+        const { error } = await supabase.from('quick_links').insert([payload])
+        if (error) throw error
+        showToast('✓ အသစ်ထည့်ပြီးပါပြီ')
+      }
+      setEditingLink(null)
+      setLinkForm({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
+      await loadQuickLinks()
+    } catch (e) {
+      console.error('Save link error:', e)
+      showToast(`Error: ${e.message}`, 'error')
     }
-    
-    setEditingLink(null)
-    setLinkForm({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
-    loadQuickLinks()
   }
 
   async function handleDeleteLink(id) {
     if (!window.confirm('ဖျက်မှာသေချာပြီလား?')) return
-    await supabase.from('quick_links').delete().eq('id', id)
-    showToast('ဖျက်ပြီးပါပြီ')
-    loadQuickLinks()
+    try {
+      const { error } = await supabase.from('quick_links').delete().eq('id', id)
+      if (error) throw error
+      showToast('ဖျက်ပြီးပါပြီ')
+      await loadQuickLinks()
+    } catch (e) {
+      console.error('Delete link error:', e)
+      showToast(`Error: ${e.message}`, 'error')
+    }
   }
 
   const filteredUsers = usersList.filter(u => 
@@ -247,38 +339,62 @@ export default function AdminPage() {
       </div>
 
       {tab === 'dashboard' && (
-        <div className="px-4 space-y-4 animate-fade-in">
-          <h2 className="text-white font-bold font-display flex items-center gap-2">
-            <Users size={18} className="text-brand-400" /> Member Status
-          </h2>
+        <div className="px-4 space-y-6 animate-fade-in">
+          {/* Header with refresh button */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-white font-bold font-display flex items-center gap-2">
+              <Activity size={18} className="text-brand-400" /> Platform Analytics
+            </h2>
+            <button onClick={loadDashboardStats} disabled={statsLoading} className="text-brand-300 hover:text-brand-200 transition-colors">
+              <RefreshCw size={16} className={statsLoading ? 'animate-spin' : ''} />
+            </button>
+          </div>
+
           {statsLoading ? (
-             <p className="text-white/30 text-center py-8">Loading stats...</p>
+            <div className="text-center py-8 text-white/30">Loading stats...</div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="card-dark p-4 rounded-2xl border border-white/5">
-                <p className="text-[10px] text-white/40 uppercase tracking-wider font-bold mb-1">Total Registered</p>
-                <p className="text-2xl font-display font-bold text-white">{stats.total}</p>
+            <>
+              {/* User stats row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <StatCard title="Total Users" value={dashboardStats.totalUsers} icon={Users} color="text-blue-400" />
+                <StatCard title="Online Now" value={dashboardStats.onlineNow} icon={Activity} color="text-green-400" pulse />
+                <StatCard title="Active Today" value={dashboardStats.activeToday} icon={TrendingUp} color="text-brand-300" />
+                <StatCard title="New Today" value={dashboardStats.newToday} icon={UserCog} color="text-yellow-400" />
               </div>
-              <div className="card-dark p-4 rounded-2xl border border-green-500/20 bg-green-500/5">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                  <p className="text-[10px] text-green-400/70 uppercase tracking-wider font-bold">Online Now</p>
+
+              {/* Additional user metrics */}
+              <div className="grid grid-cols-3 gap-2">
+                <StatCard title="New (7d)" value={dashboardStats.newLast7Days} icon={TrendingUp} color="text-amber-400" size="small" />
+                <StatCard title="Admins" value={dashboardStats.usersByRole.admin} icon={Users} color="text-purple-400" size="small" />
+                <StatCard title="Moderators" value={dashboardStats.usersByRole.moderator} icon={Users} color="text-indigo-400" size="small" />
+              </div>
+
+              {/* Listings stats */}
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-white/70 mb-2">📋 Listings</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatCard title="Approved" value={dashboardStats.listings.approved} icon={Check} color="text-green-400" size="small" />
+                  <StatCard title="Pending" value={dashboardStats.listings.pending} icon={AlertCircle} color="text-yellow-400" size="small" />
+                  <StatCard title="Hidden" value={dashboardStats.listings.hidden} icon={EyeOff} color="text-red-400" size="small" />
                 </div>
-                <p className="text-2xl font-display font-bold text-green-400">{stats.online}</p>
               </div>
-              <div className="card-dark p-4 rounded-2xl border border-brand-500/20 bg-brand-500/5">
-                <p className="text-[10px] text-brand-300/70 uppercase tracking-wider font-bold mb-1">Active Today</p>
-                <p className="text-2xl font-display font-bold text-brand-300">{stats.todayActive}</p>
+
+              {/* Posts stats */}
+              <div className="mt-4">
+                <h3 className="text-sm font-semibold text-white/70 mb-2">📰 Posts</h3>
+                <div className="grid grid-cols-3 gap-2">
+                  <StatCard title="News" value={dashboardStats.posts.news} icon={FileText} color="text-blue-400" size="small" />
+                  <StatCard title="Events" value={dashboardStats.posts.events} icon={Calendar} color="text-green-400" size="small" />
+                  <StatCard title="Announcements" value={dashboardStats.posts.announcements} icon={Megaphone} color="text-amber-400" size="small" />
+                </div>
               </div>
-              <div className="card-dark p-4 rounded-2xl border border-blue-500/20 bg-blue-500/5">
-                <p className="text-[10px] text-blue-300/70 uppercase tracking-wider font-bold mb-1">New Today</p>
-                <p className="text-2xl font-display font-bold text-blue-400">+{stats.todayNew}</p>
+
+              {/* Reviews */}
+              <div className="mt-4">
+                <StatCard title="Total Reviews" value={dashboardStats.totalReviews} icon={Star} color="text-gold-400" size="small" />
               </div>
-            </div>
+            </>
           )}
-          <p className="text-[9px] text-white/20 mt-4 font-myanmar text-center">
-            * Active Today နှင့် Online Now မှန်ကန်ရန် Database တွင် updated_at လိုအပ်ပါသည်။
-          </p>
         </div>
       )}
 
@@ -409,7 +525,9 @@ export default function AdminPage() {
           </div>
 
           <div className="space-y-2">
-            {quickLinks.length === 0 ? (
+            {linkLoading ? (
+              <p className="text-xs text-white/30 text-center py-4">Loading...</p>
+            ) : quickLinks.length === 0 ? (
               <p className="text-xs text-white/30 text-center py-4">Link များ မရှိသေးပါ</p>
             ) : (
               quickLinks.map(link => (
@@ -539,6 +657,21 @@ export default function AdminPage() {
           {toast.msg}
         </div>
       )}
+    </div>
+  )
+}
+
+// Helper component for stat cards
+function StatCard({ title, value, icon: Icon, color, pulse = false, size = 'normal' }) {
+  return (
+    <div className="card-dark p-3 rounded-2xl border border-white/5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className={`${size === 'small' ? 'text-[9px]' : 'text-[10px]'} text-white/40 uppercase tracking-wider font-bold`}>{title}</p>
+          <p className={`font-display font-bold ${size === 'small' ? 'text-lg' : 'text-xl'} text-white`}>{value.toLocaleString()}</p>
+        </div>
+        <Icon size={size === 'small' ? 16 : 20} className={`${color} ${pulse ? 'animate-pulse' : ''}`} />
+      </div>
     </div>
   )
 }

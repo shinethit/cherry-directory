@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Search, X, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
-import { useAppConfig } from '../hooks/useAppConfig'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
 
 export default function DirectoryPage() {
@@ -36,7 +36,28 @@ export default function DirectoryPage() {
   // Filters
   const [city, setCity] = useState(searchParams.get('city') || 'All')
   const [verifiedOnly, setVerifiedOnly] = useState(searchParams.get('verified') === 'true')
+  
+  // Debounced search
+  const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
   const [q, setQ] = useState(searchParams.get('q') || '')
+  const debounceTimer = useRef(null)
+
+  // Debounce effect
+  useEffect(() => {
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current)
+    }
+    
+    debounceTimer.current = setTimeout(() => {
+      setQ(searchInput)
+    }, 500)
+    
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current)
+      }
+    }
+  }, [searchInput])
   
   const cities = ['All', ...(config.cities || [])]
   const cityLabels = {
@@ -189,7 +210,6 @@ export default function DirectoryPage() {
         .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
         .eq('status', 'approved')
         .eq('category_id', selectedSubcategory.id)
-        // Sorting: Review ကောင်းတာတွေ အရင်၊ ပြီးမှ Alphabet
         .order('rating_avg', { ascending: false, nullsFirst: false })
         .order('name', { ascending: true })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
@@ -243,6 +263,7 @@ export default function DirectoryPage() {
   }
 
   function clearFilters() {
+    setSearchInput('')
     setQ('')
     setCity('All')
     setVerifiedOnly(false)
@@ -254,7 +275,6 @@ export default function DirectoryPage() {
   if (!selectedCategory) {
     return (
       <div className="pb-8">
-        {/* Fixed header - no overlapping */}
         <div className="sticky top-0 z-40 bg-[#140020] border-b border-white/10">
           <div className="px-4 py-4">
             <h1 className="font-display font-bold text-lg text-white">📂 အမျိုးအစားများ</h1>
@@ -390,18 +410,18 @@ export default function DirectoryPage() {
           </h1>
         </div>
 
-        {/* Search input */}
+        {/* Search input with debounce */}
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
           <input
             type="text"
             placeholder="လုပ်ငန်းအမည် ရှာရန်..."
-            value={q}
-            onChange={e => setQ(e.target.value)}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
             className="input-dark pl-9 pr-10 text-sm w-full"
           />
-          {q && (
-            <button onClick={() => setQ('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
+          {searchInput && (
+            <button onClick={() => { setSearchInput(''); setQ('') }} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
               <X size={14} />
             </button>
           )}

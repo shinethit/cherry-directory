@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { LogOut, Edit3, Crown, Shield, User, BookMarked, Star, Building2, Bell, BellOff, Download, Trophy, Clock, ChevronRight } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
-import { useAppConfig } from '../hooks/useAppConfig'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { usePWA } from '../hooks/usePWA'
 import { useSEO } from '../hooks/useSEO'
 import { usePoints } from '../hooks/usePoints'
@@ -56,8 +56,7 @@ export default function ProfilePage() {
       }
     }
     load()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user])
+  }, [user, getHistory])
 
   async function handleAvatarChange(e) {
     const file = e.target.files?.[0]
@@ -70,7 +69,6 @@ export default function ProfilePage() {
 
   async function saveProfile() {
     setNickError('')
-    // Validate nickname: alphanumeric + underscore, 3-20 chars
     if (nickname && !/^[a-zA-Z0-9_]{3,20}$/.test(nickname)) {
       setNickError('Nickname: 3-20 chars, letters/numbers/underscore only')
       return
@@ -103,8 +101,8 @@ export default function ProfilePage() {
 
   const POINT_LABELS = {
     write_review:     { mm: 'Review ရေး',      en: 'Wrote a review'   },
-    submit_listing:   { mm: "လုပ်ငန်း Submit",     en: 'Submitted listing' },
-    listing_approved: { mm: "လုပ်ငန်း Approved",   en: 'Listing approved'  },
+    submit_listing:   { mm: 'လုပ်ငန်း Submit',     en: 'Submitted listing' },
+    listing_approved: { mm: 'လုပ်ငန်း Approved',   en: 'Listing approved'  },
     rsvp_going:       { mm: 'Event RSVP',       en: 'RSVP to event'    },
     chat_message:     { mm: 'Chat message',     en: 'Chat message'     },
     claim_approved:   { mm: 'Claim Approved',   en: 'Claim approved'   },

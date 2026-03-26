@@ -1,28 +1,20 @@
-# 🍒 Cherry Directory v2
-**တောင်ကြီးမြို့ Business Directory Platform**
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
 
----
+# Run and deploy your AI Studio app
 
-## 📦 Tech Stack
+This contains everything you need to run your app locally.
 
-| Layer | Tech |
-|-------|------|
-| Frontend | React 18 + Vite + TailwindCSS |
-| Fonts | Pyidaungsu (Myanmar) + Syne (Display) + DM Sans |
-| Database | Supabase (PostgreSQL) |
-| Auth | Supabase Auth |
-| Realtime | Supabase Realtime (Chat) |
-| Images | Cloudinary CDN |
-| Maps | OpenStreetMap via Leaflet.js (free) |
-| Charts | Chart.js (CDN) |
-| Notifications | Web Push API + Supabase Edge Function |
-| Telegram | Bot API via Edge Function |
-| PWA | Service Worker + Web App Manifest |
-| i18n | Custom LangContext (Myanmar/English) |
-| Router | React Router v6 |
-| Icons | Lucide React |
-| Deploy | Vercel / Netlify |
+View your app in AI Studio: https://ai.studio/apps/0914fb93-f807-4e7f-a778-2fc6884038af
 
----
+## Run Locally
 
-Made with ❤️ for Taunggyi • Cherry Directory v2
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`

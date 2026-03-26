@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Calendar, MapPin, Users, BookOpen, Plus, Edit2, Trash2, Clock, CheckCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
@@ -37,7 +38,7 @@ function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
     <div className="card-dark rounded-2xl overflow-hidden border border-white/8 hover:border-brand-500/30 transition-all cursor-pointer" onClick={() => navigate(`/history/${post.id}`)}>
       {post.cover_url && (
         <div className="h-40 overflow-hidden">
-          <img src={post.cover_url} alt="" className="w-full h-full object-cover" />
+          <img src={post.cover_url} alt="" className="w-full h-full object-cover" loading="lazy" />
         </div>
       )}
       <div className="p-4 space-y-2">
@@ -153,9 +154,21 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
     }
     
     if (editPost) {
-      await supabase.from('history').update(payload).eq('id', editPost.id)
+      const { error } = await supabase.from('history').update(payload).eq('id', editPost.id)
+      if (error) {
+        console.error('Update error:', error)
+        alert('Error: ' + error.message)
+        setSubmitting(false)
+        return
+      }
     } else {
-      await supabase.from('history').insert(payload)
+      const { error } = await supabase.from('history').insert(payload)
+      if (error) {
+        console.error('Insert error:', error)
+        alert('Error: ' + error.message)
+        setSubmitting(false)
+        return
+      }
     }
     setSubmitting(false)
     onSuccess()
@@ -333,6 +346,7 @@ export function HistoryDetailPage() {
 export default function HistoryPage() {
   const { lang } = useLang()
   const { isModerator } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'ဒေသဆိုင်ရာ သမိုင်းကြောင်းများ' : 'Local History' })
 
   const [posts, setPosts] = useState([])
@@ -341,31 +355,61 @@ export default function HistoryPage() {
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      let q = supabase.from('history').select('*').eq('status', 'published').order('event_date', { ascending: false }).order('created_at', { ascending: false })
-      if (catFilter !== 'all') q = q.eq('category', catFilter)
-      const { data } = await q
-      setPosts(data || [])
-    } catch (e) { console.warn(e) }
+      let q = supabase
+        .from('history')
+        .select('*')
+        .eq('status', 'published')
+        .order('event_date', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+
+      if (catFilter !== 'all') {
+        q = q.eq('category', catFilter)
+      }
+
+      const { data, error } = await q
+      
+      if (error) {
+        console.error('History load error:', error)
+      } else {
+        setPosts(data || [])
+      }
+    } catch (e) {
+      console.error('History load exception:', e)
+    }
     setLoading(false)
-  }
+  }, [catFilter])
 
   useEffect(() => {
     load()
+    
     const channel = supabase
       .channel('history-live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'history' }, load)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'history' }, load)
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'history' 
+      }, () => {
+        load()
+      })
       .subscribe()
-    return () => supabase.removeChannel(channel)
-  }, [catFilter])
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [load])
 
   async function deletePost(id) {
     if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
-    await supabase.from('history').delete().eq('id', id)
-    load()
+    const { error } = await supabase.from('history').delete().eq('id', id)
+    if (error) {
+      console.error('Delete error:', error)
+      alert('Error: ' + error.message)
+    } else {
+      load()
+    }
   }
 
   return (
@@ -373,7 +417,9 @@ export default function HistoryPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">📜 {lang === 'mm' ? 'ဒေသဆိုင်ရာ သမိုင်းကြောင်းများ' : 'Local History'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'တောင်ကြီး၊ ကလော၊ အင်းလေး စသည့် ဒေသဆိုင်ရာ သမိုင်း၊ ယဉ်ကျေးမှု၊ သိသင့်သိထိုက်ရာ' : 'History, culture, and knowledge about our region'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">
+            {lang === 'mm' ? `${config.app_city || ''} ဒေသဆိုင်ရာ သမိုင်း၊ ယဉ်ကျေးမှု၊ သိသင့်သိထိုက်ရာ` : 'History, culture, and knowledge about our region'}
+          </p>
         </div>
         {isModerator && (
           <button onClick={() => { setEditTarget(null); setShowForm(true) }} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5">
@@ -384,7 +430,11 @@ export default function HistoryPage() {
 
       <div className="px-4 mb-4">
         <div className="relative">
-          <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="select-dark">
+          <select
+            value={catFilter}
+            onChange={e => setCatFilter(e.target.value)}
+            className="select-dark"
+          >
             {HISTORY_CATS.map(c => (
               <option key={c.id} value={c.id} style={{ backgroundColor: '#1a0030' }}>
                 {c.icon} {lang === 'mm' ? c.mm : c.en}
@@ -396,24 +446,26 @@ export default function HistoryPage() {
       </div>
 
       <div className="px-4 space-y-3 pb-24">
-        {loading ? [1,2,3].map(n => <div key={n} className="h-48 rounded-2xl shimmer" />) :
-         posts.length === 0 ? (
-           <div className="flex flex-col items-center py-14 text-center">
-             <span className="text-4xl mb-3">📜</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'စာရင်း မရှိသေး' : 'No posts yet'}</p>
-             {isModerator && <p className="text-xs text-white/30 mt-2">"တင်မည်" ကို နှိပ်ပြီး ပထမဆုံး သမိုင်းအကြောင်း ရေးပါ</p>}
-           </div>
-         ) :
-         posts.map(p => (
-           <HistoryCard
-             key={p.id}
-             post={p}
-             lang={lang}
-             isModerator={isModerator}
-             onEdit={(post) => { setEditTarget(post); setShowForm(true) }}
-             onDelete={deletePost}
-           />
-         ))}
+        {loading ? (
+          [1,2,3].map(n => <div key={n} className="h-48 rounded-2xl shimmer" />)
+        ) : posts.length === 0 ? (
+          <div className="flex flex-col items-center py-14 text-center">
+            <span className="text-4xl mb-3">📜</span>
+            <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'စာရင်း မရှိသေး' : 'No posts yet'}</p>
+            {isModerator && <p className="text-xs text-white/30 mt-2">"တင်မည်" ကို နှိပ်ပြီး ပထမဆုံး သမိုင်းအကြောင်း ရေးပါ</p>}
+          </div>
+        ) : (
+          posts.map(p => (
+            <HistoryCard
+              key={p.id}
+              post={p}
+              lang={lang}
+              isModerator={isModerator}
+              onEdit={(post) => { setEditTarget(post); setShowForm(true) }}
+              onDelete={deletePost}
+            />
+          ))
+        )}
       </div>
 
       {showForm && (

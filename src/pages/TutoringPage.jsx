@@ -4,6 +4,7 @@ import { Plus, Phone, BookOpen, Users, Clock, Calendar, ArrowLeft, Trash2, Edit2
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
@@ -199,22 +200,34 @@ function TutoringForm({ onClose, onSuccess, lang, editPost }) {
   async function submit() {
     if (!form.title_mm && !form.title) return
     setSubmitting(true)
+
     const payload = {
       ...form,
       price_hourly: form.price_hourly ? parseInt(form.price_hourly) : null,
       price_monthly: form.price_monthly ? parseInt(form.price_monthly) : null,
       images,
-      user_id: user.id,
+      user_id: user?.id,
       poster_name: profile?.full_name || profile?.nickname,
     }
-    
-    if (editPost) {
-      await supabase.from('tutoring').update(payload).eq('id', editPost.id)
-    } else {
-      await supabase.from('tutoring').insert(payload)
+
+    console.log('[TutoringForm] Submitting payload:', payload)
+
+    try {
+      if (editPost) {
+        const { error } = await supabase.from('tutoring').update(payload).eq('id', editPost.id)
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.from('tutoring').insert(payload).select()
+        console.log('[TutoringForm] Insert response:', { data, error })
+        if (error) throw error
+      }
+      setSubmitting(false)
+      onSuccess()
+    } catch (err) {
+      console.error('[TutoringForm] Submit error:', err)
+      alert('Error: ' + err.message)
+      setSubmitting(false)
     }
-    setSubmitting(false)
-    onSuccess()
   }
 
   return (
@@ -326,6 +339,7 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
 export default function TutoringPage() {
   const { lang } = useLang()
   const { user, isModerator, isLoggedIn } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'ဆရာ/ကျောင်းသား ချိတ်ဆက်ရေး' : 'Tutoring' })
 
   const [posts, setPosts] = useState([])
@@ -346,7 +360,8 @@ export default function TutoringPage() {
       if (gradeFilter !== 'all') q = q.eq('grade_level', gradeFilter)
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
       if (statusFilter !== 'all') q = q.eq('status', statusFilter)
-      const { data } = await q
+      const { data, error } = await q
+      if (error) throw error
       setPosts(data || [])
     } catch (e) { console.warn(e) }
     setLoading(false)

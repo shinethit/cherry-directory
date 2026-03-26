@@ -4,7 +4,7 @@ import { Plus, Phone, MapPin, ArrowLeft, Trash2, Edit2, Clock, Briefcase, Users,
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
-import { useAppConfig } from '../hooks/useAppConfig'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
@@ -63,12 +63,17 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
     : (lang === 'mm' ? 'သဘောတူညီ' : 'Negotiable')
 
   const handleContact = () => {
-    if (job.phone) {
-      window.location.href = `tel:${job.phone}`
+    if (job.contact_phone) {
+      window.location.href = `tel:${job.contact_phone}`
     } else if (job.user_id) {
       navigate(`/profile/${job.user_id}`)
     }
   }
+
+  // Distinct styles for employer vs job seeker
+  const postTypeStyle = job.post_type === 'employer'
+    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-sm shadow-blue-500/10'
+    : 'bg-green-500/20 text-green-400 border border-green-500/30 shadow-sm shadow-green-500/10'
 
   return (
     <div className={`card-dark rounded-2xl p-4 space-y-2 border-l-4 ${status.color === 'text-green-400' ? 'border-l-green-500/60' : 'border-l-amber-500/60'}`}>
@@ -78,7 +83,8 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
             {job.is_urgent && <span className="text-[8px] font-bold text-red-400 bg-red-500/15 border border-red-500/25 px-1.5 py-0.5 rounded-full">⚡ Urgent</span>}
             <span className="text-[9px] text-white/40 bg-white/6 px-1.5 py-0.5 rounded-full">{cat?.icon} {lang === 'mm' ? cat?.mm : cat?.en}</span>
             <span className="text-[9px] text-brand-300 bg-brand-600/15 border border-brand-400/20 px-1.5 py-0.5 rounded-full">{lang === 'mm' ? type?.mm : type?.en}</span>
-            <span className="text-[9px] text-white/40 bg-white/6 px-1.5 py-0.5 rounded-full">
+            {/* Post type with stronger visual */}
+            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${postTypeStyle}`}>
               {postType.icon} {lang === 'mm' ? postType.mm : postType.en}
             </span>
           </div>
@@ -109,9 +115,9 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
 
       <div className="flex items-center justify-between pt-1">
         <div className="flex gap-2">
-          {job.phone && (
+          {job.contact_phone && (
             <button onClick={handleContact} className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300">
-              <Phone size={10} /> {job.phone}
+              <Phone size={10} /> {job.contact_phone}
             </button>
           )}
           <span className="text-[10px] text-white/30">{timeAgo(job.posted_at, lang)}</span>
@@ -122,10 +128,10 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
             <button onClick={() => onStatusChange(job)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center" title="Status ပြောင်း">
               <Clock size={11} className="text-white/40" />
             </button>
-            <button onClick={() => onEdit(job)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center">
-              <Edit2 size={11} className="text-white/40" />
+            <button onClick={() => onEdit(job)} className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/30">
+              <Edit2 size={11} />
             </button>
-            <button onClick={() => onDelete(job.id)} className="w-6 h-6 rounded-lg bg-red-500/10 flex items-center justify-center">
+            <button onClick={() => onDelete(job.id)} className="w-6 h-6 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20">
               <Trash2 size={11} className="text-red-400" />
             </button>
           </div>
@@ -195,9 +201,11 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
     }
     
     if (editPost) {
-      await supabase.from('jobs').update(payload).eq('id', editPost.id)
+      const { error } = await supabase.from('jobs').update(payload).eq('id', editPost.id)
+      if (error) throw error
     } else {
-      await supabase.from('jobs').insert(payload)
+      const { error } = await supabase.from('jobs').insert(payload)
+      if (error) throw error
     }
     setSubmitting(false)
     onSuccess()
@@ -323,15 +331,6 @@ export default function JobBoardPage() {
       let q = supabase
         .from('jobs')
         .select('*')
-        .eq('status', 'active')  // Only show active by default? No, we want to show all based on filter
-        .order('is_urgent', { ascending: false })
-        .order('posted_at', { ascending: false })
-        .limit(50)
-      
-      // Remove the default active filter since we have statusFilter now
-      q = supabase
-        .from('jobs')
-        .select('*')
         .order('is_urgent', { ascending: false })
         .order('posted_at', { ascending: false })
         .limit(50)
@@ -340,7 +339,8 @@ export default function JobBoardPage() {
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
       if (statusFilter !== 'all') q = q.eq('status', statusFilter)
       
-      const { data } = await q
+      const { data, error } = await q
+      if (error) throw error
       setJobs(data || [])
     } catch (e) { console.warn(e) }
     setLoading(false)

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, CalendarDays } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI'
-import { useAppConfig } from '../hooks/useAppConfig'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
 
 export default function HomePage() {
@@ -20,42 +20,56 @@ export default function HomePage() {
   const [stats, setStats] = useState({ listings: 0, posts: 0 })
   const [quickLinks, setQuickLinks] = useState([])
   const [loading, setLoading] = useState(true)
+  const timeoutRef = useRef(null)
+
+  const load = useCallback(async () => {
+    console.log('[HomePage] load started')
+    try {
+      const results = await Promise.allSettled([
+        supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
+        supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
+        supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
+        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+        supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
+        supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order')
+      ])
+
+      console.log('[HomePage] all queries resolved')
+
+      setPosts(results[0]?.status === 'fulfilled' ? results[0].value.data || [] : [])
+      setFeatured(results[1]?.status === 'fulfilled' ? results[1].value.data || [] : [])
+      
+      const all = results[2]?.status === 'fulfilled' ? results[2].value.data || [] : []
+      setAllCategories(all)
+      setHomeCategories(all.filter(c => !c.parent_id))
+      
+      setStats({ listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0 })
+      setUpcomingEvents(results[4]?.status === 'fulfilled' ? results[4].value.data || [] : [])
+      setQuickLinks(results[5]?.status === 'fulfilled' ? results[5].value.data || [] : [])
+      
+    } catch (err) {
+      console.error('[HomePage] CRITICAL ERROR in load():', err)
+    } finally {
+      console.log('[HomePage] finally – setting loading false')
+      setLoading(false)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [
-          { data: postsData },
-          { data: featuredData },
-          { data: catsData },
-          { count: listingCount },
-          { data: eventsData },
-          { data: linksData }
-        ] = await Promise.all([
-          supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
-          supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
-          supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
-          supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
-          supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
-          supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order')
-        ])
-
-        setPosts(postsData || [])
-        setFeatured(featuredData || [])
-        const all = catsData || []
-        setAllCategories(all)
-        setHomeCategories(all.filter(c => !c.parent_id))
-        setUpcomingEvents(eventsData || [])
-        setStats({ listings: listingCount || 0 })
-        setQuickLinks(linksData || [])
-      } catch (e) {
-        console.warn('Load Error:', e)
-      } finally {
+    timeoutRef.current = setTimeout(() => {
+      if (loading) {
+        console.warn('[HomePage] Load timeout – forcing loading false')
         setLoading(false)
       }
-    }
+    }, 5000)
+
     load()
-  }, [])
+
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+  }, [load])
 
   const closeAndNavigate = (url) => {
     setSelectedCat(null)
@@ -63,13 +77,16 @@ export default function HomePage() {
     setTimeout(() => navigate(url), 20)
   }
 
+  const cityName = config?.app_city || 'တောင်ကြီးမြို့'
+  const appName = config?.app_name || 'Cherry Directory'
+
   return (
     <div className="space-y-6 py-4">
       {/* Hero Section */}
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
           <div className="relative">
-            <p className="text-gold-400 text-xs font-display font-semibold tracking-widest uppercase mb-1">{config.app_city || 'တောင်ကြီးမြို့'}</p>
+            <p className="text-gold-400 text-xs font-display font-semibold tracking-widest uppercase mb-1">{cityName}</p>
             <h2 className="font-display font-bold text-2xl text-white leading-tight mb-3">
               Cherry<br />Directory 🍒
             </h2>
@@ -378,7 +395,7 @@ export default function HomePage() {
           ))}
         </div>
         <p className="text-center text-[10px] text-white/30 mt-5 font-display font-medium tracking-wider uppercase">
-          {config.app_name || 'Cherry Directory'} • {config.app_city || 'Taunggyi'}
+          {appName} • {cityName}
         </p>
       </div>
     </div>

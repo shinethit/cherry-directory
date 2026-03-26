@@ -4,7 +4,7 @@ import { ArrowLeft, Save, Plus, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
-import { invalidateAppConfig } from '../hooks/useAppConfig'
+import { invalidateAppConfig } from '../contexts/AppConfigContext'
 
 export default function AppSettingsPage() {
   const navigate = useNavigate()

@@ -3,7 +3,7 @@ import { Phone, Plus, Pencil, Trash2, X, Save, Clock, DollarSign } from 'lucide-
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
-import { useAppConfig } from '../hooks/useAppConfig'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 
 // ── Category config ───────────────────────────────────────────

@@ -7,9 +7,7 @@ import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
-import { useAppConfig } from '../hooks/useAppConfig'
-
-
+import { useAppConfig } from '../contexts/AppConfigContext'
 
 function Field({ label, children, required }) {
   return (

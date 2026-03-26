@@ -4,6 +4,7 @@ import { Plus, Phone, MapPin, Home, Users, CheckCircle, XCircle, Clock, ArrowLef
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
@@ -177,22 +178,34 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
   async function submit() {
     if (!form.title_mm && !form.title) return
     setSubmitting(true)
+
     const payload = {
       ...form,
       price_monthly: form.price_monthly ? parseInt(form.price_monthly) : null,
       price_deposit: form.price_deposit ? parseInt(form.price_deposit) : null,
       images,
-      user_id: user.id,
+      user_id: user?.id,
       poster_name: profile?.full_name || profile?.nickname,
     }
-    
-    if (editPost) {
-      await supabase.from('rentals').update(payload).eq('id', editPost.id)
-    } else {
-      await supabase.from('rentals').insert(payload)
+
+    console.log('[RentForm] Submitting payload:', payload)
+
+    try {
+      if (editPost) {
+        const { error } = await supabase.from('rentals').update(payload).eq('id', editPost.id)
+        if (error) throw error
+      } else {
+        const { data, error } = await supabase.from('rentals').insert(payload).select()
+        console.log('[RentForm] Insert response:', { data, error })
+        if (error) throw error
+      }
+      setSubmitting(false)
+      onSuccess()
+    } catch (err) {
+      console.error('[RentForm] Submit error:', err)
+      alert('Error: ' + err.message)
+      setSubmitting(false)
     }
-    setSubmitting(false)
-    onSuccess()
   }
 
   return (
@@ -295,6 +308,7 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
 export default function RentPage() {
   const { lang } = useLang()
   const { user, isModerator, isLoggedIn } = useAuth()
+  const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'အိမ်/အခန်း ငှားရမ်းခြင်း' : 'Rentals' })
 
   const [posts, setPosts] = useState([])
@@ -313,7 +327,8 @@ export default function RentPage() {
       if (propertyFilter !== 'all') q = q.eq('property_type', propertyFilter)
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
       if (statusFilter !== 'all') q = q.eq('status', statusFilter)
-      const { data } = await q
+      const { data, error } = await q
+      if (error) throw error
       setPosts(data || [])
     } catch (e) { console.warn(e) }
     setLoading(false)

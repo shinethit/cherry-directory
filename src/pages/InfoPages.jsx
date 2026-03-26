@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useLang } from '../contexts/LangContext'
-import { useAppConfig } from '../hooks/useAppConfig'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 
 // ── Shared layout ─────────────────────────────────────────────
@@ -27,6 +27,34 @@ function Section({ title, titleMm, children }) {
     <div className="space-y-2">
       <h2 className="font-display font-bold text-base text-white">{titleMm || title}</h2>
       <div className="text-white/60 space-y-2 leading-relaxed">{children}</div>
+    </div>
+  )
+}
+
+// ── Disclaimer Banner Component ───────────────────────────────
+function DisclaimerBanner() {
+  return (
+    <div className="bg-amber-500/15 border-2 border-red-500/60 rounded-2xl p-5 my-4 shadow-lg shadow-red-900/20">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0">
+          <span className="text-4xl text-red-500 animate-pulse">⚠️</span>
+        </div>
+        <div>
+          <p className="text-red-400 font-bold text-lg font-myanmar mb-2">
+            သတိပြုရန် အရေးကြီး
+          </p>
+          <p className="text-amber-300 text-base font-myanmar leading-relaxed">
+            ဤ Application အတွင်းရှိ Data များသည် Public မှ တိုက်ရိုက်လာသော Data များဖြစ်ပြီး 
+            Application ဖန်တီးသူနှင့် သက်ဆိုင်ခြင်းမရှိပါ။ 
+            အဆက်အသွယ်များ ၊ ဖုန်းများကို မိမိတို့ဘာသာ ချင့်ချိန်သုံးစွဲကြပါရန်။
+          </p>
+          <div className="mt-3 pt-2 border-t border-red-500/30">
+            <p className="text-red-400/80 text-xs font-myanmar">
+              ⚡ Community မှ တင်ပြသော အချက်အလက်များဖြစ်သဖြင့် တိကျမှုကို အာမခံနိုင်မည် မဟုတ်ပါ။
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -73,7 +101,7 @@ export function AboutPage() {
   )
 }
 
-// ── Privacy Policy ─────────────────────────────────────────────
+// ── Privacy Policy (with Disclaimer) ─────────────────────────
 export function PrivacyPage() {
   const { lang } = useLang()
   useSEO({ title: lang === 'mm' ? 'ကိုယ်ရေးလုံခြုံမှုမူဝါဒ' : 'Privacy Policy' })
@@ -81,6 +109,9 @@ export function PrivacyPage() {
   return (
     <InfoLayout title="Privacy Policy" titleMm="ကိုယ်ရေးလုံခြုံမှုမူဝါဒ">
       <p className="text-xs text-white/30">Last updated: {updated}</p>
+
+      {/* ⚠️ DISCLAIMER BANNER - Prominent Yellow with Red Text */}
+      <DisclaimerBanner />
 
       <Section titleMm="ကောက်ယူသောသတင်းအချက်အလက်">
         <p>Cherry Directory သည် အောက်ပါ သတင်းအချက်အလက်များကို ကောက်ယူပါသည်:</p>

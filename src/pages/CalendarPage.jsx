@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, MapPin, Clock, CheckCircle, Star, Plus, Edit
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
-import { useAppConfig } from '../hooks/useAppConfig'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { getOptimizedUrl } from '../lib/cloudinary'
 
