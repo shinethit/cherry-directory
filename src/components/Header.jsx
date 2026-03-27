@@ -54,15 +54,15 @@ export default function Header() {
   return (
     <>
       <header
-        className={`sticky top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled
-            ? 'bg-[#0a0018]/90 backdrop-blur-lg border-b border-white/10 dark:bg-[#0a0018]/90'
+            ? 'bg-[#0a0018]/80 backdrop-blur-md border-b border-white/10'
             : 'bg-transparent'
         }`}
         style={{ top: 'env(safe-area-inset-top)' }}
       >
         <div className="flex items-center justify-between px-4 py-3">
-          {/* Logo - using actual image from public folder */}
+          {/* Logo */}
           <button
             onClick={() => navigate('/')}
             className="flex items-center gap-2"
@@ -118,6 +118,10 @@ export default function Header() {
         </div>
       </header>
 
+      {/* Spacer to prevent content from hiding under fixed header */}
+      <div className="h-16" style={{ marginTop: 'env(safe-area-inset-top)' }} />
+
+      {/* Menu overlay */}
       {menuOpen && (
         <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md pt-16" onClick={() => setMenuOpen(false)}>
           <div className="p-4 space-y-2" onClick={e => e.stopPropagation()}>
