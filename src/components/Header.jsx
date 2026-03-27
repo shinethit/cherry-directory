@@ -128,7 +128,7 @@ export default function Header() {
       </header>
 
       {/* Spacer to prevent content from hiding under fixed header */}
-      <div className="h-16" style={{ marginTop: 'env(safe-area-inset-top)' }} />
+      <div className="h-24" />
 
       {/* Menu overlay */}
       {menuOpen && (
