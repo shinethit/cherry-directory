@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Reply, X } from 'lucide-react'
+import { Send, Reply, X, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
-function ChatBubble({ msg, isMe, onReply }) {
+function ChatBubble({ msg, isMe, onReply, onDelete, canDelete }) {
   return (
     <div className={`flex gap-2 mb-3 ${isMe ? 'flex-row-reverse' : ''}`}>
       {!isMe && (
@@ -23,10 +23,7 @@ function ChatBubble({ msg, isMe, onReply }) {
           </div>
         )}
         <div className={isMe ? 'bubble-me' : 'bubble-other'}>
-          {!msg.is_deleted
-            ? <p className="text-sm text-white font-myanmar leading-relaxed">{msg.content}</p>
-            : <p className="text-xs text-white/30 italic">This message was deleted</p>
-          }
+          <p className="text-sm text-white font-myanmar leading-relaxed">{msg.content}</p>
         </div>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-[9px] text-white/25">
@@ -35,6 +32,11 @@ function ChatBubble({ msg, isMe, onReply }) {
           <button onClick={() => onReply(msg)} className="text-[9px] text-white/30 hover:text-brand-300 transition-colors flex items-center gap-0.5">
             <Reply size={10} /> Reply
           </button>
+          {canDelete && (
+            <button onClick={() => onDelete(msg.id)} className="text-[9px] text-red-400/70 hover:text-red-400 transition-colors flex items-center gap-0.5">
+              <Trash2 size={10} /> Delete
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -42,7 +44,7 @@ function ChatBubble({ msg, isMe, onReply }) {
 }
 
 export default function ChatPage() {
-  const { user, profile, isLoggedIn } = useAuth()
+  const { user, profile, isLoggedIn, isAdmin, isModerator } = useAuth()
   const [rooms, setRooms] = useState([])
   const [activeRoom, setActiveRoom] = useState(null)
   const [messages, setMessages] = useState([])
@@ -98,19 +100,14 @@ export default function ChatPage() {
       .on(
         'postgres_changes',
         {
-          event: 'UPDATE',
+          event: 'DELETE',
           schema: 'public',
           table: 'chat_messages',
           filter: `room_id=eq.${activeRoom.id}`,
         },
-        async (payload) => {
-          const { data: updatedMsg } = await supabase
-            .from('chat_messages')
-            .select('*, user:profiles(full_name, avatar_url)')
-            .eq('id', payload.new.id)
-            .single()
-          if (updatedMsg && isSubscribed) {
-            setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m))
+        (payload) => {
+          if (isSubscribed) {
+            setMessages(prev => prev.filter(m => m.id !== payload.old.id))
           }
         }
       )
@@ -127,6 +124,10 @@ export default function ChatPage() {
   }, [messages])
 
   async function sendMessage() {
+    if (!activeRoom) {
+      alert('No chat room selected')
+      return
+    }
     const content = input.trim()
     if (!content) return
 
@@ -150,7 +151,19 @@ export default function ChatPage() {
       const { error } = await supabase.from('chat_messages').insert(messageToSend)
       if (error) console.error('Send error:', error)
     } catch (err) {
-      console.error('Send failed:', err)
+      console.error('Send exception:', err)
+    }
+  }
+
+  async function deleteMessage(messageId) {
+    if (!confirm('ဖျက်မည်လား?')) return
+    const { error } = await supabase
+      .from('chat_messages')
+      .delete()
+      .eq('id', messageId)
+    if (error) {
+      console.error('Delete error:', error)
+      alert('ဖျက်ရာတွင် အမှားရှိသည်: ' + error.message)
     }
   }
 
@@ -161,8 +174,28 @@ export default function ChatPage() {
     }
   }
 
+  const canDelete = (msg) => {
+    if (!isLoggedIn) return false
+    // Admin or moderator can delete any message
+    if (isAdmin || isModerator) return true
+    // User can delete their own message
+    return msg.user_id === user?.id
+  }
+
+  if (rooms.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-[80dvh] p-4 text-center">
+        <div className="card-dark p-6 rounded-2xl max-w-sm">
+          <span className="text-4xl mb-3 block">💬</span>
+          <p className="text-white/70 font-myanmar">Chat room မရှိသေးပါ။</p>
+          <p className="text-white/40 text-xs mt-2">Admin မှ room ဖန်တီးပေးရန် လိုအပ်သည်။</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col h-[calc(100dvh-180px)]">
+    <div className="flex flex-col h-[calc(100dvh-180px)] pb-40" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 10rem)' }}>
       <div className="flex gap-2 px-4 py-2 overflow-x-auto scrollbar-hide border-b border-white/8">
         {rooms.map(room => (
           <button
@@ -175,13 +208,15 @@ export default function ChatPage() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-0 pb-24">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-0">
         {messages.map(msg => (
           <ChatBubble
             key={msg.id}
             msg={msg}
             isMe={isLoggedIn ? msg.user_id === user?.id : msg.guest_name === guestName}
             onReply={setReplyTo}
+            onDelete={deleteMessage}
+            canDelete={canDelete(msg)}
           />
         ))}
         <div ref={bottomRef} />
@@ -197,7 +232,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="px-4 py-3 border-t border-white/8">
+      <div className="px-4 pt-3 pb-8 border-t border-white/8" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 1rem)' }}>
         {!isLoggedIn && guestName && (
           <p className="text-[10px] text-white/30 mb-1.5">Guest: {guestName} • <button onClick={() => setShowNamePrompt(true)} className="text-brand-300 hover:text-brand-200">ပြောင်းရန်</button></p>
         )}
