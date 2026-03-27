@@ -54,11 +54,12 @@ export default function Header() {
   return (
     <>
       <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        className={`sticky top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled
             ? 'bg-[#0a0018]/90 backdrop-blur-lg border-b border-white/10 dark:bg-[#0a0018]/90'
             : 'bg-transparent'
         }`}
+        style={{ top: 'env(safe-area-inset-top)' }}
       >
         <div className="flex items-center justify-between px-4 py-3">
           {/* Logo - using actual image from public folder */}
@@ -204,8 +205,6 @@ export default function Header() {
           </div>
         </div>
       )}
-
-      <div className="h-14" />
     </>
   )
 }

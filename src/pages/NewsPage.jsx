@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, X as ImageIcon, Pin } from 'lucide-react'
+import { Plus, X, Pin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -23,7 +23,9 @@ function PostForm({ onClose, onSuccess, lang }) {
     event_start: '', event_location: '',
   })
   const [coverUrl, setCoverUrl] = useState('')
+  const [images, setImages] = useState([])        // Gallery images (max 5)
   const [coverLoading, setCoverLoading] = useState(false)
+  const [galleryLoading, setGalleryLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -36,13 +38,28 @@ function PostForm({ onClose, onSuccess, lang }) {
     setCoverLoading(false)
   }
 
+  async function handleGalleryUpload(file) {
+    if (images.length >= 5) {
+      setError(lang === 'mm' ? 'အများဆုံး ၅ ပုံသာ တင်နိုင်ပါသည်' : 'Maximum 5 images allowed')
+      return
+    }
+    setGalleryLoading(true)
+    const url = await uploadImage(file, 'news/gallery')
+    setImages(prev => [...prev, url])
+    setGalleryLoading(false)
+  }
+
+  function removeGalleryImage(index) {
+    setImages(prev => prev.filter((_, i) => i !== index))
+  }
+
   async function submit() {
     if (!form.title_mm && !form.title) {
       setError(lang === 'mm' ? 'ခေါင်းစဉ် ထည့်ပါ' : 'Title is required')
       return
     }
     setSaving(true)
-    const { error: err } = await supabase.from('posts').insert({
+    const payload = {
       title:       form.title || form.title_mm,
       title_mm:    form.title_mm || null,
       content:     form.content || null,
@@ -51,10 +68,12 @@ function PostForm({ onClose, onSuccess, lang }) {
       status:      'published',
       is_pinned:   form.is_pinned,
       cover_url:   coverUrl || null,
+      images:      images,                      // store gallery images
       event_start: form.event_start || null,
       event_location: form.event_location || null,
       author_id:   user?.id,
-    })
+    }
+    const { error: err } = await supabase.from('posts').insert(payload)
     setSaving(false)
     if (err) { setError(err.message); return }
     onSuccess()
@@ -121,6 +140,28 @@ function PostForm({ onClose, onSuccess, lang }) {
           ) : (
             <ImageUploader onUpload={handleCover} loading={coverLoading} label="Cover တင်ရန်" />
           )}
+        </div>
+
+        {/* Gallery images */}
+        <div>
+          <label className="block text-xs text-white/50 mb-2">ဓာတ်ပုံများ (optional, max 5)</label>
+          <div className="grid grid-cols-3 gap-2">
+            {images.map((url, i) => (
+              <div key={i} className="relative aspect-square">
+                <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
+                <button
+                  onClick={() => removeGalleryImage(i)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-[10px]"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {images.length < 5 && (
+              <ImageUploader onUpload={handleGalleryUpload} loading={galleryLoading} label="+ ပုံထပ်ထည့်" />
+            )}
+          </div>
+          <p className="text-[9px] text-white/25 mt-1.5">အများဆုံး ၅ ပုံ</p>
         </div>
 
         {/* Title */}
@@ -205,7 +246,7 @@ function PostForm({ onClose, onSuccess, lang }) {
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────
+// ── Main Page (unchanged) ─────────────────────────────────────
 export default function NewsPage() {
   const { lang }        = useLang()
   const { isModerator } = useAuth()
