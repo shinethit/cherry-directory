@@ -51,6 +51,15 @@ export default function Header() {
     { path: '/admin/settings', label: 'App Settings', icon: Settings },
   ]
 
+  // Helper to get top padding that accounts for safe area
+  const getMenuTopPadding = () => {
+    if (typeof window !== 'undefined') {
+      // On iOS, env(safe-area-inset-top) is supported; we use it via CSS variable
+      return 'calc(4rem + env(safe-area-inset-top))'
+    }
+    return '4rem'
+  }
+
   return (
     <>
       <header
@@ -123,8 +132,12 @@ export default function Header() {
 
       {/* Menu overlay */}
       {menuOpen && (
-        <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md pt-16" onClick={() => setMenuOpen(false)}>
-          <div className="p-4 space-y-2" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md" onClick={() => setMenuOpen(false)}>
+          <div
+            className="p-4 space-y-2 overflow-y-auto h-full"
+            style={{ paddingTop: getMenuTopPadding() }}
+            onClick={e => e.stopPropagation()}
+          >
             {isLoggedIn && profile && (
               <div className="card-dark p-4 rounded-2xl mb-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-brand-700 flex items-center justify-center overflow-hidden">
