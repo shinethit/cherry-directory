@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, MapPin, Plus, X, Minus } from 'lucide-react'
+import { ArrowLeft, CheckCircle, MapPin, Plus, X, Minus, Trash2, Edit2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -47,28 +47,41 @@ export default function SubmitListingPage() {
   const [quickCat, setQuickCat] = useState({ name_mm: '', name: '', icon: '📦', parent_id: '' })
   const [addingCat, setAddingCat] = useState(false)
 
+  // --- Menu items state ---
+  const [menuItems, setMenuItems] = useState([])
+  const [editingMenuItem, setEditingMenuItem] = useState(null)
+  const [menuFormOpen, setMenuFormOpen] = useState(false)
+  const [menuForm, setMenuForm] = useState({
+    name: '',
+    price: '',
+    description: '',
+    images: [],
+  })
+  const [menuImageLoading, setMenuImageLoading] = useState(false)
+  const [menuError, setMenuError] = useState('')
+
   useEffect(() => {
     supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
   }, [])
 
-  function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
+  function setFormField(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
   function updatePhone(index, value) {
     const newPhones = [...form.phones]
     newPhones[index] = value
-    set('phones', newPhones)
+    setFormField('phones', newPhones)
   }
 
   function addPhone() {
     if (form.phones.length < 5) {
-      set('phones', [...form.phones, ''])
+      setFormField('phones', [...form.phones, ''])
     }
   }
 
   function removePhone(index) {
     if (form.phones.length > 1) {
       const newPhones = form.phones.filter((_, i) => i !== index)
-      set('phones', newPhones)
+      setFormField('phones', newPhones)
     }
   }
 
@@ -95,8 +108,8 @@ export default function SubmitListingPage() {
     setLocationLoading(true)
     navigator.geolocation.getCurrentPosition(
       pos => {
-        set('latitude', pos.coords.latitude.toFixed(7))
-        set('longitude', pos.coords.longitude.toFixed(7))
+        setFormField('latitude', pos.coords.latitude.toFixed(7))
+        setFormField('longitude', pos.coords.longitude.toFixed(7))
         setLocationLoading(false)
       },
       () => setLocationLoading(false)
@@ -118,19 +131,88 @@ export default function SubmitListingPage() {
       }).select().single()
       const { data: cats } = await supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order')
       setCategories(cats || [])
-      if (newCat) set('category_id', newCat.id)
+      if (newCat) setFormField('category_id', newCat.id)
       setQuickCat({ name_mm: '', name: '', icon: '📦', parent_id: '' })
       setShowQuickCat(false)
     } catch (e) { console.warn(e) }
     setAddingCat(false)
   }
 
+  // --- Menu functions ---
+  const openMenuForm = (item = null) => {
+    if (item) {
+      setEditingMenuItem(item)
+      setMenuForm({
+        name: item.name,
+        price: item.price,
+        description: item.description,
+        images: item.images || [],
+      })
+    } else {
+      setEditingMenuItem(null)
+      setMenuForm({ name: '', price: '', description: '', images: [] })
+    }
+    setMenuFormOpen(true)
+    setMenuError('')
+  }
+
+  const closeMenuForm = () => {
+    setMenuFormOpen(false)
+    setEditingMenuItem(null)
+    setMenuForm({ name: '', price: '', description: '', images: [] })
+    setMenuError('')
+  }
+
+  const handleMenuImageUpload = async (file) => {
+    if (menuForm.images.length >= 5) {
+      setMenuError(lang === 'mm' ? 'အများဆုံး ၅ ပုံသာ တင်နိုင်ပါသည်' : 'Maximum 5 images allowed')
+      return
+    }
+    setMenuImageLoading(true)
+    const url = await uploadImage(file, 'menu')
+    setMenuForm(prev => ({ ...prev, images: [...prev.images, url] }))
+    setMenuImageLoading(false)
+  }
+
+  const removeMenuImage = (index) => {
+    setMenuForm(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index),
+    }))
+  }
+
+  const saveMenuItem = () => {
+    if (!menuForm.name.trim()) {
+      setMenuError(lang === 'mm' ? 'အမည် ထည့်ပါ' : 'Name required')
+      return
+    }
+    const newItem = {
+      id: editingMenuItem?.id || Date.now().toString(),
+      name: menuForm.name.trim(),
+      price: menuForm.price.trim(),
+      description: menuForm.description.trim(),
+      images: menuForm.images,
+    }
+    if (editingMenuItem) {
+      setMenuItems(prev => prev.map(item => item.id === editingMenuItem.id ? newItem : item))
+    } else {
+      setMenuItems(prev => [...prev, newItem])
+    }
+    closeMenuForm()
+  }
+
+  const deleteMenuItem = (id) => {
+    if (confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this item?')) {
+      setMenuItems(prev => prev.filter(item => item.id !== id))
+    }
+  }
+
+  // --- Submit form with menu items ---
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.name || !form.category_id) return
     setSubmitting(true)
     try {
-      // Map phones to separate columns
       const phoneColumns = {}
       form.phones.forEach((phone, idx) => {
         if (phone) phoneColumns[`phone_${idx + 1}`] = phone
@@ -143,6 +225,7 @@ export default function SubmitListingPage() {
         logo_url: logo,
         cover_url: coverImg,
         images: [],
+        menu_items: menuItems.length > 0 ? menuItems : null,
         submitted_by: profile.id,
         status: 'approved',
         report_count: 0,
@@ -202,16 +285,16 @@ export default function SubmitListingPage() {
 
         {/* Basic info */}
         <Field label={t('name_en')} required>
-          <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="input-dark" placeholder="Business Name" required />
+          <input type="text" value={form.name} onChange={e => setFormField('name', e.target.value)} className="input-dark" placeholder="Business Name" required />
         </Field>
 
         <Field label={t('name_mm_label')}>
-          <input type="text" value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="လုပ်ငန်း / ဝန်ဆောင်မှု အမည်..." />
+          <input type="text" value={form.name_mm} onChange={e => setFormField('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="လုပ်ငန်း / ဝန်ဆောင်မှု အမည်..." />
         </Field>
 
         <Field label={t('category_label')} required>
           <div className="flex gap-2">
-            <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark flex-1" required>
+            <select value={form.category_id} onChange={e => setFormField('category_id', e.target.value)} className="select-dark flex-1" required>
               <option value="">{t('category_placeholder')}</option>
               {categories.filter(c => !c.parent_id).map(parent => {
                 const subs = categories.filter(c => c.parent_id === parent.id)
@@ -282,10 +365,10 @@ export default function SubmitListingPage() {
         )}
 
         <Field label={t('desc_label')}>
-          <textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" placeholder={t('desc_placeholder')} />
+          <textarea value={form.description_mm} onChange={e => setFormField('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" placeholder={t('desc_placeholder')} />
         </Field>
 
-        {/* Location */}
+        {/* Location (unchanged) */}
         <div className="border-t border-white/8 pt-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">တည်နေရာ</p>
@@ -302,13 +385,13 @@ export default function SubmitListingPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label={t('city_label')}>
-              <select value={form.city} onChange={e => set('city', e.target.value)} className="select-dark">
+              <select value={form.city} onChange={e => setFormField('city', e.target.value)} className="select-dark">
                 <option value="">-- ရွေးပါ --</option>
                 {(config.cities || []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </Field>
             <Field label="Township">
-              <input type="text" value={form.township} onChange={e => set('township', e.target.value)} className="input-dark" placeholder="Township..." />
+              <input type="text" value={form.township} onChange={e => setFormField('township', e.target.value)} className="input-dark" placeholder="Township..." />
             </Field>
           </div>
 
@@ -321,7 +404,7 @@ export default function SubmitListingPage() {
                   { value: 'home',    label: '🏠 အိမ်မှ',          desc: 'Home-based' },
                 ].map(opt => (
                   <button key={opt.value} type="button"
-                    onClick={() => set('business_type', opt.value)}
+                    onClick={() => setFormField('business_type', opt.value)}
                     className={`p-2.5 rounded-xl border text-center transition-colors ${form.business_type === opt.value ? 'bg-brand-600/50 border-brand-400/60 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
                     <p className="text-sm">{opt.label}</p>
                     <p className="text-[9px] text-white/40 mt-0.5">{opt.desc}</p>
@@ -333,13 +416,13 @@ export default function SubmitListingPage() {
 
           <div className="mt-3">
             <Field label={t('ward_label')}>
-              <input type="text" value={form.ward} onChange={e => set('ward', e.target.value)} className="input-dark font-myanmar" placeholder={t('ward_placeholder')} />
+              <input type="text" value={form.ward} onChange={e => setFormField('ward', e.target.value)} className="input-dark font-myanmar" placeholder={t('ward_placeholder')} />
             </Field>
           </div>
 
           <div className="mt-3">
             <Field label={t('address_label')}>
-              <input type="text" value={form.address_mm} onChange={e => set('address_mm', e.target.value)} className="input-dark font-myanmar" placeholder={t('address_placeholder')} />
+              <input type="text" value={form.address_mm} onChange={e => setFormField('address_mm', e.target.value)} className="input-dark font-myanmar" placeholder={t('address_placeholder')} />
             </Field>
           </div>
 
@@ -347,22 +430,22 @@ export default function SubmitListingPage() {
             <div className="mt-3 flex gap-2">
               <div className="flex-1">
                 <label className="block text-xs text-white/50 mb-1.5">Latitude</label>
-                <input type="text" value={form.latitude} onChange={e => set('latitude', e.target.value)} className="input-dark text-xs" placeholder="16.xxxxxx" />
+                <input type="text" value={form.latitude} onChange={e => setFormField('latitude', e.target.value)} className="input-dark text-xs" placeholder="16.xxxxxx" />
               </div>
               <div className="flex-1">
                 <label className="block text-xs text-white/50 mb-1.5">Longitude</label>
-                <input type="text" value={form.longitude} onChange={e => set('longitude', e.target.value)} className="input-dark text-xs" placeholder="97.xxxxxx" />
+                <input type="text" value={form.longitude} onChange={e => setFormField('longitude', e.target.value)} className="input-dark text-xs" placeholder="97.xxxxxx" />
               </div>
             </div>
           )}
           {!form.latitude && (
-            <button type="button" onClick={() => { set('latitude', ''); set('longitude', '') }} className="mt-2 text-xs text-white/30 hover:text-white/50 transition-colors">
+            <button type="button" onClick={() => { setFormField('latitude', ''); setFormField('longitude', '') }} className="mt-2 text-xs text-white/30 hover:text-white/50 transition-colors">
               + GPS coordinates ကိုယ်တိုင် ထည့်မည်
             </button>
           )}
         </div>
 
-        {/* Contact section with dynamic phone fields */}
+        {/* Contact section with dynamic phone fields (unchanged) */}
         <div className="border-t border-white/8 pt-4">
           <p className="text-xs text-white/40 mb-3 font-display font-semibold uppercase tracking-wider">{t('contact_section')}</p>
           <div className="space-y-3">
@@ -393,27 +476,95 @@ export default function SubmitListingPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Viber">
-                <input type="tel" value={form.viber} onChange={e => set('viber', e.target.value)} className="input-dark" placeholder="09xxxxxxxxx" />
+                <input type="tel" value={form.viber} onChange={e => setFormField('viber', e.target.value)} className="input-dark" placeholder="09xxxxxxxxx" />
               </Field>
               <Field label="WhatsApp">
-                <input type="tel" value={form.whatsapp} onChange={e => set('whatsapp', e.target.value)} className="input-dark" placeholder="09xxxxxxxxx" />
+                <input type="tel" value={form.whatsapp} onChange={e => setFormField('whatsapp', e.target.value)} className="input-dark" placeholder="09xxxxxxxxx" />
               </Field>
             </div>
 
             <Field label="Telegram">
-              <input type="text" value={form.telegram} onChange={e => set('telegram', e.target.value)} className="input-dark" placeholder="@username" />
+              <input type="text" value={form.telegram} onChange={e => setFormField('telegram', e.target.value)} className="input-dark" placeholder="@username" />
             </Field>
 
             <Field label="Facebook Page">
-              <input type="url" value={form.facebook} onChange={e => set('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." />
+              <input type="url" value={form.facebook} onChange={e => setFormField('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." />
             </Field>
 
             <Field label="Website">
-              <input type="url" value={form.website} onChange={e => set('website', e.target.value)} className="input-dark" placeholder="https://..." />
+              <input type="url" value={form.website} onChange={e => setFormField('website', e.target.value)} className="input-dark" placeholder="https://..." />
             </Field>
           </div>
         </div>
 
+        {/* ========== MENU SECTION ========== */}
+        <div className="border-t border-white/8 pt-4">
+          <div className="flex justify-between items-center mb-3">
+            <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">
+              {lang === 'mm' ? 'မီနူး / ဝန်ဆောင်မှုများ' : 'Menu / Services'}
+            </p>
+            <button
+              type="button"
+              onClick={() => openMenuForm()}
+              className="flex items-center gap-1 text-xs text-brand-300 hover:text-brand-200 transition-colors"
+            >
+              <Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add Item'}
+            </button>
+          </div>
+
+          {menuItems.length === 0 ? (
+            <div className="text-center py-4 text-white/30 text-sm font-myanmar">
+              {lang === 'mm' ? 'မီနူးစာရင်း မရှိသေးပါ' : 'No menu items added yet'}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {menuItems.map((item) => (
+                <div key={item.id} className="bg-white/5 rounded-xl p-3 border border-white/10">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-semibold text-white">{item.name}</h3>
+                        {item.price && (
+                          <span className="text-xs bg-brand-600/30 text-brand-300 px-2 py-0.5 rounded-full">
+                            {item.price} Ks
+                          </span>
+                        )}
+                      </div>
+                      {item.description && (
+                        <p className="text-xs text-white/50 mt-1 line-clamp-2">{item.description}</p>
+                      )}
+                      {item.images && item.images.length > 0 && (
+                        <div className="flex gap-1 mt-2">
+                          {item.images.map((img, i) => (
+                            <img key={i} src={img} alt="menu" className="w-8 h-8 rounded object-cover" />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => openMenuForm(item)}
+                        className="p-1.5 text-white/40 hover:text-white transition-colors"
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteMenuItem(item.id)}
+                        className="p-1.5 text-red-400/70 hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Submit button */}
         <button type="submit" disabled={submitting || !form.name || !form.category_id} className="btn-primary w-full mt-2">
           {submitting ? (
             <span className="flex items-center justify-center gap-2">
@@ -425,6 +576,109 @@ export default function SubmitListingPage() {
 
         <p className="text-[11px] text-white/30 text-center font-myanmar pb-4">{t('submit_notice')}</p>
       </form>
+
+      {/* Menu Item Modal */}
+      {menuFormOpen && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-[#140020] rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto border border-white/10">
+            <div className="sticky top-0 bg-[#140020] p-4 border-b border-white/10 flex justify-between items-center">
+              <h3 className="font-display font-bold text-white">
+                {editingMenuItem
+                  ? (lang === 'mm' ? 'မီနူးပြင်မည်' : 'Edit Menu Item')
+                  : (lang === 'mm' ? 'မီနူးအသစ်ထည့်မည်' : 'Add Menu Item')}
+              </h3>
+              <button onClick={closeMenuForm} className="text-white/50 hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div>
+                <label className="block text-xs text-white/50 mb-1.5 font-myanmar">
+                  {lang === 'mm' ? 'အမည်' : 'Item Name'} *
+                </label>
+                <input
+                  type="text"
+                  value={menuForm.name}
+                  onChange={e => setMenuForm(prev => ({ ...prev, name: e.target.value }))}
+                  className="input-dark w-full"
+                  placeholder={lang === 'mm' ? 'ဥပမာ: မုန့်တီ' : 'e.g. Mohinga'}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-white/50 mb-1.5">
+                  {lang === 'mm' ? 'ဈေးနှုန်း (ကျပ်)' : 'Price (Ks)'}
+                </label>
+                <input
+                  type="text"
+                  value={menuForm.price}
+                  onChange={e => setMenuForm(prev => ({ ...prev, price: e.target.value }))}
+                  className="input-dark w-full"
+                  placeholder="2000"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-white/50 mb-1.5 font-myanmar">
+                  {lang === 'mm' ? 'ဖော်ပြချက်' : 'Description'}
+                </label>
+                <textarea
+                  value={menuForm.description}
+                  onChange={e => setMenuForm(prev => ({ ...prev, description: e.target.value }))}
+                  rows="2"
+                  className="input-dark w-full resize-none"
+                  placeholder={lang === 'mm' ? 'အနှစ်ချုပ် ဖော်ပြချက်...' : 'Brief description...'}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-white/50 mb-1.5">
+                  {lang === 'mm' ? 'ပုံများ (အများဆုံး ၅ ပုံ)' : 'Images (max 5)'}
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {menuForm.images.map((img, i) => (
+                    <div key={i} className="relative aspect-square rounded-lg overflow-hidden border border-white/20">
+                      <img src={img} alt="menu" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeMenuImage(i)}
+                        className="absolute top-1 right-1 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center text-white text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  {menuForm.images.length < 5 && (
+                    <ImageUploader
+                      onUpload={handleMenuImageUpload}
+                      loading={menuImageLoading}
+                      label="+"
+                      className="aspect-square w-full"
+                    />
+                  )}
+                </div>
+                {menuError && <p className="text-xs text-red-400 mt-2">{menuError}</p>}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={saveMenuItem}
+                  className="flex-1 btn-primary py-2 text-sm"
+                >
+                  {lang === 'mm' ? 'သိမ်းမည်' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeMenuForm}
+                  className="flex-1 btn-ghost py-2 text-sm"
+                >
+                  {lang === 'mm' ? 'မလုပ်တော့ပါ' : 'Cancel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
