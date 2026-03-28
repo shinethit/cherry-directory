@@ -9,7 +9,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import BottomNav from './components/BottomNav'
 import Header from './components/Header'
 
-// Pages (keep your existing imports)
+// Pages
 import HomePage from './pages/HomePage'
 import DirectoryPage from './pages/DirectoryPage'
 import ListingDetailPage from './pages/ListingDetailPage'
@@ -23,8 +23,8 @@ import CalendarPage from './pages/CalendarPage'
 import CommunityPage from './pages/CommunityPage'
 import EmergencyPage from './pages/EmergencyPage'
 import MarketPricePage from './pages/MarketPricePage'
-import PowerCutPage from './pages/PowerCutPage'
-import FuelPage from './pages/FuelPage'
+import PowerCutPage from './pages/PowerCutPage'          // Keep PowerCutPage
+// import FuelPage from './pages/FuelPage'               // REMOVED FuelPage
 import LostFoundPage from './pages/LostFoundPage'
 import LostFoundDetailPage from './pages/LostFoundDetailPage'
 import JobBoardPage from './pages/JobBoardPage'
@@ -110,7 +110,7 @@ function AppRoutes() {
         <Route path="/emergency" element={<EmergencyPage />} />
         <Route path="/prices" element={<MarketPricePage />} />
         <Route path="/power" element={<PowerCutPage />} />
-        <Route path="/fuel" element={<FuelPage />} />
+        {/* <Route path="/fuel" element={<FuelPage />} /> */}   {/* Fuel Page removed */}
         <Route path="/lost-found" element={<LostFoundPage />} />
         <Route path="/lost-found/:id" element={<LostFoundDetailPage />} />
         <Route path="/jobs" element={<JobBoardPage />} />

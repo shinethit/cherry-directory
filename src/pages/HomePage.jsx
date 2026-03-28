@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw, Home, User, Briefcase, GraduationCap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI';
 import { useAppConfig } from '../contexts/AppConfigContext';
@@ -31,9 +31,11 @@ export default function HomePage() {
   const config = useAppConfig();
   const { lang } = useLang();
 
-  // --- Splash consent state (store in localStorage) ---
+  // --- Splash consent: daily check ---
   const [consentGiven, setConsentGiven] = useState(() => {
-    return localStorage.getItem('cherry_consent') === 'true';
+    const lastShown = localStorage.getItem('cherry_consent_date');
+    const today = new Date().toISOString().split('T')[0];
+    return lastShown === today; // true if already shown today
   });
 
   // --- Data states ---
@@ -53,6 +55,20 @@ export default function HomePage() {
   const [visitorCount, setVisitorCount] = useState(null);
   const [countryStats, setCountryStats] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // --- Power status (read‑only, show ALL areas) ---
+  const [powerAreas, setPowerAreas] = useState([]);
+  const [powerLoading, setPowerLoading] = useState(true);
+  const powerChannelRef = useRef(null);
+
+  // --- Community stats (rent, tutoring, jobs) – silent fail if tables missing ---
+  const [rentListingsCount, setRentListingsCount] = useState(0);
+  const [rentSeekersCount, setRentSeekersCount] = useState(0);
+  const [tutorOffersCount, setTutorOffersCount] = useState(0);
+  const [tutorRequestsCount, setTutorRequestsCount] = useState(0);
+  const [jobOpeningsCount, setJobOpeningsCount] = useState(0);
+  const [jobSeekersCount, setJobSeekersCount] = useState(0);
+  const [communityStatsLoading, setCommunityStatsLoading] = useState(true);
 
   // --- Online/Offline listener ---
   useEffect(() => {
@@ -110,7 +126,7 @@ export default function HomePage() {
     if (consentGiven) fetchStats();
   }, [consentGiven]);
 
-  // --- Main data loading ---
+  // --- Main data loading (listings, posts, categories, quick links) ---
   const loadData = useCallback(async () => {
     setLoading(true);
     setDataError(false);
@@ -146,14 +162,113 @@ export default function HomePage() {
     }
   }, [consentGiven, loadData]);
 
-  // --- Handlers ---
-  const handleConsent = () => {
-    localStorage.setItem('cherry_consent', 'true');
-    setConsentGiven(true);
-  };
+  // --- Power status (read‑only, show ALL areas) ---
+  const loadPowerStatus = useCallback(async () => {
+    setPowerLoading(true);
+    try {
+      const { data } = await supabase.from('current_power_status').select('*');
+      setPowerAreas(data || []);
+    } catch (e) {
+      console.warn(e);
+    } finally {
+      setPowerLoading(false);
+    }
+  }, []);
 
+  useEffect(() => {
+    if (consentGiven) {
+      loadPowerStatus();
+      powerChannelRef.current = supabase
+        .channel('power-live')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'power_cut_reports' }, loadPowerStatus)
+        .subscribe();
+      return () => {
+        if (powerChannelRef.current) supabase.removeChannel(powerChannelRef.current);
+      };
+    }
+  }, [consentGiven, loadPowerStatus]);
+
+  // --- Community stats (silent fail) ---
+  const loadCommunityStats = useCallback(async () => {
+    setCommunityStatsLoading(true);
+    try {
+      // Rent listings (available)
+      const { count: rentAvailable } = await supabase
+        .from('rent')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'available')
+        .catch(() => ({ count: 0 }));
+      setRentListingsCount(rentAvailable || 0);
+
+      // Rent seekers
+      const { count: rentSeekers } = await supabase
+        .from('rent')
+        .select('*', { count: 'exact', head: true })
+        .eq('type', 'seeker')
+        .catch(() => ({ count: 0 }));
+      setRentSeekersCount(rentSeekers || 0);
+
+      // Tutoring offers
+      const { count: tutorOffers } = await supabase
+        .from('tutoring')
+        .select('*', { count: 'exact', head: true })
+        .eq('type', 'offer')
+        .catch(() => ({ count: 0 }));
+      setTutorOffersCount(tutorOffers || 0);
+
+      // Tutoring requests
+      const { count: tutorRequests } = await supabase
+        .from('tutoring')
+        .select('*', { count: 'exact', head: true })
+        .eq('type', 'request')
+        .catch(() => ({ count: 0 }));
+      setTutorRequestsCount(tutorRequests || 0);
+
+      // Job openings
+      const { count: jobs } = await supabase
+        .from('job_board')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'open')
+        .catch(() => ({ count: 0 }));
+      setJobOpeningsCount(jobs || 0);
+
+      // Job seekers
+      const { count: jobSeekers } = await supabase
+        .from('job_seekers')
+        .select('*', { count: 'exact', head: true })
+        .catch(() => ({ count: 0 }));
+      setJobSeekersCount(jobSeekers || 0);
+    } catch (e) {
+      // Fallback to zeros on any error
+      setRentListingsCount(0);
+      setRentSeekersCount(0);
+      setTutorOffersCount(0);
+      setTutorRequestsCount(0);
+      setJobOpeningsCount(0);
+      setJobSeekersCount(0);
+    } finally {
+      setCommunityStatsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (consentGiven) {
+      loadCommunityStats();
+    }
+  }, [consentGiven, loadCommunityStats]);
+
+  // --- Combined refresh handler ---
   const handleRefresh = () => {
     loadData();
+    loadPowerStatus();
+    loadCommunityStats();
+  };
+
+  // --- Splash consent handler (daily) ---
+  const handleConsent = () => {
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.setItem('cherry_consent_date', today);
+    setConsentGiven(true);
   };
 
   // --- Helper for subcategory modals ---
@@ -163,7 +278,7 @@ export default function HomePage() {
     setTimeout(() => navigate(url), 20);
   };
 
-  // --- Show splash if not consented ---
+  // --- Show splash if not consented today ---
   if (!consentGiven) {
     return <SplashScreen onConsent={handleConsent} />;
   }
@@ -258,6 +373,34 @@ export default function HomePage() {
               </button>
             ))
           )}
+        </div>
+      </div>
+
+      {/* Community Stats Row */}
+      <div className="px-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          {[
+            { icon: Home, label: 'ငှားရန်ရှိသောအိမ်', value: rentListingsCount, link: '/rent?type=available' },
+            { icon: User, label: 'ငှားလိုသောအိမ်ငှား', value: rentSeekersCount, link: '/rent?type=seeker' },
+            { icon: GraduationCap, label: 'အချိန်ပေးနိုင်သောဆရာ', value: tutorOffersCount, link: '/tutoring?type=offer' },
+            { icon: GraduationCap, label: 'ဆရာလိုနေသောကျောင်းသား', value: tutorRequestsCount, link: '/tutoring?type=request' },
+            { icon: Briefcase, label: 'အလုပ်ခေါ်စာ', value: jobOpeningsCount, link: '/jobs' },
+            { icon: Briefcase, label: 'အလုပ်ရှာနေသူ', value: jobSeekersCount, link: '/jobs?type=seeker' },
+          ].map((item, idx) => (
+            <button
+              key={idx}
+              onClick={() => navigate(item.link)}
+              className="card-dark p-3 rounded-2xl text-center hover:bg-white/10 transition-colors"
+            >
+              <div className="flex justify-center mb-1">
+                <item.icon size={20} className="text-brand-400" />
+              </div>
+              <p className="text-[10px] text-white/50 font-myanmar mb-0.5">{item.label}</p>
+              <p className="font-display font-bold text-lg text-white">
+                {communityStatsLoading ? '...' : item.value}
+              </p>
+            </button>
+          ))}
         </div>
       </div>
 
@@ -496,6 +639,51 @@ export default function HomePage() {
           </div>
         </div>
       )}
+
+      {/* Power Status Dashboard (read‑only, show ALL areas) */}
+      <div className="px-4">
+        <div className="mb-2">
+          <h3 className="text-sm font-display font-semibold text-white/80 flex items-center gap-1">
+            ⚡ {lang === 'mm' ? 'လျှပ်စစ်အခြေအနေ' : 'Power Status'}
+          </h3>
+        </div>
+
+        {powerLoading ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[1, 2, 3, 4, 5, 6].map(n => <ShimmerSkeleton key={n} className="h-24 rounded-2xl" />)}
+          </div>
+        ) : powerAreas.length === 0 ? (
+          <div className="text-center py-4 text-white/30 text-sm font-myanmar">
+            {lang === 'mm' ? 'ရပ်ကွက်စာရင်း မရှိသေး' : 'No neighborhoods available'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {powerAreas.map(area => {
+              const isCut = area.current_status === 'cut';
+              const isRestored = area.current_status === 'restored';
+              return (
+                <div key={area.id} className={`p-3 rounded-2xl border transition-all ${
+                  isCut      ? 'bg-red-500/8   border-red-500/25'   :
+                  isRestored ? 'bg-green-500/8 border-green-500/25' :
+                               'bg-white/4    border-white/8'
+                }`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-display font-semibold text-sm text-white">{area.name}</p>
+                      <p className="text-[9px] text-white/40 mt-0.5">{area.township}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold ${
+                      isCut ? 'text-red-400' : isRestored ? 'text-green-400' : 'text-white/30'
+                    }`}>
+                      {isCut ? '🔴 ဖြတ်' : isRestored ? '🟢 လာ' : '⚪ မသိ'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <div className="h-4" />
 

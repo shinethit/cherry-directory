@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'        // ← added
+import { useNavigate } from 'react-router-dom'
 import { Plus, X, Pin, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { PostCard, Skeleton, EmptyState, ImageUploader } from '../components/UI'
-import { uploadImage, getOptimizedUrl } from '../lib/cloudinary'
+import { uploadImage } from '../lib/cloudinary'
 import { useSEO } from '../hooks/useSEO'
 import Lightbox from 'yet-another-react-lightbox'
 import 'yet-another-react-lightbox/styles.css'
@@ -20,16 +20,16 @@ const TYPES = [
   { value: 'announcement', label: '📢 ကြေညာချက်',  labelEn: '📢 Announcement'},
 ]
 
-// ── Post Form (Admin/Mod only) – unchanged ────────────────────────────────
+// PostForm (unchanged)
 function PostForm({ onClose, onSuccess, lang }) {
-  const { user, profile, isModerator } = useAuth()
+  const { user } = useAuth()
   const [form, setForm] = useState({
     title: '', title_mm: '', content: '', content_mm: '',
     type: 'announcement', is_pinned: false,
     event_start: '', event_location: '',
   })
   const [coverUrl, setCoverUrl] = useState('')
-  const [images, setImages] = useState([])        // Gallery images (max 5)
+  const [images, setImages] = useState([])
   const [coverLoading, setCoverLoading] = useState(false)
   const [galleryLoading, setGalleryLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -109,6 +109,7 @@ function PostForm({ onClose, onSuccess, lang }) {
       </div>
 
       <div className="px-4 py-4 space-y-4 pb-24">
+        {/* Type selector */}
         <div>
           <label className="block text-xs text-white/50 mb-2">အမျိုးအစား</label>
           <div className="flex gap-2 flex-wrap">
@@ -128,6 +129,7 @@ function PostForm({ onClose, onSuccess, lang }) {
           </div>
         </div>
 
+        {/* Cover image */}
         <div>
           <label className="block text-xs text-white/50 mb-2">Cover ပုံ (optional)</label>
           {coverUrl ? (
@@ -145,6 +147,7 @@ function PostForm({ onClose, onSuccess, lang }) {
           )}
         </div>
 
+        {/* Gallery images */}
         <div>
           <label className="block text-xs text-white/50 mb-2">ဓာတ်ပုံများ (optional, max 5)</label>
           <div className="grid grid-cols-3 gap-2">
@@ -166,6 +169,7 @@ function PostForm({ onClose, onSuccess, lang }) {
           <p className="text-[9px] text-white/25 mt-1.5">အများဆုံး ၅ ပုံ</p>
         </div>
 
+        {/* Title */}
         <div>
           <label className="block text-xs text-white/50 mb-1.5">
             ခေါင်းစဉ် (မြန်မာ) <span className="text-brand-400">*</span>
@@ -188,6 +192,7 @@ function PostForm({ onClose, onSuccess, lang }) {
           />
         </div>
 
+        {/* Content */}
         <div>
           <label className="block text-xs text-white/50 mb-1.5">အကြောင်းအရာ (မြန်မာ)</label>
           <textarea
@@ -198,6 +203,7 @@ function PostForm({ onClose, onSuccess, lang }) {
           />
         </div>
 
+        {/* Event fields */}
         {form.type === 'event' && (
           <div className="space-y-3 border-t border-white/8 pt-3">
             <p className="text-[10px] text-white/40 uppercase tracking-wider font-display">Event Details</p>
@@ -222,6 +228,7 @@ function PostForm({ onClose, onSuccess, lang }) {
           </div>
         )}
 
+        {/* Pin toggle */}
         <button
           onClick={() => set('is_pinned', !form.is_pinned)}
           className={`flex items-center gap-2 px-4 py-3 rounded-xl border w-full text-sm transition-colors ${
@@ -244,9 +251,8 @@ function PostForm({ onClose, onSuccess, lang }) {
   )
 }
 
-// ── Main Page ───────────────────────────────────────────────────────────────
 export default function NewsPage() {
-  const navigate = useNavigate()                       // ← added
+  const navigate = useNavigate()
   const { lang }        = useLang()
   const { isModerator, isAdmin, isSuperAdmin } = useAuth()
   const canEdit = isSuperAdmin || isAdmin || isModerator
@@ -326,7 +332,7 @@ export default function NewsPage() {
         {canEdit && (
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 btn-primary text-xs px-3 py-2"
+            className="flex items-center gap-1.5 btn-primary text-xs px-3 py-2 mt-1"   // ← added mt-1
           >
             <Plus size={14} />
             {lang === 'mm' ? 'Post တင်မည်' : 'New Post'}

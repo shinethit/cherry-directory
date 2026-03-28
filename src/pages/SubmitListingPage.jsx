@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, MapPin, Plus, X, Minus, Trash2, Edit2 } from 'lucide-react'
+import { ArrowLeft, CheckCircle, MapPin, Plus, X, Minus, Trash2, Edit2, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -22,7 +22,7 @@ function Field({ label, children, required }) {
 
 export default function SubmitListingPage() {
   const navigate = useNavigate()
-  const { profile } = useAuth()
+  const { profile, isLoggedIn } = useAuth()
   const { t, lang } = useLang()
   useSEO({ title: lang === 'mm' ? 'လုပ်ငန်း / ဝန်ဆောင်မှု ထည့်မည်' : 'Submit Listing' })
 
@@ -47,7 +47,7 @@ export default function SubmitListingPage() {
   const [quickCat, setQuickCat] = useState({ name_mm: '', name: '', icon: '📦', parent_id: '' })
   const [addingCat, setAddingCat] = useState(false)
 
-  // --- Menu items state ---
+  // Menu items state
   const [menuItems, setMenuItems] = useState([])
   const [editingMenuItem, setEditingMenuItem] = useState(null)
   const [menuFormOpen, setMenuFormOpen] = useState(false)
@@ -138,7 +138,7 @@ export default function SubmitListingPage() {
     setAddingCat(false)
   }
 
-  // --- Menu functions ---
+  // Menu functions
   const openMenuForm = (item = null) => {
     if (item) {
       setEditingMenuItem(item)
@@ -207,18 +207,26 @@ export default function SubmitListingPage() {
     }
   }
 
-  // --- Submit form with menu items ---
+  // Submit form – immediate approval
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.name || !form.category_id) return
     setSubmitting(true)
     try {
+      // Map phones to individual columns
       const phoneColumns = {}
       form.phones.forEach((phone, idx) => {
         if (phone) phoneColumns[`phone_${idx + 1}`] = phone
       })
+
+      // Remove the 'phones' array from the data to be inserted
+      const { phones, ...restData } = form
+
+      // Determine submitted_by: if logged in, use profile.id; otherwise null
+      const submittedBy = isLoggedIn && profile ? profile.id : null
+
       const { error } = await supabase.from('listings').insert({
-        ...form,
+        ...restData,
         ...phoneColumns,
         latitude: form.latitude ? parseFloat(form.latitude) : null,
         longitude: form.longitude ? parseFloat(form.longitude) : null,
@@ -226,8 +234,8 @@ export default function SubmitListingPage() {
         cover_url: coverImg,
         images: [],
         menu_items: menuItems.length > 0 ? menuItems : null,
-        submitted_by: profile.id,
-        status: 'approved',
+        submitted_by: submittedBy,
+        status: 'approved',          // ← Immediate approval
         report_count: 0,
       })
       if (error) throw error
@@ -259,6 +267,18 @@ export default function SubmitListingPage() {
         </button>
         <h1 className="font-display font-bold text-lg text-white">{t('submit_title')}</h1>
       </div>
+
+      {/* Info banner for anonymous users */}
+      {!isLoggedIn && (
+        <div className="mx-4 mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-start gap-2">
+          <Info size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
+          <p className="text-xs text-blue-300 font-myanmar">
+            {lang === 'mm' 
+              ? 'အကောင့်မဖွင့်ဘဲ လုပ်ငန်းတင်နိုင်ပါသည်။ အကောင့်ဖွင့်ပြီးတင်ပါက Points ရရှိမည်ဖြစ်သည်။'
+              : 'You can submit a listing without an account. Registered users will earn points.'}
+          </p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="px-4 space-y-4">
         {/* Logo + Cover */}
@@ -368,7 +388,7 @@ export default function SubmitListingPage() {
           <textarea value={form.description_mm} onChange={e => setFormField('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" placeholder={t('desc_placeholder')} />
         </Field>
 
-        {/* Location (unchanged) */}
+        {/* Location section */}
         <div className="border-t border-white/8 pt-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">တည်နေရာ</p>
@@ -445,7 +465,7 @@ export default function SubmitListingPage() {
           )}
         </div>
 
-        {/* Contact section with dynamic phone fields (unchanged) */}
+        {/* Contact section */}
         <div className="border-t border-white/8 pt-4">
           <p className="text-xs text-white/40 mb-3 font-display font-semibold uppercase tracking-wider">{t('contact_section')}</p>
           <div className="space-y-3">
@@ -497,20 +517,22 @@ export default function SubmitListingPage() {
           </div>
         </div>
 
-        {/* ========== MENU SECTION ========== */}
+        {/* MENU SECTION with bigger button */}
         <div className="border-t border-white/8 pt-4">
           <div className="flex justify-between items-center mb-3">
             <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">
               {lang === 'mm' ? 'မီနူး / ဝန်ဆောင်မှုများ' : 'Menu / Services'}
             </p>
-            <button
-              type="button"
-              onClick={() => openMenuForm()}
-              className="flex items-center gap-1 text-xs text-brand-300 hover:text-brand-200 transition-colors"
-            >
-              <Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add Item'}
-            </button>
           </div>
+
+          {/* Big "Add Menu Item" button */}
+          <button
+            type="button"
+            onClick={() => openMenuForm()}
+            className="w-full btn-primary py-3 mb-4 flex items-center justify-center gap-2 text-sm"
+          >
+            <Plus size={18} /> {lang === 'mm' ? 'မီနူးအသစ်ထည့်မည်' : 'Add Menu Item'}
+          </button>
 
           {menuItems.length === 0 ? (
             <div className="text-center py-4 text-white/30 text-sm font-myanmar">
