@@ -53,14 +53,14 @@ export default function Header() {
 
   return (
     <>
-      {/* Header with extra padding for dynamic island */}
+      {/* Header – no extra spacer inside; uses safe area and a minimal padding */}
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
           scrolled
             ? 'bg-[#0a0018]/80 backdrop-blur-md border-b border-white/10'
             : 'bg-transparent'
         }`}
-        style={{ top: 'env(safe-area-inset-top)', paddingTop: '8px' }} // ← added paddingTop
+        style={{ top: 'env(safe-area-inset-top)' }}
       >
         <div className="flex items-center justify-between px-4 py-3">
           <button
@@ -115,13 +115,11 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Spacer for header (adjust height if needed) */}
-      <div className="h-16" style={{ marginTop: 'calc(env(safe-area-inset-top) + 8px)' }} />
-
+      {/* Menu Modal – adjusted top padding */}
       {menuOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md overflow-y-auto"
-          style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top) + 8px)' }} // ← increased top padding
+          style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top))' }}
           onClick={() => setMenuOpen(false)}
         >
           <div className="p-4 space-y-2" onClick={e => e.stopPropagation()}>
