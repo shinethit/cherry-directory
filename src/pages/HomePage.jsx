@@ -19,7 +19,7 @@ function getCountryDisplay(code) {
   return countryNames[code] || code;
 }
 
-// Shimmer skeleton
+// Shimmer skeleton component
 const ShimmerSkeleton = ({ className }) => (
   <div className={`relative overflow-hidden bg-white/5 rounded-2xl ${className}`}>
     <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -31,12 +31,12 @@ export default function HomePage() {
   const config = useAppConfig();
   const { lang } = useLang();
 
-  // Splash consent state (store in localStorage)
+  // --- Splash consent state (store in localStorage) ---
   const [consentGiven, setConsentGiven] = useState(() => {
     return localStorage.getItem('cherry_consent') === 'true';
   });
 
-  // Data states
+  // --- Data states ---
   const [posts, setPosts] = useState([]);
   const [featured, setFeatured] = useState([]);
   const [homeCategories, setHomeCategories] = useState([]);
@@ -49,12 +49,12 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState(false);
 
-  // Visitor stats
+  // --- Visitor stats ---
   const [visitorCount, setVisitorCount] = useState(null);
   const [countryStats, setCountryStats] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Online/Offline listener
+  // --- Online/Offline listener ---
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -66,7 +66,7 @@ export default function HomePage() {
     };
   }, []);
 
-  // Track visit (every page load)
+  // --- Track visit (every page load) ---
   useEffect(() => {
     const trackVisit = async () => {
       try {
@@ -82,7 +82,7 @@ export default function HomePage() {
     if (consentGiven) trackVisit();
   }, [consentGiven]);
 
-  // Fetch visitor stats
+  // --- Fetch visitor stats (last 7 days) ---
   useEffect(() => {
     const fetchStats = async () => {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -110,7 +110,7 @@ export default function HomePage() {
     if (consentGiven) fetchStats();
   }, [consentGiven]);
 
-  // Main data loading
+  // --- Main data loading ---
   const loadData = useCallback(async () => {
     setLoading(true);
     setDataError(false);
@@ -146,6 +146,7 @@ export default function HomePage() {
     }
   }, [consentGiven, loadData]);
 
+  // --- Handlers ---
   const handleConsent = () => {
     localStorage.setItem('cherry_consent', 'true');
     setConsentGiven(true);
@@ -155,7 +156,14 @@ export default function HomePage() {
     loadData();
   };
 
-  // Show splash screen only if consent not given
+  // --- Helper for subcategory modals ---
+  const closeAndNavigate = (url) => {
+    setSelectedCat(null);
+    setSelectedSub(null);
+    setTimeout(() => navigate(url), 20);
+  };
+
+  // --- Show splash if not consented ---
   if (!consentGiven) {
     return <SplashScreen onConsent={handleConsent} />;
   }
@@ -524,11 +532,4 @@ export default function HomePage() {
       `}</style>
     </div>
   );
-
-  // Helper function for closeAndNavigate
-  function closeAndNavigate(url) {
-    setSelectedCat(null);
-    setSelectedSub(null);
-    setTimeout(() => navigate(url), 20);
-  }
 }

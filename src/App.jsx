@@ -9,7 +9,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import BottomNav from './components/BottomNav'
 import Header from './components/Header'
 
-// Pages
+// Pages (keep your existing imports)
 import HomePage from './pages/HomePage'
 import DirectoryPage from './pages/DirectoryPage'
 import ListingDetailPage from './pages/ListingDetailPage'
@@ -40,8 +40,6 @@ import BulkImportPage from './pages/BulkImportPage'
 import AppSettingsPage from './pages/AppSettingsPage'
 import NoticeBoardPage from './pages/NoticeBoardPage'
 import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
-
-// Community Features from CommunityFeaturePages.jsx
 import { 
   WeatherAlertPage, 
   DonationPage, 
@@ -49,8 +47,6 @@ import {
   BusSchedulePage, 
   ToursPage 
 } from './pages/CommunityFeaturePages'
-
-// New Pages
 import RentPage from './pages/RentPage'
 import TutoringPage from './pages/TutoringPage'
 import HistoryPage, { HistoryDetailPage } from './pages/HistoryPage'
@@ -92,7 +88,10 @@ function AppRoutes() {
   if (timeoutExceeded) return <ErrorScreen onRetry={() => window.location.reload()} />
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0d0015] to-[#1a0030] dark:from-[#0d0015] dark:to-[#1a0030] pb-20">
+    <div 
+      className="min-h-screen bg-gradient-to-b from-[#0d0015] to-[#1a0030] dark:from-[#0d0015] dark:to-[#1a0030] pb-20"
+      style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top))' }}
+    >
       <Header />
       <ScrollToTop />
       <Routes>
@@ -107,7 +106,6 @@ function AppRoutes() {
         <Route path="/events/create" element={<EventFormPage />} />
         <Route path="/events/edit/:id" element={<EventFormPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
-        
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/emergency" element={<EmergencyPage />} />
         <Route path="/prices" element={<MarketPricePage />} />
@@ -117,36 +115,30 @@ function AppRoutes() {
         <Route path="/lost-found/:id" element={<LostFoundDetailPage />} />
         <Route path="/jobs" element={<JobBoardPage />} />
         <Route path="/chat" element={<ChatPage />} />
-        
         <Route path="/bus" element={<BusSchedulePage />} />
         <Route path="/health" element={<HealthServicePage />} />
         <Route path="/notices" element={<NoticeBoardPage />} />
         <Route path="/weather" element={<WeatherAlertPage />} />
         <Route path="/donations" element={<DonationPage />} />
         <Route path="/tours" element={<ToursPage />} />
-        
         <Route path="/rent" element={<RentPage />} />
         <Route path="/tutoring" element={<TutoringPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/history/:id" element={<HistoryDetailPage />} />
-        
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/:id" element={<ProfilePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/bookmarks" element={<BookmarksPage />} />
         <Route path="/leaderboard" element={<LeaderboardPage />} />
         <Route path="/claim/:id" element={<ClaimPage />} />
-        
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/admin/categories" element={<CategoryManagerPage />} />
         <Route path="/admin/bulk-import" element={<BulkImportPage />} />
         <Route path="/admin/settings" element={<AppSettingsPage />} />
-        
         <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/help" element={<HelpPage />} />
-        
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <BottomNav />

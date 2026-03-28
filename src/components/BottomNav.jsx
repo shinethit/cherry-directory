@@ -29,7 +29,7 @@ export default function BottomNav() {
         <PlusCircle size={24} className="text-white" />
       </NavLink>
 
-      {/* Admin Button */}
+      {/* Admin Floating Button */}
       {(isAdmin || isModerator) && (
         <NavLink
           to="/admin"
