@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, CalendarDays, Users, Wifi, WifiOff, AlertCircle, RefreshCw, Check } from 'lucide-react';
+import { Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
+import SplashScreen from '../components/SplashScreen';
 
 // Helper: country code → full name
 const countryNames = {
@@ -30,15 +31,10 @@ export default function HomePage() {
   const config = useAppConfig();
   const { lang } = useLang();
 
-  // UI states
-  const [confirmed, setConfirmed] = useState(false);       // user clicked "Start"
-  const [loading, setLoading] = useState(true);
-  const [dataLoadError, setDataLoadError] = useState(false);
-  const [dataLoadSuccess, setDataLoadSuccess] = useState(false);
-  const [showReadyButton, setShowReadyButton] = useState(false);
-  const [showErrorButtons, setShowErrorButtons] = useState(false);
-  const timeoutRef = useRef(null);
-  const retryTimeoutRef = useRef(null);
+  // Splash consent state (store in localStorage)
+  const [consentGiven, setConsentGiven] = useState(() => {
+    return localStorage.getItem('cherry_consent') === 'true';
+  });
 
   // Data states
   const [posts, setPosts] = useState([]);
@@ -50,18 +46,13 @@ export default function HomePage() {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [stats, setStats] = useState({ listings: 0, posts: 0 });
   const [quickLinks, setQuickLinks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState(false);
 
   // Visitor stats
   const [visitorCount, setVisitorCount] = useState(null);
   const [countryStats, setCountryStats] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  // Helpers
-  const closeAndNavigate = (url) => {
-    setSelectedCat(null);
-    setSelectedSub(null);
-    setTimeout(() => navigate(url), 20);
-  };
 
   // Online/Offline listener
   useEffect(() => {
@@ -88,8 +79,8 @@ export default function HomePage() {
         await supabase.from('visits').insert({ country_code: 'XX' }).catch(() => {});
       }
     };
-    trackVisit();
-  }, []);
+    if (consentGiven) trackVisit();
+  }, [consentGiven]);
 
   // Fetch visitor stats
   useEffect(() => {
@@ -116,26 +107,13 @@ export default function HomePage() {
       const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
       setCountryStats(sorted);
     };
-    fetchStats();
-  }, []);
+    if (consentGiven) fetchStats();
+  }, [consentGiven]);
 
   // Main data loading
   const loadData = useCallback(async () => {
     setLoading(true);
-    setDataLoadError(false);
-    setShowReadyButton(false);
-    setShowErrorButtons(false);
-    if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-
-    // 8s timeout for error buttons
-    timeoutRef.current = setTimeout(() => {
-      if (loading) {
-        console.warn('Data loading timeout');
-        setShowErrorButtons(true);
-      }
-    }, 8000);
-
+    setDataError(false);
     try {
       const results = await Promise.allSettled([
         supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
@@ -154,117 +132,55 @@ export default function HomePage() {
       setStats({ listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0 });
       setUpcomingEvents(results[4]?.status === 'fulfilled' ? results[4].value.data || [] : []);
       setQuickLinks(results[5]?.status === 'fulfilled' ? results[5].value.data || [] : []);
-
-      setDataLoadSuccess(true);
-      setShowReadyButton(true);
     } catch (err) {
       console.error('Data load error:', err);
-      setDataLoadError(true);
-      setShowErrorButtons(true);
+      setDataError(true);
     } finally {
       setLoading(false);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     }
-  }, [loading]);
+  }, []);
 
   useEffect(() => {
-    loadData();
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
-    };
-  }, [loadData]);
+    if (consentGiven) {
+      loadData();
+    }
+  }, [consentGiven, loadData]);
 
-  // Button handlers
-  const handleReady = () => {
-    setConfirmed(true);        // user wants to see content
-    setShowReadyButton(false);
+  const handleConsent = () => {
+    localStorage.setItem('cherry_consent', 'true');
+    setConsentGiven(true);
   };
 
-  const handleRetry = () => {
+  const handleRefresh = () => {
     loadData();
   };
 
-  const handleContinueAnyway = () => {
-    setConfirmed(true);
-    setShowErrorButtons(false);
-    setDataLoadSuccess(true);
-  };
-
-  // If user hasn't clicked "Start", show splash / ready / error screen
-  if (!confirmed) {
-    return (
-      <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gradient-to-br from-[#0d0015] to-[#1a0030] p-6 text-center">
-        {loading && !showErrorButtons && (
-          <>
-            <div className="w-16 h-16 mb-4 relative">
-              <div className="absolute inset-0 animate-ping rounded-full bg-brand-400/30" />
-              <div className="relative flex items-center justify-center w-full h-full rounded-full bg-brand-600/30 backdrop-blur-sm">
-                <span className="text-4xl">🍒</span>
-              </div>
-            </div>
-            <h2 className="text-white font-display font-bold text-xl">Loading Data...</h2>
-            <p className="text-white/50 text-sm mt-2 font-myanmar">ကျေးဇူးပြု၍ စောင့်ပါ။</p>
-            <div className="mt-4 flex gap-1">
-              <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce [animation-delay:-0.3s]" />
-              <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce [animation-delay:-0.15s]" />
-              <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce" />
-            </div>
-          </>
-        )}
-
-        {showErrorButtons && (
-          <div className="max-w-sm">
-            <AlertCircle size={48} className="text-amber-400 mx-auto mb-4" />
-            <h2 className="text-white font-display font-bold text-xl">ဒေတာရယူရန် ခက်ခဲနေပါသည်</h2>
-            <p className="text-white/50 text-sm mt-2 font-myanmar">
-              အင်တာနက်ချိတ်ဆက်မှုကို စစ်ဆေးပါ။
-            </p>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={handleRetry}
-                className="flex-1 btn-primary flex items-center justify-center gap-2 text-sm"
-              >
-                <RefreshCw size={16} /> ပြန်စမ်းမည်
-              </button>
-              <button
-                onClick={handleContinueAnyway}
-                className="flex-1 btn-ghost text-sm"
-              >
-                ဆက်သွားမည်
-              </button>
-            </div>
-          </div>
-        )}
-
-        {!loading && !showErrorButtons && showReadyButton && (
-          <div className="max-w-sm">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
-              <Check size={32} className="text-green-400" />
-            </div>
-            <h2 className="text-white font-display font-bold text-xl">အဆင်သင့်ဖြစ်ပါပြီ</h2>
-            <p className="text-white/50 text-sm mt-2 font-myanmar">
-              ဒေတာအားလုံး ပြင်ဆင်ပြီးပါပြီ။ အောက်ပါခလုတ်ကို နှိပ်၍ စတင်အသုံးပြုနိုင်ပါသည်။
-            </p>
-            <button
-              onClick={handleReady}
-              className="mt-6 btn-primary flex items-center justify-center gap-2 w-full text-sm"
-            >
-              <Search size={16} /> စတင်အသုံးပြုမည်
-            </button>
-          </div>
-        )}
-      </div>
-    );
+  // Show splash screen only if consent not given
+  if (!consentGiven) {
+    return <SplashScreen onConsent={handleConsent} />;
   }
 
-  // --- MAIN CONTENT (shown after user clicks "Start") ---
   const cityName = config?.app_city || 'တောင်ကြီးမြို့';
   const appName = config?.app_name || 'Cherry Directory';
 
   return (
-    <div className="space-y-6 py-4">
-      {/* Hero Section */}
+    <div className="space-y-6 py-4 pb-24">
+      {/* Header with Refresh Button */}
+      <div className="px-4 flex justify-between items-center">
+        <div>
+          <h1 className="font-display font-bold text-xl text-white">Cherry Directory</h1>
+          <p className="text-xs text-white/40 font-myanmar">{cityName}</p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+          title="Refresh data"
+        >
+          <RefreshCw size={18} className="text-white/70" />
+        </button>
+      </div>
+
+      {/* Hero Section with Stats */}
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
           <div className="absolute top-3 right-3 flex items-center gap-3 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] text-white/70">
@@ -608,4 +524,11 @@ export default function HomePage() {
       `}</style>
     </div>
   );
+
+  // Helper function for closeAndNavigate
+  function closeAndNavigate(url) {
+    setSelectedCat(null);
+    setSelectedSub(null);
+    setTimeout(() => navigate(url), 20);
+  }
 }
