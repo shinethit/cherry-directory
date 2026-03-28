@@ -30,6 +30,16 @@ export default function HomePage() {
   const config = useAppConfig();
   const { lang } = useLang();
 
+  // UI states
+  const [confirmed, setConfirmed] = useState(false);       // user clicked "Start"
+  const [loading, setLoading] = useState(true);
+  const [dataLoadError, setDataLoadError] = useState(false);
+  const [dataLoadSuccess, setDataLoadSuccess] = useState(false);
+  const [showReadyButton, setShowReadyButton] = useState(false);
+  const [showErrorButtons, setShowErrorButtons] = useState(false);
+  const timeoutRef = useRef(null);
+  const retryTimeoutRef = useRef(null);
+
   // Data states
   const [posts, setPosts] = useState([]);
   const [featured, setFeatured] = useState([]);
@@ -40,20 +50,20 @@ export default function HomePage() {
   const [upcomingEvents, setUpcomingEvents] = useState([]);
   const [stats, setStats] = useState({ listings: 0, posts: 0 });
   const [quickLinks, setQuickLinks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [dataLoadError, setDataLoadError] = useState(false);
-  const [dataLoadSuccess, setDataLoadSuccess] = useState(false);
-  const [showReadyButton, setShowReadyButton] = useState(false);
-  const [showErrorButtons, setShowErrorButtons] = useState(false);
-  const timeoutRef = useRef(null);
-  const retryTimeoutRef = useRef(null);
 
   // Visitor stats
   const [visitorCount, setVisitorCount] = useState(null);
   const [countryStats, setCountryStats] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Online/Offline
+  // Helpers
+  const closeAndNavigate = (url) => {
+    setSelectedCat(null);
+    setSelectedSub(null);
+    setTimeout(() => navigate(url), 20);
+  };
+
+  // Online/Offline listener
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -65,7 +75,7 @@ export default function HomePage() {
     };
   }, []);
 
-  // Track visit (EVERY PAGE LOAD)
+  // Track visit (every page load)
   useEffect(() => {
     const trackVisit = async () => {
       try {
@@ -118,7 +128,7 @@ export default function HomePage() {
     if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
-    // Timeout to show error buttons if loading takes too long
+    // 8s timeout for error buttons
     timeoutRef.current = setTimeout(() => {
       if (loading) {
         console.warn('Data loading timeout');
@@ -165,7 +175,9 @@ export default function HomePage() {
     };
   }, [loadData]);
 
+  // Button handlers
   const handleReady = () => {
+    setConfirmed(true);        // user wants to see content
     setShowReadyButton(false);
   };
 
@@ -174,16 +186,13 @@ export default function HomePage() {
   };
 
   const handleContinueAnyway = () => {
-    setShowReadyButton(false);
+    setConfirmed(true);
     setShowErrorButtons(false);
-    setDataLoadSuccess(true); // pretend success to show UI
+    setDataLoadSuccess(true);
   };
 
-  const cityName = config?.app_city || 'တောင်ကြီးမြို့';
-  const appName = config?.app_name || 'Cherry Directory';
-
-  // Splash / Ready Screen
-  if (showReadyButton || showErrorButtons || loading) {
+  // If user hasn't clicked "Start", show splash / ready / error screen
+  if (!confirmed) {
     return (
       <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gradient-to-br from-[#0d0015] to-[#1a0030] p-6 text-center">
         {loading && !showErrorButtons && (
@@ -249,10 +258,13 @@ export default function HomePage() {
     );
   }
 
-  // Main page (only shown when ready button clicked)
+  // --- MAIN CONTENT (shown after user clicks "Start") ---
+  const cityName = config?.app_city || 'တောင်ကြီးမြို့';
+  const appName = config?.app_name || 'Cherry Directory';
+
   return (
     <div className="space-y-6 py-4">
-      {/* Hero Section with Stats */}
+      {/* Hero Section */}
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
           <div className="absolute top-3 right-3 flex items-center gap-3 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] text-white/70">
@@ -356,7 +368,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Subcategory modals (same as before) */}
+      {/* Subcategory modals (unchanged) */}
       {selectedCat && (
         <div
           style={{
@@ -596,11 +608,4 @@ export default function HomePage() {
       `}</style>
     </div>
   );
-
-  // Helper function for closeAndNavigate (must be inside component but we moved it earlier)
-  function closeAndNavigate(url) {
-    setSelectedCat(null);
-    setSelectedSub(null);
-    setTimeout(() => navigate(url), 20);
-  }
 }
