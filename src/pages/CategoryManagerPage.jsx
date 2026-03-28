@@ -4,27 +4,19 @@ import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
-
-// ── Common emoji icons for quick pick ────────────────────────
-const ICONS = [
-  '🍜','🍕','🍔','☕','🥗','🏥','💊','🦷','👁️','🎓','📚','🏫',
-  '🏨','🏠','🏢','🏗️','🚗','🚕','🚌','📦','🛍️','💄','💅','✂️',
-  '🔧','💡','🪣','🧹','👕','🏦','💰','💳','🎭','🎬','🎮','🎵',
-  '📱','💻','🖨️','🔌','🌿','🌸','🐾','🚑','👮','🔴','📢','📋',
-]
+import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့်ထားပါ
 
 const BLANK = { name: '', name_mm: '', icon: '📦', type: 'directory', sort_order: 0, parent_id: null, description_mm: '', is_active: true, is_featured: false }
 
-// ── Form modal ────────────────────────────────────────────────
+// ── Form modal (IconPicker သုံးထားတယ်) ─────────────────────
 function CategoryForm({ initial, parentId, parentName, allCategories, onClose, onSaved, lang }) {
   const [form, setForm]       = useState({ ...BLANK, ...initial, parent_id: parentId || initial?.parent_id || null })
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState('')
-  const [showIcons, setShowIcons] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const isEdit = !!initial?.id
 
-  // Available parents — top-level only (no sub-sub)
+  // Available parents — top-level only
   const parents = allCategories.filter(c => !c.parent_id && c.id !== initial?.id && c.type === 'directory')
 
   async function save() {
@@ -72,33 +64,14 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4 pb-24">
-          {/* Icon picker */}
+          {/* Icon picker using IconPicker component */}
           <div>
             <label className="block text-xs text-white/50 mb-2">Icon</label>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowIcons(s => !s)}
-                className="w-14 h-14 rounded-2xl bg-white/8 border border-white/12 text-3xl flex items-center justify-center hover:bg-white/12 transition-colors"
-              >
-                {form.icon}
-              </button>
-              <div>
-                <p className="text-sm text-white/70">{form.icon}</p>
-                <button onClick={() => setShowIcons(s => !s)} className="text-[10px] text-brand-300 hover:text-brand-200">
-                  {showIcons ? 'Close' : 'Pick icon →'}
-                </button>
-              </div>
-            </div>
-            {showIcons && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {ICONS.map(ic => (
-                  <button key={ic} onClick={() => { set('icon', ic); setShowIcons(false) }}
-                    className={`w-9 h-9 rounded-xl text-xl flex items-center justify-center transition-colors ${form.icon === ic ? 'bg-brand-600/60 border border-brand-400/40' : 'bg-white/5 hover:bg-white/10'}`}>
-                    {ic}
-                  </button>
-                ))}
-              </div>
-            )}
+            <IconPicker
+              value={form.icon}
+              onChange={(icon) => set('icon', icon)}
+              label={null} // no extra label
+            />
           </div>
 
           {/* Names */}
@@ -115,7 +88,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
               className="input-dark" placeholder="e.g. Restaurant & Food" />
           </div>
 
-          {/* Parent category (only for new, non-top-level) */}
+          {/* Parent category */}
           {!parentId && (
             <div>
               <label className="block text-xs text-white/50 mb-1.5">
@@ -194,14 +167,13 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
   )
 }
 
-// ── Category Row ──────────────────────────────────────────────
+// ── Category Row (မပြောင်း) ───────────────────────────────────
 function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, onToggle }) {
   const [open, setOpen] = useState(false)
   const subsOfSub = (id) => (allCats || []).filter(c => c.parent_id === id)
 
   return (
     <div className={`rounded-2xl overflow-hidden border transition-all ${cat.is_active ? 'border-white/10 bg-white/3' : 'border-white/5 bg-white/1 opacity-60'}`}>
-      {/* Main row */}
       <div className="flex items-center gap-3 px-4 py-3">
         <span className="text-xl flex-shrink-0">{cat.icon}</span>
         <div className="flex-1 min-w-0">
@@ -218,7 +190,6 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex items-center gap-1 flex-shrink-0">
           {subcats.length > 0 && (
             <button onClick={() => setOpen(o => !o)}
@@ -247,7 +218,6 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
         </div>
       </div>
 
-      {/* Subcategories */}
       {open && subcats.length > 0 && (
         <div className="border-t border-white/6 bg-white/2">
           {subcats.map(sub => (
@@ -299,7 +269,7 @@ export default function CategoryManagerPage() {
   const [cats, setCats]   = useState([])
   const [loading, setLoading] = useState(true)
   const [typeFilter, setType] = useState('directory')
-  const [formData, setFormData] = useState(null)   // null=closed, {initial,parentId,parentName}
+  const [formData, setFormData] = useState(null)
   const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
@@ -315,7 +285,6 @@ export default function CategoryManagerPage() {
 
   useEffect(() => { load() }, [load])
 
-  // Split top-level and subs — fixed to avoid duplicates
   const topLevel = cats.filter(c => !c.parent_id && c.type === typeFilter)
   const searchedTop = search
     ? topLevel.filter(c => (c.name_mm || '').includes(search) || (c.name || '').toLowerCase().includes(search.toLowerCase()))
@@ -343,7 +312,6 @@ export default function CategoryManagerPage() {
 
   return (
     <div className="pb-12">
-      {/* Header */}
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start justify-between">
           <div>
@@ -363,7 +331,6 @@ export default function CategoryManagerPage() {
         </div>
       </div>
 
-      {/* Stats */}
       <div className="flex gap-2 px-4 mb-4">
         <div className="flex-1 card-dark rounded-2xl p-3 text-center">
           <p className="font-display font-bold text-lg text-white">{totalActive}</p>
@@ -379,7 +346,6 @@ export default function CategoryManagerPage() {
         </div>
       </div>
 
-      {/* Type filter */}
       <div className="px-4 mb-3">
         <div className="relative">
           <select value={typeFilter} onChange={e => setType(e.target.value)}
@@ -396,7 +362,6 @@ export default function CategoryManagerPage() {
         </div>
       </div>
 
-      {/* Search */}
       <div className="px-4 mb-4">
         <input
           value={search}
@@ -406,7 +371,6 @@ export default function CategoryManagerPage() {
         />
       </div>
 
-      {/* Category tree */}
       <div className="px-4 space-y-2">
         {loading ? (
           [1,2,3,4,5].map(n => <div key={n} className="h-14 rounded-2xl shimmer" />)
@@ -439,7 +403,6 @@ export default function CategoryManagerPage() {
         )}
       </div>
 
-      {/* Tip */}
       <div className="mx-4 mt-6 card-dark rounded-2xl p-4">
         <p className="text-[10px] text-white/30 font-myanmar leading-relaxed">
           💡 {lang === 'mm'
@@ -448,7 +411,6 @@ export default function CategoryManagerPage() {
         </p>
       </div>
 
-      {/* Form modal */}
       {formData !== null && (
         <CategoryForm
           initial={formData.initial}

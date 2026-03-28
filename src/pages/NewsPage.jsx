@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react'
-import { Plus, X, Pin } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'        // ← added
+import { Plus, X, Pin, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { PostCard, Skeleton, EmptyState, ImageUploader } from '../components/UI'
-import { uploadImage } from '../lib/cloudinary'
+import { uploadImage, getOptimizedUrl } from '../lib/cloudinary'
 import { useSEO } from '../hooks/useSEO'
+import Lightbox from 'yet-another-react-lightbox'
+import 'yet-another-react-lightbox/styles.css'
+import Zoom from 'yet-another-react-lightbox/plugins/zoom'
+import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
+import 'yet-another-react-lightbox/plugins/thumbnails.css'
 
 const TYPES = [
   { value: '',             label: 'အားလုံး',        labelEn: 'All'           },
@@ -14,7 +20,7 @@ const TYPES = [
   { value: 'announcement', label: '📢 ကြေညာချက်',  labelEn: '📢 Announcement'},
 ]
 
-// ── Post Form (Admin/Mod only) ─────────────────────────────────
+// ── Post Form (Admin/Mod only) – unchanged ────────────────────────────────
 function PostForm({ onClose, onSuccess, lang }) {
   const { user, profile, isModerator } = useAuth()
   const [form, setForm] = useState({
@@ -68,7 +74,7 @@ function PostForm({ onClose, onSuccess, lang }) {
       status:      'published',
       is_pinned:   form.is_pinned,
       cover_url:   coverUrl || null,
-      images:      images,                      // store gallery images
+      images:      images,
       event_start: form.event_start || null,
       event_location: form.event_location || null,
       author_id:   user?.id,
@@ -81,7 +87,6 @@ function PostForm({ onClose, onSuccess, lang }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
@@ -104,7 +109,6 @@ function PostForm({ onClose, onSuccess, lang }) {
       </div>
 
       <div className="px-4 py-4 space-y-4 pb-24">
-        {/* Type selector */}
         <div>
           <label className="block text-xs text-white/50 mb-2">အမျိုးအစား</label>
           <div className="flex gap-2 flex-wrap">
@@ -124,7 +128,6 @@ function PostForm({ onClose, onSuccess, lang }) {
           </div>
         </div>
 
-        {/* Cover image */}
         <div>
           <label className="block text-xs text-white/50 mb-2">Cover ပုံ (optional)</label>
           {coverUrl ? (
@@ -142,7 +145,6 @@ function PostForm({ onClose, onSuccess, lang }) {
           )}
         </div>
 
-        {/* Gallery images */}
         <div>
           <label className="block text-xs text-white/50 mb-2">ဓာတ်ပုံများ (optional, max 5)</label>
           <div className="grid grid-cols-3 gap-2">
@@ -164,7 +166,6 @@ function PostForm({ onClose, onSuccess, lang }) {
           <p className="text-[9px] text-white/25 mt-1.5">အများဆုံး ၅ ပုံ</p>
         </div>
 
-        {/* Title */}
         <div>
           <label className="block text-xs text-white/50 mb-1.5">
             ခေါင်းစဉ် (မြန်မာ) <span className="text-brand-400">*</span>
@@ -187,7 +188,6 @@ function PostForm({ onClose, onSuccess, lang }) {
           />
         </div>
 
-        {/* Content */}
         <div>
           <label className="block text-xs text-white/50 mb-1.5">အကြောင်းအရာ (မြန်မာ)</label>
           <textarea
@@ -198,7 +198,6 @@ function PostForm({ onClose, onSuccess, lang }) {
           />
         </div>
 
-        {/* Event fields */}
         {form.type === 'event' && (
           <div className="space-y-3 border-t border-white/8 pt-3">
             <p className="text-[10px] text-white/40 uppercase tracking-wider font-display">Event Details</p>
@@ -223,7 +222,6 @@ function PostForm({ onClose, onSuccess, lang }) {
           </div>
         )}
 
-        {/* Pin toggle */}
         <button
           onClick={() => set('is_pinned', !form.is_pinned)}
           className={`flex items-center gap-2 px-4 py-3 rounded-xl border w-full text-sm transition-colors ${
@@ -246,10 +244,12 @@ function PostForm({ onClose, onSuccess, lang }) {
   )
 }
 
-// ── Main Page (unchanged) ─────────────────────────────────────
+// ── Main Page ───────────────────────────────────────────────────────────────
 export default function NewsPage() {
+  const navigate = useNavigate()                       // ← added
   const { lang }        = useLang()
-  const { isModerator } = useAuth()
+  const { isModerator, isAdmin, isSuperAdmin } = useAuth()
+  const canEdit = isSuperAdmin || isAdmin || isModerator
   useSEO({ title: lang === 'mm' ? 'သတင်းနှင့် ဖြစ်ရပ်များ' : 'News & Events' })
 
   const [posts, setPosts]   = useState([])
@@ -258,48 +258,72 @@ export default function NewsPage() {
   const [type, setType]     = useState('')
   const [showForm, setShowForm] = useState(false)
 
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxImages, setLightboxImages] = useState([])
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+
   async function load() {
     setLoading(true)
     try {
-
-    let postsQuery = supabase
-      .from('posts')
-      .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
-      .eq('status', 'published')
-      .eq('is_pinned', false)
-      .order('created_at', { ascending: false })
-      .limit(30)
-
-    if (type) postsQuery = postsQuery.eq('type', type)
-
-    const [{ data: pinnedData }, { data: postsData }] = await Promise.all([
-      supabase
+      let postsQuery = supabase
         .from('posts')
         .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
         .eq('status', 'published')
-        .eq('is_pinned', true)
+        .eq('is_pinned', false)
         .order('created_at', { ascending: false })
-        .limit(3),
-      postsQuery,
-    ])
+        .limit(30)
 
-    setPinned(pinnedData || [])
-    setPosts(postsData || [])
+      if (type) postsQuery = postsQuery.eq('type', type)
+
+      const [{ data: pinnedData }, { data: postsData }] = await Promise.all([
+        supabase
+          .from('posts')
+          .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
+          .eq('status', 'published')
+          .eq('is_pinned', true)
+          .order('created_at', { ascending: false })
+          .limit(3),
+        postsQuery,
+      ])
+
+      setPinned(pinnedData || [])
+      setPosts(postsData || [])
     } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
   useEffect(() => { load() }, [type])
 
+  async function handleDelete(postId) {
+    if (!confirm(lang === 'mm' ? 'Post ကို ဖျက်မှာလား?' : 'Delete this post?')) return
+    const { error } = await supabase.from('posts').delete().eq('id', postId)
+    if (error) alert(error.message)
+    else load()
+  }
+
+  function openLightbox(post, startIndex = 0) {
+    const images = []
+    if (post.cover_url) images.push(post.cover_url)
+    if (post.images && post.images.length) images.push(...post.images)
+    setLightboxImages(images.map(src => ({ src })))
+    setLightboxIndex(startIndex)
+    setLightboxOpen(true)
+  }
+
+  function getFirstImage(post) {
+    if (post.cover_url) return post.cover_url
+    if (post.images && post.images.length) return post.images[0]
+    return null
+  }
+
   return (
     <div className="py-4 pb-8">
-
-      {/* Header row */}
       <div className="flex items-center justify-between px-4 mb-3">
         <h1 className="font-display font-bold text-xl text-white">
           {lang === 'mm' ? 'သတင်းနှင့် ဖြစ်ရပ်များ' : 'News & Events'}
         </h1>
-        {isModerator && (
+        {canEdit && (
           <button
             onClick={() => setShowForm(true)}
             className="flex items-center gap-1.5 btn-primary text-xs px-3 py-2"
@@ -310,7 +334,6 @@ export default function NewsPage() {
         )}
       </div>
 
-      {/* Type filter */}
       <div className="px-4 mb-3">
         <div className="relative">
           <select
@@ -328,20 +351,42 @@ export default function NewsPage() {
         </div>
       </div>
 
-      {/* Pinned posts */}
       {!loading && pinned.length > 0 && (
         <div className="px-4 mb-4">
           <p className="text-[11px] text-gold-500/70 font-display font-semibold uppercase tracking-wider mb-2">
             📌 {lang === 'mm' ? 'Pinned' : 'Pinned'}
           </p>
           <div className="space-y-3">
-            {pinned.map(p => <PostCard key={p.id} post={p} />)}
+            {pinned.map(p => (
+              <div key={p.id} className="relative">
+                <div onClick={() => navigate(`/news/${p.id}`)}>
+                  <PostCard post={p} />
+                </div>
+                {canEdit && (
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/admin/posts/${p.id}/edit`); }}
+                      className="p-1.5 bg-black/50 rounded-lg text-white/70 hover:text-white"
+                      title="Edit"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
+                      className="p-1.5 bg-black/50 rounded-lg text-white/70 hover:text-red-400"
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
           <div className="border-t border-white/8 mt-4" />
         </div>
       )}
 
-      {/* Posts list */}
       <div className="px-4 space-y-3 pb-24">
         {loading ? (
           [1,2,3].map(n => <Skeleton key={n} className="h-48" />)
@@ -350,17 +395,49 @@ export default function NewsPage() {
             icon="📰"
             title={lang === 'mm' ? 'Post မရှိသေးပါ' : 'No posts yet'}
             message={
-              isModerator
+              canEdit
                 ? (lang === 'mm' ? '"Post တင်မည်" ကို နှိပ်ပြီး ပထမဆုံး Post ရေးပါ' : 'Click "New Post" to write the first post')
                 : (lang === 'mm' ? 'မကြာမီ Post တွေ တွေ့ရမည်' : 'Posts will appear here soon')
             }
           />
         ) : (
-          posts.map(p => <PostCard key={p.id} post={p} />)
+          posts.map(p => (
+            <div key={p.id} className="relative group">
+              <div onClick={() => navigate(`/news/${p.id}`)} className="cursor-pointer">
+                <PostCard post={p} />
+              </div>
+              {canEdit && (
+                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/admin/posts/${p.id}/edit`); }}
+                    className="p-1.5 bg-black/60 rounded-lg text-white/80 hover:text-white backdrop-blur-sm"
+                    title="Edit"
+                  >
+                    <Edit2 size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
+                    className="p-1.5 bg-black/60 rounded-lg text-white/80 hover:text-red-400 backdrop-blur-sm"
+                    title="Delete"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
+              {getFirstImage(p) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); openLightbox(p, 0); }}
+                  className="absolute bottom-2 left-2 p-1.5 bg-black/50 rounded-full text-white/60 hover:text-white"
+                  title="View images"
+                >
+                  🖼️
+                </button>
+              )}
+            </div>
+          ))
         )}
       </div>
 
-      {/* Post form (Admin/Mod) */}
       {showForm && (
         <PostForm
           lang={lang}
@@ -368,6 +445,15 @@ export default function NewsPage() {
           onSuccess={() => { setShowForm(false); load() }}
         />
       )}
+
+      <Lightbox
+        open={lightboxOpen}
+        close={() => setLightboxOpen(false)}
+        slides={lightboxImages}
+        index={lightboxIndex}
+        plugins={[Zoom, Thumbnails]}
+        zoom={{ maxZoomPixelRatio: 3 }}
+      />
     </div>
   )
 }

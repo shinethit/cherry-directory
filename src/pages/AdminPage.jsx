@@ -4,10 +4,11 @@ import {
   ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, 
   LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, 
   UserCog, Search, RefreshCw, TrendingUp, Activity, FileText, Star,
-  EyeOff, Calendar, Megaphone   // Added missing icons
+  EyeOff, Calendar, Megaphone
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import CategoryManagerPage from './CategoryManagerPage'
+import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့်ထားပါ
 
 const PRESET_LINKS = [
   { url: '', label: '-- App ထဲရှိ စာမျက်နှာတစ်ခုကို ရွေးပါ --' },
@@ -101,14 +102,12 @@ export default function AdminPage() {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
 
-      // Users
       const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
       const { count: newToday } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr)
       const { count: newLast7Days } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo)
       const { count: activeToday } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', todayStr)
       const { count: onlineNow } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', fiveMinsAgo)
 
-      // Users by role
       const { data: roleCounts } = await supabase
         .from('profiles')
         .select('role', { count: 'exact', head: false })
@@ -122,17 +121,14 @@ export default function AdminPage() {
         })
       }
 
-      // Listings by status
       const { count: approvedListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved')
       const { count: pendingListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'pending')
       const { count: hiddenListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'hidden')
 
-      // Posts by type
       const { count: newsPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'news')
       const { count: eventPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'event')
       const { count: announcementPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'announcement')
 
-      // Reviews
       const { count: totalReviews } = await supabase.from('reviews').select('*', { count: 'exact', head: true })
 
       setDashboardStats({
@@ -179,7 +175,7 @@ export default function AdminPage() {
       if (updated && updated.length > 0) {
         showToast(`✓ Role ကို ${newRole} သို့ ပြောင်းလဲပြီးပါပြီ`)
         loadUsers()
-        loadDashboardStats() // refresh stats
+        loadDashboardStats()
       } else {
         throw new Error('No rows updated – check RLS policy')
       }
@@ -340,7 +336,6 @@ export default function AdminPage() {
 
       {tab === 'dashboard' && (
         <div className="px-4 space-y-6 animate-fade-in">
-          {/* Header with refresh button */}
           <div className="flex items-center justify-between">
             <h2 className="text-white font-bold font-display flex items-center gap-2">
               <Activity size={18} className="text-brand-400" /> Platform Analytics
@@ -354,22 +349,17 @@ export default function AdminPage() {
             <div className="text-center py-8 text-white/30">Loading stats...</div>
           ) : (
             <>
-              {/* User stats row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <StatCard title="Total Users" value={dashboardStats.totalUsers} icon={Users} color="text-blue-400" />
                 <StatCard title="Online Now" value={dashboardStats.onlineNow} icon={Activity} color="text-green-400" pulse />
                 <StatCard title="Active Today" value={dashboardStats.activeToday} icon={TrendingUp} color="text-brand-300" />
                 <StatCard title="New Today" value={dashboardStats.newToday} icon={UserCog} color="text-yellow-400" />
               </div>
-
-              {/* Additional user metrics */}
               <div className="grid grid-cols-3 gap-2">
                 <StatCard title="New (7d)" value={dashboardStats.newLast7Days} icon={TrendingUp} color="text-amber-400" size="small" />
                 <StatCard title="Admins" value={dashboardStats.usersByRole.admin} icon={Users} color="text-purple-400" size="small" />
                 <StatCard title="Moderators" value={dashboardStats.usersByRole.moderator} icon={Users} color="text-indigo-400" size="small" />
               </div>
-
-              {/* Listings stats */}
               <div className="mt-4">
                 <h3 className="text-sm font-semibold text-white/70 mb-2">📋 Listings</h3>
                 <div className="grid grid-cols-3 gap-2">
@@ -378,8 +368,6 @@ export default function AdminPage() {
                   <StatCard title="Hidden" value={dashboardStats.listings.hidden} icon={EyeOff} color="text-red-400" size="small" />
                 </div>
               </div>
-
-              {/* Posts stats */}
               <div className="mt-4">
                 <h3 className="text-sm font-semibold text-white/70 mb-2">📰 Posts</h3>
                 <div className="grid grid-cols-3 gap-2">
@@ -388,8 +376,6 @@ export default function AdminPage() {
                   <StatCard title="Announcements" value={dashboardStats.posts.announcements} icon={Megaphone} color="text-amber-400" size="small" />
                 </div>
               </div>
-
-              {/* Reviews */}
               <div className="mt-4">
                 <StatCard title="Total Reviews" value={dashboardStats.totalReviews} icon={Star} color="text-gold-400" size="small" />
               </div>
@@ -497,7 +483,12 @@ export default function AdminPage() {
               <input value={linkForm.title_mm} onChange={e => setLinkForm({...linkForm, title_mm: e.target.value})} placeholder="Title (MM)" className="input-dark text-xs font-myanmar" />
               <input value={linkForm.subtitle} onChange={e => setLinkForm({...linkForm, subtitle: e.target.value})} placeholder="Subtitle" className="input-dark text-xs" />
               <div className="flex gap-2">
-                <input value={linkForm.icon} onChange={e => setLinkForm({...linkForm, icon: e.target.value})} placeholder="Icon" className="input-dark text-xs w-12 text-center" />
+                {/* IconPicker နေရာ */}
+                <IconPicker
+                  value={linkForm.icon}
+                  onChange={(icon) => setLinkForm({...linkForm, icon})}
+                  label={null}
+                />
                 <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="URL" className="input-dark text-xs flex-1" />
               </div>
               <input value={linkForm.css_classes} onChange={e => setLinkForm({...linkForm, css_classes: e.target.value})} placeholder="CSS classes" className="input-dark text-xs col-span-2" />

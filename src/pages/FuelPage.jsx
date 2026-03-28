@@ -21,7 +21,7 @@ function timeAgo(iso, lang) {
   return `${Math.floor(m/60)}${lang === 'mm' ? 'နာရီ' : 'h'}`
 }
 
-// ─── Station Card ────────────────────────────────────────────────────────────
+// ─── Station Card (unchanged except using props for update callbacks) ─────────
 function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
   const [expanded, setExpanded] = useState(false)
   const [showQueueForm, setShowQueueForm] = useState(false)
@@ -82,7 +82,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
                   </div>
                   <div className="flex flex-col gap-1 flex-shrink-0">
                     {['available','limited','unavailable'].map(s => (
-                      <button key={s} onClick={() => onReport(station, ft.name, s)}
+                      <button key={s} onClick={() => onReport(station.id, ft.name, s)}
                         className={`text-[8px] font-bold px-2 py-1 rounded-lg border transition-colors ${
                           row?.status === s ? STATUS_CFG[s].bg + ' ' + STATUS_CFG[s].color : 'bg-white/5 border-white/10 text-white/30 hover:text-white/60'
                         }`}>
@@ -97,7 +97,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
             })}
           </div>
 
-          {/* Queue Status Section (New) */}
+          {/* Queue Status Section */}
           <div className="mt-4 p-3 rounded-xl bg-white/5 border border-white/10">
             <div className="flex justify-between items-center mb-2">
               <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider font-myanmar">
@@ -162,7 +162,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
   )
 }
 
-// ─── Fuel Types Tab ──────────────────────────────────────────────────────────
+// ─── Fuel Types Tab (unchanged) ──────────────────────────────────────────
 function FuelTypesTab({ onChanged }) {
   const [list, setList]       = useState([])
   const [loading, setLoading] = useState(true)
@@ -413,10 +413,8 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
         </button>
       </div>
 
-      {/* Content - pb-36 ထည့်ထားသည် (Nav Bar မဖုံးအောင်) */}
+      {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-36">
-
-        {/* ── Stations Tab ── */}
         {modalTab === 'stations' && (
           <div className="space-y-4">
             <div className="space-y-2 p-3 rounded-2xl bg-white/3 border border-white/8">
@@ -548,7 +546,6 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
           </div>
         )}
 
-        {/* ── Fuel Types Tab ── */}
         {modalTab === 'fueltypes' && (
           <FuelTypesTab onChanged={() => { onUpdated(); onFuelTypesChanged?.() }} />
         )}
@@ -557,7 +554,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
   )
 }
 
-// ─── Main FuelPage ────────────────────────────────────────────────────────────
+// ─── Main FuelPage (optimized updates) ───────────────────────────────────────
 export default function FuelPage() {
   const { lang }       = useLang()
   const { isModerator } = useAuth()
@@ -570,31 +567,29 @@ export default function FuelPage() {
   const [showManage, setShowManage]     = useState(false)
   const [toast, setToast]               = useState(null)
 
+  // Load initial data
   async function load() {
     setLoading(true)
     try {
-      // 1. Load fuel types
+      // Load fuel types
       const { data: ftData } = await supabase.from('fuel_types').select('*').order('sort_order')
       setAllFuelTypes(ftData || [])
 
-      // 2. Load ALL active stations directly (ဆိုင်အသစ် ချက်ချင်းပေါ်ရန်)
+      // Load stations with their current status view
       const { data: stationsRaw } = await supabase
         .from('fuel_stations')
         .select('*')
         .eq('is_active', true)
         .order('sort_order')
 
-      // 3. Load current fuel status from view
       const { data: statusData } = await supabase.from('current_fuel_status').select('*')
 
-      // 4. Build lookup: station_id → { fuel_name → row }
       const statusMap = {}
       for (const row of (statusData || [])) {
         if (!statusMap[row.station_id]) statusMap[row.station_id] = {}
         statusMap[row.station_id][row.fuel_id] = row
       }
 
-      // 5. Merge — every station shows up even if no reports yet
       const merged = (stationsRaw || []).map(s => ({
         id: s.id,
         name: s.name,
@@ -606,7 +601,6 @@ export default function FuelPage() {
         phone: s.phone,
         fuel_type_names: s.fuel_type_names || [],
         fuels: statusMap[s.id] || {},
-        // --- ယာဉ်အရေအတွက် Data များကို ယူရန် ---
         waiting_cars: s.waiting_cars,
         waiting_motorcycles: s.waiting_motorcycles,
         queue_updated_at: s.queue_updated_at
@@ -619,18 +613,38 @@ export default function FuelPage() {
 
   useEffect(() => { load() }, [])
 
-  async function handleReport(station, fuelType, status) {
+  // Optimistic update for fuel status
+  async function handleReport(stationId, fuelType, status) {
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('fuel_reports').insert({
-      station_id: station.id, fuel_type: fuelType, status,
+    // Insert report
+    const { error } = await supabase.from('fuel_reports').insert({
+      station_id: stationId, fuel_type: fuelType, status,
       reporter_id: user?.id || null,
     })
-    setToast({ msg: 'Report တင်ပြီးပါပြီ ✓' })
+    if (error) {
+      console.error(error)
+      setToast({ msg: 'Error: ' + error.message, type: 'error' })
+      setTimeout(() => setToast(null), 3000)
+      return
+    }
+
+    // Update local state optimistically
+    setStations(prevStations => prevStations.map(station => {
+      if (station.id !== stationId) return station
+      const updatedFuels = { ...station.fuels }
+      updatedFuels[fuelType] = {
+        ...updatedFuels[fuelType],
+        status,
+        reported_at: new Date().toISOString() // approximate
+      }
+      return { ...station, fuels: updatedFuels }
+    }))
+
+    setToast({ msg: 'Report တင်ပြီးပါပြီ ✓', type: 'ok' })
     setTimeout(() => setToast(null), 3000)
-    load()
   }
 
-  // လူတန်းအရေအတွက်ကို Update လုပ်မည့် Function အသစ်
+  // Optimistic update for queue
   async function handleQueueReport(stationId, cars, bikes) {
     const c = cars === '' ? null : parseInt(cars, 10)
     const b = bikes === '' ? null : parseInt(bikes, 10)
@@ -646,13 +660,22 @@ export default function FuelPage() {
       return
     }
 
-    setToast({ msg: 'လူတန်းအခြေအနေ တင်ပြီးပါပြီ ✓' })
+    // Update local state
+    setStations(prevStations => prevStations.map(station => {
+      if (station.id !== stationId) return station
+      return {
+        ...station,
+        waiting_cars: c,
+        waiting_motorcycles: b,
+        queue_updated_at: new Date().toISOString()
+      }
+    }))
+
+    setToast({ msg: 'လူတန်းအခြေအနေ တင်ပြီးပါပြီ ✓', type: 'ok' })
     setTimeout(() => setToast(null), 3000)
-    load()
   }
 
   return (
-    // pb-36 ထည့်ထားသည် (Nav Bar မဖုံးအောင်)
     <div className="pb-36">
       <div className="px-4 pt-4 pb-3 flex items-center justify-between">
         <h1 className="font-display font-bold text-xl text-white">⛽ Fuel Status</h1>
@@ -687,7 +710,7 @@ export default function FuelPage() {
         </div>
       )}
 
-      {/* ── How it works section လမ်းညွှန် ── */}
+      {/* How it works section */}
       <div className="mx-4 mt-6 card-dark rounded-2xl p-4 bg-white/5 border border-white/8">
         <p className="text-xs font-display font-bold text-white/50 uppercase tracking-wider mb-3">
           {lang === 'mm' ? 'ဘယ်လိုအလုပ်လုပ်သလဲ' : 'How it works'}
@@ -721,8 +744,12 @@ export default function FuelPage() {
       )}
 
       {toast && (
-        <div className="fixed bottom-28 left-4 right-4 z-[300] bg-green-500/20 border border-green-500/40 text-green-300 px-4 py-3 rounded-2xl text-center text-sm font-myanmar shadow-xl">
-          {toast.msg}
+        <div className={`fixed bottom-28 left-4 right-4 z-[300] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl font-myanmar text-sm ${
+          toast.type === 'ok'   ? 'bg-green-500/20 border border-green-500/40 text-green-300' :
+          toast.type === 'error' ? 'bg-red-500/20 border border-red-500/40 text-red-300' :
+                                   'bg-amber-500/20 border border-amber-500/40 text-amber-300'
+        }`}>
+          {toast.type === 'ok' ? '✓' : toast.type === 'error' ? '⚠️' : 'ℹ️'} {toast.msg}
         </div>
       )}
     </div>

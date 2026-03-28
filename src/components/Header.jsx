@@ -51,15 +51,6 @@ export default function Header() {
     { path: '/admin/settings', label: 'App Settings', icon: Settings },
   ]
 
-  // Helper to get top padding that accounts for safe area
-  const getMenuTopPadding = () => {
-    if (typeof window !== 'undefined') {
-      // On iOS, env(safe-area-inset-top) is supported; we use it via CSS variable
-      return 'calc(4rem + env(safe-area-inset-top))'
-    }
-    return '4rem'
-  }
-
   return (
     <>
       <header
@@ -71,7 +62,6 @@ export default function Header() {
         style={{ top: 'env(safe-area-inset-top)' }}
       >
         <div className="flex items-center justify-between px-4 py-3">
-          {/* Logo */}
           <button
             onClick={() => navigate('/')}
             className="flex items-center gap-2"
@@ -97,7 +87,6 @@ export default function Header() {
           </button>
 
           <div className="flex items-center gap-2">
-            {/* Dark Mode Toggle */}
             <button
               onClick={toggleDarkMode}
               className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90 transition-colors"
@@ -105,7 +94,6 @@ export default function Header() {
               {darkMode ? <Sun size={14} /> : <Moon size={14} />}
             </button>
 
-            {/* Language Toggle */}
             <button
               onClick={() => {
                 localStorage.setItem('lang', lang === 'mm' ? 'en' : 'mm')
@@ -116,7 +104,6 @@ export default function Header() {
               {lang === 'mm' ? 'EN' : 'မြန်မာ'}
             </button>
 
-            {/* Menu Button */}
             <button
               onClick={() => setMenuOpen(!menuOpen)}
               className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center"
@@ -127,17 +114,11 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Spacer to prevent content from hiding under fixed header */}
-      <div className="h-24" />
+      <div className="h-16" style={{ marginTop: 'env(safe-area-inset-top)' }} />
 
-      {/* Menu overlay */}
       {menuOpen && (
-        <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md" onClick={() => setMenuOpen(false)}>
-          <div
-            className="p-4 space-y-2 overflow-y-auto h-full"
-            style={{ paddingTop: getMenuTopPadding() }}
-            onClick={e => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md pt-16" onClick={() => setMenuOpen(false)}>
+          <div className="p-4 space-y-2" onClick={e => e.stopPropagation()}>
             {isLoggedIn && profile && (
               <div className="card-dark p-4 rounded-2xl mb-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-brand-700 flex items-center justify-center overflow-hidden">

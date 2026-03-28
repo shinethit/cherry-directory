@@ -176,9 +176,7 @@ export default function ChatPage() {
 
   const canDelete = (msg) => {
     if (!isLoggedIn) return false
-    // Admin or moderator can delete any message
     if (isAdmin || isModerator) return true
-    // User can delete their own message
     return msg.user_id === user?.id
   }
 
@@ -244,6 +242,7 @@ export default function ChatPage() {
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() } }}
             placeholder={isLoggedIn ? 'မက်ဆေ့ ရေးရန်...' : 'မက်ဆေ့ ရေးရန်... (Guest)'}
             className="input-dark flex-1 text-sm py-2 font-myanmar"
+            style={{ fontSize: '16px' }}
             maxLength={500}
           />
           <button
@@ -268,6 +267,7 @@ export default function ChatPage() {
               onChange={e => setGuestName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && saveGuestName()}
               className="input-dark mb-3 font-myanmar"
+              style={{ fontSize: '16px' }}
               autoFocus
             />
             <div className="flex gap-2">

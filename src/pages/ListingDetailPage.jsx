@@ -10,6 +10,7 @@ import { StarRating, ReactionBar, Skeleton } from '../components/UI'
 import MapEmbed from '../components/MapEmbed'
 import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
+import Lightbox from '../components/Lightbox'
 
 export default function ListingDetailPage() {
   const { id } = useParams()
@@ -26,6 +27,8 @@ export default function ListingDetailPage() {
   const [claimStatus, setClaimStatus] = useState(null)
   const [myVote, setMyVote] = useState(false)
   const [voteLoading, setVoteLoading] = useState(false)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxIndex, setLightboxIndex] = useState(0)
 
   useSEO({
     title: listing ? (lang === 'mm' ? listing.name_mm || listing.name : listing.name) : 'Business',
@@ -94,6 +97,11 @@ export default function ListingDetailPage() {
   const bookmarked = isBookmarked('listing', id)
   const displayName = lang === 'mm' ? (listing.name_mm || listing.name) : listing.name
 
+  const openLightbox = (index) => {
+    setLightboxIndex(index)
+    setLightboxOpen(true)
+  }
+
   return (
     <div className="pb-8">
       <div className="flex items-center justify-between px-4 py-3">
@@ -111,13 +119,6 @@ export default function ListingDetailPage() {
             </button>
           )}
           <button
-            onClick={() => navigate(`/directory/${id}/menu`)}
-            className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors"
-            title="Menu & Prices"
-          >
-            <UtensilsCrossed size={16} className="text-white/60" />
-          </button>
-          <button
             onClick={() => toggleBookmark('listing', id)}
             className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${bookmarked ? 'bg-gold-500/20 text-gold-400' : 'bg-white/8 text-white/50 hover:text-white'}`}
           >
@@ -126,14 +127,15 @@ export default function ListingDetailPage() {
         </div>
       </div>
 
+      {/* Images gallery with lightbox */}
       {cover && (
-        <div className="relative h-52 overflow-hidden mx-4 rounded-2xl mb-4">
+        <div className="relative h-52 overflow-hidden mx-4 rounded-2xl mb-4 cursor-pointer" onClick={() => openLightbox(activeImg)}>
           <img src={cover} alt={displayName} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           {allImages.length > 1 && (
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
               {allImages.map((_, i) => (
-                <button key={i} onClick={() => setActiveImg(i)} className={`w-1.5 h-1.5 rounded-full ${i === activeImg ? 'bg-white' : 'bg-white/40'}`} />
+                <button key={i} onClick={(e) => { e.stopPropagation(); setActiveImg(i); }} className={`w-1.5 h-1.5 rounded-full ${i === activeImg ? 'bg-white' : 'bg-white/40'}`} />
               ))}
             </div>
           )}
@@ -144,7 +146,7 @@ export default function ListingDetailPage() {
         <div>
           <div className="flex items-start gap-3">
             {listing.logo_url && (
-              <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0">
+              <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0 cursor-pointer" onClick={() => openLightbox(allImages.indexOf(listing.logo_url))}>
                 <img src={getOptimizedUrl(listing.logo_url, { width: 120 })} alt="" className="w-full h-full object-contain" />
               </div>
             )}
@@ -154,7 +156,6 @@ export default function ListingDetailPage() {
               </div>
               {listing.name_mm && lang === 'en' && <p className="text-sm text-white/50 font-myanmar">{listing.name_mm}</p>}
 
-              {/* Verified Badge - Updated with Cherry Verified */}
               {listing.is_verified && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   {listing.verify_type === 'owner' || (!listing.verify_type && listing.is_verified) ? (
@@ -259,6 +260,16 @@ export default function ListingDetailPage() {
           )}
         </div>
 
+        {/* Prominent Menu Button */}
+        <button
+          onClick={() => navigate(`/directory/${id}/menu`)}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-brand-600/40 to-brand-700/40 border border-brand-400/50 text-brand-200 font-semibold text-base hover:from-brand-600/60 hover:to-brand-700/60 transition-all"
+        >
+          <UtensilsCrossed size={20} className="text-brand-300" />
+          <span className="font-display font-bold">View Menu & Prices</span>
+        </button>
+
+        {/* Owner verification section */}
         {listing.is_verified && listing.owner ? (
           <div className="relative overflow-hidden rounded-2xl border border-gold-500/30 bg-gradient-to-br from-gold-500/10 via-gold-500/5 to-transparent p-4">
             <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-gold-400/60 to-transparent" />
@@ -323,6 +334,7 @@ export default function ListingDetailPage() {
           </div>
         ) : null}
 
+        {/* Community verify section */}
         {!listing.is_verified && isLoggedIn && listing.owner_id !== profile?.id && (
           <div className="card-dark rounded-2xl p-4 space-y-2">
             <div className="flex items-center justify-between">
@@ -369,50 +381,13 @@ export default function ListingDetailPage() {
           </div>
         )}
 
-        {isLoggedIn && !listing.is_verified && (
-          <div className="card-dark p-4 rounded-2xl space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <p className="text-sm font-display font-semibold text-white">
-                  👥 {lang === 'mm' ? 'Community စစ်ဆေးခြင်း' : 'Community Verify'}
-                </p>
-                <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
-                  {lang === 'mm'
-                    ? `Member ${listing.community_votes || 0}/10 ဦး အတည်ပြုပြီး`
-                    : `${listing.community_votes || 0}/10 members confirmed`}
-                </p>
-              </div>
-              <button
-                onClick={toggleVote}
-                disabled={voteLoading}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
-                  myVote
-                    ? 'bg-blue-500/20 border-blue-500/40 text-blue-400'
-                    : 'bg-white/5 border-white/15 text-white/60 hover:border-blue-500/30 hover:text-blue-400'
-                }`}
-              >
-                {myVote ? '✓ ' : ''}{lang === 'mm' ? 'လုပ်ငန်းမှန်ကန်' : 'Vouch'}
-              </button>
-            </div>
-            <div className="h-1.5 bg-white/8 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-500 rounded-full transition-all"
-                style={{ width: `${Math.min(100, ((listing.community_votes || 0) / 10) * 100)}%` }}
-              />
-            </div>
-            <p className="text-[9px] text-white/25 font-myanmar">
-              {lang === 'mm'
-                ? '10 ဦး အတည်ပြုပြီးပါက Community Verified badge အလိုအလျောက် ရမည်'
-                : '10 member vouches = automatic Community Verified badge'}
-            </p>
-          </div>
-        )}
-
+        {/* Reactions */}
         <div>
           <p className="text-xs text-white/40 mb-2 font-display font-semibold uppercase tracking-wider">{t('reactions')}</p>
           <ReactionBar targetType="listing" targetId={id} />
         </div>
 
+        {/* Reviews */}
         <div>
           <p className="text-sm font-display font-bold text-white mb-3">{t('reviews_title')} ({reviews.length})</p>
 
@@ -450,6 +425,15 @@ export default function ListingDetailPage() {
           ))}
         </div>
       </div>
+
+      {/* Lightbox */}
+      {lightboxOpen && (
+        <Lightbox
+          images={allImages}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxOpen(false)}
+        />
+      )}
     </div>
   )
 }

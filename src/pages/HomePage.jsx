@@ -1,29 +1,132 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Search, CalendarDays } from 'lucide-react'
-import { supabase } from '../lib/supabase'
-import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI'
-import { useAppConfig } from '../contexts/AppConfigContext'
-import { useLang } from '../contexts/LangContext'
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, CalendarDays, Users, Wifi, WifiOff } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI';
+import { useAppConfig } from '../contexts/AppConfigContext';
+import { useLang } from '../contexts/LangContext';
+import SplashScreen from '../components/SplashScreen';
+
+// Helper: country code → full name (အလံမပြဘဲ နိုင်ငံအမည် ပြရန်)
+const countryNames = {
+  MM: 'မြန်မာ',
+  TH: 'ထိုင်း',
+  SG: 'စင်ကာပူ',
+  US: 'အမေရိကန်',
+  GB: 'ယူကေ',
+  JP: 'ဂျပန်',
+  KR: 'ကိုရီးယား',
+  MY: 'မလေးရှား',
+  VN: 'ဗီယက်နမ်',
+  LA: 'လာအို',
+  KH: 'ကမ္ဘောဒီးယား',
+  IN: 'အိန္ဒိယ',
+  AU: 'ဩစတြေးလျ',
+  DE: 'ဂျာမနီ',
+  FR: 'ပြင်သစ်',
+  // လိုချင်ရင် ထပ်ထည့်ပါ
+};
+
+function getCountryDisplay(code) {
+  if (!code) return 'မသိ';
+  return countryNames[code] || code;
+}
+
+// Shimmer loading skeleton
+const ShimmerSkeleton = ({ className }) => (
+  <div className={`relative overflow-hidden bg-white/5 rounded-2xl ${className}`}>
+    <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+  </div>
+);
 
 export default function HomePage() {
-  const navigate = useNavigate()
-  const config = useAppConfig()
-  const { lang } = useLang()
-  const [posts, setPosts] = useState([])
-  const [featured, setFeatured] = useState([])
-  const [homeCategories, setHomeCategories] = useState([])
-  const [allCategories, setAllCategories] = useState([])
-  const [selectedCat, setSelectedCat] = useState(null)
-  const [selectedSub, setSelectedSub] = useState(null)
-  const [upcomingEvents, setUpcomingEvents] = useState([])
-  const [stats, setStats] = useState({ listings: 0, posts: 0 })
-  const [quickLinks, setQuickLinks] = useState([])
-  const [loading, setLoading] = useState(true)
-  const timeoutRef = useRef(null)
+  const navigate = useNavigate();
+  const config = useAppConfig();
+  const { lang } = useLang();
+  const [posts, setPosts] = useState([]);
+  const [featured, setFeatured] = useState([]);
+  const [homeCategories, setHomeCategories] = useState([]);
+  const [allCategories, setAllCategories] = useState([]);
+  const [selectedCat, setSelectedCat] = useState(null);
+  const [selectedSub, setSelectedSub] = useState(null);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [stats, setStats] = useState({ listings: 0, posts: 0 });
+  const [quickLinks, setQuickLinks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
+  const timeoutRef = useRef(null);
 
+  // --- Visitor & Country Stats ---
+  const [visitorCount, setVisitorCount] = useState(null);
+  const [countryStats, setCountryStats] = useState([]);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // Online/Offline listener
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Track visit (EVERY PAGE LOAD – no localStorage)
+  useEffect(() => {
+    const trackVisit = async () => {
+      try {
+        // Get country code from IP (ipapi.co)
+        const res = await fetch('https://ipapi.co/json/');
+        const data = await res.json();
+        const countryCode = data.country_code || 'XX';
+        await supabase.from('visits').insert({ country_code: countryCode });
+      } catch (err) {
+        console.warn('Visit tracking failed:', err);
+        // Fallback: insert 'XX' so we don't lose the visit count
+        await supabase.from('visits').insert({ country_code: 'XX' }).catch(() => {});
+      }
+    };
+    trackVisit();
+  }, []);
+
+  // Fetch visitor stats (last 7 days)
+  useEffect(() => {
+    const fetchStats = async () => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('visits')
+        .select('country_code')
+        .gte('visited_at', sevenDaysAgo);
+
+      if (error) {
+        console.warn('Failed to fetch visitor stats:', error);
+        return;
+      }
+
+      // Total count (all visits, including XX)
+      setVisitorCount(data.length);
+
+      // Count per country, excluding XX and null
+      const counts = {};
+      data.forEach(({ country_code }) => {
+        const code = country_code?.trim();
+        if (code && code !== 'XX' && code !== '') {
+          counts[code] = (counts[code] || 0) + 1;
+        }
+      });
+      const sorted = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+      setCountryStats(sorted);
+    };
+    fetchStats();
+  }, []);
+
+  // --- Data loading (မူရင်းအတိုင်း) ---
   const load = useCallback(async () => {
-    console.log('[HomePage] load started')
+    console.log('[HomePage] load started');
     try {
       const results = await Promise.allSettled([
         supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
@@ -32,59 +135,72 @@ export default function HomePage() {
         supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
         supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
         supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order')
-      ])
+      ]);
 
-      console.log('[HomePage] all queries resolved')
-
-      setPosts(results[0]?.status === 'fulfilled' ? results[0].value.data || [] : [])
-      setFeatured(results[1]?.status === 'fulfilled' ? results[1].value.data || [] : [])
-      
-      const all = results[2]?.status === 'fulfilled' ? results[2].value.data || [] : []
-      setAllCategories(all)
-      setHomeCategories(all.filter(c => !c.parent_id))
-      
-      setStats({ listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0 })
-      setUpcomingEvents(results[4]?.status === 'fulfilled' ? results[4].value.data || [] : [])
-      setQuickLinks(results[5]?.status === 'fulfilled' ? results[5].value.data || [] : [])
-      
+      setPosts(results[0]?.status === 'fulfilled' ? results[0].value.data || [] : []);
+      setFeatured(results[1]?.status === 'fulfilled' ? results[1].value.data || [] : []);
+      const all = results[2]?.status === 'fulfilled' ? results[2].value.data || [] : [];
+      setAllCategories(all);
+      setHomeCategories(all.filter(c => !c.parent_id));
+      setStats({ listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0 });
+      setUpcomingEvents(results[4]?.status === 'fulfilled' ? results[4].value.data || [] : []);
+      setQuickLinks(results[5]?.status === 'fulfilled' ? results[5].value.data || [] : []);
     } catch (err) {
-      console.error('[HomePage] CRITICAL ERROR in load():', err)
+      console.error('[HomePage] CRITICAL ERROR:', err);
     } finally {
-      console.log('[HomePage] finally – setting loading false')
-      setLoading(false)
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      setLoading(false);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     }
-  }, [])
+  }, []);
 
   useEffect(() => {
     timeoutRef.current = setTimeout(() => {
       if (loading) {
-        console.warn('[HomePage] Load timeout – forcing loading false')
-        setLoading(false)
+        console.warn('[HomePage] Load timeout – forcing loading false');
+        setLoading(false);
       }
-    }, 5000)
-
-    load()
-
+    }, 5000);
+    load();
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    }
-  }, [load])
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, [load]);
+
+  // Splash screen
+  useEffect(() => {
+    if (!loading && showSplash) setShowSplash(false);
+  }, [loading, showSplash]);
 
   const closeAndNavigate = (url) => {
-    setSelectedCat(null)
-    setSelectedSub(null)
-    setTimeout(() => navigate(url), 20)
-  }
+    setSelectedCat(null);
+    setSelectedSub(null);
+    setTimeout(() => navigate(url), 20);
+  };
 
-  const cityName = config?.app_city || 'တောင်ကြီးမြို့'
-  const appName = config?.app_name || 'Cherry Directory'
+  const cityName = config?.app_city || 'တောင်ကြီးမြို့';
+  const appName = config?.app_name || 'Cherry Directory';
+
+  if (showSplash) {
+    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  }
 
   return (
     <div className="space-y-6 py-4">
-      {/* Hero Section */}
+      {/* Hero Section with Stats */}
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
+          {/* Stats bar (Online + Visitor count) */}
+          <div className="absolute top-3 right-3 flex items-center gap-3 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] text-white/70">
+            <div className="flex items-center gap-1">
+              <Users size={12} />
+              <span>{visitorCount !== null ? visitorCount : '...'}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-red-400" />}
+              <span className="text-[9px]">{isOnline ? 'Online' : 'Offline'}</span>
+            </div>
+          </div>
+
           <div className="relative">
             <p className="text-gold-400 text-xs font-display font-semibold tracking-widest uppercase mb-1">{cityName}</p>
             <h2 className="font-display font-bold text-2xl text-white leading-tight mb-3">
@@ -111,6 +227,18 @@ export default function HomePage() {
               <p className="text-[10px] text-white/50">အသုံးပြုရေး</p>
             </div>
           </div>
+
+          {/* Country stats (names only) */}
+          {countryStats.length > 0 && (
+            <div className="mt-4 pt-2 border-t border-white/20 flex flex-wrap gap-2 justify-center">
+              {countryStats.map(([code, count]) => (
+                <div key={code} className="flex items-center gap-1 bg-black/30 px-2 py-1 rounded-full text-[9px]">
+                  <span>{getCountryDisplay(code)}</span>
+                  <span>{count}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -118,7 +246,7 @@ export default function HomePage() {
       <div className="px-4">
         <div className="grid grid-cols-2 gap-3">
           {loading ? (
-            [1, 2, 3, 4].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)
+            [1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)
           ) : (
             quickLinks.map(link => (
               <button
@@ -140,7 +268,7 @@ export default function HomePage() {
       {/* Category Grid */}
       {loading ? (
         <div className="px-4 grid grid-cols-4 gap-2">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <Skeleton key={n} className="h-20 rounded-2xl" />)}
+          {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)}
         </div>
       ) : homeCategories.length === 0 ? (
         <div className="px-4 py-8 text-center">
@@ -152,7 +280,7 @@ export default function HomePage() {
           <SectionHeader title="အမျိုးအစားများ" subtitle="Category" action="အားလုံး" onAction={() => navigate('/directory')} />
           <div className="px-4 grid grid-cols-4 gap-2">
             {homeCategories.map(cat => {
-              const subs = allCategories.filter(c => c.parent_id === cat.id)
+              const subs = allCategories.filter(c => c.parent_id === cat.id);
               return (
                 <button
                   key={cat.id}
@@ -162,13 +290,13 @@ export default function HomePage() {
                   <span className="text-2xl">{cat.icon}</span>
                   <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</span>
                 </button>
-              )
+              );
             })}
           </div>
         </div>
       )}
 
-      {/* ========== MODAL FOR SUBCATEGORIES ========== */}
+      {/* Subcategory modals */}
       {selectedCat && (
         <div
           style={{
@@ -219,16 +347,16 @@ export default function HomePage() {
                 <span className="text-[9px] text-white/50 text-center font-myanmar">{lang === 'mm' ? 'အားလုံး' : 'All'}</span>
               </button>
               {allCategories.filter(c => c.parent_id === selectedCat.id).map(sub => {
-                const subSubs = allCategories.filter(c => c.parent_id === sub.id)
+                const subSubs = allCategories.filter(c => c.parent_id === sub.id);
                 return (
                   <button
                     key={sub.id}
                     onClick={() => {
                       if (subSubs.length > 0) {
-                        setSelectedSub(sub)
-                        setSelectedCat(null)
+                        setSelectedSub(sub);
+                        setSelectedCat(null);
                       } else {
-                        closeAndNavigate(`/directory?cat=${sub.id}`)
+                        closeAndNavigate(`/directory?cat=${sub.id}`);
                       }
                     }}
                     className="flex flex-col items-center gap-1 p-3 card-dark rounded-xl hover:bg-white/8 transition-colors"
@@ -237,14 +365,13 @@ export default function HomePage() {
                     <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}</span>
                     {subSubs.length > 0 && <span className="text-[8px] text-brand-300/70">{subSubs.length} ▸</span>}
                   </button>
-                )
+                );
               })}
             </div>
           </div>
         </div>
       )}
 
-      {/* ========== MODAL FOR SUB-SUBCATEGORIES ========== */}
       {selectedSub && (
         <div
           style={{
@@ -315,7 +442,7 @@ export default function HomePage() {
           <SectionHeader title="Featured လုပ်ငန်းများ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
           <div className="px-4 space-y-2">
             {loading
-              ? [1, 2, 3].map(n => <Skeleton key={n} className="h-20" />)
+              ? [1, 2, 3].map(n => <ShimmerSkeleton key={n} className="h-20" />)
               : featured.map(l => <ListingCard key={l.id} listing={l} compact />)}
           </div>
         </div>
@@ -327,7 +454,7 @@ export default function HomePage() {
           <SectionHeader title="သတင်းနှင့် ဖြစ်ရပ်များ" subtitle="News & Events" action="အားလုံး" onAction={() => navigate('/news')} />
           <div className="px-4 space-y-3">
             {loading
-              ? [1, 2].map(n => <Skeleton key={n} className="h-48" />)
+              ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-48" />)
               : posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} />)}
           </div>
         </div>
@@ -344,7 +471,7 @@ export default function HomePage() {
           />
           <div className="px-4 space-y-2">
             {loading
-              ? [1, 2].map(n => <Skeleton key={n} className="h-16" />)
+              ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-16" />)
               : upcomingEvents.map(ev => (
                   <div
                     key={ev.id}
@@ -398,6 +525,18 @@ export default function HomePage() {
           {appName} • {cityName}
         </p>
       </div>
+
+      {/* Shimmer animation style */}
+      <style>{`
+        @keyframes shimmer {
+          100% {
+            transform: translateX(100%);
+          }
+        }
+        .animate-shimmer {
+          animation: shimmer 1.5s infinite;
+        }
+      `}</style>
     </div>
-  )
+  );
 }

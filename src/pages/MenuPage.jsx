@@ -31,6 +31,7 @@ function MenuItem({ item, canEdit, onEdit, onDelete }) {
           <div>
             <p className="text-sm font-display font-semibold text-white">{item.name}</p>
             {item.name_mm && <p className="text-[10px] text-white/50 font-myanmar">{item.name_mm}</p>}
+            {item.unit && <p className="text-[9px] text-white/40 mt-0.5">({item.unit})</p>}
             {item.description && <p className="text-xs text-white/40 mt-0.5 font-myanmar line-clamp-2">{item.description}</p>}
             <div className="mt-1.5">
               <PriceDisplay price={item.price} priceMax={item.price_max} />
@@ -63,6 +64,7 @@ function ItemForm({ listingId, categoryId, item, categories, onSave, onCancel })
     description: item?.description || '',
     price: item?.price || '',
     price_max: item?.price_max || '',
+    unit: item?.unit || '',
     image_url: item?.image_url || '',
     category_id: item?.category_id || categoryId || '',
     is_available: item?.is_available ?? true,
@@ -96,7 +98,7 @@ function ItemForm({ listingId, categoryId, item, categories, onSave, onCancel })
         <input value={form.description} onChange={e => set('description', e.target.value)} className="input-dark text-sm py-2 font-myanmar" placeholder="ဖော်ပြချက်..." />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-2">
         <div>
           <label className="block text-[10px] text-white/40 mb-1">Price (Ks)</label>
           <input type="number" value={form.price} onChange={e => set('price', e.target.value)} className="input-dark text-sm py-2" placeholder="1000" />
@@ -104,6 +106,10 @@ function ItemForm({ listingId, categoryId, item, categories, onSave, onCancel })
         <div>
           <label className="block text-[10px] text-white/40 mb-1">Max Price (range)</label>
           <input type="number" value={form.price_max} onChange={e => set('price_max', e.target.value)} className="input-dark text-sm py-2" placeholder="5000" />
+        </div>
+        <div>
+          <label className="block text-[10px] text-white/40 mb-1">Unit (e.g., ပိဿာ, ကျပ်သား)</label>
+          <input value={form.unit} onChange={e => set('unit', e.target.value)} className="input-dark text-sm py-2" placeholder="Unit" />
         </div>
       </div>
 
@@ -156,7 +162,7 @@ export default function MenuPage() {
   const [listing, setListing] = useState(null)
   const [menuCategories, setMenuCategories] = useState([])
   const [items, setItems] = useState([])
-  const [editItem, setEditItem] = useState(null)  // null | 'new' | item object
+  const [editItem, setEditItem] = useState(null)
   const [newCatName, setNewCatName] = useState('')
   const [newCatMm, setNewCatMm] = useState('')
   const [addingCat, setAddingCat] = useState(false)
@@ -165,16 +171,14 @@ export default function MenuPage() {
 
   useEffect(() => {
     async function load() {
-
-    try {
+      try {
         const { data: l } = await supabase.from('listings').select('id, name, name_mm, owner_id, submitted_by').eq('id', id).single()
         if (!l) { navigate('/directory'); return }
         setListing(l)
         setCanEdit(isAdmin || isModerator || l.owner_id === profile?.id || l.submitted_by === profile?.id)
         loadMenu()
-    
-    } catch (e) { console.warn(e) }
-  }
+      } catch (e) { console.warn(e) }
+    }
     load()
   }, [id, profile])
 
@@ -207,6 +211,7 @@ export default function MenuPage() {
       price: form.price ? parseFloat(form.price) : null,
       price_max: form.price_max ? parseFloat(form.price_max) : null,
       category_id: form.category_id || null,
+      unit: form.unit || null,
     }
 
     if (editItem && editItem !== 'new') {

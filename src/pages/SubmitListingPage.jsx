@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, MapPin, Plus, X } from 'lucide-react'
+import { ArrowLeft, CheckCircle, MapPin, Plus, X, Minus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -31,7 +31,8 @@ export default function SubmitListingPage() {
   const [form, setForm] = useState({
     name: '', name_mm: '', description_mm: '', description: '',
     category_id: '', city: '', township: '', ward: '',
-    address: '', address_mm: '', phone_1: '', phone_2: '',
+    address: '', address_mm: '',
+    phones: ['', ''],  // dynamic phone numbers
     viber: '', telegram: '', whatsapp: '', facebook: '', website: '',
     latitude: '', longitude: '', business_type: 'shop',
   })
@@ -52,14 +53,31 @@ export default function SubmitListingPage() {
 
   function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
+  function updatePhone(index, value) {
+    const newPhones = [...form.phones]
+    newPhones[index] = value
+    set('phones', newPhones)
+  }
+
+  function addPhone() {
+    if (form.phones.length < 5) {
+      set('phones', [...form.phones, ''])
+    }
+  }
+
+  function removePhone(index) {
+    if (form.phones.length > 1) {
+      const newPhones = form.phones.filter((_, i) => i !== index)
+      set('phones', newPhones)
+    }
+  }
+
   async function handleLogoUpload(file) {
     setLogoUploading(true)
     try {
       const url = await uploadImage(file, 'listings/logos')
       setLogo(url)
-    } catch (err) {
-      console.warn('Logo upload failed:', err)
-    }
+    } catch (err) { console.warn('Logo upload failed:', err) }
     setLogoUploading(false)
   }
 
@@ -68,9 +86,7 @@ export default function SubmitListingPage() {
     try {
       const url = await uploadImage(file, 'listings/covers')
       setCoverImg(url)
-    } catch (err) {
-      console.warn('Cover upload failed:', err)
-    }
+    } catch (err) { console.warn('Cover upload failed:', err) }
     setCoverUploading(false)
   }
 
@@ -114,22 +130,31 @@ export default function SubmitListingPage() {
     if (!form.name || !form.category_id) return
     setSubmitting(true)
     try {
-      await supabase.from('listings').insert({
+      // Map phones to separate columns
+      const phoneColumns = {}
+      form.phones.forEach((phone, idx) => {
+        if (phone) phoneColumns[`phone_${idx + 1}`] = phone
+      })
+      const { error } = await supabase.from('listings').insert({
         ...form,
+        ...phoneColumns,
         latitude: form.latitude ? parseFloat(form.latitude) : null,
         longitude: form.longitude ? parseFloat(form.longitude) : null,
         logo_url: logo,
         cover_url: coverImg,
         images: [],
         submitted_by: profile.id,
-        status: 'approved',  // Auto-show in directory immediately
+        status: 'approved',
         report_count: 0,
       })
+      if (error) throw error
       setDone(true)
     } catch (err) {
-      console.warn('Submit listing failed:', err)
+      console.error('Submit listing failed:', err)
+      alert(`Error: ${err.message}`)
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
   }
 
   if (done) return (
@@ -153,7 +178,7 @@ export default function SubmitListingPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="px-4 space-y-4">
-        {/* Logo + Cover */}
+        {/* Logo + Cover (unchanged) */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-white/50 mb-2">{t('logo_label')}</label>
@@ -175,7 +200,7 @@ export default function SubmitListingPage() {
           </div>
         </div>
 
-        {/* Basic info */}
+        {/* Basic info (unchanged) */}
         <Field label={t('name_en')} required>
           <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="input-dark" placeholder="Business Name" required />
         </Field>
@@ -209,6 +234,7 @@ export default function SubmitListingPage() {
           </div>
         </Field>
 
+        {/* Quick category modal (unchanged) */}
         {showQuickCat && (
           <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
@@ -259,7 +285,7 @@ export default function SubmitListingPage() {
           <textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" placeholder={t('desc_placeholder')} />
         </Field>
 
-        {/* Location */}
+        {/* Location (unchanged) */}
         <div className="border-t border-white/8 pt-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">တည်နေရာ</p>
@@ -286,7 +312,6 @@ export default function SubmitListingPage() {
             </Field>
           </div>
 
-          {/* Business type */}
           <div className="mt-3">
             <Field label="လုပ်ငန်းအမျိုးအစား">
               <div className="grid grid-cols-3 gap-2">
@@ -318,7 +343,6 @@ export default function SubmitListingPage() {
             </Field>
           </div>
 
-          {/* GPS coordinates */}
           {(form.latitude || form.longitude) && (
             <div className="mt-3 flex gap-2">
               <div className="flex-1">
@@ -338,17 +362,33 @@ export default function SubmitListingPage() {
           )}
         </div>
 
-        {/* Contact */}
+        {/* Contact section with dynamic phone fields */}
         <div className="border-t border-white/8 pt-4">
           <p className="text-xs text-white/40 mb-3 font-display font-semibold uppercase tracking-wider">{t('contact_section')}</p>
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={t('phone1_label')}>
-                <input type="tel" value={form.phone_1} onChange={e => set('phone_1', e.target.value)} className="input-dark" placeholder="09xxxxxxxxx" />
-              </Field>
-              <Field label={t('phone2_label')}>
-                <input type="tel" value={form.phone_2} onChange={e => set('phone_2', e.target.value)} className="input-dark" placeholder="(optional)" />
-              </Field>
+            <div className="space-y-2">
+              <label className="block text-xs text-white/50">ဖုန်းနံပါတ်များ</label>
+              {form.phones.map((phone, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => updatePhone(idx, e.target.value)}
+                    className="input-dark flex-1"
+                    placeholder={`ဖုန်း ${idx + 1} (09xxxxxxxxx)`}
+                  />
+                  {form.phones.length > 1 && (
+                    <button type="button" onClick={() => removePhone(idx)} className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500/20 transition-colors">
+                      <Minus size={16} />
+                    </button>
+                  )}
+                  {idx === form.phones.length - 1 && form.phones.length < 5 && (
+                    <button type="button" onClick={addPhone} className="w-10 h-10 rounded-xl bg-brand-600/20 text-brand-300 flex items-center justify-center hover:bg-brand-600/30 transition-colors">
+                      <Plus size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

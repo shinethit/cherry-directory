@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 
-// ── Helpers ───────────────────────────────────────────────────
 function timeAgoShort(iso, lang) {
   if (!iso) return '—'
   const m = Math.floor((Date.now() - new Date(iso)) / 60000)
@@ -17,10 +16,10 @@ function timeAgoShort(iso, lang) {
   return `${Math.floor(h / 24)}${lang === 'mm' ? ' ရက်' : 'd'}`
 }
 
-const COOLDOWN_MS = 5 * 60 * 1000   // 5 min per area per device
+const COOLDOWN_MS = 5 * 60 * 1000
 
-// ── Status card ───────────────────────────────────────────────
-function AreaCard({ area, lang, onReport }) {
+// AreaCard component – updated to include edit button
+function AreaCard({ area, lang, onReport, onEdit }) {
   const isCut      = area.current_status === 'cut'
   const isRestored = area.current_status === 'restored'
   const isUnknown  = area.current_status === 'unknown'
@@ -28,7 +27,6 @@ function AreaCard({ area, lang, onReport }) {
   const restConf   = area.restored_confirmations || 0
   const total      = cutConf + restConf
 
-  // Confidence bar
   const confidence = total > 0 ? Math.round((isCut ? cutConf : restConf) / total * 100) : 0
 
   return (
@@ -39,7 +37,6 @@ function AreaCard({ area, lang, onReport }) {
     }`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5 flex-1 min-w-0">
-          {/* Status icon */}
           <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${
             isCut      ? 'bg-red-500/20'   :
             isRestored ? 'bg-green-500/20' :
@@ -54,7 +51,6 @@ function AreaCard({ area, lang, onReport }) {
             <p className="font-display font-semibold text-sm text-white">{area.name}</p>
             <p className="text-[10px] text-white/40 font-myanmar mt-0.5">{area.township}</p>
 
-            {/* Status label */}
             <div className="flex items-center gap-1.5 mt-1">
               <span className={`text-xs font-bold font-myanmar ${
                 isCut      ? 'text-red-400'   :
@@ -70,7 +66,6 @@ function AreaCard({ area, lang, onReport }) {
               )}
             </div>
 
-            {/* Confirmation bar */}
             {total > 0 && (
               <div className="mt-2">
                 <div className="flex items-center justify-between text-[9px] text-white/30 mb-1">
@@ -92,7 +87,6 @@ function AreaCard({ area, lang, onReport }) {
           </div>
         </div>
 
-        {/* Report buttons */}
         <div className="flex flex-col gap-1.5 flex-shrink-0">
           <button
             onClick={() => onReport(area, 'cut')}
@@ -106,13 +100,21 @@ function AreaCard({ area, lang, onReport }) {
           >
             <Zap size={11} /> ပြန်ရ
           </button>
+          {/* Edit button – shown only if onEdit prop provided */}
+          {onEdit && (
+            <button
+              onClick={() => onEdit(area)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-500/15 border border-blue-500/25 text-blue-400 text-[10px] font-bold hover:bg-blue-500/25 transition-colors"
+            >
+              <Pencil size={11} /> Edit
+            </button>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-// ── Main Page ─────────────────────────────────────────────────
 export default function PowerCutPage() {
   const { lang } = useLang()
   const { isModerator, user } = useAuth()
@@ -133,30 +135,31 @@ export default function PowerCutPage() {
   const [editAreaName, setEditAreaName] = useState('')
   const channelRef = useRef(null)
 
+  // Inline edit state
+  const [editingArea, setEditingArea] = useState(null)
+  const [editInlineName, setEditInlineName] = useState('')
+  const [editInlineTown, setEditInlineTown] = useState('')
+
   async function load() {
     setLoading(true)
     try {
-    const { data } = await supabase.from('current_power_status').select('*')
-    setAreas(data || [])
-    setLastUpdate(new Date())
+      const { data } = await supabase.from('current_power_status').select('*')
+      setAreas(data || [])
+      setLastUpdate(new Date())
     } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
   useEffect(() => {
     load()
-
-    // Realtime
     channelRef.current = supabase
       .channel('power-live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'power_cut_reports' }, load)
       .subscribe()
-
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current) }
   }, [])
 
   async function handleReport(area, status) {
-    // Rate limit per area
     const key  = `pwr_${area.id}`
     const last = localStorage.getItem(key)
     if (last && Date.now() - parseInt(last) < COOLDOWN_MS) {
@@ -180,6 +183,27 @@ export default function PowerCutPage() {
 
     setToast({ type: status === 'cut' ? 'warn' : 'ok', msg })
     setTimeout(() => setToast(null), 3000)
+  }
+
+  // Inline edit functions
+  function openInlineEdit(area) {
+    setEditingArea(area)
+    setEditInlineName(area.name)
+    setEditInlineTown(area.township || '')
+  }
+
+  async function saveInlineEdit() {
+    if (!editInlineName.trim()) return
+    const { error } = await supabase
+      .from('power_areas')
+      .update({ name: editInlineName.trim(), township: editInlineTown.trim() || null })
+      .eq('id', editingArea.id)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    setEditingArea(null)
+    load() // refresh data
   }
 
   const towns = ['all', ...new Set(areas.map(a => a.township).filter(Boolean))]
@@ -222,8 +246,6 @@ export default function PowerCutPage() {
 
   return (
     <div className="pb-8">
-
-      {/* Header */}
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start justify-between">
           <div>
@@ -248,7 +270,6 @@ export default function PowerCutPage() {
         </button>
       )}
 
-      {/* Summary */}
       <div className="flex gap-2 px-4 mb-4">
         <div className="flex-1 p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-center">
           <p className="font-display font-bold text-xl text-red-400">{cutCount}</p>
@@ -271,7 +292,6 @@ export default function PowerCutPage() {
         </div>
       </div>
 
-      {/* Township filter */}
       {towns.length > 2 && (
         <div className="px-4 mb-4">
           <div className="relative">
@@ -291,17 +311,21 @@ export default function PowerCutPage() {
         </div>
       )}
 
-      {/* Area list */}
       <div className="px-4 space-y-2 mb-6">
         {loading
           ? [1,2,3,4,5].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />)
           : filtered.map(area => (
-            <AreaCard key={area.id} area={area} lang={lang} onReport={handleReport} />
+            <AreaCard
+              key={area.id}
+              area={area}
+              lang={lang}
+              onReport={handleReport}
+              onEdit={isModerator ? openInlineEdit : null}   // ← edit button for moderators
+            />
           ))
         }
       </div>
 
-      {/* How it works */}
       <div className="mx-4 card-dark rounded-2xl p-4">
         <p className="text-xs font-display font-bold text-white/50 uppercase tracking-wider mb-3">
           {lang === 'mm' ? 'ဘယ်လိုအလုပ်လုပ်သလဲ' : 'How it works'}
@@ -324,8 +348,7 @@ export default function PowerCutPage() {
         </p>
       </div>
 
-
-      {/* Manage Areas Modal */}
+      {/* Manage Areas Modal (existing) */}
       {showManage && (
         <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
@@ -336,7 +359,6 @@ export default function PowerCutPage() {
             <div className="w-9" />
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3 pb-24">
-            {/* Add new area */}
             <div className="space-y-2">
               <input autoFocus value={newAreaName} onChange={e => setNewAreaName(e.target.value)}
                 placeholder={lang === 'mm' ? 'ရပ်ကွက်အမည်...' : 'Area name...'}
@@ -386,7 +408,33 @@ export default function PowerCutPage() {
         </div>
       )}
 
-      {/* Toast */}
+      {/* Inline Edit Modal for quick edit */}
+      {editingArea && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-[#140020] rounded-2xl w-full max-w-sm p-4 border border-white/10">
+            <h3 className="font-bold text-white mb-3">Edit Area</h3>
+            <input
+              type="text"
+              value={editInlineName}
+              onChange={e => setEditInlineName(e.target.value)}
+              className="input-dark w-full mb-2"
+              placeholder="Area name"
+            />
+            <input
+              type="text"
+              value={editInlineTown}
+              onChange={e => setEditInlineTown(e.target.value)}
+              className="input-dark w-full mb-4"
+              placeholder="Township (optional)"
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setEditingArea(null)} className="px-3 py-1.5 bg-white/10 rounded-lg text-white/70">Cancel</button>
+              <button onClick={saveInlineEdit} className="btn-primary px-3 py-1.5 text-sm">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div className={`fixed bottom-28 left-4 right-4 max-w-lg mx-auto z-[300] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl font-myanmar text-sm ${
           toast.type === 'ok'   ? 'bg-green-500/20 border border-green-500/40 text-green-300' :

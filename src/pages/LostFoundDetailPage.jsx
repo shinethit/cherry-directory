@@ -6,6 +6,11 @@ import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { Skeleton } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
+import Lightbox from 'yet-another-react-lightbox'
+import 'yet-another-react-lightbox/styles.css'
+import Zoom from 'yet-another-react-lightbox/plugins/zoom'
+import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
+import 'yet-another-react-lightbox/plugins/thumbnails.css'
 
 export default function LostFoundDetailPage() {
   const { id } = useParams()
@@ -17,11 +22,19 @@ export default function LostFoundDetailPage() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
 
+  // Lightbox state
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxImages, setLightboxImages] = useState([])
+  const [lightboxIndex, setLightboxIndex] = useState(0)
+
   useEffect(() => {
     supabase.from('lost_found').select('*').eq('id', id).single()
       .then(({ data }) => {
         setPost(data)
         setEditForm(data)
+        if (data?.images?.length) {
+          setLightboxImages(data.images.map(src => ({ src })))
+        }
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -41,6 +54,11 @@ export default function LostFoundDetailPage() {
       setPost(editForm)
       setEditing(false)
     }
+  }
+
+  function openLightbox(startIndex = 0) {
+    setLightboxIndex(startIndex)
+    setLightboxOpen(true)
   }
 
   if (loading) return <div className="p-4"><Skeleton className="h-64" /></div>
@@ -91,8 +109,8 @@ export default function LostFoundDetailPage() {
       </div>
 
       {cover && (
-        <div className="mx-4 rounded-2xl overflow-hidden h-56 mb-4">
-          <img src={cover} alt="" className="w-full h-full object-cover" />
+        <div className="mx-4 rounded-2xl overflow-hidden h-56 mb-4 cursor-pointer" onClick={() => openLightbox(0)}>
+          <img src={cover} alt="" className="w-full h-full object-cover hover:scale-105 transition" />
         </div>
       )}
 
@@ -142,7 +160,27 @@ export default function LostFoundDetailPage() {
             <span className="text-sm font-myanmar">ဖြေရှင်းပြီးပါပြီ</span>
           </div>
         )}
+
+        {/* Gallery images with lightbox (if more than one) */}
+        {post.images && post.images.length > 1 && (
+          <div className="grid grid-cols-3 gap-2">
+            {post.images.slice(1).map((img, idx) => (
+              <div key={idx} className="aspect-square rounded-lg overflow-hidden cursor-pointer" onClick={() => openLightbox(idx + 1)}>
+                <img src={getOptimizedUrl(img, { width: 200 })} alt="" className="w-full h-full object-cover" />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      <Lightbox
+        open={lightboxOpen}
+        close={() => setLightboxOpen(false)}
+        slides={lightboxImages}
+        index={lightboxIndex}
+        plugins={[Zoom, Thumbnails]}
+        zoom={{ maxZoomPixelRatio: 3 }}
+      />
     </div>
   )
 }
