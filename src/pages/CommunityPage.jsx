@@ -66,16 +66,6 @@ const FEATURES = [
     border: 'border-green-500/20',
   },
   {
-    path: '/fuel',
-    icon: '⛽',
-    mm: 'ဓာတ်ဆီ/ဒီဇယ် ရမရ',
-    en: 'Fuel Availability',
-    descMm: 'Gas Station တွင် ဓာတ်ဆီ/ဒီဇယ် ရမရ Community Report',
-    descEn: 'Gas station fuel availability — community report',
-    color: 'from-orange-600/20 to-orange-700/10',
-    border: 'border-orange-500/20',
-  },
-  {
     path: '/power',
     icon: '⚡',
     mm: 'လျှပ်စစ်အခြေအနေ',
