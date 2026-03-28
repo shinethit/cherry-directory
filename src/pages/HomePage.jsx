@@ -1,30 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, CalendarDays, Users, Wifi, WifiOff } from 'lucide-react';
+import { Search, CalendarDays, Users, Wifi, WifiOff, AlertCircle, RefreshCw, Check } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
-import SplashScreen from '../components/SplashScreen';
 
-// Helper: country code → full name (အလံမပြဘဲ နိုင်ငံအမည် ပြရန်)
+// Helper: country code → full name
 const countryNames = {
-  MM: 'မြန်မာ',
-  TH: 'ထိုင်း',
-  SG: 'စင်ကာပူ',
-  US: 'အမေရိကန်',
-  GB: 'ယူကေ',
-  JP: 'ဂျပန်',
-  KR: 'ကိုရီးယား',
-  MY: 'မလေးရှား',
-  VN: 'ဗီယက်နမ်',
-  LA: 'လာအို',
-  KH: 'ကမ္ဘောဒီးယား',
-  IN: 'အိန္ဒိယ',
-  AU: 'ဩစတြေးလျ',
-  DE: 'ဂျာမနီ',
-  FR: 'ပြင်သစ်',
-  // လိုချင်ရင် ထပ်ထည့်ပါ
+  MM: 'မြန်မာ', TH: 'ထိုင်း', SG: 'စင်ကာပူ', US: 'အမေရိကန်', GB: 'ယူကေ',
+  JP: 'ဂျပန်', KR: 'ကိုရီးယား', MY: 'မလေးရှား', VN: 'ဗီယက်နမ်', LA: 'လာအို',
+  KH: 'ကမ္ဘောဒီးယား', IN: 'အိန္ဒိယ', AU: 'ဩစတြေးလျ', DE: 'ဂျာမနီ', FR: 'ပြင်သစ်',
 };
 
 function getCountryDisplay(code) {
@@ -32,7 +18,7 @@ function getCountryDisplay(code) {
   return countryNames[code] || code;
 }
 
-// Shimmer loading skeleton
+// Shimmer skeleton
 const ShimmerSkeleton = ({ className }) => (
   <div className={`relative overflow-hidden bg-white/5 rounded-2xl ${className}`}>
     <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent" />
@@ -43,6 +29,8 @@ export default function HomePage() {
   const navigate = useNavigate();
   const config = useAppConfig();
   const { lang } = useLang();
+
+  // Data states
   const [posts, setPosts] = useState([]);
   const [featured, setFeatured] = useState([]);
   const [homeCategories, setHomeCategories] = useState([]);
@@ -53,15 +41,19 @@ export default function HomePage() {
   const [stats, setStats] = useState({ listings: 0, posts: 0 });
   const [quickLinks, setQuickLinks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showSplash, setShowSplash] = useState(true);
+  const [dataLoadError, setDataLoadError] = useState(false);
+  const [dataLoadSuccess, setDataLoadSuccess] = useState(false);
+  const [showReadyButton, setShowReadyButton] = useState(false);
+  const [showErrorButtons, setShowErrorButtons] = useState(false);
   const timeoutRef = useRef(null);
+  const retryTimeoutRef = useRef(null);
 
-  // --- Visitor & Country Stats ---
+  // Visitor stats
   const [visitorCount, setVisitorCount] = useState(null);
   const [countryStats, setCountryStats] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Online/Offline listener
+  // Online/Offline
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -73,25 +65,23 @@ export default function HomePage() {
     };
   }, []);
 
-  // Track visit (EVERY PAGE LOAD – no localStorage)
+  // Track visit (EVERY PAGE LOAD)
   useEffect(() => {
     const trackVisit = async () => {
       try {
-        // Get country code from IP (ipapi.co)
         const res = await fetch('https://ipapi.co/json/');
         const data = await res.json();
         const countryCode = data.country_code || 'XX';
         await supabase.from('visits').insert({ country_code: countryCode });
       } catch (err) {
         console.warn('Visit tracking failed:', err);
-        // Fallback: insert 'XX' so we don't lose the visit count
         await supabase.from('visits').insert({ country_code: 'XX' }).catch(() => {});
       }
     };
     trackVisit();
   }, []);
 
-  // Fetch visitor stats (last 7 days)
+  // Fetch visitor stats
   useEffect(() => {
     const fetchStats = async () => {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -105,10 +95,7 @@ export default function HomePage() {
         return;
       }
 
-      // Total count (all visits, including XX)
       setVisitorCount(data.length);
-
-      // Count per country, excluding XX and null
       const counts = {};
       data.forEach(({ country_code }) => {
         const code = country_code?.trim();
@@ -116,17 +103,29 @@ export default function HomePage() {
           counts[code] = (counts[code] || 0) + 1;
         }
       });
-      const sorted = Object.entries(counts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5);
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
       setCountryStats(sorted);
     };
     fetchStats();
   }, []);
 
-  // --- Data loading (မူရင်းအတိုင်း) ---
-  const load = useCallback(async () => {
-    console.log('[HomePage] load started');
+  // Main data loading
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setDataLoadError(false);
+    setShowReadyButton(false);
+    setShowErrorButtons(false);
+    if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+    // Timeout to show error buttons if loading takes too long
+    timeoutRef.current = setTimeout(() => {
+      if (loading) {
+        console.warn('Data loading timeout');
+        setShowErrorButtons(true);
+      }
+    }, 8000);
+
     try {
       const results = await Promise.allSettled([
         supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
@@ -145,51 +144,117 @@ export default function HomePage() {
       setStats({ listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0 });
       setUpcomingEvents(results[4]?.status === 'fulfilled' ? results[4].value.data || [] : []);
       setQuickLinks(results[5]?.status === 'fulfilled' ? results[5].value.data || [] : []);
+
+      setDataLoadSuccess(true);
+      setShowReadyButton(true);
     } catch (err) {
-      console.error('[HomePage] CRITICAL ERROR:', err);
+      console.error('Data load error:', err);
+      setDataLoadError(true);
+      setShowErrorButtons(true);
     } finally {
       setLoading(false);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     }
-  }, []);
+  }, [loading]);
 
   useEffect(() => {
-    timeoutRef.current = setTimeout(() => {
-      if (loading) {
-        console.warn('[HomePage] Load timeout – forcing loading false');
-        setLoading(false);
-      }
-    }, 5000);
-    load();
+    loadData();
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
     };
-  }, [load]);
+  }, [loadData]);
 
-  // Splash screen
-  useEffect(() => {
-    if (!loading && showSplash) setShowSplash(false);
-  }, [loading, showSplash]);
+  const handleReady = () => {
+    setShowReadyButton(false);
+  };
 
-  const closeAndNavigate = (url) => {
-    setSelectedCat(null);
-    setSelectedSub(null);
-    setTimeout(() => navigate(url), 20);
+  const handleRetry = () => {
+    loadData();
+  };
+
+  const handleContinueAnyway = () => {
+    setShowReadyButton(false);
+    setShowErrorButtons(false);
+    setDataLoadSuccess(true); // pretend success to show UI
   };
 
   const cityName = config?.app_city || 'တောင်ကြီးမြို့';
   const appName = config?.app_name || 'Cherry Directory';
 
-  if (showSplash) {
-    return <SplashScreen onFinish={() => setShowSplash(false)} />;
+  // Splash / Ready Screen
+  if (showReadyButton || showErrorButtons || loading) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gradient-to-br from-[#0d0015] to-[#1a0030] p-6 text-center">
+        {loading && !showErrorButtons && (
+          <>
+            <div className="w-16 h-16 mb-4 relative">
+              <div className="absolute inset-0 animate-ping rounded-full bg-brand-400/30" />
+              <div className="relative flex items-center justify-center w-full h-full rounded-full bg-brand-600/30 backdrop-blur-sm">
+                <span className="text-4xl">🍒</span>
+              </div>
+            </div>
+            <h2 className="text-white font-display font-bold text-xl">Loading Data...</h2>
+            <p className="text-white/50 text-sm mt-2 font-myanmar">ကျေးဇူးပြု၍ စောင့်ပါ။</p>
+            <div className="mt-4 flex gap-1">
+              <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce [animation-delay:-0.3s]" />
+              <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce [animation-delay:-0.15s]" />
+              <div className="w-2 h-2 rounded-full bg-brand-400 animate-bounce" />
+            </div>
+          </>
+        )}
+
+        {showErrorButtons && (
+          <div className="max-w-sm">
+            <AlertCircle size={48} className="text-amber-400 mx-auto mb-4" />
+            <h2 className="text-white font-display font-bold text-xl">ဒေတာရယူရန် ခက်ခဲနေပါသည်</h2>
+            <p className="text-white/50 text-sm mt-2 font-myanmar">
+              အင်တာနက်ချိတ်ဆက်မှုကို စစ်ဆေးပါ။
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={handleRetry}
+                className="flex-1 btn-primary flex items-center justify-center gap-2 text-sm"
+              >
+                <RefreshCw size={16} /> ပြန်စမ်းမည်
+              </button>
+              <button
+                onClick={handleContinueAnyway}
+                className="flex-1 btn-ghost text-sm"
+              >
+                ဆက်သွားမည်
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!loading && !showErrorButtons && showReadyButton && (
+          <div className="max-w-sm">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
+              <Check size={32} className="text-green-400" />
+            </div>
+            <h2 className="text-white font-display font-bold text-xl">အဆင်သင့်ဖြစ်ပါပြီ</h2>
+            <p className="text-white/50 text-sm mt-2 font-myanmar">
+              ဒေတာအားလုံး ပြင်ဆင်ပြီးပါပြီ။ အောက်ပါခလုတ်ကို နှိပ်၍ စတင်အသုံးပြုနိုင်ပါသည်။
+            </p>
+            <button
+              onClick={handleReady}
+              className="mt-6 btn-primary flex items-center justify-center gap-2 w-full text-sm"
+            >
+              <Search size={16} /> စတင်အသုံးပြုမည်
+            </button>
+          </div>
+        )}
+      </div>
+    );
   }
 
+  // Main page (only shown when ready button clicked)
   return (
     <div className="space-y-6 py-4">
       {/* Hero Section with Stats */}
       <div className="px-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
-          {/* Stats bar (Online + Visitor count) */}
           <div className="absolute top-3 right-3 flex items-center gap-3 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] text-white/70">
             <div className="flex items-center gap-1">
               <Users size={12} />
@@ -200,19 +265,16 @@ export default function HomePage() {
               <span className="text-[9px]">{isOnline ? 'Online' : 'Offline'}</span>
             </div>
           </div>
-
           <div className="relative">
             <p className="text-gold-400 text-xs font-display font-semibold tracking-widest uppercase mb-1">{cityName}</p>
             <h2 className="font-display font-bold text-2xl text-white leading-tight mb-3">
               Cherry<br />Directory 🍒
             </h2>
             <p className="text-white/60 text-sm font-myanmar mb-4">မြို့တွင်း လုပ်ငန်းများ၊ သတင်းများ၊ ဖြစ်ရပ်များ<br />အားလုံး တစ်နေရာတည်းတွင် ရှာဖွေနိုင်</p>
-
             <button onClick={() => navigate('/directory')} className="btn-primary flex items-center gap-2 text-sm">
               <Search size={16} /> လုပ်ငန်းရှာမယ်
             </button>
           </div>
-
           <div className="relative flex gap-3 mt-4">
             <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
               <p className="font-display font-bold text-lg text-white">{stats.listings.toLocaleString()}</p>
@@ -227,8 +289,6 @@ export default function HomePage() {
               <p className="text-[10px] text-white/50">အသုံးပြုရေး</p>
             </div>
           </div>
-
-          {/* Country stats (names only) */}
           {countryStats.length > 0 && (
             <div className="mt-4 pt-2 border-t border-white/20 flex flex-wrap gap-2 justify-center">
               {countryStats.map(([code, count]) => (
@@ -296,7 +356,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Subcategory modals */}
+      {/* Subcategory modals (same as before) */}
       {selectedCat && (
         <div
           style={{
@@ -526,12 +586,9 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* Shimmer animation style */}
       <style>{`
         @keyframes shimmer {
-          100% {
-            transform: translateX(100%);
-          }
+          100% { transform: translateX(100%); }
         }
         .animate-shimmer {
           animation: shimmer 1.5s infinite;
@@ -539,4 +596,11 @@ export default function HomePage() {
       `}</style>
     </div>
   );
+
+  // Helper function for closeAndNavigate (must be inside component but we moved it earlier)
+  function closeAndNavigate(url) {
+    setSelectedCat(null);
+    setSelectedSub(null);
+    setTimeout(() => navigate(url), 20);
+  }
 }
