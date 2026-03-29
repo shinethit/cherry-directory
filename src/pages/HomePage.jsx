@@ -6,6 +6,7 @@ import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
 import SplashScreen from '../components/SplashScreen';
+import ShareButton from '../components/ShareButton';   // ← ထည့်
 
 // Helper: country code → full name
 const countryNames = {
@@ -35,7 +36,7 @@ export default function HomePage() {
   const [consentGiven, setConsentGiven] = useState(() => {
     const lastShown = localStorage.getItem('cherry_consent_date');
     const today = new Date().toISOString().split('T')[0];
-    return lastShown === today; // true if already shown today
+    return lastShown === today;
   });
 
   // --- Data states ---
@@ -192,7 +193,6 @@ export default function HomePage() {
   const loadCommunityStats = useCallback(async () => {
     setCommunityStatsLoading(true);
     try {
-      // Rent listings (available)
       const { count: rentAvailable } = await supabase
         .from('rent')
         .select('*', { count: 'exact', head: true })
@@ -200,7 +200,6 @@ export default function HomePage() {
         .catch(() => ({ count: 0 }));
       setRentListingsCount(rentAvailable || 0);
 
-      // Rent seekers
       const { count: rentSeekers } = await supabase
         .from('rent')
         .select('*', { count: 'exact', head: true })
@@ -208,7 +207,6 @@ export default function HomePage() {
         .catch(() => ({ count: 0 }));
       setRentSeekersCount(rentSeekers || 0);
 
-      // Tutoring offers
       const { count: tutorOffers } = await supabase
         .from('tutoring')
         .select('*', { count: 'exact', head: true })
@@ -216,7 +214,6 @@ export default function HomePage() {
         .catch(() => ({ count: 0 }));
       setTutorOffersCount(tutorOffers || 0);
 
-      // Tutoring requests
       const { count: tutorRequests } = await supabase
         .from('tutoring')
         .select('*', { count: 'exact', head: true })
@@ -224,7 +221,6 @@ export default function HomePage() {
         .catch(() => ({ count: 0 }));
       setTutorRequestsCount(tutorRequests || 0);
 
-      // Job openings
       const { count: jobs } = await supabase
         .from('job_board')
         .select('*', { count: 'exact', head: true })
@@ -232,14 +228,12 @@ export default function HomePage() {
         .catch(() => ({ count: 0 }));
       setJobOpeningsCount(jobs || 0);
 
-      // Job seekers
       const { count: jobSeekers } = await supabase
         .from('job_seekers')
         .select('*', { count: 'exact', head: true })
         .catch(() => ({ count: 0 }));
       setJobSeekersCount(jobSeekers || 0);
     } catch (e) {
-      // Fallback to zeros on any error
       setRentListingsCount(0);
       setRentSeekersCount(0);
       setTutorOffersCount(0);
@@ -257,28 +251,24 @@ export default function HomePage() {
     }
   }, [consentGiven, loadCommunityStats]);
 
-  // --- Combined refresh handler ---
   const handleRefresh = () => {
     loadData();
     loadPowerStatus();
     loadCommunityStats();
   };
 
-  // --- Splash consent handler (daily) ---
   const handleConsent = () => {
     const today = new Date().toISOString().split('T')[0];
     localStorage.setItem('cherry_consent_date', today);
     setConsentGiven(true);
   };
 
-  // --- Helper for subcategory modals ---
   const closeAndNavigate = (url) => {
     setSelectedCat(null);
     setSelectedSub(null);
     setTimeout(() => navigate(url), 20);
   };
 
-  // --- Show splash if not consented today ---
   if (!consentGiven) {
     return <SplashScreen onConsent={handleConsent} />;
   }
@@ -704,6 +694,13 @@ export default function HomePage() {
               {label}
             </button>
           ))}
+        </div>
+        <div className="flex justify-center mt-4">
+          <ShareButton
+            url={window.location.origin}
+            title="Cherry Directory"
+            description="တောင်ကြီးမြို့ ဒေသဆိုင်ရာ လမ်းညွှန်"
+          />
         </div>
         <p className="text-center text-[10px] text-white/30 mt-5 font-display font-medium tracking-wider uppercase">
           {appName} • {cityName}

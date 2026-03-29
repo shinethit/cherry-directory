@@ -8,8 +8,9 @@ import { ThemeProvider } from './contexts/ThemeContext'
 // Layout
 import BottomNav from './components/BottomNav'
 import Header from './components/Header'
+import AnnouncementBanner from './components/AnnouncementBanner'
 
-// Pages (imports – unchanged)
+// Pages
 import HomePage from './pages/HomePage'
 import DirectoryPage from './pages/DirectoryPage'
 import ListingDetailPage from './pages/ListingDetailPage'
@@ -49,6 +50,7 @@ import {
 import RentPage from './pages/RentPage'
 import TutoringPage from './pages/TutoringPage'
 import HistoryPage, { HistoryDetailPage } from './pages/HistoryPage'
+import AdminAnnouncements from './pages/AdminAnnouncements'   // ← Announcement admin page
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -92,9 +94,9 @@ function AppRoutes() {
       style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top))' }}
     >
       <Header />
+      <AnnouncementBanner />   {/* ← Announcement banner appears on all pages */}
       <ScrollToTop />
       <Routes>
-        {/* ... all routes ... */}
         <Route path="/" element={<HomePage />} />
         <Route path="/directory" element={<DirectoryPage />} />
         <Route path="/directory/:id" element={<ListingDetailPage />} />
@@ -134,6 +136,7 @@ function AppRoutes() {
         <Route path="/admin/categories" element={<CategoryManagerPage />} />
         <Route path="/admin/bulk-import" element={<BulkImportPage />} />
         <Route path="/admin/settings" element={<AppSettingsPage />} />
+        <Route path="/admin/announcements" element={<AdminAnnouncements />} />   {/* ← New route */}
         <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />

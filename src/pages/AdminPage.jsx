@@ -4,11 +4,10 @@ import {
   ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, 
   LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, 
   UserCog, Search, RefreshCw, TrendingUp, Activity, FileText, Star,
-  EyeOff, Calendar, Megaphone
+  EyeOff, Calendar, Megaphone, Shield   // ← added Megaphone for announcements
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import CategoryManagerPage from './CategoryManagerPage'
-import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့်ထားပါ
 
 const PRESET_LINKS = [
   { url: '', label: '-- App ထဲရှိ စာမျက်နှာတစ်ခုကို ရွေးပါ --' },
@@ -331,6 +330,9 @@ export default function AdminPage() {
           <button onClick={() => setTab('quicklinks')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/40'}`}>
             <LinkIcon size={14} /> Quick Links
           </button>
+          <button onClick={() => navigate('/admin/announcements')} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap bg-white/5 text-white/40 hover:bg-white/10">
+            <Megaphone size={14} /> Announcements
+          </button>
         </div>
       </div>
 
@@ -483,12 +485,7 @@ export default function AdminPage() {
               <input value={linkForm.title_mm} onChange={e => setLinkForm({...linkForm, title_mm: e.target.value})} placeholder="Title (MM)" className="input-dark text-xs font-myanmar" />
               <input value={linkForm.subtitle} onChange={e => setLinkForm({...linkForm, subtitle: e.target.value})} placeholder="Subtitle" className="input-dark text-xs" />
               <div className="flex gap-2">
-                {/* IconPicker နေရာ */}
-                <IconPicker
-                  value={linkForm.icon}
-                  onChange={(icon) => setLinkForm({...linkForm, icon})}
-                  label={null}
-                />
+                <input value={linkForm.icon} onChange={e => setLinkForm({...linkForm, icon: e.target.value})} placeholder="Icon" className="input-dark text-xs w-12 text-center" />
                 <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="URL" className="input-dark text-xs flex-1" />
               </div>
               <input value={linkForm.css_classes} onChange={e => setLinkForm({...linkForm, css_classes: e.target.value})} placeholder="CSS classes" className="input-dark text-xs col-span-2" />

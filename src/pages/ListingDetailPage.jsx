@@ -11,6 +11,7 @@ import MapEmbed from '../components/MapEmbed'
 import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import Lightbox from '../components/Lightbox'
+import ShareButton from '../components/ShareButton'   // ← NEW import
 
 export default function ListingDetailPage() {
   const { id } = useParams()
@@ -109,6 +110,12 @@ export default function ListingDetailPage() {
           <ArrowLeft size={18} className="text-white" />
         </button>
         <div className="flex items-center gap-2">
+          {/* NEW: ShareButton component */}
+          <ShareButton
+            url={window.location.href}
+            title={displayName}
+            description={listing.description_mm || listing.description}
+          />
           {isLoggedIn && (listing.owner_id === profile?.id || listing.submitted_by === profile?.id || isAdmin || isModerator) && (
             <button
               onClick={() => navigate(`/directory/${id}/edit`)}
