@@ -7,6 +7,7 @@ import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
 import SplashScreen from '../components/SplashScreen';
 import ShareButton from '../components/ShareButton';
+import { usePWA } from '../hooks/usePWA';   // ← added
 
 // Helper: country code → full name
 const countryNames = {
@@ -31,6 +32,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const config = useAppConfig();
   const { lang } = useLang();
+  const { installable, installApp } = usePWA();   // ← added
 
   // --- Splash consent: daily check ---
   const [consentGiven, setConsentGiven] = useState(() => {
@@ -707,6 +709,16 @@ export default function HomePage() {
           {appName} • {cityName}
         </p>
       </div>
+
+      {/* PWA Install Button – floating at bottom right */}
+      {installable && (
+        <button
+          onClick={installApp}
+          className="fixed bottom-24 right-4 z-50 bg-brand-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-pulse hover:bg-brand-500 transition-all"
+        >
+          📲 App ထည့်မည်
+        </button>
+      )}
 
       <style>{`
         @keyframes shimmer {
