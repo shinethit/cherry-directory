@@ -6,7 +6,7 @@ import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
 import SplashScreen from '../components/SplashScreen';
-import ShareButton from '../components/ShareButton';   // ← ထည့်
+import ShareButton from '../components/ShareButton';
 
 // Helper: country code → full name
 const countryNames = {
@@ -278,19 +278,27 @@ export default function HomePage() {
 
   return (
     <div className="space-y-6 py-4 pb-24">
-      {/* Header with Refresh Button */}
+      {/* Header with prominent Share & QR buttons */}
       <div className="px-4 flex justify-between items-center">
         <div>
           <h1 className="font-display font-bold text-xl text-white">Cherry Directory</h1>
           <p className="text-xs text-white/40 font-myanmar">{cityName}</p>
         </div>
-        <button
-          onClick={handleRefresh}
-          className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-          title="Refresh data"
-        >
-          <RefreshCw size={18} className="text-white/70" />
-        </button>
+        <div className="flex items-center gap-3">
+          <ShareButton
+            variant="prominent"
+            customUrl="https://cutt.ly/cherrydir"
+            title="Cherry Directory"
+            description="တောင်ကြီးမြို့ ဒေသဆိုင်ရာ လမ်းညွှန်"
+          />
+          <button
+            onClick={handleRefresh}
+            className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            title="Refresh data"
+          >
+            <RefreshCw size={18} className="text-white/70" />
+          </button>
+        </div>
       </div>
 
       {/* Hero Section with Stats */}
@@ -630,7 +638,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Power Status Dashboard (read‑only, show ALL areas) */}
+      {/* Power Status Dashboard */}
       <div className="px-4">
         <div className="mb-2">
           <h3 className="text-sm font-display font-semibold text-white/80 flex items-center gap-1">
@@ -694,13 +702,6 @@ export default function HomePage() {
               {label}
             </button>
           ))}
-        </div>
-        <div className="flex justify-center mt-4">
-          <ShareButton
-            url={window.location.origin}
-            title="Cherry Directory"
-            description="တောင်ကြီးမြို့ ဒေသဆိုင်ရာ လမ်းညွှန်"
-          />
         </div>
         <p className="text-center text-[10px] text-white/30 mt-5 font-display font-medium tracking-wider uppercase">
           {appName} • {cityName}

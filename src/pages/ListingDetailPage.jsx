@@ -11,7 +11,7 @@ import MapEmbed from '../components/MapEmbed'
 import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import Lightbox from '../components/Lightbox'
-import ShareButton from '../components/ShareButton'   // ← NEW import
+import ShareButton from '../components/ShareButton'
 
 export default function ListingDetailPage() {
   const { id } = useParams()
@@ -110,7 +110,6 @@ export default function ListingDetailPage() {
           <ArrowLeft size={18} className="text-white" />
         </button>
         <div className="flex items-center gap-2">
-          {/* NEW: ShareButton component */}
           <ShareButton
             url={window.location.href}
             title={displayName}
