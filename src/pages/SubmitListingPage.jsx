@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, MapPin, Plus, X, Minus, Trash2, Edit2, Info } from 'lucide-react'
+import { ArrowLeft, CheckCircle, MapPin, Plus, X, Minus, Info } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -8,6 +8,8 @@ import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { useAppConfig } from '../contexts/AppConfigContext'
+import IconPicker from '../components/IconPicker'
+import LocationPicker from '../components/LocationPicker'
 
 function Field({ label, children, required }) {
   return (
@@ -22,7 +24,7 @@ function Field({ label, children, required }) {
 
 export default function SubmitListingPage() {
   const navigate = useNavigate()
-  const { profile, isLoggedIn } = useAuth()
+  const { profile, isLoggedIn, isAdmin, isModerator } = useAuth()
   const { t, lang } = useLang()
   useSEO({ title: lang === 'mm' ? 'လုပ်ငန်း / ဝန်ဆောင်မှု ထည့်မည်' : 'Submit Listing' })
 
@@ -32,7 +34,7 @@ export default function SubmitListingPage() {
     name: '', name_mm: '', description_mm: '', description: '',
     category_id: '', city: '', township: '', ward: '',
     address: '', address_mm: '',
-    phones: ['', ''],  // dynamic phone numbers
+    phones: ['', ''],
     viber: '', telegram: '', whatsapp: '', facebook: '', website: '',
     latitude: '', longitude: '', business_type: 'shop',
   })
@@ -46,6 +48,7 @@ export default function SubmitListingPage() {
   const [showQuickCat, setShowQuickCat] = useState(false)
   const [quickCat, setQuickCat] = useState({ name_mm: '', name: '', icon: '📦', parent_id: '' })
   const [addingCat, setAddingCat] = useState(false)
+  const [showMapPicker, setShowMapPicker] = useState(false)
 
   // Menu items state
   const [menuItems, setMenuItems] = useState([])
@@ -207,22 +210,17 @@ export default function SubmitListingPage() {
     }
   }
 
-  // Submit form – immediate approval
   async function handleSubmit(e) {
     e.preventDefault()
     if (!form.name || !form.category_id) return
     setSubmitting(true)
     try {
-      // Map phones to individual columns
       const phoneColumns = {}
       form.phones.forEach((phone, idx) => {
         if (phone) phoneColumns[`phone_${idx + 1}`] = phone
       })
 
-      // Remove the 'phones' array from the data to be inserted
       const { phones, ...restData } = form
-
-      // Determine submitted_by: if logged in, use profile.id; otherwise null
       const submittedBy = isLoggedIn && profile ? profile.id : null
 
       const { error } = await supabase.from('listings').insert({
@@ -235,7 +233,7 @@ export default function SubmitListingPage() {
         images: [],
         menu_items: menuItems.length > 0 ? menuItems : null,
         submitted_by: submittedBy,
-        status: 'approved',          // ← Immediate approval
+        status: 'approved',
         report_count: 0,
       })
       if (error) throw error
@@ -268,7 +266,6 @@ export default function SubmitListingPage() {
         <h1 className="font-display font-bold text-lg text-white">{t('submit_title')}</h1>
       </div>
 
-      {/* Info banner for anonymous users */}
       {!isLoggedIn && (
         <div className="mx-4 mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-start gap-2">
           <Info size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
@@ -330,11 +327,27 @@ export default function SubmitListingPage() {
                 )
               })}
             </select>
-            <button type="button" onClick={() => setShowQuickCat(true)}
-              className="w-10 h-10 flex-shrink-0 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center text-white/50 hover:text-brand-300 hover:border-brand-400/30 transition-colors">
-              <Plus size={16} />
-            </button>
+
+            {isLoggedIn ? (
+              <button
+                type="button"
+                onClick={() => setShowQuickCat(true)}
+                className="w-10 h-10 flex-shrink-0 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center text-white/50 hover:text-brand-300 hover:border-brand-400/30 transition-colors"
+                title={lang === 'mm' ? 'Category အသစ်ထည့်မည်' : 'Add new category'}
+              >
+                <Plus size={16} />
+              </button>
+            ) : (
+              <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center text-white/30 text-[10px] text-center leading-tight px-1 cursor-not-allowed" title={lang === 'mm' ? 'Category အသစ်ထည့်ရန် Account ဖွင့်ပါ' : 'Sign up to add new category'}>
+                <span className="text-[9px]">🔒</span>
+              </div>
+            )}
           </div>
+          {!isLoggedIn && (
+            <p className="text-[10px] text-amber-400 mt-1 font-myanmar">
+              {lang === 'mm' ? 'Category အသစ်ထည့်ချင်ပါက Account ဖွင့်ပြီး ဝင်ရောက်ပါ' : 'Sign up to add a new category'}
+            </p>
+          )}
         </Field>
 
         {/* Quick category modal */}
@@ -370,15 +383,11 @@ export default function SubmitListingPage() {
               </div>
               <div>
                 <label className="block text-xs text-white/50 mb-1.5">Icon</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {['📦','🏠','🔧','💄','👕','🎓','📚','🏥','🚗','🍜','💻','📱','🌿','🎵','🎮','💰','🛍️','✂️','🎭','🏋️','🧹','🚿','🔌','🎨'].map(ic => (
-                    <button type="button" key={ic}
-                      onClick={() => setQuickCat(q => ({...q, icon: ic}))}
-                      className={`w-9 h-9 rounded-lg text-xl flex items-center justify-center ${quickCat.icon === ic ? 'bg-brand-600/60 border border-brand-400/50' : 'bg-white/5'}`}>
-                      {ic}
-                    </button>
-                  ))}
-                </div>
+                <IconPicker
+                  value={quickCat.icon}
+                  onChange={(icon) => setQuickCat(q => ({...q, icon}))}
+                  label={null}
+                />
               </div>
             </div>
           </div>
@@ -392,15 +401,24 @@ export default function SubmitListingPage() {
         <div className="border-t border-white/8 pt-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">တည်နေရာ</p>
-            <button
-              type="button"
-              onClick={getMyLocation}
-              disabled={locationLoading}
-              className="flex items-center gap-1.5 text-xs text-brand-300 hover:text-brand-200 transition-colors"
-            >
-              <MapPin size={12} />
-              {locationLoading ? 'ရှာနေသည်...' : 'GPS ရယူမည်'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={getMyLocation}
+                disabled={locationLoading}
+                className="flex items-center gap-1.5 text-xs text-brand-300 hover:text-brand-200 transition-colors"
+              >
+                <MapPin size={12} />
+                {locationLoading ? 'ရှာနေသည်...' : 'GPS ရယူမည်'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMapPicker(true)}
+                className="flex items-center gap-1.5 text-xs text-brand-300 hover:text-brand-200 transition-colors"
+              >
+                <MapPin size={12} /> မြေပုံပေါ်တွင် ရွေးမည်
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -517,15 +535,13 @@ export default function SubmitListingPage() {
           </div>
         </div>
 
-        {/* MENU SECTION with bigger button */}
+        {/* Menu Section */}
         <div className="border-t border-white/8 pt-4">
           <div className="flex justify-between items-center mb-3">
             <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">
               {lang === 'mm' ? 'မီနူး / ဝန်ဆောင်မှုများ' : 'Menu / Services'}
             </p>
           </div>
-
-          {/* Big "Add Menu Item" button */}
           <button
             type="button"
             onClick={() => openMenuForm()}
@@ -569,14 +585,14 @@ export default function SubmitListingPage() {
                         onClick={() => openMenuForm(item)}
                         className="p-1.5 text-white/40 hover:text-white transition-colors"
                       >
-                        <Edit2 size={14} />
+                        ✏️
                       </button>
                       <button
                         type="button"
                         onClick={() => deleteMenuItem(item.id)}
                         className="p-1.5 text-red-400/70 hover:text-red-400 transition-colors"
                       >
-                        <Trash2 size={14} />
+                        🗑️
                       </button>
                     </div>
                   </div>
@@ -613,7 +629,6 @@ export default function SubmitListingPage() {
                 <X size={18} />
               </button>
             </div>
-
             <div className="p-4 space-y-4">
               <div>
                 <label className="block text-xs text-white/50 mb-1.5 font-myanmar">
@@ -700,6 +715,18 @@ export default function SubmitListingPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Map Picker Modal */}
+      {showMapPicker && (
+        <LocationPicker
+          onSelect={(latLng) => {
+            setFormField('latitude', latLng.lat.toFixed(7));
+            setFormField('longitude', latLng.lng.toFixed(7));
+            setShowMapPicker(false);
+          }}
+          onClose={() => setShowMapPicker(false)}
+        />
       )}
     </div>
   )

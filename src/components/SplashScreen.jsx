@@ -31,7 +31,7 @@ export default function SplashScreen({ onConsent }) {
             တိုက်ရိုက်တင်ပြသော ပလက်ဖောင်းဖြစ်ပါသည်။
           </p>
           <p className="text-xs text-white/40">
-            Version 7.0 • Since 2026 • by Shine Thit
+            Version 2.0 • Since 2026 • by Shine Thit
           </p>
         </div>
 

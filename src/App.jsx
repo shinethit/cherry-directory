@@ -40,8 +40,8 @@ import BulkImportPage from './pages/BulkImportPage'
 import AppSettingsPage from './pages/AppSettingsPage'
 import NoticeBoardPage from './pages/NoticeBoardPage'
 import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
+import WeatherAlertPage from './pages/WeatherAlertPage'                    // ← ထည့်
 import { 
-  WeatherAlertPage, 
   DonationPage, 
   HealthServicePage, 
   BusSchedulePage, 
@@ -50,7 +50,6 @@ import {
 import RentPage from './pages/RentPage'
 import TutoringPage from './pages/TutoringPage'
 import HistoryPage, { HistoryDetailPage } from './pages/HistoryPage'
-import AdminAnnouncements from './pages/AdminAnnouncements'   // ← Announcement admin page
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -94,7 +93,7 @@ function AppRoutes() {
       style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top))' }}
     >
       <Header />
-      <AnnouncementBanner />   {/* ← Announcement banner appears on all pages */}
+      <AnnouncementBanner />
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -119,7 +118,7 @@ function AppRoutes() {
         <Route path="/bus" element={<BusSchedulePage />} />
         <Route path="/health" element={<HealthServicePage />} />
         <Route path="/notices" element={<NoticeBoardPage />} />
-        <Route path="/weather" element={<WeatherAlertPage />} />
+        <Route path="/weather" element={<WeatherAlertPage />} />            {/* ← အသစ်ထည့် */}
         <Route path="/donations" element={<DonationPage />} />
         <Route path="/tours" element={<ToursPage />} />
         <Route path="/rent" element={<RentPage />} />
@@ -136,7 +135,6 @@ function AppRoutes() {
         <Route path="/admin/categories" element={<CategoryManagerPage />} />
         <Route path="/admin/bulk-import" element={<BulkImportPage />} />
         <Route path="/admin/settings" element={<AppSettingsPage />} />
-        <Route path="/admin/announcements" element={<AdminAnnouncements />} />   {/* ← New route */}
         <Route path="/about" element={<AboutPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />

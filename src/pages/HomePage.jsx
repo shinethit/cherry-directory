@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw, Home, User, Briefcase, GraduationCap } from 'lucide-react';
+import { Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw, Home, User, Briefcase, GraduationCap, Droplets, Wind } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
 import SplashScreen from '../components/SplashScreen';
 import ShareButton from '../components/ShareButton';
-import { usePWA } from '../hooks/usePWA';   // ← added
+import { usePWA } from '../hooks/usePWA';
 
 // Helper: country code → full name
 const countryNames = {
@@ -32,7 +32,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const config = useAppConfig();
   const { lang } = useLang();
-  const { installable, installApp } = usePWA();   // ← added
+  const { installable, installApp } = usePWA();
 
   // --- Splash consent: daily check ---
   const [consentGiven, setConsentGiven] = useState(() => {
@@ -59,10 +59,15 @@ export default function HomePage() {
   const [countryStats, setCountryStats] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // --- Power status (read‑only, show ALL areas) ---
+  // --- Power status (sorted by last_reported) ---
   const [powerAreas, setPowerAreas] = useState([]);
   const [powerLoading, setPowerLoading] = useState(true);
   const powerChannelRef = useRef(null);
+
+  // --- Weather alerts (latest 4) ---
+  const [weatherAlerts, setWeatherAlerts] = useState([]);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+  const weatherChannelRef = useRef(null);
 
   // --- Community stats (rent, tutoring, jobs) – silent fail if tables missing ---
   const [rentListingsCount, setRentListingsCount] = useState(0);
@@ -165,11 +170,14 @@ export default function HomePage() {
     }
   }, [consentGiven, loadData]);
 
-  // --- Power status (read‑only, show ALL areas) ---
+  // --- Power status (sorted by last_reported descending) ---
   const loadPowerStatus = useCallback(async () => {
     setPowerLoading(true);
     try {
-      const { data } = await supabase.from('current_power_status').select('*');
+      const { data } = await supabase
+        .from('current_power_status')
+        .select('*')
+        .order('last_reported', { ascending: false, nullsLast: true });
       setPowerAreas(data || []);
     } catch (e) {
       console.warn(e);
@@ -190,6 +198,39 @@ export default function HomePage() {
       };
     }
   }, [consentGiven, loadPowerStatus]);
+
+  // --- Weather alerts (latest 4, order by severity then posted_at) ---
+  const loadWeatherAlerts = useCallback(async () => {
+    setWeatherLoading(true);
+    try {
+      const { data } = await supabase
+        .from('weather_alerts')
+        .select('*')
+        .eq('status', 'active')
+        .order('severity', { ascending: false }) // danger first
+        .order('posted_at', { ascending: false })
+        .limit(4);
+      setWeatherAlerts(data || []);
+    } catch (e) {
+      console.warn(e);
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (consentGiven) {
+      loadWeatherAlerts();
+      weatherChannelRef.current = supabase
+        .channel('weather-live')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'weather_alerts' }, loadWeatherAlerts)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'weather_alerts' }, loadWeatherAlerts)
+        .subscribe();
+      return () => {
+        if (weatherChannelRef.current) supabase.removeChannel(weatherChannelRef.current);
+      };
+    }
+  }, [consentGiven, loadWeatherAlerts]);
 
   // --- Community stats (silent fail) ---
   const loadCommunityStats = useCallback(async () => {
@@ -256,6 +297,7 @@ export default function HomePage() {
   const handleRefresh = () => {
     loadData();
     loadPowerStatus();
+    loadWeatherAlerts();
     loadCommunityStats();
   };
 
@@ -278,9 +320,18 @@ export default function HomePage() {
   const cityName = config?.app_city || 'တောင်ကြီးမြို့';
   const appName = config?.app_name || 'Cherry Directory';
 
+  // Helper for severity color
+  const getSeverityColor = (severity) => {
+    switch (severity) {
+      case 'danger': return 'text-red-400 bg-red-500/10 border-red-500/20';
+      case 'warning': return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+      default: return 'text-blue-400 bg-blue-500/10 border-blue-500/20';
+    }
+  };
+
   return (
     <div className="space-y-6 py-4 pb-24">
-      {/* Header with prominent Share & QR buttons */}
+      {/* Header with Share & Refresh */}
       <div className="px-4 flex justify-between items-center">
         <div>
           <h1 className="font-display font-bold text-xl text-white">Cherry Directory</h1>
@@ -640,25 +691,28 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Power Status Dashboard */}
+      {/* Power Status Dashboard (read‑only, sorted by last_reported) */}
       <div className="px-4">
-        <div className="mb-2">
+        <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-display font-semibold text-white/80 flex items-center gap-1">
             ⚡ {lang === 'mm' ? 'လျှပ်စစ်အခြေအနေ' : 'Power Status'}
           </h3>
+          <button onClick={() => navigate('/power')} className="text-[9px] text-brand-300 hover:text-brand-200">
+            {lang === 'mm' ? 'အားလုံးကြည့်မည် →' : 'View all →'}
+          </button>
         </div>
 
         {powerLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {[1, 2, 3, 4, 5, 6].map(n => <ShimmerSkeleton key={n} className="h-24 rounded-2xl" />)}
+          <div className="grid grid-cols-2 gap-2">
+            {[1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-24 rounded-2xl" />)}
           </div>
         ) : powerAreas.length === 0 ? (
           <div className="text-center py-4 text-white/30 text-sm font-myanmar">
             {lang === 'mm' ? 'ရပ်ကွက်စာရင်း မရှိသေး' : 'No neighborhoods available'}
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {powerAreas.map(area => {
+          <div className="grid grid-cols-2 gap-2">
+            {powerAreas.slice(0, 6).map(area => {
               const isCut = area.current_status === 'cut';
               const isRestored = area.current_status === 'restored';
               return (
@@ -678,6 +732,63 @@ export default function HomePage() {
                       {isCut ? '🔴 ဖြတ်' : isRestored ? '🟢 လာ' : '⚪ မသိ'}
                     </span>
                   </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {powerAreas.length > 6 && (
+          <p className="text-[9px] text-white/30 text-center mt-2">
+            + {powerAreas.length - 6} {lang === 'mm' ? 'ရပ်ကွက်များ' : 'more areas'}
+          </p>
+        )}
+      </div>
+
+      {/* Weather Dashboard (read‑only, latest 4 alerts) */}
+      <div className="px-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-display font-semibold text-white/80 flex items-center gap-1">
+            🌧️ {lang === 'mm' ? 'မိုးလေဝသ/ရေကြီး သတိပေးချက်' : 'Weather & Flood Alerts'}
+          </h3>
+          <button onClick={() => navigate('/weather')} className="text-[9px] text-brand-300 hover:text-brand-200">
+            {lang === 'mm' ? 'အားလုံးကြည့်မည် →' : 'View all →'}
+          </button>
+        </div>
+
+        {weatherLoading ? (
+          <div className="grid grid-cols-2 gap-2">
+            {[1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-24 rounded-2xl" />)}
+          </div>
+        ) : weatherAlerts.length === 0 ? (
+          <div className="text-center py-4 text-white/30 text-sm font-myanmar">
+            {lang === 'mm' ? 'သတိပေးချက် မရှိပါ' : 'No active alerts'}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            {weatherAlerts.map(alert => {
+              const severityColor = getSeverityColor(alert.severity);
+              return (
+                <div key={alert.id} className={`p-3 rounded-2xl border ${severityColor} bg-opacity-10`}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-display font-semibold text-sm text-white">
+                        {lang === 'mm' ? alert.title_mm : alert.title}
+                      </p>
+                      {alert.location && (
+                        <p className="text-[9px] text-white/40 mt-0.5 font-myanmar">📍 {alert.location}</p>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold uppercase">{alert.severity === 'danger' ? '⚠️' : alert.severity === 'warning' ? '⚡' : 'ℹ️'}</span>
+                  </div>
+                  {alert.content_mm && (
+                    <p className="text-[10px] text-white/50 mt-1 line-clamp-2 font-myanmar">{alert.content_mm}</p>
+                  )}
+                  {alert.inle_level_cm && (
+                    <div className="flex items-center gap-1 mt-2 text-[9px]">
+                      <Droplets size={10} />
+                      <span className="text-white/60">Inle Lake: {alert.inle_level_cm} cm</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -710,7 +821,7 @@ export default function HomePage() {
         </p>
       </div>
 
-      {/* PWA Install Button – floating at bottom right */}
+      {/* PWA Install Button */}
       {installable && (
         <button
           onClick={installApp}
