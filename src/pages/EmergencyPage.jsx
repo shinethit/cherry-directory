@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
+import { useNavigate } from 'react-router-dom'
 
 // ── Category config ───────────────────────────────────────────
 const CATS = [
@@ -232,6 +233,7 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function EmergencyPage() {
+  const navigate                    = useNavigate()
   const { lang }                    = useLang()
   const { user, isModerator }       = useAuth()
   const config                      = useAppConfig()
@@ -316,6 +318,25 @@ export default function EmergencyPage() {
           ))}
         </div>
       </div>
+
+      {/* Health Services link */}
+      <button
+        onClick={() => navigate('/health')}
+        className="mx-4 mb-4 w-[calc(100%-2rem)] flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-red-600/15 to-red-700/5 border border-red-500/25 hover:border-red-500/40 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🏥</span>
+          <div className="text-left">
+            <p className="font-display font-semibold text-sm text-white">
+              {lang === 'mm' ? 'ကျန်းမာရေးဝန်ဆောင်မှု' : 'Health Services'}
+            </p>
+            <p className="text-[10px] text-white/50 mt-0.5 font-myanmar">
+              {lang === 'mm' ? 'သွေးလှူ • အခမဲ့ဆေးခန်း • ဆေးထိုး' : 'Blood drives • Free clinics • Vaccination'}
+            </p>
+          </div>
+        </div>
+        <span className="text-white/30">→</span>
+      </button>
 
       {/* Category filter */}
       <div className="px-4 mb-4">

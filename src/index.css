@@ -294,3 +294,174 @@
 .animate-shimmer {
   animation: shimmer 1.5s infinite;
 }
+
+/* ============================================================
+   LIGHT MODE v3 — Final
+   ============================================================ */
+
+html:not(.dark) { color-scheme: light; }
+
+/* Body */
+html:not(.dark) body {
+  background: #f0f0f3 !important;
+  color: #1a1a1f !important;
+}
+
+/* Kill App.jsx gradient */
+html:not(.dark) [class*="bg-gradient-to-b"][class*="from-[#0d0015]"] {
+  background-image: none !important;
+  background-color: #f0f0f3 !important;
+}
+
+/* Fixed header */
+html:not(.dark) header {
+  background: rgba(255, 255, 255, 0.94) !important;
+}
+
+/* Bottom nav */
+html:not(.dark) nav.glass {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Cards */
+html:not(.dark) .card-dark,
+html:not(.dark) .card-listing {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+html:not(.dark) .card-listing:hover {
+  background: #ffffff !important;
+  border-color: rgba(124, 0, 176, 0.3) !important;
+}
+
+html:not(.dark) .glass {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Inputs */
+html:not(.dark) .input-dark,
+html:not(.dark) .select-dark {
+  background: #ffffff !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: #1a1a1f !important;
+}
+html:not(.dark) select option {
+  background-color: #ffffff !important;
+  color: #1a1a1f !important;
+}
+
+/* Text: white → dark (default) */
+html:not(.dark) .text-white { color: #1a1a1f !important; }
+html:not(.dark) .text-white\/90 { color: rgba(0,0,0,0.9) !important; }
+html:not(.dark) .text-white\/80 { color: rgba(0,0,0,0.8) !important; }
+html:not(.dark) .text-white\/70 { color: rgba(0,0,0,0.7) !important; }
+html:not(.dark) .text-white\/60 { color: rgba(0,0,0,0.6) !important; }
+html:not(.dark) .text-white\/50 { color: rgba(0,0,0,0.55) !important; }
+html:not(.dark) .text-white\/45 { color: rgba(0,0,0,0.5) !important; }
+html:not(.dark) .text-white\/40 { color: rgba(0,0,0,0.5) !important; }
+html:not(.dark) .text-white\/35 { color: rgba(0,0,0,0.45) !important; }
+html:not(.dark) .text-white\/30 { color: rgba(0,0,0,0.4) !important; }
+html:not(.dark) .text-white\/25 { color: rgba(0,0,0,0.35) !important; }
+html:not(.dark) .text-white\/20 { color: rgba(0,0,0,0.3) !important; }
+
+/* PRIMARY BUTTONS always keep white text */
+html:not(.dark) .btn-primary,
+html:not(.dark) .btn-primary *,
+html:not(.dark) .btn-primary [class*="text-"] {
+  color: #ffffff !important;
+}
+
+/* === HERO GRADIENT: keep original colors, only fix inner cards === */
+/* Hero itself stays purple (don't override its bg) */
+html:not(.dark) [class*="from-brand-800"] {
+  /* leave as-is — the purple gradient is fine in light mode */
+}
+
+/* Text directly in hero stays white */
+html:not(.dark) [class*="from-brand-800"] > * .text-white,
+html:not(.dark) [class*="from-brand-800"] > * [class*="text-white/"],
+html:not(.dark) [class*="from-brand-800"] > div > .text-white,
+html:not(.dark) [class*="from-brand-800"] > div > [class*="text-white/"] {
+  color: #ffffff !important;
+}
+html:not(.dark) [class*="from-brand-800"] .text-gold-400 {
+  color: #ffd968 !important;
+}
+
+/* BUT: glass cards inside hero are white → text must be dark */
+html:not(.dark) [class*="from-brand-800"] .glass {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+html:not(.dark) [class*="from-brand-800"] .glass .text-white,
+html:not(.dark) [class*="from-brand-800"] .glass [class*="text-white/"] {
+  color: #1a1a1f !important;
+}
+html:not(.dark) [class*="from-brand-800"] .glass .text-gold-400 {
+  color: #b8860b !important;
+}
+
+/* === BOTTOM NAV === */
+html:not(.dark) .nav-item {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+html:not(.dark) .nav-item.active {
+  color: #7c00b0 !important;
+  background: rgba(124, 0, 176, 0.1) !important;
+}
+
+/* Bottom nav Home center button — force solid purple */
+html:not(.dark) nav button .bg-brand-600 {
+  background-color: #63008c !important;
+}
+html:not(.dark) nav button .bg-brand-600 svg {
+  color: #ffffff !important;
+}
+
+/* Header icon buttons */
+html:not(.dark) header button.bg-white\/8 {
+  background: rgba(0, 0, 0, 0.06) !important;
+  color: #1a1a1f !important;
+}
+html:not(.dark) header button.bg-white\/8 svg {
+  color: #1a1a1f !important;
+}
+
+/* Hero secondary buttons (Share/QR) - keep clear */
+html:not(.dark) .btn-ghost {
+  color: rgba(0, 0, 0, 0.75) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  background: #ffffff !important;
+}
+
+/* ============================================================
+   COMPACT OVERRIDES
+   ============================================================ */
+
+/* Section headers (h2 inside .section-header) */
+.font-display.font-bold.text-base {
+  /* keep — this is not too big */
+}
+
+/* HomePage section gap */
+.space-y-3 > * + * {
+  margin-top: 0.6rem;
+}
+
+/* Community stats cards — auto-short */
+.card-dark.px-2.py-2 {
+  min-height: 44px;
+}
+
+/* Prevent stat card from stretching */
+.grid.grid-cols-3 > .card-dark {
+  height: auto;
+}
+
+/* Bottom nav — slightly slimmer */
+nav.glass > div > div {
+  padding-top: 0.4rem;
+  padding-bottom: 0.4rem;
+}

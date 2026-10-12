@@ -132,18 +132,5 @@ export const useRemoveBookmark = () => {
 /**
  * Toggle bookmark
  */
-export const useToggleBookmark = () => {
-  const addBookmark = useAddBookmark();
-  const removeBookmark = useRemoveBookmark();
-  const { data: isBookmarked } = useIsBookmarked();
+// useToggleBookmark removed — broken. Use useAddBookmark + useRemoveBookmark separately.
 
-  return useMutation({
-    mutationFn: async ({ targetId, targetType = 'listing' }) => {
-      if (isBookmarked) {
-        await removeBookmark.mutateAsync({ targetId, targetType });
-      } else {
-        await addBookmark.mutateAsync({ targetId, targetType });
-      }
-    },
-  });
-};

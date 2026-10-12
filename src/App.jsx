@@ -9,6 +9,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import BottomNav from './components/BottomNav'
 import Header from './components/Header'
 import AnnouncementBanner from './components/AnnouncementBanner'
+import OnboardingGuide from './components/OnboardingGuide'
 
 // Pages
 import HomePage from './pages/HomePage'
@@ -40,7 +41,10 @@ import BulkImportPage from './pages/BulkImportPage'
 import AppSettingsPage from './pages/AppSettingsPage'
 import NoticeBoardPage from './pages/NoticeBoardPage'
 import { AboutPage, PrivacyPage, TermsPage, HelpPage } from './pages/InfoPages'
-import WeatherAlertPage from './pages/WeatherAlertPage'                    // ← ထည့်
+import WeatherAlertPage from './pages/WeatherAlertPage'
+import SearchPage from './pages/SearchPage'
+import NotificationsPage from './pages/NotificationsPage'
+import SavedPlacesPage from './pages/SavedPlacesPage'                    // ← ထည့်
 import { 
   DonationPage, 
   HealthServicePage, 
@@ -98,6 +102,9 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/directory" element={<DirectoryPage />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/saved-places" element={<SavedPlacesPage />} />
         <Route path="/directory/:id" element={<ListingDetailPage />} />
         <Route path="/directory/:id/edit" element={<EditListingPage />} />
         <Route path="/directory/:id/menu" element={<MenuPage />} />
@@ -142,6 +149,7 @@ function AppRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <BottomNav />
+      <OnboardingGuide />
     </div>
   )
 }

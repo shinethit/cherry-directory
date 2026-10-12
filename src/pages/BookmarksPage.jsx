@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Bookmark, Building2, Newspaper } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useBookmarks } from '../hooks/useBookmarks'
+import { useAuth } from '../contexts/AuthContext'
+import { supabase } from '../lib/supabase'
 import { useSEO } from '../hooks/useSEO'
 import { ListingCard, PostCard, EmptyState } from '../components/UI'
 
 export default function BookmarksPage() {
   const navigate = useNavigate()
-  const { fetchBookmarkedListings, fetchBookmarkedPosts } = useBookmarks()
+  const { user, isLoggedIn } = useAuth()
   const [tab, setTab] = useState('listings')
   const [listings, setListings] = useState([])
   const [posts, setPosts] = useState([])
@@ -16,14 +17,37 @@ export default function BookmarksPage() {
 
   useEffect(() => {
     async function load() {
+      if (!isLoggedIn || !user) { setLoading(false); return }
       setLoading(true)
-      const [l, p] = await Promise.all([fetchBookmarkedListings(), fetchBookmarkedPosts()])
-      setListings(l)
-      setPosts(p)
+      try {
+        const { data: bmarks } = await supabase
+          .from('bookmarks')
+          .select('target_id, target_type')
+          .eq('user_id', user.id)
+
+        if (!bmarks?.length) { setListings([]); setPosts([]); setLoading(false); return }
+
+        const listingIds = bmarks.filter(b => b.target_type === 'listing').map(b => b.target_id)
+        const postIds = bmarks.filter(b => b.target_type === 'post').map(b => b.target_id)
+
+        const [{ data: lData }, { data: pData }] = await Promise.all([
+          listingIds.length
+            ? supabase.from('listings').select('*, category:categories(name, name_mm, icon)').in('id', listingIds)
+            : Promise.resolve({ data: [] }),
+          postIds.length
+            ? supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm)').in('id', postIds)
+            : Promise.resolve({ data: [] }),
+        ])
+
+        setListings(lData || [])
+        setPosts(pData || [])
+      } catch (err) {
+        console.warn('Bookmarks load error:', err)
+      }
       setLoading(false)
     }
     load()
-  }, [])
+  }, [user, isLoggedIn])
 
   return (
     <div className="py-4">

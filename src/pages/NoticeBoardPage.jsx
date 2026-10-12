@@ -116,7 +116,7 @@ function PostForm({ onClose, onSuccess, lang }) {
 export default function NoticeBoardPage() {
   const { lang } = useLang()
   const { isModerator } = useAuth()
-  useSEO({ title: lang === 'mm' ? 'ကြေညာချက်ဘုတ်' : 'Notice Board' })
+  useSEO({ title: lang === 'mm' ? 'ကြေညာချက်များ' : 'Announcements' })
 
   const [notices, setNotices]   = useState([])
   const [loading, setLoading]   = useState(true)
@@ -165,7 +165,7 @@ export default function NoticeBoardPage() {
     <div className="pb-8">
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
-          <h1 className="font-display font-bold text-xl text-white">📢 {lang === 'mm' ? 'ကြေညာချက်ဘုတ်' : 'Notice Board'}</h1>
+          <h1 className="font-display font-bold text-xl text-white">📢 {lang === 'mm' ? 'ကြေညာချက်များ' : 'Announcements'}</h1>
           <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'ရပ်ကွက် ကြေညာချက်များ' : 'Community notices & announcements'}</p>
         </div>
         <div className="flex gap-2">

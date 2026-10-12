@@ -24,7 +24,6 @@ export default function ProfilePage() {
   const { lang }  = useLang()
   const config = useAppConfig()
   const { installable, installApp, pushEnabled, enablePush, disablePush } = usePWA()
-  const { getHistory } = usePoints()
   useSEO({ title: 'Profile' })
 
   const [editing, setEditing]     = useState(false)
@@ -35,28 +34,25 @@ export default function ProfilePage() {
   const [saving, setSaving]       = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
   const [myStats, setMyStats]     = useState({ listings: 0, reviews: 0, bookmarks: 0, rsvps: 0 })
-  const [recentPoints, setRecentPoints] = useState([])
   const [nickError, setNickError] = useState('')
 
   useEffect(() => {
     if (!user) return
     async function load() {
       try {
-        const [{ count: l }, { count: r }, { count: b }, { count: rv }, pts] = await Promise.all([
+        const [{ count: l }, { count: r }, { count: b }, { count: rv }] = await Promise.all([
           supabase.from('listings').select('*', { count: 'exact', head: true }).eq('submitted_by', user.id),
           supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
           supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
           supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          getHistory(5),
         ])
         setMyStats({ listings: l || 0, reviews: r || 0, bookmarks: b || 0, rsvps: rv || 0 })
-        setRecentPoints(pts)
       } catch (err) {
         console.warn('Profile stats load failed:', err)
       }
     }
     load()
-  }, [user, getHistory])
+  }, [user])
 
   async function handleAvatarChange(e) {
     const file = e.target.files?.[0]
@@ -99,14 +95,6 @@ export default function ProfilePage() {
   const RoleIcon = role.icon
   const displayName = profile?.nickname ? `@${profile.nickname}` : profile?.full_name || 'User'
 
-  const POINT_LABELS = {
-    write_review:     { mm: 'Review ရေး',      en: 'Wrote a review'   },
-    submit_listing:   { mm: 'လုပ်ငန်း Submit',     en: 'Submitted listing' },
-    listing_approved: { mm: 'လုပ်ငန်း Approved',   en: 'Listing approved'  },
-    rsvp_going:       { mm: 'Event RSVP',       en: 'RSVP to event'    },
-    chat_message:     { mm: 'Chat message',     en: 'Chat message'     },
-    claim_approved:   { mm: 'Claim Approved',   en: 'Claim approved'   },
-  }
 
   return (
     <div className="py-4 px-4 space-y-4">
@@ -201,12 +189,11 @@ export default function ProfilePage() {
       </div>
 
       {/* ── Stats grid ── */}
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {[
           { icon: Building2,    label: lang === 'mm' ? 'လုပ်ငန်း' : 'Listings',  value: myStats.listings,  action: () => navigate('/directory') },
           { icon: Star,         label: 'Reviews',                               value: myStats.reviews   },
           { icon: BookMarked,   label: lang === 'mm' ? 'Saved' : 'Saved',      value: myStats.bookmarks, action: () => navigate('/bookmarks') },
-          { icon: Trophy,       label: 'Points',                                value: profile?.points || 0, highlight: true },
         ].map(({ icon: Icon, label, value, action, highlight }) => (
           <button key={label} onClick={action} disabled={!action} className={`card-dark p-3 rounded-2xl text-center ${action ? 'hover:bg-white/8 transition-colors' : ''}`}>
             <Icon size={15} className={`mx-auto mb-1 ${highlight ? 'text-gold-400' : 'text-brand-300'}`} />
@@ -216,28 +203,6 @@ export default function ProfilePage() {
         ))}
       </div>
 
-      {/* ── Recent points ── */}
-      {recentPoints.length > 0 && (
-        <div className="card-dark rounded-2xl p-4">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-display font-bold text-white/50 uppercase tracking-wider">Recent Points</p>
-            <button onClick={() => navigate('/leaderboard')} className="text-[10px] text-brand-300 hover:text-brand-200">
-              Leaderboard →
-            </button>
-          </div>
-          <div className="space-y-2">
-            {recentPoints.map(p => (
-              <div key={p.id} className="flex items-center gap-2">
-                <span className="text-xs font-mono text-green-400 font-bold w-8 text-right">+{p.points}</span>
-                <p className="text-[11px] text-white/50 flex-1">
-                  {(POINT_LABELS[p.action]?.[lang] || p.action)}
-                </p>
-                <span className="text-[9px] text-white/20">{timeAgo(p.created_at, lang)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ── Settings ── */}
       <div className="space-y-2">
@@ -278,6 +243,7 @@ export default function ProfilePage() {
         {[
           { icon: Trophy,    label: 'Top Contributors', labelMm: 'Top Contributors', path: '/leaderboard', color: 'text-gold-400' },
           { icon: BookMarked,label: 'Saved Items',      labelMm: 'Saved Items',      path: '/bookmarks',  color: 'text-brand-300' },
+          { icon: MapPin,     label: 'Saved Places',     labelMm: 'သိမ်းထားသောနေရာများ', path: '/saved-places', color: 'text-emerald-300' },
           { icon: Building2, label: 'Add Listing',      labelMm: 'လုပ်ငန်းထည့်မည်',  path: '/submit',     color: 'text-brand-300' },
           ...(isModerator ? [{ icon: Shield, label: 'Admin Panel', labelMm: 'Admin Panel', path: '/admin', color: 'text-amber-400' }] : []),
         ].map(({ icon: Icon, label, labelMm, path, color }) => (

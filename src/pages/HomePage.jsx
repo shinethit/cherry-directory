@@ -10,16 +10,7 @@ import ShareButton from '../components/ShareButton';
 import { usePWA } from '../hooks/usePWA';
 
 // Helper: country code → full name
-const countryNames = {
-  MM: 'မြန်မာ', TH: 'ထိုင်း', SG: 'စင်ကာပူ', US: 'အမေရိကန်', GB: 'ယူကေ',
-  JP: 'ဂျပန်', KR: 'ကိုရီးယား', MY: 'မလေးရှား', VN: 'ဗီယက်နမ်', LA: 'လာအို',
-  KH: 'ကမ္ဘောဒီးယား', IN: 'အိန္ဒိယ', AU: 'ဩစတြေးလျ', DE: 'ဂျာမနီ', FR: 'ပြင်သစ်',
-};
 
-function getCountryDisplay(code) {
-  if (!code) return 'မသိ';
-  return countryNames[code] || code;
-}
 
 // Shimmer skeleton component
 const ShimmerSkeleton = ({ className }) => (
@@ -54,7 +45,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState(false);
 
-  // --- Visitor stats ---
   const [visitorCount, setVisitorCount] = useState(null);
   const [countryStats, setCountryStats] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -90,49 +80,7 @@ export default function HomePage() {
     };
   }, []);
 
-  // --- Track visit (every page load) ---
-  useEffect(() => {
-    const trackVisit = async () => {
-      try {
-        const res = await fetch('https://ipapi.co/json/');
-        const data = await res.json();
-        const countryCode = data.country_code || 'XX';
-        await supabase.from('visits').insert({ country_code: countryCode });
-      } catch (err) {
-        console.warn('Visit tracking failed:', err);
-        await supabase.from('visits').insert({ country_code: 'XX' }).catch(() => {});
-      }
-    };
-    if (consentGiven) trackVisit();
-  }, [consentGiven]);
 
-  // --- Fetch visitor stats (last 7 days) ---
-  useEffect(() => {
-    const fetchStats = async () => {
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { data, error } = await supabase
-        .from('visits')
-        .select('country_code')
-        .gte('visited_at', sevenDaysAgo);
-
-      if (error) {
-        console.warn('Failed to fetch visitor stats:', error);
-        return;
-      }
-
-      setVisitorCount(data.length);
-      const counts = {};
-      data.forEach(({ country_code }) => {
-        const code = country_code?.trim();
-        if (code && code !== 'XX' && code !== '') {
-          counts[code] = (counts[code] || 0) + 1;
-        }
-      });
-      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
-      setCountryStats(sorted);
-    };
-    if (consentGiven) fetchStats();
-  }, [consentGiven]);
 
   // --- Main data loading (listings, posts, categories, quick links) ---
   const loadData = useCallback(async () => {
@@ -330,11 +278,11 @@ export default function HomePage() {
   };
 
   return (
-    <div className="space-y-6 py-4 pb-24">
+    <div className="space-y-3 py-3 pb-24">
       {/* Header with Share & Refresh */}
-      <div className="px-4 flex justify-between items-center">
+      <div className="px-4 flex justify-between items-center mb-1">
         <div>
-          <h1 className="font-display font-bold text-xl text-white">Cherry Directory</h1>
+          <h1 className="font-display font-bold text-lg text-white">Cherry Directory</h1>
           <p className="text-xs text-white/40 font-myanmar">{cityName}</p>
         </div>
         <div className="flex items-center gap-3">
@@ -356,57 +304,48 @@ export default function HomePage() {
 
       {/* Hero Section with Stats */}
       <div className="px-4">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-6 border border-white/10">
-          <div className="absolute top-3 right-3 flex items-center gap-3 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] text-white/70">
-            <div className="flex items-center gap-1">
-              <Users size={12} />
-              <span>{visitorCount !== null ? visitorCount : '...'}</span>
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-800 via-brand-700 to-brand-900 p-4 border border-white/10">
+
+          <div className="flex gap-3">
+
+            {/* LEFT: Title + description + search */}
+            <div className="flex-1 min-w-0">
+              <p className="text-gold-400 text-[10px] font-display font-semibold tracking-widest uppercase mb-0.5">{cityName}</p>
+              <h2 className="font-display font-bold text-lg text-white leading-tight mb-1.5">
+                Cherry Directory 🍒
+              </h2>
+              <p className="text-white/60 text-[10px] font-myanmar mb-2.5 leading-relaxed">
+                မြို့တွင်း လုပ်ငန်းများ၊ သတင်းများ၊ ဖြစ်ရပ်များ အားလုံး တစ်နေရာတည်းတွင် ရှာဖွေနိုင်
+              </p>
+              <button onClick={() => navigate('/directory')} className="btn-primary flex items-center gap-1.5 text-xs py-2 px-3">
+                <Search size={13} /> လုပ်ငန်းရှာမယ်
+              </button>
             </div>
-            <div className="flex items-center gap-1">
-              {isOnline ? <Wifi size={12} className="text-green-400" /> : <WifiOff size={12} className="text-red-400" />}
-              <span className="text-[9px]">{isOnline ? 'Online' : 'Offline'}</span>
+
+            {/* RIGHT: Vertical stats — 1 col x 3 rows */}
+            <div className="flex flex-col gap-1.5 flex-shrink-0 w-[70px]">
+              <div className="glass rounded-lg px-2 py-1.5 text-center">
+                <p className="font-display font-bold text-sm text-white leading-none">{stats.listings.toLocaleString()}</p>
+                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">လုပ်ငန်း</p>
+              </div>
+              <div className="glass rounded-lg px-2 py-1.5 text-center">
+                <p className="font-display font-bold text-sm text-white leading-none">{posts.length > 0 ? `${posts.length}+` : '0'}</p>
+                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">သတင်း</p>
+              </div>
+              <div className="glass rounded-lg px-2 py-1.5 text-center">
+                <p className="font-display font-bold text-sm text-gold-400 leading-none">Free</p>
+                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">သုံးရေး</p>
+              </div>
             </div>
+
           </div>
-          <div className="relative">
-            <p className="text-gold-400 text-xs font-display font-semibold tracking-widest uppercase mb-1">{cityName}</p>
-            <h2 className="font-display font-bold text-2xl text-white leading-tight mb-3">
-              Cherry<br />Directory 🍒
-            </h2>
-            <p className="text-white/60 text-sm font-myanmar mb-4">မြို့တွင်း လုပ်ငန်းများ၊ သတင်းများ၊ ဖြစ်ရပ်များ<br />အားလုံး တစ်နေရာတည်းတွင် ရှာဖွေနိုင်</p>
-            <button onClick={() => navigate('/directory')} className="btn-primary flex items-center gap-2 text-sm">
-              <Search size={16} /> လုပ်ငန်းရှာမယ်
-            </button>
-          </div>
-          <div className="relative flex gap-3 mt-4">
-            <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
-              <p className="font-display font-bold text-lg text-white">{stats.listings.toLocaleString()}</p>
-              <p className="text-[10px] text-white/50">လုပ်ငန်းများ</p>
-            </div>
-            <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
-              <p className="font-display font-bold text-lg text-white">{posts.length > 0 ? `${posts.length}+` : '0'}</p>
-              <p className="text-[10px] text-white/50">သတင်းများ</p>
-            </div>
-            <div className="glass rounded-xl px-3 py-2 flex-1 text-center">
-              <p className="font-display font-bold text-lg text-gold-400">Free</p>
-              <p className="text-[10px] text-white/50">အသုံးပြုရေး</p>
-            </div>
-          </div>
-          {countryStats.length > 0 && (
-            <div className="mt-4 pt-2 border-t border-white/20 flex flex-wrap gap-2 justify-center">
-              {countryStats.map(([code, count]) => (
-                <div key={code} className="flex items-center gap-1 bg-black/30 px-2 py-1 rounded-full text-[9px]">
-                  <span>{getCountryDisplay(code)}</span>
-                  <span>{count}</span>
-                </div>
-              ))}
-            </div>
-          )}
+
         </div>
       </div>
 
       {/* Quick Actions */}
       <div className="px-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-1.5">
           {loading ? (
             [1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)
           ) : (
@@ -414,12 +353,11 @@ export default function HomePage() {
               <button
                 key={link.id}
                 onClick={() => link.url.startsWith('http') ? window.open(link.url, '_blank') : navigate(link.url)}
-                className={`p-4 flex items-center gap-3 rounded-2xl border transition-colors ${link.css_classes}`}
+                className={`px-2 py-2.5 flex flex-col items-center gap-1 rounded-xl border transition-colors text-center ${link.css_classes}`}
               >
-                <span className="text-2xl">{link.icon}</span>
-                <div className="text-left">
-                  <p className="text-sm font-display font-semibold">{lang === 'mm' ? (link.title_mm || link.title) : link.title}</p>
-                  <p className="text-[10px] opacity-70">{link.subtitle}</p>
+                <span className="text-lg leading-none">{link.icon}</span>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-display font-semibold leading-tight truncate">{lang === 'mm' ? (link.title_mm || link.title) : link.title}</p>
                 </div>
               </button>
             ))
@@ -429,7 +367,7 @@ export default function HomePage() {
 
       {/* Community Stats Row */}
       <div className="px-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {[
             { icon: Home, label: 'ငှားရန်ရှိသောအိမ်', value: rentListingsCount, link: '/rent?type=available' },
             { icon: User, label: 'ငှားလိုသောအိမ်ငှား', value: rentSeekersCount, link: '/rent?type=seeker' },
@@ -441,13 +379,13 @@ export default function HomePage() {
             <button
               key={idx}
               onClick={() => navigate(item.link)}
-              className="card-dark p-3 rounded-2xl text-center hover:bg-white/10 transition-colors"
+              className="card-dark px-2 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
             >
               <div className="flex justify-center mb-1">
                 <item.icon size={20} className="text-brand-400" />
               </div>
               <p className="text-[10px] text-white/50 font-myanmar mb-0.5">{item.label}</p>
-              <p className="font-display font-bold text-lg text-white">
+              <p className="font-display font-bold text-base text-white">
                 {communityStatsLoading ? '...' : item.value}
               </p>
             </button>
@@ -457,7 +395,7 @@ export default function HomePage() {
 
       {/* Category Grid */}
       {loading ? (
-        <div className="px-4 grid grid-cols-4 gap-2">
+        <div className="px-4 grid grid-cols-4 gap-1.5">
           {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)}
         </div>
       ) : homeCategories.length === 0 ? (
@@ -468,16 +406,16 @@ export default function HomePage() {
       ) : (
         <div>
           <SectionHeader title="အမျိုးအစားများ" subtitle="Category" action="အားလုံး" onAction={() => navigate('/directory')} />
-          <div className="px-4 grid grid-cols-4 gap-2">
+          <div className="px-4 grid grid-cols-4 gap-1.5">
             {homeCategories.map(cat => {
               const subs = allCategories.filter(c => c.parent_id === cat.id);
               return (
                 <button
                   key={cat.id}
                   onClick={() => subs.length > 0 ? setSelectedCat(cat) : navigate(`/directory?cat=${cat.id}`)}
-                  className={`flex flex-col items-center gap-1.5 p-3 card-dark hover:bg-white/8 transition-colors rounded-2xl ${cat.is_featured ? 'border border-amber-500/20' : ''}`}
+                  className={`flex flex-col items-center gap-0.5 py-2 px-1 card-dark hover:bg-white/8 transition-colors rounded-lg ${cat.is_featured ? 'border border-amber-500/20' : ''}`}
                 >
-                  <span className="text-2xl">{cat.icon}</span>
+                  <span className="text-xl">{cat.icon}</span>
                   <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</span>
                 </button>
               );

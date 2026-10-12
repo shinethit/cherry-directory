@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Moon, Sun } from 'lucide-react'
+import { ArrowLeft, Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useTheme } from '../contexts/ThemeContext'
+// Main navigation pages — no back button needed
+const MAIN_NAV_PATHS = ['/', '/directory', '/community', '/calendar', '/profile']
 
 export default function Header() {
   const navigate = useNavigate()
@@ -15,6 +17,8 @@ export default function Header() {
   const { darkMode, toggleDarkMode } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  // Show back button on all pages except main nav pages
+  const showBack = !MAIN_NAV_PATHS.includes(location.pathname)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,9 +28,20 @@ export default function Header() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  
+
   useEffect(() => {
     setMenuOpen(false)
   }, [location])
+
+  function handleBack() {
+    // If there's history to go back to, use it. Otherwise go home.
+    if (window.history.length > 1) {
+      navigate(-1)
+    } else {
+      navigate('/')
+    }
+  }
 
   const handleLogout = async () => {
     await signOut()
@@ -63,10 +78,20 @@ export default function Header() {
         style={{ top: 'env(safe-area-inset-top)' }}
       >
         <div className="flex items-center justify-between px-4 py-3">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2"
-          >
+          <div className="flex items-center gap-2">
+            {showBack && (
+              <button
+                onClick={handleBack}
+                className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all"
+                aria-label="Back"
+              >
+                <ArrowLeft size={16} className="text-white" />
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2"
+            >
             <div className="w-8 h-8 rounded-xl overflow-hidden bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
               <img 
                 src="/logo.png" 
@@ -86,8 +111,25 @@ export default function Header() {
               <p className="text-[9px] text-white/40 font-myanmar">{config.app_city || 'တောင်ကြီးမြို့'}</p>
             </div>
           </button>
+          </div>
 
           <div className="flex items-center gap-2">
+                        <button
+              onClick={() => navigate('/search')}
+              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
+              aria-label="Search"
+            >
+              <Search size={14} />
+            </button>
+
+                        <button
+              onClick={() => navigate('/notifications')}
+              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
+              aria-label="Notifications"
+            >
+              <Bell size={14} />
+            </button>
+
             <button
               onClick={toggleDarkMode}
               className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90 transition-colors"

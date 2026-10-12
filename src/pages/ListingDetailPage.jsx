@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
-import { useBookmarks } from '../hooks/useBookmarks'
+import { useIsBookmarked, useAddBookmark, useRemoveBookmark } from '../hooks/useBookmarksDB'
 import { StarRating, ReactionBar, Skeleton } from '../components/UI'
 import MapEmbed from '../components/MapEmbed'
 import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
@@ -18,7 +18,18 @@ export default function ListingDetailPage() {
   const navigate = useNavigate()
   const { isLoggedIn, profile, isAdmin, isModerator, user } = useAuth()
   const { t, lang } = useLang()
-  const { isBookmarked, toggleBookmark } = useBookmarks()
+  const { data: bookmarked = false } = useIsBookmarked(id)
+  const addBookmark = useAddBookmark()
+  const removeBookmark = useRemoveBookmark()
+
+  function toggleBookmark() {
+    if (!isLoggedIn) { navigate('/login'); return }
+    if (bookmarked) {
+      removeBookmark.mutate({ targetId: id, targetType: 'listing' })
+    } else {
+      addBookmark.mutate({ targetId: id, targetType: 'listing' })
+    }
+  }
   const [listing, setListing] = useState(null)
   const [reviews, setReviews] = useState([])
   const [myRating, setMyRating] = useState(0)
@@ -95,7 +106,6 @@ export default function ListingDetailPage() {
 
   const allImages = [listing.cover_url, listing.logo_url, ...(listing.images || [])].filter(Boolean)
   const cover = allImages[activeImg] ? getOptimizedUrl(allImages[activeImg], { width: 800 }) : null
-  const bookmarked = isBookmarked('listing', id)
   const displayName = lang === 'mm' ? (listing.name_mm || listing.name) : listing.name
 
   const openLightbox = (index) => {
@@ -125,7 +135,7 @@ export default function ListingDetailPage() {
             </button>
           )}
           <button
-            onClick={() => toggleBookmark('listing', id)}
+            onClick={toggleBookmark}
             className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${bookmarked ? 'bg-gold-500/20 text-gold-400' : 'bg-white/8 text-white/50 hover:text-white'}`}
           >
             {bookmarked ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}

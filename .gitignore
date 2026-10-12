@@ -13,3 +13,24 @@ supabase-*.sql
 
 # Test files
 public/test.html
+
+# Environment
+.env.local
+.env
+.env.*.local
+
+# Temp scripts
+*.cjs
+
+# SQL migrations
+supabase-*.sql
+saved-places.sql
+fix-*.sql
+test-notification.sql
+
+# Backups
+*.bak
+*.bak.*
+
+# Test files
+public/test.html

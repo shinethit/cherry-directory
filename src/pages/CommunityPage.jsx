@@ -1,160 +1,92 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 
-const FEATURES = [
-  // ========== ORDERED AS REQUESTED ==========
+// ── 5 Groups ──────────────────────────────────────────────
+const GROUPS = [
   {
-    path: '/history',
-    icon: '📜',
-    mm: 'ဒေသဆိုင်ရာ သမိုင်းကြောင်းများ',
-    en: 'Local History',
-    descMm: 'တောင်ကြီး၊ ကလော၊ အင်းလေး စသည့် ဒေသဆိုင်ရာ သမိုင်း၊ ယဉ်ကျေးမှု၊ သိသင့်သိထိုက်ရာ',
-    descEn: 'History, culture, and knowledge about our region',
-    color: 'from-amber-600/20 to-amber-700/10',
-    border: 'border-amber-500/20',
-  },
-  {
-    path: '/rent',
-    icon: '🏠',
-    mm: 'အိမ်/အခန်း ငှားရမ်းခြင်း',
-    en: 'Rentals',
-    descMm: 'အိမ်ရှင် / အိမ်ငှား — ချိတ်ဆက်ရေး၊ Status ပြောင်းနိုင်',
-    descEn: 'Connect landlords & tenants, status tracking',
-    color: 'from-emerald-600/20 to-emerald-700/10',
-    border: 'border-emerald-500/20',
-  },
-  {
-    path: '/tutoring',
-    icon: '📚',
-    mm: 'ဆရာ/ကျောင်းသား ချိတ်ဆက်ရေး',
-    en: 'Tutoring',
-    descMm: 'ဆရာရှာ၊ ကျောင်းသားရှာ — ဘာသာရပ်၊ အတန်းအလိုက် Filter',
-    descEn: 'Find tutors or students — filter by subject & grade',
-    color: 'from-indigo-600/20 to-indigo-700/10',
-    border: 'border-indigo-500/20',
-  },
-  {
-    path: '/jobs',
-    icon: '💼',
-    mm: 'အလုပ်ကြော်ငြာ',
-    en: 'Job Board',
-    descMm: 'အလုပ်ရှင် / အလုပ်ရှာ — နှစ်ဖက်စလုံးမှ တင်နိုင်',
-    descEn: 'Employers & Job Seekers — post from both sides',
-    color: 'from-purple-600/20 to-purple-700/10',
-    border: 'border-purple-500/20',
-  },
-  {
-    path: '/emergency',
-    icon: '🆘',
-    mm: 'အရေးပေါ် ဆက်သွယ်ရေး',
-    en: 'Emergency Contacts',
-    descMm: 'ဆေးရုံ • ရဲ • မီးသတ် • Ambulance — တစ်ချက်နှိပ်ပြီး ဖုန်းခေါ်',
-    descEn: 'Hospital, Police, Fire, Ambulance — one-tap calling',
-    color: 'from-red-600/25 to-red-700/10',
+    id: 'emergency',
+    icon: '🚨',
+    mm: 'အရေးပေါ်',
+    en: 'Emergency',
+    descMm: 'အရေးပေါ် ဆက်သွယ်ရေးနှင့် သတိပေးချက်များ',
+    descEn: 'Emergency contacts & alerts',
+    color: 'from-red-600/20 to-red-700/5',
     border: 'border-red-500/30',
+    defaultOpen: true,
+    features: [
+      { path: '/emergency', icon: '🆘', mm: 'အရေးပေါ် ဆက်သွယ်ရေး', en: 'Emergency', descMm: 'ဆေးရုံ • ရဲ • မီးသတ်', descEn: 'Hospital, Police, Fire' },
+      { path: '/weather',   icon: '🌧️', mm: 'မိုးလေဝသ/ရေကြီး',      en: 'Weather Alerts', descMm: 'မိုးလေဝသ သတိပေးချက်', descEn: 'Weather warnings' },
+      { path: '/power',     icon: '⚡', mm: 'လျှပ်စစ်အခြေအနေ',       en: 'Power Status', descMm: 'မီးပျက်/မီးလာ', descEn: 'Power cut status' },
+    ],
   },
   {
-    path: '/prices',
-    icon: '🛒',
-    mm: 'ဈေးနှုန်းဘုတ်',
-    en: 'Market Prices',
-    descMm: 'ဆန်၊ ဆီ၊ ငါး၊ ဓာတ်ဆီ ဈေးနှုန်း Real-time',
-    descEn: 'Rice, oil, fish, fuel prices — community reported',
-    color: 'from-green-600/20 to-green-700/10',
-    border: 'border-green-500/20',
+    id: 'daily',
+    icon: '📅',
+    mm: 'နေ့စဉ်သုံး',
+    en: 'Daily Use',
+    descMm: 'နေ့စဉ် ဘဝအတွက် လိုအပ်တာများ',
+    descEn: 'Everyday essentials',
+    color: 'from-amber-600/20 to-amber-700/5',
+    border: 'border-amber-500/30',
+    defaultOpen: true,
+    features: [
+      { path: '/prices',  icon: '🛒', mm: 'ဈေးနှုန်းဘုတ်',    en: 'Market Prices',  descMm: 'ဆန်၊ ဆီ၊ ငါး ဈေးနှုန်း', descEn: 'Rice, oil, fish prices' },
+      { path: '/fuel',    icon: '⛽', mm: 'ဓာတ်ဆီအခြေအနေ',   en: 'Fuel Status',    descMm: 'ဆီရ/မရ အခြေအနေ', descEn: 'Fuel availability' },
+      { path: '/bus',     icon: '🚌', mm: 'ကားထွက်ချိန်',      en: 'Bus Schedule',   descMm: 'ကား ထွက်ချိန် Report', descEn: 'Bus departure times' },
+      { path: '/notices', icon: '📢', mm: 'ကြေညာချက်များ',   en: 'Announcements',   descMm: 'ရပ်ကွက် ကြေညာချက်', descEn: 'Community notices' },
+    ],
   },
   {
-    path: '/power',
-    icon: '⚡',
-    mm: 'လျှပ်စစ်အခြေအနေ',
-    en: 'Power Status',
-    descMm: 'ဓာတ်အားဖြတ်တောက်မှု ရပ်ကွက်အလိုက် ကြည့်ရန်',
-    descEn: 'Power outage status by ward — live',
-    color: 'from-amber-600/20 to-amber-700/10',
-    border: 'border-amber-500/20',
-  },
-  // ========== REMAINING FEATURES ==========
-  {
-    path: '/lost-found',
-    icon: '🔍',
-    mm: 'ပျောက်ဆုံးပစ္စည်း',
-    en: 'Lost & Found',
-    descMm: 'လူ၊ ကလေး၊ တိရိစ္ဆာန်၊ ပစ္စည်း ပျောက်ဆုံး/တွေ့ရှိ',
-    descEn: 'Missing people, animals, and items',
-    color: 'from-blue-600/20 to-blue-700/10',
-    border: 'border-blue-500/20',
+    id: 'community',
+    icon: '🏘️',
+    mm: 'Community',
+    en: 'Community',
+    descMm: 'ရပ်ရွာ ချိတ်ဆက်ရေးနှင့် ကူညီရေး',
+    descEn: 'Connect & help community',
+    color: 'from-violet-600/20 to-violet-700/5',
+    border: 'border-violet-500/30',
+    defaultOpen: false,
+    features: [
+      { path: '/chat',       icon: '💬', mm: 'Public Chat',      en: 'Public Chat',    descMm: 'အများပြည်သူ ဆွေးနွေးခန်း', descEn: 'Public chat room' },
+      { path: '/lost-found', icon: '🔍', mm: 'ပျောက်ဆုံးပစ္စည်း', en: 'Lost & Found',  descMm: 'ပျောက်ဆုံး/တွေ့ရှိ', descEn: 'Lost & found items' },
+      { path: '/donations',  icon: '❤️', mm: 'လှူဒါန်းမှု',       en: 'Donations',      descMm: 'ငွေကြေးစုဆောင်းမှု', descEn: 'Fundraising' },
+      { path: '/history',    icon: '📜', mm: 'ဒေသသမိုင်း',        en: 'Local History',  descMm: 'ဒေသ သမိုင်းကြောင်း', descEn: 'Regional history' },
+    ],
   },
   {
-    path: '/bus',
-    icon: '🚌',
-    mm: 'ကားထွက်ချိန်',
-    en: 'Bus Schedule',
-    descMm: 'ကား ထွက်ချိန် Community Report',
-    descEn: 'Bus departure times — community reported',
-    color: 'from-sky-600/20 to-sky-700/10',
-    border: 'border-sky-500/20',
+    id: 'services',
+    icon: '💼',
+    mm: 'ဝန်ဆောင်မှု',
+    en: 'Services',
+    descMm: 'အလုပ်၊ အိမ်၊ ပညာ၊ ကျန်းမာရေး',
+    descEn: 'Jobs, housing, education, health',
+    color: 'from-emerald-600/20 to-emerald-700/5',
+    border: 'border-emerald-500/30',
+    defaultOpen: false,
+    features: [
+      { path: '/jobs',     icon: '💼', mm: 'အလုပ်ကြော်ငြာ',          en: 'Job Board',      descMm: 'အလုပ်ရှင်/အလုပ်ရှာ', descEn: 'Jobs & seekers' },
+      { path: '/rent',     icon: '🏠', mm: 'အိမ်/အခန်း ငှားရမ်း',   en: 'Rentals',        descMm: 'အိမ်ရှင်/အိမ်ငှား', descEn: 'Rentals & seekers' },
+      { path: '/tutoring', icon: '📚', mm: 'ဆရာ/ကျောင်းသား',        en: 'Tutoring',       descMm: 'ဆရာရှာ၊ ကျောင်းသားရှာ', descEn: 'Find tutors & students' },
+      { path: '/health',   icon: '🏥', mm: 'ကျန်းမာရေးဝန်ဆောင်မှု',  en: 'Health Services', descMm: 'သွေးလှူ၊ အခမဲ့ဆေးခန်း', descEn: 'Blood drives, clinics' },
+    ],
   },
   {
-    path: '/health',
-    icon: '🏥',
-    mm: 'ကျန်းမာရေးဝန်ဆောင်မှု',
-    en: 'Health Services',
-    descMm: 'အခမဲ့ဆေးခန်း • သွေးလှူ • ဆေးထိုး schedule',
-    descEn: 'Free clinics, blood drives, vaccination schedules',
-    color: 'from-red-600/20 to-red-700/10',
-    border: 'border-red-500/20',
-  },
-  {
-    path: '/notices',
-    icon: '📢',
-    mm: 'ကြေညာချက်ဘုတ်',
-    en: 'Notice Board',
-    descMm: 'ရပ်ကွက်ကြေညာချက်၊ ဆေးထိုး schedule၊ အများပြည်သူ',
-    descEn: 'Community notices, vaccination schedules',
-    color: 'from-red-600/20 to-red-700/10',
-    border: 'border-red-500/20',
-  },
-  {
-    path: '/weather',
-    icon: '🌧️',
-    mm: 'မိုးလေဝသ/ရေကြီး သတိပေးချက်',
-    en: 'Weather & Flood Alerts',
-    descMm: 'မိုးလေဝသ / ရေကြီး သတိပေးချက်',
-    descEn: 'Weather & flood warnings',
-    color: 'from-cyan-600/20 to-cyan-700/10',
-    border: 'border-cyan-500/20',
-  },
-  {
-    path: '/donations',
-    icon: '❤️',
-    mm: 'လှူဒါန်းမှု',
-    en: 'Donations',
-    descMm: 'ကျောင်း၊ ဘုန်းကြီးကျောင်း၊ Community ငွေကြေးစုဆောင်းမှု',
-    descEn: 'School, monastery, community fundraising',
-    color: 'from-pink-600/20 to-pink-700/10',
-    border: 'border-pink-500/20',
-  },
-  {
-    path: '/tours',
-    icon: '🏔️',
-    mm: 'Tour Guide / Trekking',
-    en: 'Tour Guide / Trekking',
-    descMm: 'Trekking / Boat Trip Guide တွေ',
-    descEn: 'Local trekking & boat tour guides',
-    color: 'from-teal-600/20 to-teal-700/10',
-    border: 'border-teal-500/20',
-  },
-  {
-    path: '/chat',
-    icon: '💬',
-    mm: 'Public Chat',
-    en: 'Public Chat',
-    descMm: 'အများပြည်သူ ဆွေးနွေးခန်း',
-    descEn: 'Public community chat room',
-    color: 'from-violet-600/20 to-violet-700/10',
-    border: 'border-violet-500/20',
+    id: 'fun',
+    icon: '🎯',
+    mm: 'ဖျော်ဖြေရေး',
+    en: 'Leisure',
+    descMm: 'Tour နှင့် အနားယူရေး',
+    descEn: 'Tours & leisure',
+    color: 'from-teal-600/20 to-teal-700/5',
+    border: 'border-teal-500/30',
+    defaultOpen: false,
+    features: [
+      { path: '/tours', icon: '🏔️', mm: 'Tour Guide / Trekking', en: 'Tour Guides', descMm: 'Trekking / Boat Trip Guide', descEn: 'Local tour guides' },
+    ],
   },
 ]
 
@@ -162,32 +94,95 @@ export default function CommunityPage() {
   const navigate = useNavigate()
   const { lang } = useLang()
   const config = useAppConfig()
-  useSEO({ title: lang === 'mm' ? 'Community' : 'Community' })
+  useSEO({ title: 'Community' })
+
+  // Track open/close state per group
+  const [openGroups, setOpenGroups] = useState(() => {
+    const initial = {}
+    GROUPS.forEach(g => { initial[g.id] = g.defaultOpen })
+    return initial
+  })
+
+  function toggleGroup(id) {
+    setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }))
+  }
 
   return (
     <div className="pb-8">
+      {/* Header */}
       <div className="px-4 pt-4 pb-3">
-        <h1 className="font-display font-bold text-xl text-white">🏘️ {lang === 'mm' ? 'Community' : 'Community'}</h1>
+        <h1 className="font-display font-bold text-xl text-white">
+          🏘️ {lang === 'mm' ? 'Community' : 'Community'}
+        </h1>
         <p className="text-xs text-white/40 mt-0.5 font-myanmar">
           {lang === 'mm' ? `${config.app_city || 'မြို့'} Community Features` : `${config.app_city || ''} community tools`}
         </p>
       </div>
 
-      <div className="px-4 space-y-2">
-        {FEATURES.map(f => (
-          <button
-            key={f.path}
-            onClick={() => navigate(f.path)}
-            className={`w-full flex items-center gap-4 p-4 rounded-2xl bg-gradient-to-r ${f.color} border ${f.border} hover:opacity-90 transition-opacity text-left`}
-          >
-            <span className="text-3xl flex-shrink-0">{f.icon}</span>
-            <div className="flex-1 min-w-0">
-              <p className="font-display font-bold text-sm text-white">{lang === 'mm' ? f.mm : f.en}</p>
-              <p className="text-[10px] text-white/50 mt-0.5 font-myanmar">{lang === 'mm' ? f.descMm : f.descEn}</p>
+      {/* Groups */}
+      <div className="px-4 space-y-3">
+        {GROUPS.map(group => {
+          const isOpen = openGroups[group.id]
+          return (
+            <div key={group.id} className={`rounded-2xl bg-gradient-to-br ${group.color} border ${group.border} overflow-hidden`}>
+              {/* Group header (clickable) */}
+              <button
+                onClick={() => toggleGroup(group.id)}
+                className="w-full flex items-center gap-3 p-4 text-left hover:bg-white/5 transition-colors"
+              >
+                <span className="text-3xl flex-shrink-0">{group.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-display font-bold text-base text-white">
+                    {lang === 'mm' ? group.mm : group.en}
+                  </p>
+                  <p className="text-[10px] text-white/50 mt-0.5 font-myanmar">
+                    {lang === 'mm' ? group.descMm : group.descEn}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-[10px] text-white/40 bg-white/8 px-2 py-0.5 rounded-full">
+                    {group.features.length}
+                  </span>
+                  {isOpen
+                    ? <ChevronUp size={18} className="text-white/50" />
+                    : <ChevronDown size={18} className="text-white/50" />
+                  }
+                </div>
+              </button>
+
+              {/* Group features (collapsible) */}
+              {isOpen && (
+                <div className="border-t border-white/8 px-2 py-2 space-y-1 bg-black/10">
+                  {group.features.map(f => (
+                    <button
+                      key={f.path}
+                      onClick={() => navigate(f.path)}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/8 transition-colors text-left"
+                    >
+                      <span className="text-2xl flex-shrink-0">{f.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-display font-semibold text-sm text-white">
+                          {lang === 'mm' ? f.mm : f.en}
+                        </p>
+                        <p className="text-[10px] text-white/50 mt-0.5 font-myanmar">
+                          {lang === 'mm' ? f.descMm : f.descEn}
+                        </p>
+                      </div>
+                      <span className="text-white/20 flex-shrink-0">→</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-            <span className="text-white/20 flex-shrink-0">→</span>
-          </button>
-        ))}
+          )
+        })}
+      </div>
+
+      {/* Footer note */}
+      <div className="px-4 mt-6">
+        <p className="text-[10px] text-white/25 text-center font-myanmar">
+          💡 {lang === 'mm' ? 'Group ကို နှိပ်ပြီး Feature များ ကြည့်နိုင်သည်' : 'Tap a group to view features'}
+        </p>
       </div>
     </div>
   )
