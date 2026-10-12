@@ -10,7 +10,7 @@ export default function Header() {
   const navigate = useNavigate()
   const location = useLocation()
   const { profile, isLoggedIn, isAdmin, isModerator, signOut } = useAuth()
-  const { lang } = useLang()
+  const { lang, toggleLang } = useLang()
   const config = useAppConfig()
   const { darkMode, toggleDarkMode } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -96,10 +96,7 @@ export default function Header() {
             </button>
 
             <button
-              onClick={() => {
-                localStorage.setItem('lang', lang === 'mm' ? 'en' : 'mm')
-                window.location.reload()
-              }}
+              onClick={toggleLang}
               className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90"
             >
               {lang === 'mm' ? 'EN' : 'မြန်မာ'}

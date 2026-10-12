@@ -12,7 +12,7 @@
   * { -webkit-tap-highlight-color: transparent; }
 
   body {
-    font-family: 'Pyidaungsu', 'DM Sans', sans-serif;
+    font-family: 'Noto Sans Myanmar', 'Pyidaungsu', 'DM Sans', sans-serif;
     background: #0d0015;
     color: #f0e6ff;
     min-height: 100dvh;
@@ -20,7 +20,7 @@
   }
 
   h1, h2, h3, .font-display {
-    font-family: 'Syne', 'DM Sans', sans-serif;
+    font-family: 'Syne', 'Noto Sans Myanmar', 'DM Sans', sans-serif;
   }
 }
 

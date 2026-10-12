@@ -1,0 +1,15 @@
+node_modules
+
+# Environment variables (NEVER commit)
+.env.local
+.env
+.env.*.local
+
+# Temp scripts
+*.cjs
+
+# SQL migration files
+supabase-*.sql
+
+# Test files
+public/test.html

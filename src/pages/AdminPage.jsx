@@ -420,7 +420,7 @@ export default function AdminPage() {
                   <div className="flex items-center justify-between border-t border-white/5 pt-3">
                     <span className="text-xs text-white/50 font-myanmar">Role ပြောင်းရန်:</span>
                     <select 
-                      value={user.role || 'user'}
+                      value={user.role === 'user' ? 'member' : (user.role || 'member')}
                       onChange={(e) => handleRoleChange(user.id, e.target.value)}
                       className={`text-xs px-2 py-1.5 rounded-lg border outline-none font-bold ${
                         user.role === 'admin' ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' :
@@ -429,7 +429,7 @@ export default function AdminPage() {
                       }`}
                       style={{ backgroundColor: '#1a0030' }}
                     >
-                      <option value="user">User</option>
+                      <option value="member">Member</option>
                       <option value="moderator">Moderator</option>
                       <option value="admin">Admin</option>
                     </select>
