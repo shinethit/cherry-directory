@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { usePrefetchAll } from './hooks/usePrefetchAll'
 import { LangProvider } from './contexts/LangContext'
 import { AppConfigProvider } from './contexts/AppConfigContext'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -74,6 +75,7 @@ function LoadingSpinner() {
 
 function AppRoutes() {
   const { loading } = useAuth()
+  usePrefetchAll()
   const [timeoutExceeded, setTimeoutExceeded] = useState(false)
 
   useEffect(() => {

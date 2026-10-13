@@ -1,0 +1,304 @@
+import { useEffect, useRef } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { supabase } from '../lib/supabase'
+
+/**
+ * Pre-fetch all critical data on app start so it's available offline.
+ * Runs once per session (uses ref to prevent duplicates).
+ * Errors are silent (network might be down on first load).
+ */
+export function usePrefetchAll() {
+  const queryClient = useQueryClient()
+  const done = useRef(false)
+
+  useEffect(() => {
+    if (done.current) return
+    done.current = true
+
+    async function prefetch() {
+      // Skip if already online? No — we want to refresh cache anyway
+      const onlyWhenOnline = navigator.onLine
+      if (!onlyWhenOnline) {
+        console.log('[Prefetch] Offline — skipping prefetch')
+        return
+      }
+
+      console.log('[Prefetch] Starting...')
+      const t0 = Date.now()
+
+      const tasks = [
+        // 1. Top-level categories
+        {
+          key: ['prefetch', 'categories'],
+          fn: () => supabase
+            .from('categories')
+            .select('*')
+            .eq('type', 'directory')
+            .eq('is_active', true)
+            .order('sort_order')
+            .then(r => r.data || []),
+        },
+
+        // 2. Approved listings (first 100)
+        {
+          key: ['prefetch', 'listings'],
+          fn: () => supabase
+            .from('listings')
+            .select('*, category:categories(name, name_mm, icon)')
+            .eq('status', 'approved')
+            .order('rating_avg', { ascending: false, nullsFirst: false })
+            .limit(100)
+            .then(r => r.data || []),
+        },
+
+        // 3. Published posts (first 30)
+        {
+          key: ['prefetch', 'posts'],
+          fn: () => supabase
+            .from('posts')
+            .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
+            .eq('status', 'published')
+            .order('created_at', { ascending: false })
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 4. Emergency contacts
+        {
+          key: ['prefetch', 'emergency'],
+          fn: () => supabase
+            .from('emergency_contacts')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order')
+            .then(r => r.data || []),
+        },
+
+        // 5. Power areas + status
+        {
+          key: ['prefetch', 'power-areas'],
+          fn: () => supabase
+            .from('power_areas')
+            .select('*')
+            .order('sort_order')
+            .then(r => r.data || []),
+        },
+        {
+          key: ['prefetch', 'power-status'],
+          fn: () => supabase
+            .from('current_power_status')
+            .select('*')
+            .then(r => r.data || []),
+        },
+
+        // 6. Fuel stations + types
+        {
+          key: ['prefetch', 'fuel-stations'],
+          fn: () => supabase
+            .from('fuel_stations')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order')
+            .then(r => r.data || []),
+        },
+        {
+          key: ['prefetch', 'fuel-types'],
+          fn: () => supabase
+            .from('fuel_types')
+            .select('*')
+            .order('sort_order')
+            .then(r => r.data || []),
+        },
+
+        // 7. Markets
+        {
+          key: ['prefetch', 'markets'],
+          fn: () => supabase
+            .from('markets')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order')
+            .then(r => r.data || []),
+        },
+
+        // 8. Price items
+        {
+          key: ['prefetch', 'price-items'],
+          fn: () => supabase
+            .from('price_items')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order')
+            .then(r => r.data || []),
+        },
+        {
+          key: ['prefetch', 'current-prices'],
+          fn: () => supabase
+            .from('current_prices')
+            .select('*')
+            .then(r => r.data || []),
+        },
+
+        // 9. Weather alerts
+        {
+          key: ['prefetch', 'weather'],
+          fn: () => supabase
+            .from('weather_alerts')
+            .select('*')
+            .eq('status', 'active')
+            .order('posted_at', { ascending: false })
+            .limit(20)
+            .then(r => r.data || []),
+        },
+
+        // 10. Notices (approved)
+        {
+          key: ['prefetch', 'notices'],
+          fn: () => supabase
+            .from('notices')
+            .select('*')
+            .eq('status', 'approved')
+            .order('posted_at', { ascending: false })
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 11. Jobs
+        {
+          key: ['prefetch', 'jobs'],
+          fn: () => supabase
+            .from('jobs')
+            .select('*')
+            .order('posted_at', { ascending: false })
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 12. Rentals
+        {
+          key: ['prefetch', 'rentals'],
+          fn: () => supabase
+            .from('rentals')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 13. Tutoring
+        {
+          key: ['prefetch', 'tutoring'],
+          fn: () => supabase
+            .from('tutoring')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 14. Lost & Found
+        {
+          key: ['prefetch', 'lost-found'],
+          fn: () => supabase
+            .from('lost_found')
+            .select('*')
+            .eq('status', 'active')
+            .order('reported_at', { ascending: false })
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 15. Health services
+        {
+          key: ['prefetch', 'health'],
+          fn: () => supabase
+            .from('health_services')
+            .select('*')
+            .eq('status', 'active')
+            .order('posted_at', { ascending: false })
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 16. Bus schedules
+        {
+          key: ['prefetch', 'bus-schedules'],
+          fn: () => supabase
+            .from('bus_departures')
+            .select('*')
+            .order('departure_time', { ascending: true })
+            .limit(50)
+            .then(r => r.data || []),
+        },
+
+        // 17. Tours
+        {
+          key: ['prefetch', 'tours'],
+          fn: () => supabase
+            .from('tour_guides')
+            .select('*')
+            .eq('is_active', true)
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 18. History
+        {
+          key: ['prefetch', 'history'],
+          fn: () => supabase
+            .from('history')
+            .select('*')
+            .eq('status', 'published')
+            .order('created_at', { ascending: false })
+            .limit(30)
+            .then(r => r.data || []),
+        },
+
+        // 19. Donations
+        {
+          key: ['prefetch', 'donations'],
+          fn: () => supabase
+            .from('donations')
+            .select('*')
+            .eq('status', 'active')
+            .limit(20)
+            .then(r => r.data || []),
+        },
+
+        // 20. Chat rooms
+        {
+          key: ['prefetch', 'chat-rooms'],
+          fn: () => supabase
+            .from('chat_rooms')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order')
+            .then(r => r.data || []),
+        },
+      ]
+
+      // Run all in parallel, silently ignore failures
+      const results = await Promise.allSettled(
+        tasks.map(async ({ key, fn }) => {
+          try {
+            const data = await fn()
+            queryClient.setQueryData(key, data)
+            return { key, count: data.length }
+          } catch (e) {
+            return { key, error: e.message }
+          }
+        })
+      )
+
+      const ok = results.filter(r => r.status === 'fulfilled' && !r.value?.error).length
+      const failed = tasks.length - ok
+      const elapsed = Date.now() - t0
+
+      console.log(`[Prefetch] Done: ${ok}/${tasks.length} ok, ${failed} failed (${elapsed}ms)`)
+    }
+
+    // Slight delay so app renders first
+    const t = setTimeout(prefetch, 1500)
+    return () => clearTimeout(t)
+  }, [queryClient])
+}

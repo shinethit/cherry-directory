@@ -212,7 +212,7 @@ export default function SubmitListingPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!form.name || !form.category_id) return
+    if ((!form.name && !form.name_mm) || !form.category_id) return
     setSubmitting(true)
     try {
       const phoneColumns = {}
@@ -301,8 +301,8 @@ export default function SubmitListingPage() {
         </div>
 
         {/* Basic info */}
-        <Field label={t('name_en')} required>
-          <input type="text" value={form.name} onChange={e => setFormField('name', e.target.value)} className="input-dark" placeholder="Business Name" required />
+        <Field label={t('name_en')}>
+          <input type="text" value={form.name} onChange={e => setFormField('name', e.target.value)} className="input-dark" placeholder="Business Name" />
         </Field>
 
         <Field label={t('name_mm_label')}>
@@ -603,7 +603,7 @@ export default function SubmitListingPage() {
         </div>
 
         {/* Submit button */}
-        <button type="submit" disabled={submitting || !form.name || !form.category_id} className="btn-primary w-full mt-2">
+        <button type="submit" disabled={submitting || (!form.name && !form.name_mm) || !form.category_id} className="btn-primary w-full mt-2">
           {submitting ? (
             <span className="flex items-center justify-center gap-2">
               <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />

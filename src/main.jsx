@@ -20,6 +20,23 @@ const queryClient = new QueryClient({
 console.log('=== APP STARTING ===')
 console.log('Environment:', import.meta.env.MODE)
 
+
+// ── Register Service Worker (production only) ─────────────
+if ('serviceWorker' in navigator) {
+  const isDev = import.meta.env.MODE === 'development'
+  const enableInDev = localStorage.getItem('enable_sw_dev') === 'true'
+  if (!isDev || enableInDev) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').then(
+        (reg) => console.log('[SW] Registered:', reg.scope),
+        (err) => console.warn('[SW] Registration failed:', err.message)
+      )
+    })
+  } else {
+    console.log('[SW] Skipped (dev mode). Enable with: localStorage.enable_sw_dev=true')
+  }
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <QueryClientProvider client={queryClient}>
     <ErrorBoundary>

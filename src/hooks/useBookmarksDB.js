@@ -48,7 +48,7 @@ export const useIsBookmarked = (listingId) => {
         .eq('user_id', user.id)
         .eq('target_type', 'listing')
         .eq('target_id', listingId)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
         throw error;

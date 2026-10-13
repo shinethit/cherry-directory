@@ -50,10 +50,14 @@ export function ListingCard({ listing, compact = false }) {
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="font-display font-semibold text-sm text-white truncate">{listing.name}</h3>
+              <h3 className="font-display font-semibold text-sm text-white truncate font-myanmar">
+                {listing.name_mm || listing.name}
+              </h3>
               {listing.is_verified && <VerifiedOwnerBadge small />}
             </div>
-            {listing.name_mm && <p className="text-[11px] text-white/50 truncate font-myanmar">{listing.name_mm}</p>}
+            {listing.name_mm && listing.name && listing.name_mm !== listing.name && (
+              <p className="text-[10px] text-white/40 truncate">{listing.name}</p>
+            )}
           </div>
           <button onClick={toggleBookmark} className="text-white/30 hover:text-gold-400 transition-colors flex-shrink-0 mt-0.5">
             {bookmarked ? <BookmarkCheck size={16} className="text-gold-400" /> : <Bookmark size={16} />}
@@ -103,7 +107,7 @@ export function PostCard({ post }) {
           <span className={`badge ${typeColor}`}>{typeLabel}</span>
           {post.is_pinned && <span className="badge bg-gold-500/20 text-gold-400">📌 Pinned</span>}
         </div>
-        <h3 className="font-display font-semibold text-sm text-white line-clamp-2 leading-snug">{post.title_mm || post.title}</h3>
+        <h3 className="font-display font-semibold text-sm text-white line-clamp-2 leading-snug font-myanmar">{post.title_mm || post.title}</h3>
         {post.excerpt && <p className="text-[11px] text-white/50 mt-1.5 line-clamp-2 font-myanmar">{post.excerpt}</p>}
         <div className="flex items-center justify-between mt-3 text-white/30 text-[10px]">
           <span>{post.author?.full_name || 'Admin'}</span>

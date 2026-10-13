@@ -96,10 +96,78 @@ export default function DirectoryPage() {
     }
   }
 
+  // ── Auto-select from ?cat= (single-pass, no loops) ──
+  const urlCatId = searchParams.get('cat')
+  const [urlResolved, setUrlResolved] = useState(!urlCatId)  // true if no URL param
+  const processedUrlRef = useRef(null)
+  const categoriesLoadedRef = useRef(false)
+
   // Load top-level categories with counts
   useEffect(() => {
     loadCategories()
   }, [])
+
+  // Track when categories are loaded
+  useEffect(() => {
+    if (categories.length > 0) categoriesLoadedRef.current = true
+  }, [categories])
+
+  // Single-pass: fetch target category + its listings directly
+  useEffect(() => {
+    if (!urlCatId) return
+    if (!categoriesLoadedRef.current) return
+    if (processedUrlRef.current === urlCatId) return
+
+    processedUrlRef.current = urlCatId
+
+    async function directNavigate() {
+      try {
+        // Fetch the target category with full info
+        const { data: target } = await supabase
+          .from('categories')
+          .select('*')
+          .eq('id', urlCatId)
+          .single()
+
+        if (!target) return
+
+        if (target.parent_id) {
+          // It's a subcategory → set parent + sub, show listings
+          const parent = categories.find(c => c.id === target.parent_id)
+          if (parent) setSelectedCategory(parent)
+          setSelectedSubcategory(target)
+          setPage(0)
+        } else {
+          // Top-level → check if it has children
+          const { count } = await supabase
+            .from('categories')
+            .select('*', { count: 'exact', head: true })
+            .eq('parent_id', target.id)
+
+          setSelectedCategory(target)
+
+          if ((count || 0) === 0) {
+            // No children → show listings directly
+            setSelectedSubcategory({
+              id: target.id,
+              icon: target.icon,
+              name_mm: target.name_mm,
+              name: target.name,
+              is_direct: true,
+            })
+            setPage(0)
+          }
+          // If has children, subcategory picker will show
+        }
+      } catch (e) {
+        console.warn('Direct navigate failed:', e)
+      } finally {
+        setUrlResolved(true)
+      }
+    }
+
+    directNavigate()
+  }, [urlCatId, categories.length])
 
   async function loadCategories() {
     setCategoryLoading(true)
@@ -128,8 +196,8 @@ export default function DirectoryPage() {
   // Load subcategories with counts
   async function loadSubcategories(categoryId) {
     setSubcategoryLoading(true)
-    setListings([])
-    setSelectedSubcategory(null)
+    // Don't clear listings if we already have a subcategory selected (direct nav)
+    if (!selectedSubcategory) setListings([])
     try {
       const { data } = await supabase
         .from('categories')
@@ -234,11 +302,23 @@ export default function DirectoryPage() {
     setSelectedSubcategory(null)
     setListings([])
     setPage(0)
+    // Update URL
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('cat', cat.id)
+      return next
+    }, { replace: true })
   }
 
   function handleSubcategorySelect(sub) {
     setSelectedSubcategory(sub)
     setPage(0)
+    // Update URL
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('cat', sub.id)
+      return next
+    }, { replace: true })
   }
 
   function handleDirectListings() {
@@ -256,9 +336,28 @@ export default function DirectoryPage() {
     if (selectedSubcategory) {
       setSelectedSubcategory(null)
       setListings([])
+      // Update URL to parent category
+      if (selectedCategory) {
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev)
+          next.set('cat', selectedCategory.id)
+          return next
+        }, { replace: true })
+      }
     } else if (selectedCategory) {
       setSelectedCategory(null)
       setSubcategories([])
+      setUrlResolved(false)  // reset for URL sync
+      // Remove cat param
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev)
+        next.delete('cat')
+        return next
+      }, { replace: true })
+      // No urlCatId now → mark resolved
+      setTimeout(() => setUrlResolved(true), 0)
+    } else {
+      navigate('/')
     }
   }
 
@@ -270,6 +369,19 @@ export default function DirectoryPage() {
   }
 
   const hasFilters = q || city !== 'All' || verifiedOnly
+
+  // ── Wait for URL resolution ──
+  // If ?cat= is present but hasn't been resolved yet, show loading
+  if (urlCatId && !urlResolved) {
+    return (
+      <div className="flex items-center justify-center min-h-[60dvh]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-3 border-brand-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-white/40 text-xs font-myanmar">ရှာဖွေနေသည်...</p>
+        </div>
+      </div>
+    )
+  }
 
   // Render Category Level
   if (!selectedCategory) {
