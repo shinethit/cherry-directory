@@ -217,58 +217,41 @@ export default function HomePage() {
   // --- Community stats (silent fail) ---
   const loadCommunityStats = useCallback(async () => {
     setCommunityStatsLoading(true);
-    try {
-      const { count: rentAvailable } = await supabase
-        .from('rent')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'available')
-        .catch(() => ({ count: 0 }));
-      setRentListingsCount(rentAvailable || 0);
 
-      const { count: rentSeekers } = await supabase
-        .from('rent')
-        .select('*', { count: 'exact', head: true })
-        .eq('type', 'seeker')
-        .catch(() => ({ count: 0 }));
-      setRentSeekersCount(rentSeekers || 0);
-
-      const { count: tutorOffers } = await supabase
-        .from('tutoring')
-        .select('*', { count: 'exact', head: true })
-        .eq('type', 'offer')
-        .catch(() => ({ count: 0 }));
-      setTutorOffersCount(tutorOffers || 0);
-
-      const { count: tutorRequests } = await supabase
-        .from('tutoring')
-        .select('*', { count: 'exact', head: true })
-        .eq('type', 'request')
-        .catch(() => ({ count: 0 }));
-      setTutorRequestsCount(tutorRequests || 0);
-
-      const { count: jobs } = await supabase
-        .from('job_board')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'open')
-        .catch(() => ({ count: 0 }));
-      setJobOpeningsCount(jobs || 0);
-
-      const { count: jobSeekers } = await supabase
-        .from('job_seekers')
-        .select('*', { count: 'exact', head: true })
-        .catch(() => ({ count: 0 }));
-      setJobSeekersCount(jobSeekers || 0);
-    } catch (e) {
-      setRentListingsCount(0);
-      setRentSeekersCount(0);
-      setTutorOffersCount(0);
-      setTutorRequestsCount(0);
-      setJobOpeningsCount(0);
-      setJobSeekersCount(0);
-    } finally {
-      setCommunityStatsLoading(false);
+    // Helper: run a count query silently
+    async function count(table, filterFn) {
+      try {
+        let q = supabase.from(table).select('*', { count: 'exact', head: true });
+        if (filterFn) q = filterFn(q);
+        const { count: c, error } = await q;
+        if (error) return 0;
+        return c || 0;
+      } catch {
+        return 0;
+      }
     }
-  }, []);
+
+    // Rentals — post_type: 'owner' | 'tenant'
+    const rentAvailable = await count('rentals', q => q.eq('post_type', 'owner'))
+    const rentSeekers   = await count('rentals', q => q.eq('post_type', 'tenant'))
+
+    // Tutoring — post_type: 'tutor' | 'student'
+    const tutorOffers   = await count('tutoring', q => q.eq('post_type', 'tutor'))
+    const tutorRequests = await count('tutoring', q => q.eq('post_type', 'student'))
+
+    // Jobs — post_type: 'employer' | 'jobseeker'
+    const jobOpenings   = await count('jobs', q => q.eq('post_type', 'employer'))
+    const jobSeekers    = await count('jobs', q => q.eq('post_type', 'jobseeker'))
+
+    setRentListingsCount(rentAvailable)
+    setRentSeekersCount(rentSeekers)
+    setTutorOffersCount(tutorOffers)
+    setTutorRequestsCount(tutorRequests)
+    setJobOpeningsCount(jobOpenings)
+    setJobSeekersCount(jobSeekers)
+
+    setCommunityStatsLoading(false)
+  }, [])
 
   useEffect(() => {
     if (consentGiven) {
@@ -475,31 +458,106 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Community Stats Row */}
+      {/* Community Stats Row — Grouped */}
       <div className="px-4">
         <div className="grid grid-cols-3 gap-2">
-          {[
-            { icon: Home, label: 'ငှားရန်ရှိသောအိမ်', value: rentListingsCount, link: '/rent?type=available' },
-            { icon: User, label: 'ငှားလိုသောအိမ်ငှား', value: rentSeekersCount, link: '/rent?type=seeker' },
-            { icon: GraduationCap, label: 'အချိန်ပေးနိုင်သောဆရာ', value: tutorOffersCount, link: '/tutoring?type=offer' },
-            { icon: GraduationCap, label: 'ဆရာလိုနေသောကျောင်းသား', value: tutorRequestsCount, link: '/tutoring?type=request' },
-            { icon: Briefcase, label: 'အလုပ်ခေါ်စာ', value: jobOpeningsCount, link: '/jobs' },
-            { icon: Briefcase, label: 'အလုပ်ရှာနေသူ', value: jobSeekersCount, link: '/jobs?type=seeker' },
-          ].map((item, idx) => (
-            <button
-              key={idx}
-              onClick={() => navigate(item.link)}
-              className="card-dark px-2 py-2 rounded-lg hover:bg-white/10 transition-colors flex items-center justify-center gap-2"
-            >
-              <div className="flex justify-center mb-1">
-                <item.icon size={20} className="text-brand-400" />
-              </div>
-              <p className="text-[10px] text-white/50 font-myanmar mb-0.5">{item.label}</p>
-              <p className="font-display font-bold text-base text-white">
-                {communityStatsLoading ? '...' : item.value}
+
+          {/* Rentals Group */}
+          <div className="card-dark rounded-xl p-2.5">
+            <div className="flex items-center gap-1 mb-1.5">
+              <Home size={13} className="text-brand-400 flex-shrink-0" />
+              <p className="text-[10px] font-myanmar font-semibold text-white/70 truncate">
+                {lang === 'mm' ? 'ငှားရမ်း' : 'Rentals'}
               </p>
+            </div>
+            <button
+              onClick={() => navigate('/rent?type=available')}
+              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
+                {lang === 'mm' ? 'ငှားရန်' : 'For rent'}
+              </span>
+              <span className="text-xs font-display font-bold text-white flex-shrink-0">
+                {communityStatsLoading ? '...' : rentListingsCount}
+              </span>
             </button>
-          ))}
+            <button
+              onClick={() => navigate('/rent?type=seeker')}
+              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
+                {lang === 'mm' ? 'ငှားလို' : 'Seeker'}
+              </span>
+              <span className="text-xs font-display font-bold text-white flex-shrink-0">
+                {communityStatsLoading ? '...' : rentSeekersCount}
+              </span>
+            </button>
+          </div>
+
+          {/* Tutoring Group */}
+          <div className="card-dark rounded-xl p-2.5">
+            <div className="flex items-center gap-1 mb-1.5">
+              <GraduationCap size={13} className="text-brand-400 flex-shrink-0" />
+              <p className="text-[10px] font-myanmar font-semibold text-white/70 truncate">
+                {lang === 'mm' ? 'ဆရာ/ကျောင်းသား' : 'Tutoring'}
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/tutoring?type=offer')}
+              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
+                {lang === 'mm' ? 'ဆရာ' : 'Tutor'}
+              </span>
+              <span className="text-xs font-display font-bold text-white flex-shrink-0">
+                {communityStatsLoading ? '...' : tutorOffersCount}
+              </span>
+            </button>
+            <button
+              onClick={() => navigate('/tutoring?type=request')}
+              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
+                {lang === 'mm' ? 'ကျောင်းသား' : 'Student'}
+              </span>
+              <span className="text-xs font-display font-bold text-white flex-shrink-0">
+                {communityStatsLoading ? '...' : tutorRequestsCount}
+              </span>
+            </button>
+          </div>
+
+          {/* Jobs Group */}
+          <div className="card-dark rounded-xl p-2.5">
+            <div className="flex items-center gap-1 mb-1.5">
+              <Briefcase size={13} className="text-brand-400 flex-shrink-0" />
+              <p className="text-[10px] font-myanmar font-semibold text-white/70 truncate">
+                {lang === 'mm' ? 'အလုပ်' : 'Jobs'}
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/jobs')}
+              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
+                {lang === 'mm' ? 'ခေါ်စာ' : 'Hiring'}
+              </span>
+              <span className="text-xs font-display font-bold text-white flex-shrink-0">
+                {communityStatsLoading ? '...' : jobOpeningsCount}
+              </span>
+            </button>
+            <button
+              onClick={() => navigate('/jobs?type=seeker')}
+              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+            >
+              <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
+                {lang === 'mm' ? 'ရှာသူ' : 'Seeker'}
+              </span>
+              <span className="text-xs font-display font-bold text-white flex-shrink-0">
+                {communityStatsLoading ? '...' : jobSeekersCount}
+              </span>
+            </button>
+          </div>
+
         </div>
       </div>
 
