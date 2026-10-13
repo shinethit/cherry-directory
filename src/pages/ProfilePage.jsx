@@ -10,6 +10,7 @@ import { usePoints } from '../hooks/usePoints'
 import { timeAgo } from '../hooks/usePresence'
 import { uploadImage } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
+import OfflineCachePanel from '../components/OfflineCachePanel'
 
 const ROLE_CONFIG = {
   super_admin: { label: 'Super Admin', icon: Crown,  color: 'text-gold-400',   bg: 'bg-gold-500/20 border-gold-500/40' },
@@ -262,6 +263,14 @@ export default function ProfilePage() {
             {lang === 'mm' ? 'Logout ထွက်မည်' : 'Sign Out'}
           </p>
         </button>
+      </div>
+
+      {/* ── Offline Cache ── */}
+      <div className="space-y-2">
+        <p className="text-[10px] text-white/30 font-display font-semibold uppercase tracking-wider px-1">
+          {lang === 'mm' ? 'အော့ဖ်လိုင်း' : 'Offline'}
+        </p>
+        <OfflineCachePanel />
       </div>
 
       {/* ── App info footer ── */}

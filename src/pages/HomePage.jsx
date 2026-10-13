@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw, Home, User, Briefcase, GraduationCap, Droplets, Wind } from 'lucide-react';
+import { Cat, Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw, Home, User, Briefcase, GraduationCap, Droplets, Wind } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
 import SplashScreen from '../components/SplashScreen';
 import ShareButton from '../components/ShareButton';
-import { usePWA } from '../hooks/usePWA';
+import { usePWA } from '../hooks/usePWA'
+import { subscribe as subscribeCache, inspectLocalStorage } from '../lib/cacheStatus';
 
 // Helper: country code → full name
 
@@ -23,8 +24,12 @@ export default function HomePage() {
   const navigate = useNavigate();
   const config = useAppConfig();
   const { lang } = useLang();
-  const { installable, installApp } = usePWA();
+  const { installable, installApp } = usePWA()
 
+  // Offline cache status
+  const [cacheStatusState, setCacheStatusState] = useState(null)
+  const [cacheStorage, setCacheStorage] = useState({ exists: false, queryCount: 0 })
+  
   // --- Splash consent: daily check ---
   const [consentGiven, setConsentGiven] = useState(() => {
     const lastShown = localStorage.getItem('cherry_consent_date');
@@ -67,6 +72,35 @@ export default function HomePage() {
   const [jobOpeningsCount, setJobOpeningsCount] = useState(0);
   const [jobSeekersCount, setJobSeekersCount] = useState(0);
   const [communityStatsLoading, setCommunityStatsLoading] = useState(true);
+
+  // --- Track display phase: idle → saving → done → ready ---
+  const [displayPhase, setDisplayPhase] = useState('idle')
+
+  useEffect(() => {
+    if (!cacheStatusState) return
+
+    // Prefetch just started
+    if (cacheStatusState.running) {
+      setDisplayPhase('saving')
+      return
+    }
+
+    // Prefetch just finished
+    if (cacheStatusState.lastRunAt) {
+      setDisplayPhase('done')
+      const t = setTimeout(() => setDisplayPhase('ready'), 2000)
+      return () => clearTimeout(t)
+    }
+  }, [cacheStatusState?.running, cacheStatusState?.lastRunAt])
+
+  // --- Offline cache status subscription ---
+  useEffect(() => {
+    const unsub = subscribeCache(setCacheStatusState)
+    const refresh = () => setCacheStorage(inspectLocalStorage())
+    refresh()
+    const id = setInterval(refresh, 3000)
+    return () => { unsub(); clearInterval(id) }
+  }, [])
 
   // --- Online/Offline listener ---
   useEffect(() => {
@@ -314,7 +348,83 @@ export default function HomePage() {
               <h2 className="font-display font-bold text-lg text-white leading-tight mb-1.5">
                 Cherry Directory 🍒
               </h2>
-              <p className="text-white/60 text-[10px] font-myanmar mb-2.5 leading-relaxed">
+              {/* Offline cache status — animated */}
+              {(displayPhase === 'saving' || displayPhase === 'done') ? (
+                <div className="mb-2">
+                  <div className="flex items-center justify-between mb-1 text-[10px]">
+                    <span className="text-blue-300 font-myanmar flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                      {displayPhase === 'saving'
+                        ? (lang === 'mm' ? 'Data သိမ်းနေသည်' : 'Saving data')
+                        : (lang === 'mm' ? 'သိမ်းပြီးပါပြီ' : 'Save complete')}
+                    </span>
+                    <span className="text-blue-200 font-mono font-bold">
+                      {cacheStatusState?.succeeded + cacheStatusState?.failed || 0}/{cacheStatusState?.totalTasks || 0}
+                      <span className="text-blue-400 ml-1">
+                        ({Math.round(((cacheStatusState?.succeeded + cacheStatusState?.failed || 0) / Math.max(1, cacheStatusState?.totalTasks || 1)) * 100)}%)
+                      </span>
+                    </span>
+                  </div>
+                  <div className="relative h-3 rounded-full bg-white/10" style={{ overflow: 'visible' }}>
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500 ease-out"
+                      style={{ width: `${((cacheStatusState?.succeeded + cacheStatusState?.failed || 0) / Math.max(1, cacheStatusState?.totalTasks || 1)) * 100}%` }}
+                    />
+                    <div
+                      className="absolute cat-runner"
+                      style={{
+                        top: '-8px',
+                        left: `${Math.max(4, Math.min(94, ((cacheStatusState?.succeeded + cacheStatusState?.failed || 0) / Math.max(1, cacheStatusState?.totalTasks || 1)) * 100))}%`,
+                        transform: 'translateX(-50%)',
+                        transition: 'left 0.6s ease-out',
+                      }}
+                    >
+                      <svg width="28" height="24" viewBox="0 0 64 56" fill="none" style={{ display: 'block', filter: 'drop-shadow(0 0 4px rgba(147,197,253,0.9))' }}>
+                        <path d="M4 38 Q 12 30 18 34" stroke="#93c5fd" strokeWidth="3" strokeLinecap="round" fill="none" />
+                        <ellipse cx="32" cy="40" rx="18" ry="10" fill="#93c5fd" />
+                        <rect x="20" y="48" width="4" height="6" rx="2" fill="#60a5fa" />
+                        <rect x="42" y="48" width="4" height="6" rx="2" fill="#60a5fa" />
+                        <circle cx="46" cy="26" r="11" fill="#93c5fd" />
+                        <polygon points="40,18 42,10 46,16" fill="#93c5fd" />
+                        <polygon points="50,16 53,10 55,18" fill="#93c5fd" />
+                        <polygon points="42,17 43,13 45,17" fill="#bfdbfe" />
+                        <polygon points="51,16 52,13 54,17" fill="#bfdbfe" />
+                        <circle cx="43" cy="25" r="1.5" fill="#1e40af" />
+                        <circle cx="50" cy="25" r="1.5" fill="#1e40af" />
+                        <circle cx="46.5" cy="29" r="1" fill="#1e3a8a" />
+                        <rect x="38" y="46" width="4" height="8" rx="2" fill="#60a5fa" />
+                        <rect x="46" y="46" width="4" height="8" rx="2" fill="#60a5fa" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              ) : displayPhase === 'ready' ? (
+                <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
+                  <svg width="14" height="12" viewBox="0 0 64 56" fill="none" style={{ display: 'block' }}>
+                    <ellipse cx="32" cy="40" rx="18" ry="10" fill="#4ade80" />
+                    <circle cx="46" cy="26" r="11" fill="#4ade80" />
+                    <polygon points="40,18 42,10 46,16" fill="#4ade80" />
+                    <polygon points="50,16 53,10 55,18" fill="#4ade80" />
+                    <circle cx="43" cy="25" r="1.5" fill="#14532d" />
+                    <circle cx="50" cy="25" r="1.5" fill="#14532d" />
+                  </svg>
+                  <span className="text-green-300 font-myanmar">
+                    {lang === 'mm'
+                      ? `Offline ရနိုင် · ${cacheStatusState?.succeeded || cacheStorage.queryCount || 23} မျိုး`
+                      : `Offline ready · ${cacheStatusState?.succeeded || cacheStorage.queryCount || 23} items`}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
+                  <span className="text-white/40 font-myanmar">
+                    {lang === 'mm' ? 'ပြင်ဆင်နေသည်...' : 'Preparing...'}
+                  </span>
+                </div>
+              )}
+
+              
+                <p className="text-white/60 text-[10px] font-myanmar mb-2.5 leading-relaxed">
                 မြို့တွင်း လုပ်ငန်းများ၊ သတင်းများ၊ ဖြစ်ရပ်များ အားလုံး တစ်နေရာတည်းတွင် ရှာဖွေနိုင်
               </p>
               <button onClick={() => navigate('/directory')} className="btn-primary flex items-center gap-1.5 text-xs py-2 px-3">

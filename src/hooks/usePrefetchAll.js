@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { startRun, recordItem, finishRun, failRun } from '../lib/cacheStatus'
 
 /**
  * Pre-fetch all critical data on app start so it's available offline.
@@ -27,9 +28,11 @@ export function usePrefetchAll() {
       const t0 = Date.now()
 
       const tasks = [
+        // label for UI tracking
         // 1. Top-level categories
         {
           key: ['prefetch', 'categories'],
+          label: 'Categories',
           fn: () => supabase
             .from('categories')
             .select('*')
@@ -42,6 +45,7 @@ export function usePrefetchAll() {
         // 2. Approved listings (first 100)
         {
           key: ['prefetch', 'listings'],
+          label: 'Listings',
           fn: () => supabase
             .from('listings')
             .select('*, category:categories(name, name_mm, icon)')
@@ -54,6 +58,7 @@ export function usePrefetchAll() {
         // 3. Published posts (first 30)
         {
           key: ['prefetch', 'posts'],
+          label: 'News & Posts',
           fn: () => supabase
             .from('posts')
             .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
@@ -66,6 +71,7 @@ export function usePrefetchAll() {
         // 4. Emergency contacts
         {
           key: ['prefetch', 'emergency'],
+          label: 'Emergency',
           fn: () => supabase
             .from('emergency_contacts')
             .select('*')
@@ -77,6 +83,7 @@ export function usePrefetchAll() {
         // 5. Power areas + status
         {
           key: ['prefetch', 'power-areas'],
+          label: 'Power Areas',
           fn: () => supabase
             .from('power_areas')
             .select('*')
@@ -85,6 +92,7 @@ export function usePrefetchAll() {
         },
         {
           key: ['prefetch', 'power-status'],
+          label: 'Power Status',
           fn: () => supabase
             .from('current_power_status')
             .select('*')
@@ -94,6 +102,7 @@ export function usePrefetchAll() {
         // 6. Fuel stations + types
         {
           key: ['prefetch', 'fuel-stations'],
+          label: 'Fuel Stations',
           fn: () => supabase
             .from('fuel_stations')
             .select('*')
@@ -103,6 +112,7 @@ export function usePrefetchAll() {
         },
         {
           key: ['prefetch', 'fuel-types'],
+          label: 'Fuel Types',
           fn: () => supabase
             .from('fuel_types')
             .select('*')
@@ -113,6 +123,7 @@ export function usePrefetchAll() {
         // 7. Markets
         {
           key: ['prefetch', 'markets'],
+          label: 'Markets',
           fn: () => supabase
             .from('markets')
             .select('*')
@@ -124,6 +135,7 @@ export function usePrefetchAll() {
         // 8. Price items
         {
           key: ['prefetch', 'price-items'],
+          label: 'Price Items',
           fn: () => supabase
             .from('price_items')
             .select('*')
@@ -133,6 +145,7 @@ export function usePrefetchAll() {
         },
         {
           key: ['prefetch', 'current-prices'],
+          label: 'Current Prices',
           fn: () => supabase
             .from('current_prices')
             .select('*')
@@ -142,6 +155,7 @@ export function usePrefetchAll() {
         // 9. Weather alerts
         {
           key: ['prefetch', 'weather'],
+          label: 'Weather',
           fn: () => supabase
             .from('weather_alerts')
             .select('*')
@@ -154,6 +168,7 @@ export function usePrefetchAll() {
         // 10. Notices (approved)
         {
           key: ['prefetch', 'notices'],
+          label: 'Notices',
           fn: () => supabase
             .from('notices')
             .select('*')
@@ -166,6 +181,7 @@ export function usePrefetchAll() {
         // 11. Jobs
         {
           key: ['prefetch', 'jobs'],
+          label: 'Jobs',
           fn: () => supabase
             .from('jobs')
             .select('*')
@@ -177,6 +193,7 @@ export function usePrefetchAll() {
         // 12. Rentals
         {
           key: ['prefetch', 'rentals'],
+          label: 'Rentals',
           fn: () => supabase
             .from('rentals')
             .select('*')
@@ -188,6 +205,7 @@ export function usePrefetchAll() {
         // 13. Tutoring
         {
           key: ['prefetch', 'tutoring'],
+          label: 'Tutoring',
           fn: () => supabase
             .from('tutoring')
             .select('*')
@@ -199,6 +217,7 @@ export function usePrefetchAll() {
         // 14. Lost & Found
         {
           key: ['prefetch', 'lost-found'],
+          label: 'Lost & Found',
           fn: () => supabase
             .from('lost_found')
             .select('*')
@@ -211,6 +230,7 @@ export function usePrefetchAll() {
         // 15. Health services
         {
           key: ['prefetch', 'health'],
+          label: 'Health',
           fn: () => supabase
             .from('health_services')
             .select('*')
@@ -223,6 +243,7 @@ export function usePrefetchAll() {
         // 16. Bus schedules
         {
           key: ['prefetch', 'bus-schedules'],
+          label: 'Bus Schedules',
           fn: () => supabase
             .from('bus_departures')
             .select('*')
@@ -234,6 +255,7 @@ export function usePrefetchAll() {
         // 17. Tours
         {
           key: ['prefetch', 'tours'],
+          label: 'Tours',
           fn: () => supabase
             .from('tour_guides')
             .select('*')
@@ -245,6 +267,7 @@ export function usePrefetchAll() {
         // 18. History
         {
           key: ['prefetch', 'history'],
+          label: 'History',
           fn: () => supabase
             .from('history')
             .select('*')
@@ -257,6 +280,7 @@ export function usePrefetchAll() {
         // 19. Donations
         {
           key: ['prefetch', 'donations'],
+          label: 'Donations',
           fn: () => supabase
             .from('donations')
             .select('*')
@@ -268,6 +292,7 @@ export function usePrefetchAll() {
         // 20. Chat rooms
         {
           key: ['prefetch', 'chat-rooms'],
+          label: 'Chat Rooms',
           fn: () => supabase
             .from('chat_rooms')
             .select('*')
@@ -277,14 +302,21 @@ export function usePrefetchAll() {
         },
       ]
 
+      // Notify start
+      startRun(tasks.length)
+
       // Run all in parallel, silently ignore failures
       const results = await Promise.allSettled(
-        tasks.map(async ({ key, fn }) => {
+        tasks.map(async ({ key, fn, label }) => {
           try {
             const data = await fn()
             queryClient.setQueryData(key, data)
+            const item = { key: key.join('/'), label: label || key[1], count: data.length, status: 'ok' }
+            recordItem(item)
             return { key, count: data.length }
           } catch (e) {
+            const item = { key: key.join('/'), label: label || key[1], count: 0, status: 'error', error: e.message }
+            recordItem(item)
             return { key, error: e.message }
           }
         })
@@ -295,10 +327,16 @@ export function usePrefetchAll() {
       const elapsed = Date.now() - t0
 
       console.log(`[Prefetch] Done: ${ok}/${tasks.length} ok, ${failed} failed (${elapsed}ms)`)
+      finishRun()
     }
 
     // Slight delay so app renders first
-    const t = setTimeout(prefetch, 1500)
+    const t = setTimeout(() => {
+      prefetch().catch(err => {
+        console.error('[Prefetch] Failed:', err)
+        failRun(err)
+      })
+    }, 1500)
     return () => clearTimeout(t)
   }, [queryClient])
 }
