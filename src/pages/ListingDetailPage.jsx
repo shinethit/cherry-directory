@@ -12,6 +12,8 @@ import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import Lightbox from '../components/Lightbox'
 import ShareButton from '../components/ShareButton'
+import BusinessHours from '../components/BusinessHours'
+import SimilarBusinesses from '../components/SimilarBusinesses'
 
 export default function ListingDetailPage() {
   const { id } = useParams()
@@ -243,6 +245,8 @@ export default function ListingDetailPage() {
           />
         )}
 
+        <BusinessHours hours={listing.hours} lang={lang} />
+
         <div className="grid grid-cols-2 gap-2">
           {listing.phone_1 && (
             <a href={`tel:${listing.phone_1}`} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
@@ -440,6 +444,7 @@ export default function ListingDetailPage() {
             </div>
           ))}
         </div>
+        <SimilarBusinesses listingId={id} categoryId={listing.category_id} lang={lang} />
       </div>
 
       {/* Lightbox */}

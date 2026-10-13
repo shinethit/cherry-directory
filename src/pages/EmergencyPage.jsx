@@ -298,6 +298,21 @@ export default function EmergencyPage() {
         )}
       </div>
 
+      {/* Emergency/Health Tabs */}
+      <div className="px-4 pb-3">
+        <div className="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/10">
+          <button className="flex-1 py-2 rounded-lg text-xs font-bold transition-colors bg-brand-600/40 text-brand-200 border border-brand-400/40">
+            🆘 {lang === 'mm' ? 'အရေးပေါ်' : 'Emergency'}
+          </button>
+          <button
+            onClick={() => navigate('/health')}
+            className="flex-1 py-2 rounded-lg text-xs font-bold transition-colors text-white/50 hover:text-white/80"
+          >
+            🏥 {lang === 'mm' ? 'ကျန်းမာရေး' : 'Health'}
+          </button>
+        </div>
+      </div>
+
       {/* SOS banner — most critical */}
       <div className="mx-4 mb-4 p-4 rounded-2xl bg-red-500/15 border border-red-500/30">
         <p className="text-[10px] text-red-400/70 font-display uppercase tracking-wider mb-2">

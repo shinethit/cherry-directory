@@ -5,7 +5,7 @@ import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
-import { Plus, Trash2, ArrowLeft, Droplets, Eye, Phone, MapPin, Calendar, Clock, Edit2 } from 'lucide-react'
+import { Plus, Trash2, ArrowLeft, Droplets, Eye, Phone, MapPin, Calendar, Clock, Edit2, Copy, Check, Share2, AlertCircle } from 'lucide-react'
 import { ImageUploader } from '../components/UI'
 import { uploadImage } from '../lib/cloudinary'
 
@@ -45,6 +45,38 @@ const DON_CATS = [
   { id: 'other',      mm: 'အခြား',           en: 'Other',       icon: '💝' },
 ]
 
+function CopyButton({ value, label, lang }) {
+  const [copied, setCopied] = useState(false)
+  async function handleCopy(e) {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {}
+  }
+  return (
+    <button
+      onClick={handleCopy}
+      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/6 hover:bg-white/10 border border-white/10 transition-colors"
+      title={copied ? (lang === 'mm' ? 'ကူးပြီး' : 'Copied') : (lang === 'mm' ? 'ကူးမည်' : 'Copy')}
+    >
+      {copied ? <Check size={10} className="text-green-400" /> : <Copy size={10} className="text-white/50" />}
+      <span className="text-[9px] text-white/60 font-mono">{value}</span>
+    </button>
+  )
+}
+
+function daysLeft(deadline, lang) {
+  if (!deadline) return null
+  const diff = new Date(deadline).getTime() - Date.now()
+  const days = Math.ceil(diff / 86400000)
+  if (days < 0) return { text: lang === 'mm' ? 'ကုန်ဆုံးပြီ' : 'Ended', urgent: true }
+  if (days === 0) return { text: lang === 'mm' ? 'ယနေ့ ကုန်ဆုံးမည်' : 'Ends today', urgent: true }
+  if (days <= 7) return { text: lang === 'mm' ? `${days} ရက် ကျန်` : `${days} days left`, urgent: true }
+  return { text: lang === 'mm' ? `${days} ရက် ကျန်` : `${days} days left`, urgent: false }
+}
+
 export function DonationPage() {
   const { lang } = useLang()
   const { user, profile, isLoggedIn, isModerator } = useAuth()
@@ -55,7 +87,17 @@ export function DonationPage() {
   const [loading, setLoading] = useState(true)
   const [catFilter, setCat] = useState('all')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ title_mm: '', description_mm: '', category: 'community', target_amount: '', contact_name: '', contact_phone: '', kbz_pay: '', wave_pay: '', bank_name: '', bank_account: '', bank_holder: '', is_urgent: false })
+  const [form, setForm] = useState({ title_mm: '', description_mm: '', category: 'community', target_amount: '', deadline: '', contact_name: '', contact_phone: '', kbz_pay: '', wave_pay: '', bank_name: '', bank_account: '', bank_holder: '', images: [], is_urgent: false })
+  const [imgLoading, setImgLoading] = useState(false)
+
+  async function handleImageUpload(file) {
+    setImgLoading(true)
+    try {
+      const url = await uploadImage(file, 'donations')
+      setForm(f => ({ ...f, images: [...f.images, url] }))
+    } catch (e) { console.warn(e) }
+    setImgLoading(false)
+  }
   const [submitting, setSubmitting] = useState(false)
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
 
@@ -83,7 +125,12 @@ export function DonationPage() {
   async function submit() {
     if (!form.title_mm || !isLoggedIn) return
     setSubmitting(true)
-    await supabase.from('donations').insert({ ...form, target_amount: form.target_amount ? parseInt(form.target_amount) : null, organizer_id: user.id })
+    await supabase.from('donations').insert({
+      ...form,
+      target_amount: form.target_amount ? parseInt(form.target_amount) : null,
+      deadline: form.deadline || null,
+      organizer_id: user.id,
+    })
     setSubmitting(false); setShowForm(false); load()
   }
 
@@ -154,11 +201,61 @@ export function DonationPage() {
                  </div>
                )}
 
-               <div className="flex flex-wrap gap-2 text-[10px]">
-                 {d.contact_phone && <a href={`tel:${d.contact_phone}`} className="flex items-center gap-1 text-green-400 hover:text-green-300">📞 {d.contact_phone}</a>}
-                 {d.kbz_pay && <div className="flex items-center gap-1 text-white/50 font-myanmar">KBZPay: <span className="font-mono text-white/70">{d.kbz_pay}</span></div>}
-                 {d.wave_pay && <div className="flex items-center gap-1 text-white/50 font-myanmar">WavePay: <span className="font-mono text-white/70">{d.wave_pay}</span></div>}
-                 {d.bank_account && <div className="text-white/40 font-myanmar">{d.bank_name}: {d.bank_account} ({d.bank_holder})</div>}
+               {/* Images gallery */}
+               {d.images?.length > 0 && (
+                 <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+                   {d.images.slice(0, 4).map((img, i) => (
+                     <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-white/10">
+                       <img src={img} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
+                     </a>
+                   ))}
+                   {d.images.length > 4 && (
+                     <div className="flex-shrink-0 w-16 h-16 rounded-lg bg-white/8 border border-white/10 flex items-center justify-center text-[10px] text-white/50 font-bold">
+                       +{d.images.length - 4}
+                     </div>
+                   )}
+                 </div>
+               )}
+
+               {/* Deadline + Verified badges */}
+               {(d.deadline || d.is_verified) && (
+                 <div className="flex items-center gap-2 flex-wrap">
+                   {d.deadline && (() => {
+                     const dl = daysLeft(d.deadline, lang)
+                     if (!dl) return null
+                     return (
+                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border flex items-center gap-1 ${dl.urgent ? 'bg-red-500/15 border-red-500/25 text-red-400' : 'bg-white/8 border-white/15 text-white/60'}`}>
+                         <Clock size={9} /> {dl.text}
+                       </span>
+                     )
+                   })()}
+                   {d.is_verified && (
+                     <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border bg-green-500/15 border-green-500/25 text-green-400 flex items-center gap-1">
+                       <Check size={9} /> {lang === 'mm' ? 'အတည်ပြုပြီး' : 'Verified'}
+                     </span>
+                   )}
+                 </div>
+               )}
+
+               {/* Contact + payment with copy buttons */}
+               <div className="flex flex-wrap gap-1.5">
+                 {d.contact_phone && (
+                   <a href={`tel:${d.contact_phone}`} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20">
+                     📞 {d.contact_phone}
+                   </a>
+                 )}
+                 {d.kbz_pay && <CopyButton value={d.kbz_pay} label="KBZPay" lang={lang} />}
+                 {d.wave_pay && <CopyButton value={d.wave_pay} label="WavePay" lang={lang} />}
+                 {d.bank_account && <CopyButton value={d.bank_account} label={d.bank_name || 'Bank'} lang={lang} />}
+               </div>
+
+               {/* Share */}
+               <div className="flex justify-end pt-1 border-t border-white/6">
+                 <ShareButton
+                   url={window.location.origin + '/donations'}
+                   title={d.title_mm || d.title}
+                   description={d.description_mm || ''}
+                 />
                </div>
              </div>
            )
@@ -183,7 +280,37 @@ export function DonationPage() {
             </div>
             <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
             <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-24" /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ပန်းတိုင် ငွေပမာဏ (Ks)</label><input type="number" value={form.target_amount} onChange={e => set('target_amount', e.target.value)} className="input-dark font-mono" placeholder="e.g. 5000000" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-white/50 mb-1.5">ပန်းတိုင် ငွေပမာဏ (Ks)</label>
+                <input type="number" value={form.target_amount} onChange={e => set('target_amount', e.target.value)} className="input-dark font-mono" placeholder="5000000" />
+              </div>
+              <div>
+                <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကုန်ဆုံးမည့်ရက်' : 'Deadline'}</label>
+                <input type="date" value={form.deadline} onChange={e => set('deadline', e.target.value)} className="input-dark" />
+              </div>
+            </div>
+
+            {/* Images */}
+            <div>
+              <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဓာတ်ပုံများ (optional)' : 'Photos (optional)'}</label>
+              <div className="flex gap-2 flex-wrap">
+                {form.images.map((url, i) => (
+                  <div key={i} className="relative w-20 h-20">
+                    <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
+                    <button
+                      type="button"
+                      onClick={() => set('images', form.images.filter((_, j) => j !== i))}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center"
+                    >✕</button>
+                  </div>
+                ))}
+                {form.images.length < 5 && (
+                  <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />
+                )}
+              </div>
+              <p className="text-[9px] text-white/25 mt-1.5">{lang === 'mm' ? 'အများဆုံး ၅ ပုံ' : 'Max 5 photos'}</p>
+            </div>
             <div className="border-t border-white/8 pt-3">
               <p className="text-xs text-white/40 mb-2 font-display font-semibold uppercase tracking-wider">ငွေလွှဲ အချက်အလက်</p>
               <div className="space-y-3">
@@ -434,6 +561,7 @@ export function HealthServicePage() {
   const { user, isModerator, isLoggedIn } = useAuth()
   const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'ကျန်းမာရေးဝန်ဆောင်မှု' : 'Health Services' })
+  const navigate = useNavigate()
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -470,6 +598,21 @@ export function HealthServicePage() {
 
   return (
     <div className="pb-8">
+
+      {/* Emergency/Health Tabs */}
+      <div className="px-4 pb-3">
+        <div className="flex gap-2 p-1 bg-white/5 rounded-xl border border-white/10">
+          <button
+            onClick={() => navigate('/emergency')}
+            className="flex-1 py-2 rounded-lg text-xs font-bold transition-colors text-white/50 hover:text-white/80"
+          >
+            🆘 {lang === 'mm' ? 'အရေးပေါ်' : 'Emergency'}
+          </button>
+          <button className="flex-1 py-2 rounded-lg text-xs font-bold transition-colors bg-brand-600/40 text-brand-200 border border-brand-400/40">
+            🏥 {lang === 'mm' ? 'ကျန်းမာရေး' : 'Health'}
+          </button>
+        </div>
+      </div>
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🏥 {lang === 'mm' ? 'ကျန်းမာရေးဝန်ဆောင်မှု' : 'Health Services'}</h1>
@@ -658,6 +801,17 @@ const TOUR_TYPES = [
   { id: 'other',    mm: 'အခြား',      en: 'Other',     icon: '📍' },
 ]
 
+const TOUR_LANGUAGES = ['မြန်မာ', 'English', 'ไทย', '中文', '日本語', '한국어', 'Français']
+
+const TOUR_INCLUDES = [
+  { id: 'meals',     icon: '🍽️', mm: 'အစားအသောက်',      en: 'Meals' },
+  { id: 'transport', icon: '🚗', mm: 'သယ်ယူပို့ဆောင်',  en: 'Transport' },
+  { id: 'guide',     icon: '🧭', mm: 'Guide',            en: 'Guide' },
+  { id: 'water',     icon: '💧', mm: 'ရေသောက်ရေ',        en: 'Drinking water' },
+  { id: 'insurance', icon: '🛡️', mm: 'အာမခံ',            en: 'Insurance' },
+  { id: 'tickets',   icon: '🎫', mm: 'ဝင်ခွင့်လက်မှတ်',  en: 'Entry tickets' },
+]
+
 export function ToursPage() {
   const { lang } = useLang()
   const { user, isModerator, profile, isLoggedIn } = useAuth()
@@ -668,9 +822,42 @@ export function ToursPage() {
   const [loading, setLoading] = useState(true)
   const [typeFilter, setType] = useState('all')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ title_mm: '', description_mm: '', type: 'trekking', price_from: '', price_to: '', duration_mm: '', contact_name: '', contact_phone: '', facebook: '', languages: '' })
+  const [form, setForm] = useState({
+    title_mm: '', description_mm: '', type: 'trekking',
+    price_from: '', price_to: '', duration_mm: '',
+    contact_name: '', contact_phone: '', facebook: '',
+    languages: [], includes: [], images: [],
+  })
   const [submitting, setSubmitting] = useState(false)
+  const [imgLoading, setImgLoading] = useState(false)
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
+
+  function toggleLanguage(lg) {
+    setForm(f => ({
+      ...f,
+      languages: f.languages.includes(lg)
+        ? f.languages.filter(x => x !== lg)
+        : [...f.languages, lg],
+    }))
+  }
+
+  function toggleInclude(inc) {
+    setForm(f => ({
+      ...f,
+      includes: f.includes.includes(inc)
+        ? f.includes.filter(x => x !== inc)
+        : [...f.includes, inc],
+    }))
+  }
+
+  async function handleImageUpload(file) {
+    setImgLoading(true)
+    try {
+      const url = await uploadImage(file, 'tours')
+      setForm(f => ({ ...f, images: [...f.images, url] }))
+    } catch (e) { console.warn(e) }
+    setImgLoading(false)
+  }
 
   async function load() {
     setLoading(true)
@@ -729,6 +916,9 @@ export function ToursPage() {
         ...form,
         price_from: form.price_from ? parseInt(form.price_from) : null,
         price_to: form.price_to ? parseInt(form.price_to) : null,
+        languages: form.languages || [],
+        includes: form.includes || [],
+        images: form.images || [],
         reporter_id: user?.id || null,
       })
       if (error) {
@@ -781,7 +971,22 @@ export function ToursPage() {
            return (
              <div key={t.id} className="card-dark rounded-2xl p-4 space-y-2">
                <div className="flex items-start justify-between gap-2">
-                 <div className="flex-1">
+                 <div className="flex-1 min-w-0">
+                   {/* Gallery preview */}
+                   {t.images?.length > 0 && (
+                     <div className="flex gap-1 mb-2 overflow-x-auto scrollbar-hide">
+                       {t.images.slice(0, 3).map((img, i) => (
+                         <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-white/10">
+                           <img src={img} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
+                         </a>
+                       ))}
+                       {t.images.length > 3 && (
+                         <div className="flex-shrink-0 w-14 h-14 rounded-lg bg-white/8 border border-white/10 flex items-center justify-center text-[9px] text-white/50 font-bold">
+                           +{t.images.length - 3}
+                         </div>
+                       )}
+                     </div>
+                   )}
                    <div className="flex items-center gap-2 mb-1">
                      <span>{tt?.icon}</span>
                      <span className="text-[9px] text-brand-300 bg-brand-600/15 border border-brand-400/20 px-1.5 py-0.5 rounded-full font-bold">{lang === 'mm' ? tt?.mm : tt?.en}</span>
@@ -791,7 +996,36 @@ export function ToursPage() {
                    <div className="flex items-center gap-3 mt-1.5 flex-wrap text-[10px]">
                      {(t.price_from || t.price_to) && <span className="text-gold-400 font-mono">{t.price_from ? Number(t.price_from).toLocaleString() : '?'}{t.price_to ? ` – ${Number(t.price_to).toLocaleString()}` : '+'} Ks</span>}
                      {t.duration_mm && <span className="text-white/40 font-myanmar">⏱ {t.duration_mm}</span>}
+                     {t.rating_avg > 0 && (
+                       <span className="flex items-center gap-1 text-amber-400">
+                         ⭐ {Number(t.rating_avg).toFixed(1)}
+                         <span className="text-white/30">({t.rating_count || 0})</span>
+                       </span>
+                     )}
                    </div>
+
+                   {t.languages?.length > 0 && (
+                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                       <span className="text-[9px] text-white/40">🌐</span>
+                       {t.languages.slice(0, 4).map((lg, i) => (
+                         <span key={i} className="text-[9px] text-blue-300 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">{lg}</span>
+                       ))}
+                       {t.languages.length > 4 && <span className="text-[9px] text-white/40">+{t.languages.length - 4}</span>}
+                     </div>
+                   )}
+
+                   {t.includes?.length > 0 && (
+                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                       {t.includes.slice(0, 4).map((inc, i) => {
+                         const cfg = TOUR_INCLUDES.find(x => x.id === inc) || { icon: '✓', mm: inc, en: inc }
+                         return (
+                           <span key={i} className="text-[9px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">
+                             {cfg.icon} {lang === 'mm' ? cfg.mm : cfg.en}
+                           </span>
+                         )
+                       })}
+                     </div>
+                   )}
                  </div>
                  {isModerator && <button onClick={() => deleteTour(t.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 flex-shrink-0"><Trash2 size={12} /></button>}
                </div>
@@ -823,6 +1057,62 @@ export function ToursPage() {
               <div><label className="block text-[10px] text-white/40 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark text-sm" placeholder="09..." /></div>
             </div>
             <div><label className="block text-xs text-white/50 mb-1.5">Facebook</label><input value={form.facebook} onChange={e => set('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." /></div>
+
+            {/* Languages */}
+            <div>
+              <label className="block text-xs text-white/50 mb-1.5">🌐 {lang === 'mm' ? 'ပြောဆိုနိုင်သော ဘာသာစကားများ' : 'Languages'}</label>
+              <div className="flex gap-2 flex-wrap">
+                {TOUR_LANGUAGES.map(lg => (
+                  <button
+                    key={lg}
+                    type="button"
+                    onClick={() => toggleLanguage(lg)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${form.languages.includes(lg) ? 'bg-blue-500/25 border-blue-500/40 text-blue-300' : 'bg-white/5 border-white/10 text-white/40'}`}
+                  >
+                    {lg}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Includes */}
+            <div>
+              <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ပါဝင်သည့် ဝန်ဆောင်မှုများ' : 'Includes'}</label>
+              <div className="grid grid-cols-2 gap-2">
+                {TOUR_INCLUDES.map(inc => (
+                  <button
+                    key={inc.id}
+                    type="button"
+                    onClick={() => toggleInclude(inc.id)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${form.includes.includes(inc.id) ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-white/5 border-white/10 text-white/40'}`}
+                  >
+                    <span>{inc.icon}</span>
+                    <span>{lang === 'mm' ? inc.mm : inc.en}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Images */}
+            <div>
+              <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဓာတ်ပုံများ (optional)' : 'Photos (optional)'}</label>
+              <div className="flex gap-2 flex-wrap">
+                {form.images.map((url, i) => (
+                  <div key={i} className="relative w-20 h-20">
+                    <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
+                    <button
+                      type="button"
+                      onClick={() => set('images', form.images.filter((_, j) => j !== i))}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center"
+                    >✕</button>
+                  </div>
+                ))}
+                {form.images.length < 6 && (
+                  <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />
+                )}
+              </div>
+              <p className="text-[9px] text-white/25 mt-1.5">{lang === 'mm' ? 'အများဆုံး ၆ ပုံ' : 'Max 6 photos'}</p>
+            </div>
           </div>
         </div>
       )}

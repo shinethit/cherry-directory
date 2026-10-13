@@ -19,8 +19,6 @@ const GROUPS = [
     defaultOpen: true,
     features: [
       { path: '/emergency', icon: '🆘', mm: 'အရေးပေါ် ဆက်သွယ်ရေး', en: 'Emergency', descMm: 'ဆေးရုံ • ရဲ • မီးသတ်', descEn: 'Hospital, Police, Fire' },
-      { path: '/weather',   icon: '🌧️', mm: 'မိုးလေဝသ/ရေကြီး',      en: 'Weather Alerts', descMm: 'မိုးလေဝသ သတိပေးချက်', descEn: 'Weather warnings' },
-      { path: '/power',     icon: '⚡', mm: 'လျှပ်စစ်အခြေအနေ',       en: 'Power Status', descMm: 'မီးပျက်/မီးလာ', descEn: 'Power cut status' },
     ],
   },
   {

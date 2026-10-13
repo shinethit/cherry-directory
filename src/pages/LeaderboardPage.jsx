@@ -6,6 +6,8 @@ import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 import { isOnline, timeAgo } from '../hooks/usePresence'
+import TierBadge from '../components/TierBadge'
+import { getTierProgress } from '../lib/tiers'
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -88,6 +90,7 @@ function Podium({ users, tab, lang }) {
             <p className={`text-[10px] font-display font-semibold text-center max-w-[64px] truncate ${textCol}`}>
               {u.nickname ? `@${u.nickname}` : u.full_name}
             </p>
+            <TierBadge points={u.points || 0} size="xs" lang={lang} />
             <div className={`${h} w-20 rounded-t-xl flex items-center justify-center border ${border} ${rank === 1 ? 'bg-gradient-to-b from-gold-500/15 to-transparent' : 'bg-white/4'}`}>
               <p className={`font-display font-bold text-sm ${textCol}`}>{(val(u) || 0).toLocaleString()}</p>
             </div>
@@ -141,6 +144,7 @@ function UserRow({ user, rank, tab, lang, period }) {
                 : 'bg-brand-600/20 text-brand-300 border-brand-400/20'
             }`}>{user.role}</span>
           )}
+          <TierBadge points={user.points || 0} size="xs" lang={lang} />
         </div>
         <p className="text-[10px] mt-0.5">
           {isOnline(user.last_seen)
@@ -263,14 +267,37 @@ export default function LeaderboardPage() {
       </div>
 
       {/* ── My rank banner (if logged in and ranked) ── */}
-      {myRank && !loading && (
-        <div className="mx-4 mb-3 flex items-center gap-2.5 px-3 py-2.5 rounded-2xl bg-brand-600/15 border border-brand-400/25">
-          <Trophy size={14} className="text-brand-300 flex-shrink-0" />
-          <p className="text-xs text-white/70 flex-1 font-myanmar">
-            {lang === 'mm' ? 'သင်၏ rank' : 'Your rank'}:
-            <span className="font-display font-bold text-brand-300 ml-1">#{myRank}</span>
-          </p>
-          <span className="text-[10px] text-white/30">{currentPeriod?.[lang === 'mm' ? 'labelMm' : 'labelEn']}</span>
+      {myRank && !loading && profile && (
+        <div className="mx-4 mb-3 px-3 py-2.5 rounded-2xl bg-brand-600/15 border border-brand-400/25">
+          <div className="flex items-center gap-2.5 mb-2">
+            <Trophy size={14} className="text-brand-300 flex-shrink-0" />
+            <p className="text-xs text-white/70 flex-1 font-myanmar">
+              {lang === 'mm' ? 'သင်၏ rank' : 'Your rank'}:
+              <span className="font-display font-bold text-brand-300 ml-1">#{myRank}</span>
+            </p>
+            <TierBadge points={profile.points || 0} size="xs" lang={lang} />
+          </div>
+          {(() => {
+            const prog = getTierProgress(profile.points || 0)
+            if (!prog.next) {
+              return (
+                <p className="text-[9px] text-purple-300 text-center font-myanmar">
+                  👑 {lang === 'mm' ? 'အမြင့်ဆုံး Tier ရောက်ပြီ' : 'Top tier reached'}
+                </p>
+              )
+            }
+            return (
+              <>
+                <div className="flex items-center justify-between text-[9px] text-white/40 mb-1 font-myanmar">
+                  <span>{lang === 'mm' ? `${prog.pointsToNext} pts ကျန် → ${prog.next.mm}` : `${prog.pointsToNext} pts → ${prog.next.en}`}</span>
+                  <span>{prog.percent}%</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-black/30 overflow-hidden">
+                  <div className={`h-full bg-gradient-to-r ${prog.current.gradient} transition-all`} style={{ width: `${prog.percent}%` }} />
+                </div>
+              </>
+            )
+          })()}
         </div>
       )}
 
@@ -308,6 +335,12 @@ export default function LeaderboardPage() {
                   ? 'Review ရေး၊ လုပ်ငန်း တင်ပြ၊ Chat လုပ်ပြီး Points ရယူပါ'
                   : 'Write reviews, submit listings, or chat to earn points'}
               </p>
+              <button
+                onClick={() => navigate('/points')}
+                className="mt-4 px-4 py-2 rounded-xl bg-brand-600/30 border border-brand-400/40 text-brand-200 text-xs font-bold hover:bg-brand-600/40 transition-colors"
+              >
+                ✨ {lang === 'mm' ? 'Points လမ်းညွှန် ကြည့်မည်' : 'View Points Guide'}
+              </button>
             </div>
           )
           : users.slice(3).map((u, i) => (
@@ -351,6 +384,14 @@ export default function LeaderboardPage() {
             </p>
           ))}
         </div>
+
+        {/* Full Guide link */}
+        <button
+          onClick={() => navigate('/points')}
+          className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-gold-500/15 border border-gold-500/30 text-gold-400 text-xs font-bold hover:bg-gold-500/25 transition-colors"
+        >
+          ✨ {lang === 'mm' ? 'Points လမ်းညွှန် အပြည့်အစုံ' : 'Full Points Guide'}
+        </button>
       </div>
 
     </div>

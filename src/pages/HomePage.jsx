@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cat, Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw, Home, User, Briefcase, GraduationCap, Droplets, Wind } from 'lucide-react';
+import { Cat, Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw, Home, User, Briefcase, GraduationCap, Droplets, Wind, BookMarked, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
+import { useAuth } from '../contexts/AuthContext';
 import SplashScreen from '../components/SplashScreen';
 import ShareButton from '../components/ShareButton';
 import { usePWA } from '../hooks/usePWA'
@@ -24,6 +25,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const config = useAppConfig();
   const { lang } = useLang();
+  const { isLoggedIn, user } = useAuth();
   const { installable, installApp } = usePWA()
 
   // Offline cache status
@@ -49,6 +51,7 @@ export default function HomePage() {
   const [quickLinks, setQuickLinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState(false);
+  const [recentFavorites, setRecentFavorites] = useState([]);
 
   const [visitorCount, setVisitorCount] = useState(null);
   const [countryStats, setCountryStats] = useState([]);
@@ -258,6 +261,32 @@ export default function HomePage() {
       loadCommunityStats();
     }
   }, [consentGiven, loadCommunityStats]);
+
+  const loadFavorites = useCallback(async () => {
+    if (!isLoggedIn || !user) { setRecentFavorites([]); return; }
+    try {
+      const { data: bmarks } = await supabase
+        .from('bookmarks')
+        .select('target_id')
+        .eq('user_id', user.id)
+        .eq('target_type', 'listing')
+        .order('created_at', { ascending: false })
+        .limit(6);
+      if (!bmarks?.length) { setRecentFavorites([]); return; }
+      const ids = bmarks.map(b => b.target_id);
+      const { data } = await supabase
+        .from('listings')
+        .select('id, name, name_mm, logo_url, cover_url, rating_avg, rating_count, category:categories(icon)')
+        .in('id', ids)
+        .eq('status', 'approved');
+      const map = Object.fromEntries((data || []).map(l => [l.id, l]));
+      setRecentFavorites(ids.map(id => map[id]).filter(Boolean).slice(0, 4));
+    } catch (e) { console.warn('favorites load:', e); }
+  }, [isLoggedIn, user]);
+
+  useEffect(() => {
+    if (consentGiven) loadFavorites();
+  }, [consentGiven, loadFavorites]);
 
   const handleRefresh = () => {
     loadData();
@@ -732,6 +761,59 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* Favorites Quick Access */}
+      {isLoggedIn && recentFavorites.length > 0 && (
+        <div>
+          <SectionHeader
+            title={lang === 'mm' ? 'သိမ်းထားသောများ' : 'Saved Items'}
+            subtitle="Favorites"
+            action={lang === 'mm' ? 'အားလုံး' : 'View all'}
+            onAction={() => navigate('/saved')}
+          />
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 px-4">
+            {recentFavorites.map(l => {
+              const img = l.cover_url || l.logo_url;
+              const displayName = lang === 'mm' ? (l.name_mm || l.name) : l.name;
+              return (
+                <button
+                  key={l.id}
+                  onClick={() => navigate('/directory/' + l.id)}
+                  className="flex-shrink-0 w-32 card-dark rounded-2xl p-2 text-left hover:border-brand-400/30 transition-colors"
+                >
+                  <div className="w-full h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mb-2">
+                    {img ? (
+                      <img src={img} alt="" className="w-full h-full object-cover" loading="lazy" />
+                    ) : (
+                      <span className="text-2xl">{l.category?.icon || '🏢'}</span>
+                    )}
+                  </div>
+                  <p className="text-[11px] font-semibold text-white truncate font-myanmar">
+                    {displayName}
+                  </p>
+                  {l.rating_avg > 0 && (
+                    <p className="text-[9px] text-amber-400 font-bold mt-0.5">
+                      ★ {Number(l.rating_avg).toFixed(1)}
+                      <span className="text-white/30 ml-1">({l.rating_count})</span>
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => navigate('/saved')}
+              className="flex-shrink-0 w-32 card-dark rounded-2xl p-2 flex flex-col items-center justify-center gap-2 hover:border-brand-400/30 transition-colors"
+            >
+              <div className="w-10 h-10 rounded-xl bg-brand-600/20 border border-brand-400/30 flex items-center justify-center">
+                <ChevronRight size={20} className="text-brand-300" />
+              </div>
+              <p className="text-[10px] text-white/50 font-myanmar text-center">
+                {lang === 'mm' ? 'အားလုံးကြည့်' : 'View all'}
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Featured Listings */}
       {(loading || featured.length > 0) && (
         <div>
@@ -796,111 +878,6 @@ export default function HomePage() {
           </div>
         </div>
       )}
-
-      {/* Power Status Dashboard (read‑only, sorted by last_reported) */}
-      <div className="px-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-display font-semibold text-white/80 flex items-center gap-1">
-            ⚡ {lang === 'mm' ? 'လျှပ်စစ်အခြေအနေ' : 'Power Status'}
-          </h3>
-          <button onClick={() => navigate('/power')} className="text-[9px] text-brand-300 hover:text-brand-200">
-            {lang === 'mm' ? 'အားလုံးကြည့်မည် →' : 'View all →'}
-          </button>
-        </div>
-
-        {powerLoading ? (
-          <div className="grid grid-cols-2 gap-2">
-            {[1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-24 rounded-2xl" />)}
-          </div>
-        ) : powerAreas.length === 0 ? (
-          <div className="text-center py-4 text-white/30 text-sm font-myanmar">
-            {lang === 'mm' ? 'ရပ်ကွက်စာရင်း မရှိသေး' : 'No neighborhoods available'}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {powerAreas.slice(0, 6).map(area => {
-              const isCut = area.current_status === 'cut';
-              const isRestored = area.current_status === 'restored';
-              return (
-                <div key={area.id} className={`p-3 rounded-2xl border transition-all ${
-                  isCut      ? 'bg-red-500/8   border-red-500/25'   :
-                  isRestored ? 'bg-green-500/8 border-green-500/25' :
-                               'bg-white/4    border-white/8'
-                }`}>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-display font-semibold text-sm text-white">{area.name}</p>
-                      <p className="text-[9px] text-white/40 mt-0.5">{area.township}</p>
-                    </div>
-                    <span className={`text-[10px] font-bold ${
-                      isCut ? 'text-red-400' : isRestored ? 'text-green-400' : 'text-white/30'
-                    }`}>
-                      {isCut ? '🔴 ဖြတ်' : isRestored ? '🟢 လာ' : '⚪ မသိ'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {powerAreas.length > 6 && (
-          <p className="text-[9px] text-white/30 text-center mt-2">
-            + {powerAreas.length - 6} {lang === 'mm' ? 'ရပ်ကွက်များ' : 'more areas'}
-          </p>
-        )}
-      </div>
-
-      {/* Weather Dashboard (read‑only, latest 4 alerts) */}
-      <div className="px-4">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-sm font-display font-semibold text-white/80 flex items-center gap-1">
-            🌧️ {lang === 'mm' ? 'မိုးလေဝသ/ရေကြီး သတိပေးချက်' : 'Weather & Flood Alerts'}
-          </h3>
-          <button onClick={() => navigate('/weather')} className="text-[9px] text-brand-300 hover:text-brand-200">
-            {lang === 'mm' ? 'အားလုံးကြည့်မည် →' : 'View all →'}
-          </button>
-        </div>
-
-        {weatherLoading ? (
-          <div className="grid grid-cols-2 gap-2">
-            {[1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-24 rounded-2xl" />)}
-          </div>
-        ) : weatherAlerts.length === 0 ? (
-          <div className="text-center py-4 text-white/30 text-sm font-myanmar">
-            {lang === 'mm' ? 'သတိပေးချက် မရှိပါ' : 'No active alerts'}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {weatherAlerts.map(alert => {
-              const severityColor = getSeverityColor(alert.severity);
-              return (
-                <div key={alert.id} className={`p-3 rounded-2xl border ${severityColor} bg-opacity-10`}>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-display font-semibold text-sm text-white">
-                        {lang === 'mm' ? alert.title_mm : alert.title}
-                      </p>
-                      {alert.location && (
-                        <p className="text-[9px] text-white/40 mt-0.5 font-myanmar">📍 {alert.location}</p>
-                      )}
-                    </div>
-                    <span className="text-[10px] font-bold uppercase">{alert.severity === 'danger' ? '⚠️' : alert.severity === 'warning' ? '⚡' : 'ℹ️'}</span>
-                  </div>
-                  {alert.content_mm && (
-                    <p className="text-[10px] text-white/50 mt-1 line-clamp-2 font-myanmar">{alert.content_mm}</p>
-                  )}
-                  {alert.inle_level_cm && (
-                    <div className="flex items-center gap-1 mt-2 text-[9px]">
-                      <Droplets size={10} />
-                      <span className="text-white/60">Inle Lake: {alert.inle_level_cm} cm</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
 
       <div className="h-4" />
 

@@ -10,6 +10,7 @@ import { ImageUploader } from '../components/UI'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import IconPicker from '../components/IconPicker'
 import LocationPicker from '../components/LocationPicker'
+import { BusinessHoursEditor } from '../components/BusinessHours'
 
 function Field({ label, children, required }) {
   return (
@@ -37,6 +38,7 @@ export default function SubmitListingPage() {
     phones: ['', ''],
     viber: '', telegram: '', whatsapp: '', facebook: '', website: '',
     latitude: '', longitude: '', business_type: 'shop',
+    hours: null,
   })
   const [logo, setLogo] = useState(null)
   const [coverImg, setCoverImg] = useState(null)
@@ -533,6 +535,14 @@ export default function SubmitListingPage() {
               <input type="url" value={form.website} onChange={e => setFormField('website', e.target.value)} className="input-dark" placeholder="https://..." />
             </Field>
           </div>
+        </div>
+
+        {/* Business Hours */}
+        <div className="border-t border-white/8 pt-4">
+          <p className="text-xs text-white/40 mb-3 font-display font-semibold uppercase tracking-wider">
+            {lang === 'mm' ? 'ဖွင့်ချိန်' : 'Business Hours'}
+          </p>
+          <BusinessHoursEditor value={form.hours} onChange={h => setFormField('hours', h)} lang={lang} />
         </div>
 
         {/* Menu Section */}

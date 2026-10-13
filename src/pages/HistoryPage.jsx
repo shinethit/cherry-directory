@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Calendar, MapPin, Users, BookOpen, Plus, Edit2, Trash2, Clock, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Calendar, MapPin, Users, BookOpen, Plus, Edit2, Trash2, Clock, CheckCircle, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -9,6 +9,7 @@ import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { Skeleton } from '../components/UI'
+import ShareButton from '../components/ShareButton'
 
 const HISTORY_CATS = [
   { id: 'all',        mm: 'အားလုံး',          en: 'All',         icon: '📜' },
@@ -28,6 +29,13 @@ function timeAgo(iso, lang) {
   const h = Math.floor(m / 60)
   if (h < 24) return `${h}${lang === 'mm' ? 'နာရီ' : 'h'}`
   return `${Math.floor(h/24)}${lang === 'mm' ? 'ရက်' : 'd'}`
+}
+
+function readingTime(text, lang) {
+  if (!text) return null
+  const chars = text.length
+  const mins = Math.max(1, Math.round(chars / 500))
+  return lang === 'mm' ? `${mins} မိနစ် ဖတ်ရန်` : `${mins} min read`
 }
 
 function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
@@ -72,11 +80,14 @@ function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
           <p className="text-xs text-white/60 font-myanmar line-clamp-3">{post.excerpt_mm}</p>
         )}
 
-        <div className="flex items-center gap-3 text-[10px] text-white/30 pt-1">
+        <div className="flex items-center gap-3 text-[10px] text-white/30 pt-1 flex-wrap">
           {post.event_date && (
             <span className="flex items-center gap-1"><Calendar size={10} /> {new Date(post.event_date).toLocaleDateString('my-MM')}</span>
           )}
           <span className="flex items-center gap-1"><Clock size={10} /> {timeAgo(post.created_at, lang)}</span>
+          {post.content_mm && (
+            <span className="flex items-center gap-1 text-white/40">📖 {readingTime(post.content_mm, lang)}</span>
+          )}
           {post.author_name && <span>✍️ {post.author_name}</span>}
         </div>
       </div>
@@ -252,12 +263,31 @@ export function HistoryDetailPage() {
   const { lang } = useLang()
   const [post, setPost] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [related, setRelated] = useState([])
 
   useEffect(() => {
-    supabase.from('history').select('*').eq('id', id).single().then(({ data }) => {
+    let cancelled = false
+    async function load() {
+      const { data } = await supabase.from('history').select('*').eq('id', id).single()
+      if (cancelled) return
       setPost(data)
       setLoading(false)
-    })
+
+      // Fetch related posts (same category, excluding this one)
+      if (data?.category) {
+        const { data: rel } = await supabase
+          .from('history')
+          .select('id, title, title_mm, category, cover_url, event_date, created_at')
+          .eq('category', data.category)
+          .eq('status', 'published')
+          .neq('id', id)
+          .order('created_at', { ascending: false })
+          .limit(4)
+        if (!cancelled) setRelated(rel || [])
+      }
+    }
+    load()
+    return () => { cancelled = true }
   }, [id])
 
   if (loading) return (
@@ -281,17 +311,22 @@ export function HistoryDetailPage() {
         <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
           <ArrowLeft size={18} className="text-white" />
         </button>
-        <div className="flex items-center gap-2">
-          <span className="text-xl">{cat.icon}</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-600/20 text-brand-300">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="text-xl flex-shrink-0">{cat.icon}</span>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-600/20 text-brand-300 flex-shrink-0">
             {lang === 'mm' ? cat.mm : cat.en}
           </span>
           {post.location_mm && (
-            <span className="text-[10px] text-white/40 flex items-center gap-1">
+            <span className="text-[10px] text-white/40 flex items-center gap-1 truncate">
               <MapPin size={10} /> {post.location_mm}
             </span>
           )}
         </div>
+        <ShareButton
+          url={window.location.href}
+          title={post.title_mm || post.title}
+          description={post.excerpt_mm || ''}
+        />
       </div>
 
       {post.cover_url && (
@@ -309,6 +344,9 @@ export function HistoryDetailPage() {
           )}
           {post.author_name && <span className="flex items-center gap-1"><BookOpen size={12} /> {post.author_name}</span>}
           <span>{timeAgo(post.created_at, lang)}</span>
+          {post.content_mm && (
+            <span className="flex items-center gap-1 text-white/50">📖 {readingTime(post.content_mm, lang)}</span>
+          )}
         </div>
 
         {post.excerpt_mm && (
@@ -337,6 +375,49 @@ export function HistoryDetailPage() {
             <p className="text-xs text-white/60 font-myanmar">{post.author_bio}</p>
           </div>
         )}
+
+        {/* Related Posts */}
+        {related.length > 0 && (
+          <div className="mt-6 pt-4 border-t border-white/8">
+            <p className="text-xs font-display font-bold text-white/60 uppercase tracking-wider mb-3 flex items-center gap-2">
+              📚 {lang === 'mm' ? 'ဆက်စပ် သမိုင်းကြောင်းများ' : 'Related Posts'}
+            </p>
+            <div className="space-y-2">
+              {related.map(r => {
+                const rCat = HISTORY_CATS.find(c => c.id === r.category) || HISTORY_CATS[0]
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => navigate(`/history/${r.id}`)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/4 border border-white/8 hover:bg-white/8 hover:border-white/15 transition-colors text-left"
+                  >
+                    {r.cover_url ? (
+                      <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
+                        <img src={r.cover_url} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-14 h-14 rounded-lg bg-brand-700/40 flex items-center justify-center flex-shrink-0 text-2xl">
+                        {rCat.icon}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-display font-semibold text-white truncate font-myanmar">
+                        {r.title_mm || r.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-white/40">
+                        <span>{rCat.icon} {lang === 'mm' ? rCat.mm : rCat.en}</span>
+                        {r.event_date && (
+                          <span>· {new Date(r.event_date).toLocaleDateString('my-MM')}</span>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-white/20 flex-shrink-0">→</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -352,6 +433,7 @@ export default function HistoryPage() {
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
   const [catFilter, setCatFilter] = useState('all')
+  const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
 
@@ -369,6 +451,11 @@ export default function HistoryPage() {
         q = q.eq('category', catFilter)
       }
 
+      if (search.trim()) {
+        const term = `%${search.trim()}%`
+        q = q.or(`title.ilike.${term},title_mm.ilike.${term},excerpt_mm.ilike.${term},content_mm.ilike.${term}`)
+      }
+
       const { data, error } = await q
       
       if (error) {
@@ -380,7 +467,7 @@ export default function HistoryPage() {
       console.error('History load exception:', e)
     }
     setLoading(false)
-  }, [catFilter])
+  }, [catFilter, search])
 
   useEffect(() => {
     load()
@@ -426,6 +513,28 @@ export default function HistoryPage() {
             <Plus size={14} /> {lang === 'mm' ? 'တင်မည်' : 'Post'}
           </button>
         )}
+      </div>
+
+      {/* Search bar */}
+      <div className="px-4 mb-3">
+        <div className="relative">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={lang === 'mm' ? 'သမိုင်းကြောင်း ရှာရန်...' : 'Search history...'}
+            className="input-dark pl-9 pr-9 text-sm w-full font-myanmar"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="px-4 mb-4">

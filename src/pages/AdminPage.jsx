@@ -330,9 +330,6 @@ export default function AdminPage() {
           <button onClick={() => setTab('quicklinks')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/40'}`}>
             <LinkIcon size={14} /> Quick Links
           </button>
-          <button onClick={() => navigate('/admin/announcements')} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap bg-white/5 text-white/40 hover:bg-white/10">
-            <Megaphone size={14} /> Announcements
-          </button>
         </div>
       </div>
 

@@ -55,7 +55,7 @@ export default function Header() {
     { path: '/calendar', label: 'Calendar', icon: Calendar },
     { path: '/community', label: 'Community', icon: Users },
     { path: '/chat', label: 'Chat', icon: MessageCircle },
-    { path: '/bookmarks', label: 'Saved', icon: Bookmark },
+    { path: '/saved', label: 'Saved', icon: Bookmark },
     { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   ]
 
@@ -174,7 +174,7 @@ export default function Header() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{profile.full_name || 'User'}</p>
                   <p className="text-[10px] text-white/40">
-                    {profile.role === 'admin' ? 'Admin' : profile.role === 'moderator' ? 'Moderator' : 'Member'}
+                    {profile.role === 'super_admin' ? 'Super Admin' : profile.role === 'admin' ? 'Admin' : profile.role === 'moderator' ? 'Moderator' : 'Member'}
                   </p>
                 </div>
                 <button onClick={handleLogout} className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center">

@@ -7,7 +7,7 @@ import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import LocationPicker from '../components/LocationPicker'
 
-const CATEGORIES = [
+export const CATEGORIES = [
   { id: 'home',     icon: Home,         mm: 'အိမ်',       en: 'Home',     color: 'text-emerald-400 bg-emerald-500/15' },
   { id: 'work',     icon: Briefcase,    mm: 'အလုပ်',      en: 'Work',     color: 'text-blue-400 bg-blue-500/15' },
   { id: 'food',     icon: Utensils,     mm: 'အစားအသောက်', en: 'Food',     color: 'text-amber-400 bg-amber-500/15' },
@@ -187,7 +187,7 @@ export default function SavedPlacesPage() {
   )
 }
 
-function PlaceCard({ place, lang, onDelete, onEdit, onOpenMap }) {
+export function PlaceCard({ place, lang, onDelete, onEdit, onOpenMap }) {
   const cat = CATEGORIES.find(c => c.id === place.category) || CATEGORIES[7]
   const Icon = cat.icon
 
@@ -243,7 +243,7 @@ function PlaceCard({ place, lang, onDelete, onEdit, onOpenMap }) {
   )
 }
 
-function PlaceForm({ lang, initial, userId, onClose, onSaved }) {
+export function PlaceForm({ lang, initial, userId, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: initial?.name || '',
     name_mm: initial?.name_mm || '',

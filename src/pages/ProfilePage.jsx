@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, LogOut, Edit3, Crown, Shield, User, BookMarked, Star, Building2, Bell, BellOff, Download, Trophy, Clock, ChevronRight } from 'lucide-react'
+import { Sparkles, MapPin, LogOut, Edit3, Crown, Shield, User, BookMarked, Star, Building2, Bell, BellOff, Download, Trophy, Clock, ChevronRight, Calendar } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -11,6 +11,7 @@ import { timeAgo } from '../hooks/usePresence'
 import { uploadImage } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
 import OfflineCachePanel from '../components/OfflineCachePanel'
+import TierBadge from '../components/TierBadge'
 
 const ROLE_CONFIG = {
   super_admin: { label: 'Super Admin', icon: Crown,  color: 'text-gold-400',   bg: 'bg-gold-500/20 border-gold-500/40' },
@@ -171,9 +172,12 @@ export default function ProfilePage() {
                 <RoleIcon size={11} /> {role.label}
               </span>
               {(profile?.points || 0) > 0 && (
-                <span className="badge bg-gold-500/15 text-gold-400 border border-gold-500/25">
-                  <Trophy size={10} /> {(profile.points || 0).toLocaleString()} pts
-                </span>
+                <>
+                  <span className="badge bg-gold-500/15 text-gold-400 border border-gold-500/25">
+                    <Trophy size={10} /> {(profile.points || 0).toLocaleString()} pts
+                  </span>
+                  <TierBadge points={profile.points || 0} size="sm" lang={lang} />
+                </>
               )}
             </div>
             {profile?.last_seen && (
@@ -192,7 +196,7 @@ export default function ProfilePage() {
       {/* ── Stats grid ── */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { icon: Building2,    label: lang === 'mm' ? 'လုပ်ငန်း' : 'Listings',  value: myStats.listings,  action: () => navigate('/directory') },
+          { icon: Building2,    label: lang === 'mm' ? 'လုပ်ငန်း' : 'Listings',  value: myStats.listings,  action: () => navigate('/my-submissions') },
           { icon: Star,         label: 'Reviews',                               value: myStats.reviews   },
           { icon: BookMarked,   label: lang === 'mm' ? 'Saved' : 'Saved',      value: myStats.bookmarks, action: () => navigate('/bookmarks') },
         ].map(({ icon: Icon, label, value, action, highlight }) => (
@@ -243,8 +247,11 @@ export default function ProfilePage() {
 
         {[
           { icon: Trophy,    label: 'Top Contributors', labelMm: 'Top Contributors', path: '/leaderboard', color: 'text-gold-400' },
+          { icon: Sparkles,  label: 'Points Guide',     labelMm: 'Points လမ်းညွှန်',  path: '/points',      color: 'text-gold-400' },
           { icon: BookMarked,label: 'Saved Items',      labelMm: 'Saved Items',      path: '/bookmarks',  color: 'text-brand-300' },
           { icon: MapPin,     label: 'Saved Places',     labelMm: 'သိမ်းထားသောနေရာများ', path: '/saved-places', color: 'text-emerald-300' },
+          { icon: Calendar,   label: 'My RSVPs',          labelMm: 'တက်မည့် ဖြစ်ရပ်များ',  path: '/my-rsvps',   color: 'text-green-300' },
+          { icon: Building2, label: 'My Submissions',  labelMm: 'ကျွန်တော့်တင်ထားသောများ', path: '/my-submissions', color: 'text-amber-300' },
           { icon: Building2, label: 'Add Listing',      labelMm: 'လုပ်ငန်းထည့်မည်',  path: '/submit',     color: 'text-brand-300' },
           ...(isModerator ? [{ icon: Shield, label: 'Admin Panel', labelMm: 'Admin Panel', path: '/admin', color: 'text-amber-400' }] : []),
         ].map(({ icon: Icon, label, labelMm, path, color }) => (

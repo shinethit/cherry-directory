@@ -22,7 +22,6 @@ const TYPES = [
 
 // PostForm (unchanged)
 function PostForm({ onClose, onSuccess, lang }) {
-  const { user } = useAuth()
   const [form, setForm] = useState({
     title: '', title_mm: '', content: '', content_mm: '',
     type: 'announcement', is_pinned: false,
@@ -329,6 +328,14 @@ export default function NewsPage() {
         <h1 className="font-display font-bold text-xl text-white">
           {lang === 'mm' ? 'သတင်းနှင့် ဖြစ်ရပ်များ' : 'News & Events'}
         </h1>
+        {(isAdmin || isModerator) && (
+          <button
+            onClick={() => navigate('/news/create')}
+            className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5"
+          >
+            <Plus size={14} /> {lang === 'mm' ? 'သတင်းထည့်' : 'Add News'}
+          </button>
+        )}
         {canEdit && (
           <button
             onClick={() => setShowForm(true)}

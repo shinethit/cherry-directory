@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, MapPin, Clock, CheckCircle, Star, Plus, Edit3 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, MapPin, Clock, CheckCircle, Star, Plus, Edit3, LayoutGrid, List } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { getOptimizedUrl } from '../lib/cloudinary'
+import { getCountdown } from '../lib/countdown'
+import WeeklyView from '../components/WeeklyView'
 
 // Myanmar month names
 const MM_MONTHS = ['ဇန်နဝါရီ','ဖေဖော်ဝါရီ','မတ်','ဧပြီ','မေ','ဇွန်','ဇူလိုင်','သြဂုတ်','စက်တင်ဘာ','အောက်တိုဘာ','နိုဝင်ဘာ','ဒီဇင်ဘာ']
@@ -109,6 +111,7 @@ function EventCard({ event, compact = false }) {
   const { lang } = useLang()
   const { user, isAdmin, isModerator } = useAuth()
   const cover = event.cover_url ? getOptimizedUrl(event.cover_url, { width: 400 }) : null
+  const countdown = getCountdown(event.event_start, lang)
   const isMultiDay = event.event_end && !isSameDay(new Date(event.event_start), new Date(event.event_end))
   const isPast = event.event_end
     ? new Date(event.event_end) < new Date()
@@ -189,6 +192,11 @@ function EventCard({ event, compact = false }) {
                 <span className="text-[10px] truncate font-myanmar">{event.event_location}</span>
               </div>
             )}
+            {countdown && (
+              <span className={'inline-block mt-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/8 ' + countdown.cls}>
+                {countdown.label}
+              </span>
+            )}
           </div>
         </div>
 
@@ -219,6 +227,9 @@ export default function CalendarPage() {
   const [events, setEvents]       = useState([])      // all events for this month
   const [upcoming, setUpcoming]   = useState([])      // next 5 upcoming
   const [loading, setLoading]     = useState(true)
+  const [viewMode, setViewMode]     = useState('month')
+  const [eventCats, setEventCats]   = useState([])
+  const [selEventCat, setSelEventCat] = useState(null)
 
   // Build calendar grid for current view month
   const firstDay = new Date(viewYear, viewMonth, 1).getDay()
@@ -235,7 +246,7 @@ export default function CalendarPage() {
 
     const { data } = await supabase
       .from('posts')
-      .select('id, title, title_mm, cover_url, event_start, event_end, event_location, type, status, author_id')
+      .select('id, title, title_mm, cover_url, event_start, event_end, event_location, type, status, author_id, category_id')
       .eq('type', 'event')
       .eq('status', 'published')
       .gte('event_start', from)
@@ -272,7 +283,9 @@ export default function CalendarPage() {
 
   // Events that have a dot on a given day
   function eventsOnDay(date) {
-    return events.filter(ev => ev.event_start && isSameDay(new Date(ev.event_start), date))
+    return events
+      .filter(ev => !selEventCat || ev.category_id === selEventCat)
+      .filter(ev => ev.event_start && isSameDay(new Date(ev.event_start), date))
   }
 
   // Events for selected day
@@ -301,8 +314,47 @@ export default function CalendarPage() {
         )}
       </div>
 
+      {/* ── View toggle ── */}
+      <div className="px-4 mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex bg-white/5 rounded-xl p-1 border border-white/10">
+          <button
+            onClick={() => setViewMode('month')}
+            className={'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ' + (viewMode === 'month' ? 'bg-brand-600/60 text-brand-200' : 'text-white/50')}
+          >
+            <LayoutGrid size={12} /> {lang === 'mm' ? 'လ' : 'Month'}
+          </button>
+          <button
+            onClick={() => setViewMode('week')}
+            className={'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ' + (viewMode === 'week' ? 'bg-brand-600/60 text-brand-200' : 'text-white/50')}
+          >
+            <List size={12} /> {lang === 'mm' ? 'ရက်' : 'Week'}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Category filter ── */}
+      {eventCats.length > 0 && (
+        <div className="px-4 mb-3 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <button
+            onClick={() => setSelEventCat(null)}
+            className={'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (selEventCat === null ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40' : 'bg-white/5 text-white/50 border border-white/10')}
+          >
+            {lang === 'mm' ? 'အားလုံး' : 'All'}
+          </button>
+          {eventCats.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setSelEventCat(cat.id === selEventCat ? null : cat.id)}
+              className={'flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (selEventCat === cat.id ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40' : 'bg-white/5 text-white/50 border border-white/10')}
+            >
+              {cat.icon} {lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Month grid ── */}
-      <div className="mx-4 card-dark rounded-3xl overflow-hidden border border-white/6">
+      <div className={"mx-4 card-dark rounded-3xl overflow-hidden border border-white/6 " + (viewMode === 'month' ? '' : 'hidden')}>
         {/* Month nav */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
           <button
@@ -388,6 +440,16 @@ export default function CalendarPage() {
           </div>
         )}
       </div>
+
+      {/* ── Week view ── */}
+      {viewMode === 'week' && (
+        <WeeklyView
+          events={selEventCat ? events.filter(e => e.category_id === selEventCat) : events}
+          selected={selected}
+          setSelected={setSelected}
+          lang={lang}
+        />
+      )}
 
       {/* ── Selected day events ── */}
       <div className="px-4 mt-5">

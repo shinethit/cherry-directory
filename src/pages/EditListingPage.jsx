@@ -9,6 +9,7 @@ import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { useAppConfig } from '../contexts/AppConfigContext'
+import { BusinessHoursEditor } from '../components/BusinessHours'
 
 function Field({ label, children, required }) {
   return (
@@ -78,6 +79,7 @@ export default function EditListingPage() {
           latitude: listing.latitude?.toString() || '',
           longitude: listing.longitude?.toString() || '',
           gallery: listing.images || [],   // load existing gallery images
+          hours: listing.hours || null,
         })
     
     } catch (e) { console.warn(e) }
@@ -395,6 +397,14 @@ export default function EditListingPage() {
             <Field label="Facebook"><input type="url" value={form.facebook} onChange={e => set('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." /></Field>
             <Field label="Website"><input type="url" value={form.website} onChange={e => set('website', e.target.value)} className="input-dark" placeholder="https://..." /></Field>
           </div>
+        </div>
+
+        {/* Business Hours */}
+        <div className="border-t border-white/8 pt-4">
+          <p className="text-xs text-white/40 mb-3 font-display font-semibold uppercase tracking-wider">
+            {lang === 'mm' ? 'ဖွင့်ချိန်' : 'Business Hours'}
+          </p>
+          <BusinessHoursEditor value={form.hours} onChange={h => set('hours', h)} lang={lang} />
         </div>
 
         {/* View history link */}

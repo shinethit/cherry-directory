@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase'
 import { ReactionBar, Skeleton } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { useAuth } from '../contexts/AuthContext'
+import ShareButton from '../components/ShareButton'
+import { getCountdown } from '../lib/countdown'
 import Lightbox from 'yet-another-react-lightbox'
 import 'yet-another-react-lightbox/styles.css'
 import Zoom from 'yet-another-react-lightbox/plugins/zoom'
@@ -92,7 +94,7 @@ function RsvpSection({ postId }) {
 export default function PostDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { isSuperAdmin, isAdmin, isModerator } = useAuth()
+  const { user, isSuperAdmin, isAdmin, isModerator } = useAuth()
   const [post, setPost] = useState(null)
 
   // Lightbox state
@@ -126,8 +128,9 @@ export default function PostDetailPage() {
   if (!post) return <div className="p-4 space-y-3"><Skeleton className="h-64" /><Skeleton className="h-48" /></div>
 
   const cover = post.cover_url ? getOptimizedUrl(post.cover_url, { width: 800 }) : null
+  const eventCountdown = post.type === 'event' ? getCountdown(post.event_start) : null
   const typeColor = post.type === 'event' ? 'bg-green-500/20 text-green-400 border-green-500/30' : post.type === 'announcement' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-brand-700/60 text-brand-200 border-brand-500/30'
-  const canEdit = isSuperAdmin || isAdmin || isModerator
+  const canEdit = isSuperAdmin || isAdmin || isModerator || (post && post.author_id && post.author_id === user?.id)
 
   return (
     <div className="pb-8">
@@ -136,10 +139,15 @@ export default function PostDetailPage() {
           <ArrowLeft size={18} className="text-white" />
         </button>
         <div className="flex gap-2">
+          <ShareButton
+            url={typeof window !== "undefined" ? window.location.href : ""}
+            title={post.title_mm || post.title}
+            description={post.content_mm || post.content}
+          />
           {canEdit && (
             <>
               <button
-                onClick={() => navigate(`/admin/posts/${id}/edit`)}
+                onClick={() => navigate(post.type === 'event' ? `/events/edit/${id}` : `/news/edit/${id}`)}
                 className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/30"
                 title="Edit"
               >
@@ -179,6 +187,12 @@ export default function PostDetailPage() {
         {/* Event specific info */}
         {post.type === 'event' && (post.event_start || post.event_location) && (
           <div className="card-dark p-4 rounded-2xl space-y-2">
+            {eventCountdown && (
+              <div className="flex items-center gap-2">
+                <span className={'text-xs font-bold ' + eventCountdown.cls}>{eventCountdown.label}</span>
+                {eventCountdown.urgent && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
+              </div>
+            )}
             {post.event_start && (
               <div className="flex items-center gap-2 text-sm">
                 <Calendar size={14} className="text-green-400" />
