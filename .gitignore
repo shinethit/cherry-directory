@@ -34,3 +34,6 @@ test-notification.sql
 
 # Test files
 public/test.html
+
+# Build output
+dist/
