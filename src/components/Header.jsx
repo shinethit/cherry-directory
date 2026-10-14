@@ -75,7 +75,7 @@ export default function Header() {
             ? 'bg-[#0a0018]/80 backdrop-blur-md border-b border-white/10'
             : 'bg-transparent'
         }`}
-        style={{ top: 'env(safe-area-inset-top)' }}
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
