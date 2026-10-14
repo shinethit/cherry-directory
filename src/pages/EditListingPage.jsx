@@ -187,7 +187,7 @@ export default function EditListingPage() {
   return (
     <div className="pb-10">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 glass sticky top-[97px] z-40 border-b border-white/8">
+      <div className="flex items-center justify-between px-4 py-3 glass sticky top-[var(--header-h)] z-40 border-b border-white/8">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
             <ArrowLeft size={18} className="text-white" />

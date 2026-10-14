@@ -387,7 +387,7 @@ export default function DirectoryPage() {
   if (!selectedCategory) {
     return (
       <div className="pb-8">
-        <div className="sticky top-0 z-40 bg-[#140020] border-b border-white/10">
+        <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/10">
           <div className="px-4 py-4">
             <h1 className="font-display font-bold text-lg text-white">📂 အမျိုးအစားများ</h1>
             <p className="text-xs text-white/40 font-myanmar mt-1">လုပ်ငန်းအမျိုးအစားကို ရွေးပါ</p>
@@ -431,7 +431,7 @@ export default function DirectoryPage() {
   if (selectedCategory && !selectedSubcategory) {
     return (
       <div className="pb-8">
-        <div className="sticky top-0 z-40 bg-[#140020] border-b border-white/10">
+        <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/10">
           <div className="px-4 py-3">
             <button onClick={goBack} className="flex items-center gap-2 mb-2 text-white/60 hover:text-white">
               <ChevronRight size={16} className="rotate-180" />
@@ -506,7 +506,7 @@ export default function DirectoryPage() {
   // Render Listings Level
   return (
     <div className="flex flex-col min-h-full">
-      <div className="sticky top-0 z-40 bg-[#140020] border-b border-white/10 px-4 py-3 space-y-3">
+      <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/10 px-4 py-3 space-y-3">
         <button onClick={goBack} className="flex items-center gap-2 text-white/60 hover:text-white">
           <ChevronRight size={16} className="rotate-180" />
           <span className="text-xs">နောက်သို့</span>
