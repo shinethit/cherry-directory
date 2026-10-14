@@ -1,41 +1,22 @@
-node_modules
-
+﻿node_modules
 # Environment variables (NEVER commit)
 .env.local
 .env
 .env.*.local
-
 # Temp scripts
 *.cjs
-
 # SQL migration files
 supabase-*.sql
-
 # Test files
 public/test.html
-
 # Environment
-.env.local
-.env
-.env.*.local
-
-# Temp scripts
-*.cjs
-
 # SQL migrations
-supabase-*.sql
 saved-places.sql
 fix-*.sql
 test-notification.sql
-
 # Backups
 *.bak
 *.bak.*
-
-# Test files
-public/test.html
-
 # Build output
 dist/
-
 *.bak-*
