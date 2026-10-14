@@ -5,6 +5,7 @@ import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့်ထားပါ
+import { confirmDialog } from '../lib/confirmDialog'
 
 const BLANK = { name: '', name_mm: '', icon: '📦', type: 'directory', sort_order: 0, parent_id: null, description_mm: '', is_active: true, is_featured: false }
 
@@ -290,14 +291,14 @@ export default function CategoryManagerPage() {
     ? topLevel.filter(c => (c.name_mm || '').includes(search) || (c.name || '').toLowerCase().includes(search.toLowerCase()))
     : topLevel
 
-  function subsOf(id) { return cats.filter(c => c.parent_id === id) }
+  async function subsOf(id) { return cats.filter(c => c.parent_id === id) }
 
   async function handleDelete(cat) {
     const subs = subsOf(cat.id)
     const msg = subs.length > 0
       ? (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်ရင် Sub-category ${subs.length} ခုလည်း ဖျက်မည်။ ဆက်မည်လား?` : `Deleting "${cat.name}" will also delete ${subs.length} sub-categories. Continue?`)
       : (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်မည်လား?` : `Delete "${cat.name}"?`)
-    if (!confirm(msg)) return
+    if (!(await confirmDialog(msg))) return
     await supabase.from('categories').delete().eq('id', cat.id)
     load()
   }

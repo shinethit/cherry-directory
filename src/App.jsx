@@ -11,6 +11,7 @@ import BottomNav from './components/BottomNav'
 import Header from './components/Header'
 import AnnouncementBanner from './components/AnnouncementBanner'
 import OnboardingGuide from './components/OnboardingGuide'
+import { ConfirmProvider } from './components/ConfirmModal'
 
 // ── Lazy pages — default exports ─────────────────────────────
 const HomePage            = lazy(() => import('./pages/HomePage'))
@@ -191,7 +192,9 @@ export default function App() {
         <AuthProvider>
           <AppConfigProvider>
             <ThemeProvider>
-              <AppRoutes />
+              <ConfirmProvider>
+                <AppRoutes />
+              </ConfirmProvider>
             </ThemeProvider>
           </AppConfigProvider>
         </AuthProvider>

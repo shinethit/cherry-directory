@@ -8,8 +8,9 @@ import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { confirmDialog } from '../lib/confirmDialog'
 
-function Field({ label, children, required }) {
+async function Field({ label, children, required }) {
   return (
     <div>
       <label className="block text-xs text-white/50 mb-1.5">
@@ -74,7 +75,7 @@ export default function EventFormPage() {
     }
   }, [id, user])
 
-  function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
+  async function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
   async function handleCoverUpload(file) {
     setCoverUploading(true)
@@ -111,7 +112,7 @@ export default function EventFormPage() {
   }
 
   async function handleDelete() {
-    if (!confirm(`"${form.title}" ကို ဖျက်မည်လား?`)) return
+    if (!(await confirmDialog(`"${form.title}" ကို ဖျက်မည်လား?`))) return
     await supabase.from('posts').delete().eq('id', id)
     await log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
     navigate('/calendar')

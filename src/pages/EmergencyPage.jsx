@@ -6,6 +6,7 @@ import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { useNavigate } from 'react-router-dom'
+import { confirmDialog } from '../lib/confirmDialog'
 
 // ── Category config ───────────────────────────────────────────
 const CATS = [
@@ -119,7 +120,7 @@ const BLANK = {
 function ContactForm({ initial, onClose, onSaved, lang }) {
   const [form, setForm] = useState(initial || BLANK)
   const [saving, setSaving]   = useState(false)
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const set = async (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   async function save() {
     if (!form.name_mm && !form.name) return
@@ -261,7 +262,7 @@ export default function EmergencyPage() {
   useEffect(() => { load() }, [])
 
   async function handleDelete(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this contact?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this contact?'))) return
     await supabase.from('emergency_contacts').update({ is_active: false }).eq('id', id)
     load()
   }

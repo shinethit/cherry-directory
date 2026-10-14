@@ -3,6 +3,8 @@ import { Database, Check, X, RefreshCw, Trash2, Clock, HardDrive, AlertCircle } 
 import { subscribe, inspectLocalStorage, clearCache } from '../lib/cacheStatus'
 import { useLang } from '../contexts/LangContext'
 import { useQueryClient } from '@tanstack/react-query'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 export default function OfflineCachePanel() {
   const { lang } = useLang()
@@ -31,20 +33,20 @@ export default function OfflineCachePanel() {
     return d.toLocaleString()
   }
 
-  function handleRefresh() {
+  async function handleRefresh() {
     queryClient.invalidateQueries()
     // Trigger a re-prefetch by clearing processed flag — but hook uses ref
     // Simplest: reload page which re-runs prefetch
     window.location.reload()
   }
 
-  function handleClear() {
-    if (!confirm(lang === 'mm' ? 'Cache ဖျက်မှာ သေချာလား? Offline မရတော့ဘူး။' : 'Clear offline cache? You will lose offline access.')) return
+  async function handleClear() {
+    if (!(await confirmDialog(lang === 'mm' ? 'Cache ဖျက်မှာ သေချာလား? Offline မရတော့ဘူး။' : 'Clear offline cache? You will lose offline access.'))) return
     clearCache()
     setStorage(inspectLocalStorage())
     // Also clear in-memory query cache
     queryClient.clear()
-    alert(lang === 'mm' ? 'Cache ဖျက်ပြီးပါပြီ။ Page ကို Reload ပါ။' : 'Cache cleared. Please reload.')
+    showError(lang === 'mm' ? 'Cache ဖျက်ပြီးပါပြီ။ Page ကို Reload ပါ။' : 'Cache cleared. Please reload.')
   }
 
   const running = status?.running

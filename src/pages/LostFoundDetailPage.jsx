@@ -11,6 +11,8 @@ import 'yet-another-react-lightbox/styles.css'
 import Zoom from 'yet-another-react-lightbox/plugins/zoom'
 import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 export default function LostFoundDetailPage() {
   const { id } = useParams()
@@ -41,15 +43,15 @@ export default function LostFoundDetailPage() {
   }, [id])
 
   async function handleDelete() {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
     const { error } = await supabase.from('lost_found').delete().eq('id', id)
-    if (error) alert('Error: ' + error.message)
+    if (error) showError(error.message)
     else navigate('/lost-found')
   }
 
   async function handleUpdate() {
     const { error } = await supabase.from('lost_found').update(editForm).eq('id', id)
-    if (error) alert('Error: ' + error.message)
+    if (error) showError(error.message)
     else {
       setPost(editForm)
       setEditing(false)

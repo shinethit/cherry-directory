@@ -10,6 +10,8 @@ import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { Skeleton } from '../components/UI'
 import ShareButton from '../components/ShareButton'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 const HISTORY_CATS = [
   { id: 'all',        mm: 'အားလုံး',          en: 'All',         icon: '📜' },
@@ -168,7 +170,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
       const { error } = await supabase.from('history').update(payload).eq('id', editPost.id)
       if (error) {
         console.error('Update error:', error)
-        alert('Error: ' + error.message)
+        showError(error.message)
         setSubmitting(false)
         return
       }
@@ -176,7 +178,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
       const { error } = await supabase.from('history').insert(payload)
       if (error) {
         console.error('Insert error:', error)
-        alert('Error: ' + error.message)
+        showError(error.message)
         setSubmitting(false)
         return
       }
@@ -489,11 +491,11 @@ export default function HistoryPage() {
   }, [load])
 
   async function deletePost(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
     const { error } = await supabase.from('history').delete().eq('id', id)
     if (error) {
       console.error('Delete error:', error)
-      alert('Error: ' + error.message)
+      showError(error.message)
     } else {
       load()
     }

@@ -12,9 +12,11 @@ import 'yet-another-react-lightbox/styles.css'
 import Zoom from 'yet-another-react-lightbox/plugins/zoom'
 import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 // Inline RSVP (unchanged)
-function RsvpSection({ postId }) {
+async function RsvpSection({ postId }) {
   const { isLoggedIn, user } = useAuth()
   const navigate = useNavigate()
   const [status, setStatus] = useState(null)
@@ -110,9 +112,9 @@ export default function PostDetailPage() {
   }, [id])
 
   async function handleDelete() {
-    if (!confirm('Are you sure you want to delete this post?')) return
+    if (!(await confirmDialog('Are you sure you want to delete this post?'))) return
     const { error } = await supabase.from('posts').delete().eq('id', id)
-    if (error) alert(error.message)
+    if (error) showError(error.message)
     else navigate('/news')
   }
 

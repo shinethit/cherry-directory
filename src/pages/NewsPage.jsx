@@ -12,6 +12,8 @@ import 'yet-another-react-lightbox/styles.css'
 import Zoom from 'yet-another-react-lightbox/plugins/zoom'
 import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 const TYPES = [
   { value: '',             label: 'အားလုံး',        labelEn: 'All'           },
@@ -301,9 +303,9 @@ export default function NewsPage() {
   useEffect(() => { load() }, [type])
 
   async function handleDelete(postId) {
-    if (!confirm(lang === 'mm' ? 'Post ကို ဖျက်မှာလား?' : 'Delete this post?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'Post ကို ဖျက်မှာလား?' : 'Delete this post?'))) return
     const { error } = await supabase.from('posts').delete().eq('id', postId)
-    if (error) alert(error.message)
+    if (error) showError(error.message)
     else load()
   }
 

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { useSEO } from '../hooks/useSEO'
 import { ListingCard, PostCard, EmptyState } from '../components/UI'
 import { PlaceCard, PlaceForm, CATEGORIES } from './SavedPlacesPage'
+import { confirmDialog } from '../lib/confirmDialog'
 
 export default function SavedPage() {
   const navigate = useNavigate()
@@ -79,12 +80,12 @@ export default function SavedPage() {
   useEffect(() => { loadBookmarks() }, [loadBookmarks])
   useEffect(() => { loadPlaces() }, [loadPlaces])
 
-  function switchTab(t) {
+  async function switchTab(t) {
     setParams({ tab: t }, { replace: true })
   }
 
   async function handleDeletePlace(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
     await supabase.from('saved_places').delete().eq('id', id)
     setPlaces(prev => prev.filter(p => p.id !== id))
   }

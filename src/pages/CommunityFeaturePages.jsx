@@ -8,6 +8,8 @@ import { useSEO } from '../hooks/useSEO'
 import { Plus, Trash2, ArrowLeft, Droplets, Eye, Phone, MapPin, Calendar, Clock, Edit2, Copy, Check, Share2, AlertCircle } from 'lucide-react'
 import { ImageUploader } from '../components/UI'
 import { uploadImage } from '../lib/cloudinary'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 // ─────────────────────────────────────────────────────────────
 // WEATHER ALERT PAGE (unchanged, same as before)
@@ -99,7 +101,7 @@ export function DonationPage() {
     setImgLoading(false)
   }
   const [submitting, setSubmitting] = useState(false)
-  const set = (k, v) => setForm(f => ({...f, [k]: v}))
+  const set = async (k, v) => setForm(f => ({...f, [k]: v}))
 
   async function load() {
     setLoading(true)
@@ -135,7 +137,7 @@ export function DonationPage() {
   }
 
   async function deleteDonation(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
     await supabase.from('donations').delete().eq('id', id); load()
   }
 
@@ -418,7 +420,7 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
   const [images, setImages] = useState([])
   const [imgLoading, setImgLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const set = (k, v) => setForm(f => ({...f, [k]: v}))
+  const set = async (k, v) => setForm(f => ({...f, [k]: v}))
 
   useEffect(() => {
     if (editTarget) {
@@ -443,7 +445,7 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
     }
   }, [editTarget])
 
-  function toggleBloodType(bt) {
+  async function toggleBloodType(bt) {
     setForm(f => ({...f, blood_types_needed: f.blood_types_needed.includes(bt) ? f.blood_types_needed.filter(b => b !== bt) : [...f.blood_types_needed, bt]}))
   }
 
@@ -478,7 +480,7 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
 
     if (error) {
       console.error('Submit error:', error)
-      alert('Error: ' + error.message)
+      showError(error.message)
     } else {
       onSuccess()
     }
@@ -591,7 +593,7 @@ export function HealthServicePage() {
   }, [typeFilter])
 
   async function deleteItem(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
     await supabase.from('health_services').delete().eq('id', id)
     load()
   }

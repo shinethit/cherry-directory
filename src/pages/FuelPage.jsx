@@ -5,6 +5,8 @@ import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 const STATUS_CFG = {
   available:   { mm: 'ရနိုင်',   en: 'Available', color: 'text-green-400', bg: 'bg-green-500/15 border-green-500/25', dot: 'bg-green-500' },
@@ -172,7 +174,7 @@ function FuelTypesTab({ onChanged }) {
   const [form, setForm] = useState({ name: '', name_mm: '', icon: '⛽' })
 
   const set  = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const setE = (k, v) => setEditData(f => ({ ...f, [k]: v }))
+  const setE = async (k, v) => setEditData(f => ({ ...f, [k]: v }))
 
   async function load() {
     setLoading(true)
@@ -212,7 +214,7 @@ function FuelTypesTab({ onChanged }) {
   }
 
   async function deleteFuelType(id) {
-    if (!window.confirm('ဆီအမျိုးအစားကို ဖျက်မည်လား? ဆိုင်များမှ ဆီပိတ်သွားနိုင်သည်။')) return
+    if (!(await confirmDialog('ဆီအမျိုးအစားကို ဖျက်မည်လား? ဆိုင်များမှ ဆီပိတ်သွားနိုင်သည်။'))) return
     await supabase.from('fuel_types').delete().eq('id', id)
     load()
     onChanged?.()
@@ -330,7 +332,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
   const [form, setForm]         = useState({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '', fuel_type_names: [] })
 
   const set  = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const setE = (k, v) => setEditData(f => ({ ...f, [k]: v }))
+  const setE = async (k, v) => setEditData(f => ({ ...f, [k]: v }))
 
   async function load() {
     setLoading(true)
@@ -380,7 +382,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
   }
 
   async function deleteStation(id) {
-    if (!window.confirm('ဆိုင်ကို ဖျက်မည်လား?')) return
+    if (!(await confirmDialog('ဆိုင်ကို ဖျက်မည်လား?'))) return
     await supabase.from('fuel_stations').delete().eq('id', id)
     load()
     onUpdated()
@@ -656,7 +658,7 @@ export default function FuelPage() {
     }).eq('id', stationId)
 
     if (error) {
-      alert('Error updating queue: ' + error.message)
+      showError('Error updating queue: ' + error.message)
       return
     }
 

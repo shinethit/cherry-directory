@@ -8,6 +8,8 @@ import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 const RENT_TYPES = [
   { id: 'all',      mm: 'အားလုံး',        en: 'All',         icon: '🏠' },
@@ -203,7 +205,7 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
       onSuccess()
     } catch (err) {
       console.error('[RentForm] Submit error:', err)
-      alert('Error: ' + err.message)
+      showError(err.message)
       setSubmitting(false)
     }
   }
@@ -346,7 +348,7 @@ export default function RentPage() {
   }, [propertyFilter, postTypeFilter, statusFilter])
 
   async function deletePost(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
     await supabase.from('rentals').delete().eq('id', id)
     load()
   }

@@ -7,6 +7,7 @@ import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { confirmDialog } from '../lib/confirmDialog'
 
 function PriceDisplay({ price, priceMax }) {
   if (!price) return <span className="text-white/30 text-xs">—</span>
@@ -71,7 +72,7 @@ function ItemForm({ listingId, categoryId, item, categories, onSave, onCancel })
     is_featured: item?.is_featured ?? false,
   })
   const [imgLoading, setImgLoading] = useState(false)
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const set = async (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   async function handleImg(file) {
     setImgLoading(true)
@@ -199,7 +200,7 @@ export default function MenuPage() {
   }
 
   async function deleteCategory(catId) {
-    if (!confirm('Category ဖျက်မည်။ ထိုCategory ထဲရှိ items များ Uncategorized ဖြစ်သွားမည်?')) return
+    if (!(await confirmDialog('Category ဖျက်မည်။ ထိုCategory ထဲရှိ items များ Uncategorized ဖြစ်သွားမည်?'))) return
     await supabase.from('menu_categories').delete().eq('id', catId)
     setMenuCategories(prev => prev.filter(c => c.id !== catId))
   }
@@ -227,7 +228,7 @@ export default function MenuPage() {
   }
 
   async function deleteItem(itemId) {
-    if (!confirm('Item ဖျက်မည်လား?')) return
+    if (!(await confirmDialog('Item ဖျက်မည်လား?'))) return
     const item = items.find(i => i.id === itemId)
     await supabase.from('menu_items').delete().eq('id', itemId)
     setItems(prev => prev.filter(i => i.id !== itemId))

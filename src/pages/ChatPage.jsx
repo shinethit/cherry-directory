@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Reply, X, Trash2, Plus, Pencil, Settings } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 function ChatBubble({ msg, isMe, onReply, onDelete, canDelete }) {
   return (
@@ -75,7 +77,7 @@ export default function ChatPage() {
       if (data?.length && !activeRoom) setActiveRoom(data[0])
     } catch (err) {
       console.error('loadRooms error:', err)
-      alert('Rooms ရယူရာတွင် အမှားရှိသည်: ' + err.message)
+      showError('Rooms ရယူရာတွင် အမှားရှိသည်: ' + err.message)
     }
   }
 
@@ -189,12 +191,12 @@ export default function ChatPage() {
       if (error) throw error
     } catch (err) {
       console.error('Send error:', err)
-      alert('မက်ဆေ့ ပို့ရာတွင် အမှားရှိသည်: ' + err.message)
+      showError('မက်ဆေ့ ပို့ရာတွင် အမှားရှိသည်: ' + err.message)
     }
   }
 
   const deleteMessage = async (messageId) => {
-    if (!confirm('ဖျက်မည်လား?')) return
+    if (!(await confirmDialog('ဖျက်မည်လား?'))) return
     try {
       const { error } = await supabase.from('chat_messages').delete().eq('id', messageId)
       if (error) throw error
@@ -202,7 +204,7 @@ export default function ChatPage() {
       setMessages(prev => prev.filter(m => m.id !== messageId))
     } catch (err) {
       console.error('Delete error:', err)
-      alert('ဖျက်ရာတွင် အမှားရှိသည်: ' + err.message)
+      showError('ဖျက်ရာတွင် အမှားရှိသည်: ' + err.message)
     }
   }
 
@@ -266,7 +268,7 @@ export default function ChatPage() {
   }
 
   const handleDeleteRoom = async (roomId) => {
-    if (!confirm('ဒီ Room ကို ဖျက်မည်လား? အတွင်းက မက်ဆေ့များပါ ဖျက်မည်။')) return
+    if (!(await confirmDialog('ဒီ Room ကို ဖျက်မည်လား? အတွင်းက မက်ဆေ့များပါ ဖျက်မည်။'))) return
     try {
       const { error } = await supabase.from('chat_rooms').delete().eq('id', roomId)
       if (error) throw error
@@ -274,7 +276,7 @@ export default function ChatPage() {
       await loadRooms()
     } catch (err) {
       console.error('Delete room error:', err)
-      alert('ဖျက်ရာတွင် အမှားရှိသည်: ' + err.message)
+      showError('ဖျက်ရာတွင် အမှားရှိသည်: ' + err.message)
     }
   }
 
@@ -293,7 +295,7 @@ export default function ChatPage() {
       await loadRooms()
     } catch (err) {
       console.error('Reorder error:', err)
-      alert('အစီအစဉ်ပြောင်းရာတွင် အမှားရှိသည်: ' + err.message)
+      showError('အစီအစဉ်ပြောင်းရာတွင် အမှားရှိသည်: ' + err.message)
     }
   }
 

@@ -8,8 +8,9 @@ import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { confirmDialog } from '../lib/confirmDialog'
 
-function Field({ label, children, required }) {
+async function Field({ label, children, required }) {
   return (
     <div>
       <label className="block text-xs text-white/50 mb-1.5">
@@ -78,7 +79,7 @@ export default function NewsEditPage() {
     }
   }, [id, user, isAdmin, isModerator, navigate])
 
-  function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
+  async function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
   async function handleCoverUpload(file) {
     setCoverUploading(true)
@@ -116,7 +117,7 @@ export default function NewsEditPage() {
   }
 
   async function handleDelete() {
-    if (!confirm((lang === 'mm' ? 'ဤသတင်းကို ဖျက်မည်လား?' : 'Delete this post?'))) return
+    if (!(await confirmDialog((lang === 'mm' ? 'ဤသတင်းကို ဖျက်မည်လား?' : 'Delete this post?')))) return
     await supabase.from('posts').delete().eq('id', id)
     await log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
     navigate('/news')

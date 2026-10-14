@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { useSEO } from '../hooks/useSEO'
 import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
+import { confirmDialog } from '../lib/confirmDialog'
 
 const STATUS_META = {
   pending:   { label_mm: 'စစ်ဆေးဆဲ',   label_en: 'Pending',   icon: Clock,        cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
@@ -42,7 +43,7 @@ export default function MySubmissionsPage() {
   useEffect(() => { load() }, [load])
 
   async function handleDelete(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this listing?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this listing?'))) return
     const { error } = await supabase.from('listings').delete().eq('id', id)
     if (!error) setItems(prev => prev.filter(i => i.id !== id))
   }

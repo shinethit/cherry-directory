@@ -6,6 +6,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import LocationPicker from '../components/LocationPicker'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 export const CATEGORIES = [
   { id: 'home',     icon: Home,         mm: 'အိမ်',       en: 'Home',     color: 'text-emerald-400 bg-emerald-500/15' },
@@ -47,7 +49,7 @@ export default function SavedPlacesPage() {
   useEffect(() => { load() }, [user])
 
   async function handleDelete(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
     await supabase.from('saved_places').delete().eq('id', id)
     setPlaces(prev => prev.filter(p => p.id !== id))
   }
@@ -261,7 +263,7 @@ export function PlaceForm({ lang, initial, userId, onClose, onSaved }) {
   async function save() {
     if (!form.name && !form.name_mm) return
     if (!form.latitude || !form.longitude) {
-      alert(lang === 'mm' ? 'မြေပုံပေါ်မှ နေရာရွေးပါ' : 'Please pick a location on the map')
+      showError(lang === 'mm' ? 'မြေပုံပေါ်မှ နေရာရွေးပါ' : 'Please pick a location on the map')
       return
     }
     setSaving(true)

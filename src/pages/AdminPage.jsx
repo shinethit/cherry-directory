@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import CategoryManagerPage from './CategoryManagerPage'
+import { confirmDialog } from '../lib/confirmDialog'
 
 const PRESET_LINKS = [
   { url: '', label: '-- App ထဲရှိ စာမျက်နှာတစ်ခုကို ရွေးပါ --' },
@@ -56,7 +57,7 @@ export default function AdminPage() {
   const [linkForm, setLinkForm] = useState({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
   const [linkLoading, setLinkLoading] = useState(false)
 
-  function showToast(msg, type = 'success') {
+  async function showToast(msg, type = 'success') {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 4000)
   }
@@ -163,7 +164,7 @@ export default function AdminPage() {
   }
 
   async function handleRoleChange(userId, newRole) {
-    if (!window.confirm(`ဒီ User ကို ${newRole.toUpperCase()} Role ပြောင်းပေးမှာ သေချာပြီလား?`)) return
+    if (!(await confirmDialog(`ဒီ User ကို ${newRole.toUpperCase()} Role ပြောင်းပေးမှာ သေချာပြီလား?`))) return
     try {
       const { data: updated, error } = await supabase
         .from('profiles')
@@ -226,7 +227,7 @@ export default function AdminPage() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။')) return
+    if (!(await confirmDialog('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။'))) return
     setDeleting(id)
     try {
       await supabase.from('listing_reports').delete().eq('listing_id', id)
@@ -241,7 +242,7 @@ export default function AdminPage() {
     setDeleting(null)
   }
 
-  function handleEdit(listing) {
+  async function handleEdit(listing) {
     setEditingId(listing.id)
     setEditForm(listing)
   }
@@ -288,7 +289,7 @@ export default function AdminPage() {
   }
 
   async function handleDeleteLink(id) {
-    if (!window.confirm('ဖျက်မှာသေချာပြီလား?')) return
+    if (!(await confirmDialog('ဖျက်မှာသေချာပြီလား?'))) return
     try {
       const { error } = await supabase.from('quick_links').delete().eq('id', id)
       if (error) throw error

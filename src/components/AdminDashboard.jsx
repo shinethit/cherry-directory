@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BarChart3, Users, FileText, Settings, AlertCircle, CheckCircle, XCircle, Search, Filter, ChevronDown, ChevronUp, Trash2, Edit2, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useLang } from '../contexts/LangContext';
+import { confirmDialog } from '../lib/confirmDialog'
 
 /**
  * Comprehensive Admin Dashboard for managing all features
@@ -155,7 +156,7 @@ export function AdminDashboard() {
 
   // Delete listing
   const deleteListing = useCallback(async (listingId) => {
-    if (!window.confirm(lang === 'mm' ? 'ဖျက်မည်သည်မှာ သေချာပါသလား?' : 'Are you sure?')) return;
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်သည်မှာ သေချာပါသလား?' : 'Are you sure?'))) return;
 
     try {
       const { error } = await supabase.from('listings').delete().eq('id', listingId);

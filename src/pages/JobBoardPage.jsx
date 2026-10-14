@@ -8,6 +8,7 @@ import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { confirmDialog } from '../lib/confirmDialog'
 
 const JOB_CATS = [
   { id: 'all',          mm: 'အားလုံး',        en: 'All',          icon: '💼' },
@@ -358,7 +359,7 @@ export default function JobBoardPage() {
   }, [catFilter, postTypeFilter, statusFilter])
 
   async function deleteJob(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
     await supabase.from('jobs').delete().eq('id', id)
     load()
   }

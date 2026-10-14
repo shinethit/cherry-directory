@@ -8,6 +8,7 @@ import { useSEO } from '../hooks/useSEO'
 import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { getCountdown } from '../lib/countdown'
+import { confirmDialog } from '../lib/confirmDialog'
 
 export default function MyRsvpsPage() {
   const navigate = useNavigate()
@@ -38,7 +39,7 @@ export default function MyRsvpsPage() {
   useEffect(() => { load() }, [load])
 
   async function cancelRsvp(postId) {
-    if (!confirm(lang === 'mm' ? 'RSVP ပယ်ဖျက်မှာ သေချာလား?' : 'Cancel RSVP?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'RSVP ပယ်ဖျက်မှာ သေချာလား?' : 'Cancel RSVP?'))) return
     await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
     setItems(prev => prev.filter(i => i.id !== postId))
   }

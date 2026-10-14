@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
+import { confirmDialog } from '../lib/confirmDialog'
 
 // ── Constants ─────────────────────────────────────────────────
 const CATEGORIES = [
@@ -577,7 +578,7 @@ export default function MarketPricePage() {
   }
 
   async function handleDeleteItem(item) {
-    if (!confirm(lang === 'mm' ? `"${item.name}" ကို ဖျက်မည်လား?` : `Delete "${item.name}"?`)) return
+    if (!(await confirmDialog(lang === 'mm' ? `"${item.name}" ကို ဖျက်မည်လား?` : `Delete "${item.name}"?`))) return
     await supabase.from('price_items').update({ is_active: false }).eq('id', item.id)
     showToast('ok', lang === 'mm' ? 'ဖျက်ပြီး' : 'Deleted')
     load()

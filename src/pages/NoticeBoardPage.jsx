@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
+import { confirmDialog } from '../lib/confirmDialog'
 
 const CATS = [
   { id: 'all',         mm: 'အားလုံး',          en: 'All',           icon: '📋' },
@@ -65,7 +66,7 @@ function PostForm({ onClose, onSuccess, lang }) {
   const { user, profile, isModerator } = useAuth()
   const [form, setForm] = useState({ title: '', title_mm: '', content_mm: '', category: 'community', ward: '', is_urgent: false })
   const [submitting, setSubmitting] = useState(false)
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+  const set = async (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   async function submit() {
     if (!form.title && !form.title_mm) return
@@ -151,7 +152,7 @@ export default function NoticeBoardPage() {
   useEffect(() => { if (showPending) loadPending() }, [showPending])
 
   async function deleteNotice(id) {
-    if (!confirm(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this notice?')) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this notice?'))) return
     await supabase.from('notices').delete().eq('id', id)
     load()
   }
