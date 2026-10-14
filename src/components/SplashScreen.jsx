@@ -12,7 +12,7 @@ export default function SplashScreen({ onConsent }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gradient-to-br from-[#0d0015] to-[#1a0030] p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-gradient-to-br from-[#0d0015] to-[#1a0030] p-6 overflow-y-auto pt-safe">
       <div className="max-w-md w-full mx-auto text-center space-y-6">
         {/* Logo */}
         <div className="w-28 h-28 mx-auto rounded-full bg-brand-600/30 backdrop-blur-sm flex items-center justify-center border border-white/20 shadow-xl">

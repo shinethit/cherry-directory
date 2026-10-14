@@ -354,7 +354,7 @@ export default function SubmitListingPage() {
 
         {/* Quick category modal */}
         {showQuickCat && (
-          <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+          <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020] pt-safe">
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
               <button type="button" onClick={() => setShowQuickCat(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0">
                 <X size={18} className="text-white" />
@@ -627,7 +627,7 @@ export default function SubmitListingPage() {
 
       {/* Menu Item Modal */}
       {menuFormOpen && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4 pt-safe">
           <div className="bg-[#140020] rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto border border-white/10">
             <div className="sticky top-0 bg-[#140020] p-4 border-b border-white/10 flex justify-between items-center">
               <h3 className="font-display font-bold text-white">

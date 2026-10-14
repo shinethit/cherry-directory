@@ -43,7 +43,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020] pt-safe">
       <div className="flex-1 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">

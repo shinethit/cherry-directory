@@ -74,7 +74,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020] pt-safe">
       <div className="flex-1 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/8">
           <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0">
@@ -169,7 +169,7 @@ function EditItemModal({ item, onClose, onSave, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020] pt-safe">
       <div className="flex-1 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
           <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0">
@@ -272,7 +272,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020] pt-safe">
       <div className="flex-1 flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
           <div>
@@ -348,7 +348,7 @@ function AddItemModal({ onClose, onAdded, lang }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015]">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] pt-safe">
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg></button>
         <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}</h2>

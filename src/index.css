@@ -1,4 +1,12 @@
 
+/* iOS safe-area padding for full-screen modals */
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* iOS safe-area + global header height (below fixed Header) */
 :root {
   --header-h: calc(4rem + env(safe-area-inset-top));

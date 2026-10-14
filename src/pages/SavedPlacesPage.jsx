@@ -282,7 +282,7 @@ export function PlaceForm({ lang, initial, userId, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto pt-safe">
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
           <X size={18} className="text-white" />

@@ -387,7 +387,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
   }
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020]">
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#140020] pt-safe">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center flex-shrink-0">

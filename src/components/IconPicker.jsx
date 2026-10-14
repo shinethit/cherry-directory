@@ -55,7 +55,7 @@ export default function IconPicker({ value, onChange, label }) {
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/70" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/70 pt-safe" onClick={() => setOpen(false)}>
           <div className="bg-[#1a0030] rounded-2xl w-full max-w-md border border-white/10 overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-3 border-b border-white/10">
               <h3 className="text-white font-bold">Icon ရွေးမယ်</h3>

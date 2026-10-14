@@ -101,7 +101,7 @@ export default function OnboardingGuide() {
 
   return (
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/85 backdrop-blur-md p-6"
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/85 backdrop-blur-md p-6 pt-safe"
       onClick={skip}
     >
       <div

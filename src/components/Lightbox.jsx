@@ -22,7 +22,7 @@ export default function Lightbox({ images, initialIndex = 0, onClose }) {
   const currentImage = images[currentIndex] ? getOptimizedUrl(images[currentIndex], { width: 1200 }) : null
 
   return (
-    <div className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-md flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-md flex items-center justify-center pt-safe" onClick={onClose}>
       <button onClick={onClose} className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
         <X size={24} className="text-white" />
       </button>

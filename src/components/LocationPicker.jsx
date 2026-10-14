@@ -45,7 +45,7 @@ export default function LocationPicker({ onSelect, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4 pt-safe" onClick={onClose}>
       <div className="bg-[#140020] rounded-2xl w-full max-w-2xl border border-white/10 overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-4 border-b border-white/10">
           <h3 className="font-display font-bold text-white">မြေပုံပေါ်တွင် နေရာရွေးပါ</h3>
