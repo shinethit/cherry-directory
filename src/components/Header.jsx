@@ -271,12 +271,12 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
-                { v: '0.9.0', date: '2026-10-20', items: ['OSM Bulk Import', 'Strict duplicate check on submit', 'iOS PWA safe-area fix', 'Fixed History RLS 401', 'Fixed Batch Insert 503'] },
-                { v: '0.8.0', date: '2026-10-19', items: ['Unified Saved Hub', 'Business Hours', 'Similar Businesses', 'My Submissions & RSVPs', 'Report Spam', 'Nearby (GPS)'] },
-                { v: '0.7.0', date: '2026-10-18', items: ['React.lazy bundle split', 'Super Admin fix', 'Audit Log RLS'] },
-                { v: '0.6.0', date: '2026-10-15', items: ['Points & Tiers', 'Leaderboard', 'Donations & Tours'] },
-                { v: '0.5.0', date: '2026-10-13', items: ['Community features', 'Market Prices', 'Fuel Status'] },
-                { v: '0.1.0', date: '2026-10-01', items: ['Initial Directory setup', 'Auth', 'PWA setup'] }
+                { v: '0.9.0', date: '2026-10-20', items: ['OSM Bulk Import စနစ်', 'ဒေတာတူညီမှု တင်းကျပ်စွာ စစ်ဆေးခြင်း', 'iOS PWA Safe-area ပြင်ဆင်ခြင်း', 'History RLS 401 Error ပြင်ဆင်ခြင်း', 'Batch Insert 503 Timeout ပြင်ဆင်ခြင်း'] },
+                { v: '0.8.0', date: '2026-10-19', items: ['Saved Hub စုစည်းခြင်း', 'လုပ်ငန်းဖွင့်ချိန် ပြသခြင်း', 'ဆင်တူလုပ်ငန်းများ ပြသခြင်း', 'My Submissions & RSVPs', 'Report Spam စနစ်', 'အနီးအနား ရှာဖွေခြင်း (GPS)'] },
+                { v: '0.7.0', date: '2026-10-18', items: ['React.lazy ဖြင့် Bundle ခွဲခြင်း', 'Super Admin အခန်းကဏ္ဍ ပြင်ဆင်ခြင်း', 'Audit Log RLS ပြင်ဆင်ခြင်း'] },
+                { v: '0.6.0', date: '2026-10-15', items: ['Points နှင့် Tiers စနစ်', 'Leaderboard အဆင့်သတ်မှတ်ချက်', 'အလှူငွေနှင့် ခရီးသွားလမ်းညွှန်'] },
+                { v: '0.5.0', date: '2026-10-13', items: ['Community ဝန်ဆောင်မှုများ', 'ဈေးနှုန်းများ', 'ဆီဆိုင်အခြေအနေ'] },
+                { v: '0.1.0', date: '2026-10-01', items: ['ပရောဂျက် စတင်တည်ဆောက်ခြင်း', 'Auth စနစ်', 'PWA စနစ်'] }
               ].map((rel, i) => (
                 <div key={i} className="space-y-2">
                   <div className="flex items-center gap-2">

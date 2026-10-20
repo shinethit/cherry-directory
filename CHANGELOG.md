@@ -1,57 +1,52 @@
-# Changelog
-All notable changes to this project will be documented in this file.
+# ပြောင်းလဲမှု မှတ်တမ်း (Changelog)
 
-## [0.9.0] - 2026-10-20 (Current)
-### Added
-- OSM Bulk Import support (Category auto-mapping for Banks, Accommodation, Government).
-- Strict duplicate detection on Listing Submit (blocks identical Name + Phone/Location).
-- `ConfirmModal` and `Toast` components (replaced native browser alerts).
-- iOS PWA safe-area fixes for Modals and Sticky Headers.
+ဤစာမျက်နှာသည် ပရောဂျက်၏ ဗားရှင်း အပြောင်းအလဲများကို မှတ်တမ်းတင်ထားပါသည်။
 
-### Fixed
-- Fixed History RLS 401 error.
-- Fixed Supabase Batch Insert 503 timeout error.
-- Removed Sentry `Replay` import warning.
-- Reduced bundle size from 1.35MB to 230KB.
+## [0.9.0] - 2026 အောက်တိုဘာ 20 (လက်ရှိ)
+### ထည့်သွင်းခဲ့သည် (Added)
+- OSM မှ လုပ်ငန်းများကို Bulk Import စနစ်ဖြင့် တင်သွင်းနိုင်ခြင်း (ဘဏ်၊ တည်းခိုရေး၊ အစိုးရရုံး ကဏ္ဍများ အလိုအလျောက် ခွဲခြားပေးခြင်း)။
+- လုပ်ငန်းအသစ် တင်သွင်းရာတွင် ဒေတာတူညီမှုရှိ/မရှိ တင်းကျပ်စွာ စစ်ဆေးခြင်း (နာမည်နှင့် ဖုန်းနံပါတ်/တည်နေရာ အားလုံးတူပါက လုံးဝ တင်ခွင့်မပြုခြင်း)။
+- ConfirmModal နှင့် Toast စနစ်များ ထည့်သွင်းခြင်း (Browser ၏ မူရင်း Alert များကို အစားထိုးခြင်း)။
+- iOS PWA တွင် Safe-area ပြဿနာများ (Header ထပ်နေခြင်း၊ Modal များ ပုန်းနေခြင်း) ကို ပြင်ဆင်ခြင်း။
 
-## [0.8.0] - 2026-10-19 (Sprint 2)
-### Added
-- Unified Saved Hub (`/saved` - Businesses, News, Places tabs).
-- Business Hours display & editor.
-- Similar Businesses widget.
-- My Submissions & My RSVPs pages.
-- Report Spam/Fake system with Admin dashboard.
-- Nearby (GPS) sorting for Directory.
-- Event Enhancements (Share, Countdown, Weekly view).
-- News Edit page & Post Edit Workflow fixes.
+### ပြင်ဆင်ခဲ့သည် (Fixed)
+- History စာမျက်နှာတွင် တက်နေသော 401 RLS Error ကို ပြင်ဆင်ခြင်း။
+- Supabase Batch Insert တွင် တက်နေသော 503 Timeout Error ကို ပြင်ဆင်ခြင်း။
+- Sentry ၏ Replay Import Warning ကို ဖယ်ရှားခြင်း။
+- App ၏ Bundle Size ကို 1.35MB မှ 230KB သို့ လျှော့ချခြင်း။
 
-## [0.7.0] - 2026-10-18 (Sprint 1)
-### Added
-- React.lazy & Suspense for all pages (Performance).
-- Vite manualChunks configuration.
-- Super Admin role logic in Header.
+## [0.8.0] - 2026 အောက်တိုဘာ 19 (Sprint 2)
+### ထည့်သွင်းခဲ့သည် (Added)
+- သိမ်းဆည်းထားသော ပစ္စည်းများအတွက် စုစည်းထားသော Saved Hub (/saved - လုပ်ငန်း၊ သတင်း၊ နေရာ ဟူသော Tab ၃ ခု)။
+- လုပ်ငန်း ဖွင့်ချိန် (Business Hours) ပြသခြင်းနှင့် ပြင်ဆင်နိုင်ခြင်း။
+- ဆင်တူလုပ်ငန်းများ (Similar Businesses) ကို ပြသပေးခြင်း။
+- ကျွန်ုပ်၏ တင်သွင်းမှုများ (My Submissions) နှင့် ကျွန်ုပ်၏ RSVP များ စာမျက်နှာ။
+- Spam/Fake လုပ်ငန်းများကို Report တင်နိုင်ခြင်းနှင့် Admin မှ စစ်ဆေးနိုင်သော Dashboard။
+- လမ်းညွှန် (Directory) တွင် အနီးအနားရှိ လုပ်ငန်းများကို GPS ဖြင့် စီစဉ်ပြသနိုင်ခြင်း။
+- Event များအတွက် မျှဝေခြင်း (Share)၊ အချိန်တိုင် (Countdown) နှင့် အပတ်စဉ် (Weekly view) ကြည့်ရှုနိုင်ခြင်း။
+- သတင်းပြင်ဆင်ခြင်း (News Edit) စာမျက်နှာနှင့် Post ပြင်ဆင်ခြင်း လုပ်ငန်းစဉ်များ ပြင်ဆင်ခြင်း။
 
-### Fixed
-- Audit Log RLS (Restricted to auth.uid).
-- Auth Loading timeout.
+## [0.7.0] - 2026 အောက်တိုဘာ 18 (Sprint 1)
+### ထည့်သွင်းခဲ့သည် (Added)
+- စာမျက်နှာအားလုံးအတွက် React.lazy နှင့် Suspense ကို အသုံးပြုခြင်း (Performance အတွက်)။
+- Vite manualChunks ကို စနစ်တကျ သတ်မှတ်ခြင်း။
+- Header တွင် Super Admin အခန်းကဏ္ဍ (Role) ကို မှန်ကန်စွာ ပြသခြင်း။
 
-## [0.6.0] - 2026-10-15 (Phase 3)
-### Added
-- Phase 3a-3g: Points/Tiers, Leaderboard, History, Donations, Tours.
-- Calendar Enhancements, Business Hours.
-- Notices & Announcements merged.
+### ပြင်ဆင်ခဲ့သည် (Fixed)
+- Audit Log အတွက် RLS (auth.uid ဖြင့်သာ ကန့်သတ်ခြင်း)။
+- Auth Loading timeout ပြဿနာ။
 
-## [0.5.0] - 2026-10-13 (Phase 2)
-### Added
-- Community Features (Jobs, Rentals, Tutoring).
-- Emergency & Health Services.
-- Market Prices & Fuel Station status.
+## [0.6.0] - 2026 အောက်တိုဘာ 15 (Phase 3)
+### ထည့်သွင်းခဲ့သည် (Added)
+- Phase 3a-3g: Points/Tiers စနစ်၊ Leaderboard၊ မှတ်တမ်း (History)၊ အလှူငွေ (Donations)၊ ခရီးသွား လမ်းညွှန် (Tours)။
+- ပြက္ခဒိန် (Calendar) နှင့် လုပ်ငန်းဖွင့်ချိန် တိုးတက်မှုများ။
+- အသိပေးချက်များ (Notices) နှင့် ကြေညာချက်များ (Announcements) ကို ပေါင်းစပ်ခြင်း။
 
-## [0.4.0] - 2026-10-10 (Phase 1)
-### Added
-- Initial Directory setup (Categories, Listings, Reviews).
-- Auth (Login, Profile, Supabase RLS).
-- PWA setup (Service Worker, Manifest, Offline Cache).
+## [0.5.0] - 2026 အောက်တိုဘာ 13 (Phase 2)
+### ထည့်သွင်းခဲ့သည် (Added)
+- Community ဝန်ဆောင်မှုများ (အလုပ်အကိုင်၊ အိမ်ငှားရမ်း၊ ကျူရှင်)။
+- အရေးပေါ်နှင့် ကျန်းမာရေး ဝန်ဆောင်မှုများ။
+- ဈေးနှုန်းများ (Market Prices) နှင့် ဆီဆိုင်အခြေအနေ (Fuel Station status)။
 
-## [0.1.0] - 2026-10-01 (Initial)
-- Project initialized.
+## [0.1.0] - 2026 အောက်တိုဘာ 1 (အစပိုင်း)
+- ပရောဂျက် စတင်တည်ဆောက်ခြင်း (လုပ်ငန်းလမ်းညွှန်၊ Auth၊ PWA စနစ်)။
