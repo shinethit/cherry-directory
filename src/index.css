@@ -493,3 +493,26 @@ nav.glass > div > div {
   z-index: 10;
   will-change: left;
 }
+
+
+/* Global Font Scale Adjustments */
+/* Makes small text (text-[10px], text-xs) slightly larger for better mobile readability */
+html {
+  font-size: 16px; /* Base size */
+}
+
+/* Override tiny fonts */
+.text-\[8px\] { font-size: 10px !important; }
+.text-\[9px\] { font-size: 11px !important; }
+.text-\[10px\] { font-size: 12px !important; }
+.text-\[11px\] { font-size: 13px !important; }
+
+/* Bump up standard Tailwind sizes slightly */
+.text-xs { font-size: 13px !important; line-height: 1.5 !important; }
+.text-sm { font-size: 15px !important; line-height: 1.5 !important; }
+.text-base { font-size: 17px !important; line-height: 1.6 !important; }
+
+/* For Myanmar text, slightly increase line height so it doesn't overlap */
+.font-myanmar {
+  line-height: 1.8 !important;
+}
