@@ -80,7 +80,7 @@ export default function SubmitListingPage() {
   const [menuForm, setMenuForm] = useState({ name: '', price: '', description: '', images: [] })
   const [menuImageLoading, setMenuImageLoading] = useState(false)
   const [menuError, setMenuError] = useState('')
-  const [dupWarning, setDupWarning] = useState(null)
+  const [dupError, setDupError] = useState(null)
 
   useEffect(() => {
     supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
@@ -184,38 +184,46 @@ export default function SubmitListingPage() {
 
   async function checkDuplicates() {
     const nameToCheck = form.name_mm || form.name;
+    const phoneToCheck = form.phones[0] || null;
+
     if (!nameToCheck) return false;
 
     try {
-      // Name တူပြီး (သို့) ဖုန်းနံပါတ် တူတာကို ရှာမယ်
+      // Fetch potential matches based on name OR phone
       let query = supabase.from('listings').select('id, name, name_mm, phone_1, latitude, longitude');
       
-      // Name နဲ့ စစ်
-      query = query.or(`name.ilike.%${nameToCheck}%,name_mm.ilike.%${nameToCheck}%`);
+      let conditions = [];
+      if (nameToCheck) conditions.push(`name.ilike.%${nameToCheck}%`, `name_mm.ilike.%${nameToCheck}%`);
+      if (phoneToCheck) conditions.push(`phone_1.eq.${phoneToCheck}`);
       
-      // ဖုန်းနံပါတ်ရှိရင် ပါ စစ်
-      const phone = form.phones[0];
-      if (phone) {
-        query = query.or(`phone_1.eq.${phone}`);
+      if (conditions.length > 0) {
+        query = query.or(conditions.join(','));
       }
 
-      const { data } = await query.limit(5);
+      const { data } = await query.limit(10);
       
       if (data && data.length > 0) {
-        // အနီးစပ်ဆုံး တူတာကို ယူမယ်
-        const match = data[0];
-        
-        // Coordinate နီးရင် (1km အတွင်း) သို့မဟုတ် ဖုန်းနံပါတ် တိတိကျကျတူရင် Warning ပြ
-        let isClose = false;
-        if (form.latitude && match.latitude) {
-           const latDiff = Math.abs(form.latitude - match.latitude);
-           const lonDiff = Math.abs(form.longitude - match.longitude);
-           if (latDiff < 0.01 && lonDiff < 0.01) isClose = true; // 1km ခန့်
-        }
-        
-        if (isClose || (phone && match.phone_1 === phone)) {
-          setDupWarning(match);
-          return true;
+        for (const match of data) {
+          const matchName = (match.name_mm || match.name || '').trim().toLowerCase();
+          const inputName = nameToCheck.trim().toLowerCase();
+          
+          const nameMatches = matchName === inputName || matchName.includes(inputName) || inputName.includes(matchName);
+          const phoneMatches = phoneToCheck && match.phone_1 === phoneToCheck;
+          
+          // Check distance if coords exist
+          let distMatches = false;
+          if (form.latitude && match.latitude) {
+             const latDiff = Math.abs(form.latitude - match.latitude);
+             const lonDiff = Math.abs(form.longitude - match.longitude);
+             // Very close (approx 100 meters)
+             if (latDiff < 0.001 && lonDiff < 0.001) distMatches = true;
+          }
+
+          // If EVERYTHING matches (Name + Phone/Distance) -> Block
+          if (nameMatches && (phoneMatches || distMatches)) {
+            setDupError(match);
+            return true;
+          }
         }
       }
     } catch (e) {
@@ -228,11 +236,10 @@ export default function SubmitListingPage() {
     if (e) e.preventDefault()
     if ((!form.name && !form.name_mm) || !form.category_id) return
     
-    if (!dupWarning) {
-      const isDup = await checkDuplicates();
-      if (isDup) return; // Warning ပြပြီး ရပ်လိုက်မယ်
-    }
+    const isDup = await checkDuplicates();
+    if (isDup) return; // တူနေရင် တင်ခွင့်မပြု
     
+    setDupError(null);
     setSubmitting(true)
     try {
       const phoneColumns = {}
