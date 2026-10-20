@@ -80,6 +80,7 @@ export default function SubmitListingPage() {
   const [menuForm, setMenuForm] = useState({ name: '', price: '', description: '', images: [] })
   const [menuImageLoading, setMenuImageLoading] = useState(false)
   const [menuError, setMenuError] = useState('')
+  const [dupWarning, setDupWarning] = useState(null)
 
   useEffect(() => {
     supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
@@ -181,9 +182,57 @@ export default function SubmitListingPage() {
     if (await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this item?')) setMenuItems(prev => prev.filter(i => i.id !== id))
   }
 
+  async function checkDuplicates() {
+    const nameToCheck = form.name_mm || form.name;
+    if (!nameToCheck) return false;
+
+    try {
+      // Name တူပြီး (သို့) ဖုန်းနံပါတ် တူတာကို ရှာမယ်
+      let query = supabase.from('listings').select('id, name, name_mm, phone_1, latitude, longitude');
+      
+      // Name နဲ့ စစ်
+      query = query.or(`name.ilike.%${nameToCheck}%,name_mm.ilike.%${nameToCheck}%`);
+      
+      // ဖုန်းနံပါတ်ရှိရင် ပါ စစ်
+      const phone = form.phones[0];
+      if (phone) {
+        query = query.or(`phone_1.eq.${phone}`);
+      }
+
+      const { data } = await query.limit(5);
+      
+      if (data && data.length > 0) {
+        // အနီးစပ်ဆုံး တူတာကို ယူမယ်
+        const match = data[0];
+        
+        // Coordinate နီးရင် (1km အတွင်း) သို့မဟုတ် ဖုန်းနံပါတ် တိတိကျကျတူရင် Warning ပြ
+        let isClose = false;
+        if (form.latitude && match.latitude) {
+           const latDiff = Math.abs(form.latitude - match.latitude);
+           const lonDiff = Math.abs(form.longitude - match.longitude);
+           if (latDiff < 0.01 && lonDiff < 0.01) isClose = true; // 1km ခန့်
+        }
+        
+        if (isClose || (phone && match.phone_1 === phone)) {
+          setDupWarning(match);
+          return true;
+        }
+      }
+    } catch (e) {
+      console.warn('Duplicate check failed:', e);
+    }
+    return false;
+  }
+
   async function handleSubmit(e) {
     if (e) e.preventDefault()
     if ((!form.name && !form.name_mm) || !form.category_id) return
+    
+    if (!dupWarning) {
+      const isDup = await checkDuplicates();
+      if (isDup) return; // Warning ပြပြီး ရပ်လိုက်မယ်
+    }
+    
     setSubmitting(true)
     try {
       const phoneColumns = {}
