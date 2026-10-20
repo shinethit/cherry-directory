@@ -16,6 +16,7 @@ export default function Header() {
   const config = useAppConfig()
   const { darkMode, toggleDarkMode } = useTheme()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showChangelog, setShowChangelog] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   // Show back button on all pages except main nav pages
   const showBack = !MAIN_NAV_PATHS.includes(location.pathname)
@@ -145,6 +146,14 @@ export default function Header() {
             </button>
 
             <button
+              onClick={() => setShowChangelog(true)}
+              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-brand-300 transition-colors"
+              title="Change Log"
+            >
+              <Info size={14} />
+            </button>
+
+            <button
               onClick={() => setMenuOpen(!menuOpen)}
               className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center"
             >
@@ -243,6 +252,47 @@ export default function Header() {
             <p className="text-[9px] text-white/20 text-center py-4">
               {config.app_name} v2.0 • {config.app_city}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Change Log Modal */}
+      {showChangelog && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pt-safe bg-black/80 backdrop-blur-md" onClick={() => setShowChangelog(false)}>
+          <div className="w-full max-w-sm bg-[#140020] border border-white/10 rounded-3xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#140020] z-10">
+              <div>
+                <h3 className="font-display font-bold text-white text-base">Change Log</h3>
+                <p className="text-[10px] text-white/40 font-myanmar">Version {config.app_version || '0.9.0'}</p>
+              </div>
+              <button onClick={() => setShowChangelog(false)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto space-y-4">
+              {[
+                { v: '0.9.0', date: '2026-10-20', items: ['OSM Bulk Import', 'Strict duplicate check on submit', 'iOS PWA safe-area fix', 'Fixed History RLS 401', 'Fixed Batch Insert 503'] },
+                { v: '0.8.0', date: '2026-10-19', items: ['Unified Saved Hub', 'Business Hours', 'Similar Businesses', 'My Submissions & RSVPs', 'Report Spam', 'Nearby (GPS)'] },
+                { v: '0.7.0', date: '2026-10-18', items: ['React.lazy bundle split', 'Super Admin fix', 'Audit Log RLS'] },
+                { v: '0.6.0', date: '2026-10-15', items: ['Points & Tiers', 'Leaderboard', 'Donations & Tours'] },
+                { v: '0.5.0', date: '2026-10-13', items: ['Community features', 'Market Prices', 'Fuel Status'] },
+                { v: '0.1.0', date: '2026-10-01', items: ['Initial Directory setup', 'Auth', 'PWA setup'] }
+              ].map((rel, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="badge bg-brand-600/30 text-brand-300 font-bold border border-brand-400/30">v{rel.v}</span>
+                    <span className="text-[10px] text-white/30">{rel.date}</span>
+                  </div>
+                  <ul className="space-y-1 pl-4">
+                    {rel.items.map((item, j) => (
+                      <li key={j} className="text-xs text-white/60 font-myanmar flex items-start gap-2">
+                        <span className="text-brand-400 mt-0.5">•</span> {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

@@ -1,25 +1,20 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
-## [Unreleased]
+## [0.9.0] - 2026-10-20 (Current)
 ### Added
 - OSM Bulk Import support (Category auto-mapping for Banks, Accommodation, Government).
 - Strict duplicate detection on Listing Submit (blocks identical Name + Phone/Location).
 - `ConfirmModal` and `Toast` components (replaced native browser alerts).
-- `fix-rls-history-and-bulk.sql` for History RLS and Bulk Import permissions.
-
-### Changed
-- Refactored `BulkImportPage.jsx` for Batch Inserts (50 per batch) to avoid 503 Timeout errors.
-- Updated `SubmitListingPage.jsx` to prioritize Myanmar Name (Required) over English (Optional).
+- iOS PWA safe-area fixes for Modals and Sticky Headers.
 
 ### Fixed
-- iOS PWA safe-area layout issues (no more double headers or hidden modals).
-- Sentry `Replay` import warning removed.
-- App bundle size reduced from 1.35MB to ~230KB via React.lazy & manualChunks.
+- Fixed History RLS 401 error.
+- Fixed Supabase Batch Insert 503 timeout error.
+- Removed Sentry `Replay` import warning.
+- Reduced bundle size from 1.35MB to 230KB.
 
-## [1.0.0] - 2026-10-20 (Sprint 2)
+## [0.8.0] - 2026-10-19 (Sprint 2)
 ### Added
 - Unified Saved Hub (`/saved` - Businesses, News, Places tabs).
 - Business Hours display & editor.
@@ -29,9 +24,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Nearby (GPS) sorting for Directory.
 - Event Enhancements (Share, Countdown, Weekly view).
 - News Edit page & Post Edit Workflow fixes.
-- Sprint 1 Critical Fixes (perf, security, code-split).
-- Phase 3a-3g (Points/Tiers, Leaderboard, History, Donations, Tours).
 
-## [0.9.0] - 2026-10-13 (Initial Handover)
+## [0.7.0] - 2026-10-18 (Sprint 1)
 ### Added
-- Core Directory, Auth, News, Calendar, Community features.
+- React.lazy & Suspense for all pages (Performance).
+- Vite manualChunks configuration.
+- Super Admin role logic in Header.
+
+### Fixed
+- Audit Log RLS (Restricted to auth.uid).
+- Auth Loading timeout.
+
+## [0.6.0] - 2026-10-15 (Phase 3)
+### Added
+- Phase 3a-3g: Points/Tiers, Leaderboard, History, Donations, Tours.
+- Calendar Enhancements, Business Hours.
+- Notices & Announcements merged.
+
+## [0.5.0] - 2026-10-13 (Phase 2)
+### Added
+- Community Features (Jobs, Rentals, Tutoring).
+- Emergency & Health Services.
+- Market Prices & Fuel Station status.
+
+## [0.4.0] - 2026-10-10 (Phase 1)
+### Added
+- Initial Directory setup (Categories, Listings, Reviews).
+- Auth (Login, Profile, Supabase RLS).
+- PWA setup (Service Worker, Manifest, Offline Cache).
+
+## [0.1.0] - 2026-10-01 (Initial)
+- Project initialized.
