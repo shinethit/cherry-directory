@@ -35,6 +35,21 @@ export default function Header() {
     setMenuOpen(false)
   }, [location])
 
+  // Auto-show Change Log on new version or first visit
+  useEffect(() => {
+    const CURRENT_VERSION = '0.9.0';
+    const lastSeen = localStorage.getItem('cherry_last_seen_version');
+    
+    if (lastSeen !== CURRENT_VERSION) {
+      // Delay a bit to let the app load first
+      const timer = setTimeout(() => {
+        setShowChangelog(true);
+        localStorage.setItem('cherry_last_seen_version', CURRENT_VERSION);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   function handleBack() {
     // If there's history to go back to, use it. Otherwise go home.
     if (window.history.length > 1) {
@@ -263,7 +278,7 @@ export default function Header() {
             <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#140020] z-10">
               <div>
                 <h3 className="font-display font-bold text-white text-base">Change Log</h3>
-                <p className="text-[10px] text-white/40 font-myanmar">Version {config.app_version || '0.9.0'}</p>
+                <p className="text-[10px] text-white/40 font-myanmar">Version 0.9.0</p>
               </div>
               <button onClick={() => setShowChangelog(false)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white">
                 <X size={16} />
