@@ -501,7 +501,28 @@ create policy "Admins delete reports" on public.reports
 -- AdminPage counts this view per listing (listing_id alias is
 -- what the page filters on). A view has no RLS of its own —
 -- the underlying reports policies apply.
-create or replace view public.listing_reports as
+--
+-- LIVE-DB GOTCHA (2026-11-03): the live database already had a
+-- TABLE named listing_reports (created by an earlier hand-run SQL
+-- file), and CREATE OR REPLACE VIEW fails on a table with
+-- ERROR 42809 "listing_reports is not a view". So first rename
+-- any such table aside (its rows are preserved under the backup
+-- name — nothing in v0.9.0 ever wrote to it, the code only reads
+-- this name), then create the view. Idempotent on re-run: once
+-- the view exists, the rename block does nothing.
+do $$
+begin
+  if exists (
+    select 1 from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relname = 'listing_reports' and c.relkind = 'r'
+  ) then
+    alter table public.listing_reports rename to listing_reports_table_backup;
+  end if;
+end $$;
+
+drop view if exists public.listing_reports;
+create view public.listing_reports as
   select *, target_id as listing_id
   from public.reports
   where target_type = 'listing';
