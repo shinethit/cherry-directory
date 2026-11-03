@@ -1,7 +1,25 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { Eye, EyeOff, Crown, Shield, User, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+
+// Raw Supabase (English) auth errors → honest Burmese. Unknown messages fall back to raw.
+const AUTH_ERROR_MM = [
+  [/invalid login credentials/i, 'အီးမေးလ် (သို့) စကားဝှက် မမှန်ပါ'],
+  [/email not confirmed/i, 'အီးမေးလ် အတည်မပြုရသေးပါ — မေးလ်ထဲက လင့်ခ်ကို နှိပ်ပါ'],
+  [/user already registered/i, 'ဒီအီးမေးလ်နဲ့ အကောင့်ရှိပြီးသားပါ — Login ဝင်ပါ'],
+  [/password should be at least/i, 'စကားဝှက် အနည်းဆုံး ၆ လုံး ရှိရမည်'],
+  [/too many requests/i, 'ခဏစောင့်ပြီး ထပ်ကြိုးစားပါ — အကြိမ်များစွာ ကြိုးစားထားသည်'],
+  [/email.*invalid|invalid.*email/i, 'အီးမေးလ် လိပ်စာ မမှန်ပါ'],
+  [/user not found/i, 'ဒီအီးမေးလ်နဲ့ အကောင့် မရှိပါ'],
+  [/expired/i, 'လင့်ခ် သက်တမ်းကုန်သွားပါပြီ — ထပ်တောင်းပါ'],
+]
+
+export function translateAuthError(err) {
+  const msg = err?.message || ''
+  const hit = AUTH_ERROR_MM.find(([re]) => re.test(msg))
+  return hit ? hit[1] : (msg || 'Error ဖြစ်ပွားသည်')
+}
 
 const ROLE_INFO = {
   member: { label: 'Member', icon: User, color: 'brand', desc: 'Chat ပြုလုပ်ရန်၊ Review ပေးရန်' },
@@ -11,7 +29,7 @@ const ROLE_INFO = {
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { signIn, signUp } = useAuth()
+  const { signIn, signUp, signInWithOAuth } = useAuth()
   const [mode, setMode] = useState('login') // 'login' | 'signup'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -21,6 +39,25 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
+  // Go back if there is somewhere to go back to; on a direct visit to
+  // /login the history stack is too short, so fall back to '/'.
+  function goBackOrHome() {
+    if (window.history.length > 1) navigate(-1)
+    else navigate('/')
+  }
+
+  async function handleGoogleSignIn() {
+    setError(''); setSuccess('')
+    setLoading(true)
+    try {
+      await signInWithOAuth('google')
+      // Supabase redirects to Google; no navigation here.
+    } catch (err) {
+      setError(translateAuthError(err))
+    }
+    setLoading(false)
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError(''); setSuccess('')
@@ -28,14 +65,20 @@ export default function LoginPage() {
     try {
       if (mode === 'login') {
         await signIn({ email, password })
-        navigate(-1)
+        goBackOrHome()
       } else {
-        await signUp({ email, password, fullName })
-        setSuccess('အကောင့် ဖွင့်ပြီးပါပြီ! Email ကို စစ်ဆေးပါ')
-        setMode('login')
+        const data = await signUp({ email, password, fullName })
+        // Email confirmation ON → no session yet, user must confirm via email.
+        // Confirmation OFF → Supabase returns a session immediately: go in.
+        if (data?.session) {
+          goBackOrHome()
+        } else {
+          setSuccess('အကောင့် ဖွင့်ပြီးပါပြီ! အီးမေးလ်ထဲက အတည်ပြုလင့်ခ်ကို နှိပ်ပါ')
+          setMode('login')
+        }
       }
     } catch (err) {
-      setError(err.message || 'Error ဖြစ်ပွားသည်')
+      setError(translateAuthError(err))
     }
     setLoading(false)
   }
@@ -44,7 +87,7 @@ export default function LoginPage() {
     <div className="min-h-[80dvh] flex flex-col">
       {/* Back */}
       <div className="px-4 py-3">
-        <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
+        <button onClick={goBackOrHome} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
           <ArrowLeft size={18} className="text-white" />
         </button>
       </div>
@@ -144,6 +187,25 @@ export default function LoginPage() {
             ) : mode === 'login' ? 'Login ဝင်ရောက်မယ်' : 'အကောင့် ဖွင့်မယ်'}
           </button>
         </form>
+
+        {/* Google sign-in */}
+        <button
+          type="button"
+          onClick={handleGoogleSignIn}
+          disabled={loading}
+          className="w-full mt-3 py-2.5 rounded-xl bg-white text-gray-800 text-sm font-display font-semibold flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors disabled:opacity-50"
+        >
+          <span className="text-base font-bold">G</span>
+          Google နဲ့ ဝင်ရောက်မည်
+        </button>
+
+        {mode === 'login' && (
+          <p className="text-center mt-3">
+            <Link to="/reset-password" className="text-brand-300 text-xs font-myanmar hover:text-brand-200 transition-colors">
+              စကားဝှက် မေ့သွားလား?
+            </Link>
+          </p>
+        )}
 
         {/* Guest notice */}
         <div className="mt-6 p-4 card-dark rounded-2xl text-center">

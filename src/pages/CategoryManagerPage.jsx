@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
+import { showError, showSuccess } from '../lib/toast'
 import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့်ထားပါ
 import { confirmDialog } from '../lib/confirmDialog'
 
@@ -275,11 +276,16 @@ export default function CategoryManagerPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('categories')
       .select('*')
       .order('sort_order')
       .order('name_mm')
+    if (error) {
+      showError('Categories ရယူရာတွင် အမှားရှိသည်: ' + error.message)
+      setLoading(false)
+      return
+    }
     setCats(data || [])
     setLoading(false)
   }, [])
@@ -291,20 +297,61 @@ export default function CategoryManagerPage() {
     ? topLevel.filter(c => (c.name_mm || '').includes(search) || (c.name || '').toLowerCase().includes(search.toLowerCase()))
     : topLevel
 
-  async function subsOf(id) { return cats.filter(c => c.parent_id === id) }
+  // NOTE: was `async` before — it returns a plain array now. As an
+  // async fn it returned a Promise, so sub-category counts were
+  // always broken (length === undefined).
+  function subsOf(id) { return cats.filter(c => c.parent_id === id) }
+
+  // When a category cannot be deleted, say why honestly: listings
+  // reference categories with NO ACTION, so the DB refuses the
+  // delete while any listing uses the category.
+  async function reportDeleteBlocked(category, error) {
+    const { count } = await supabase
+      .from('listings')
+      .select('*', { count: 'exact', head: true })
+      .eq('category_id', category.id)
+    if ((count || 0) > 0) {
+      showError(`ဒီ category မှာ လုပ်ငန်း ${count} ခု ရှိနေလို့ ဖျက်လို့မရပါ`)
+    } else {
+      showError('ဖျက်ရာတွင် အမှားရှိသည်: ' + error.message)
+    }
+    load()
+  }
 
   async function handleDelete(cat) {
-    const subs = subsOf(cat.id)
-    const msg = subs.length > 0
-      ? (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်ရင် Sub-category ${subs.length} ခုလည်း ဖျက်မည်။ ဆက်မည်လား?` : `Deleting "${cat.name}" will also delete ${subs.length} sub-categories. Continue?`)
+    // Collect ALL descendants (children, grandchildren, ...) — the
+    // parent_id FK is ON DELETE SET NULL, so deleting only the
+    // parent would orphan sub-categories instead of deleting them.
+    const descendants = []
+    const walk = (id) => {
+      cats.filter(c => c.parent_id === id).forEach(child => {
+        descendants.push(child)
+        walk(child.id)
+      })
+    }
+    walk(cat.id)
+    const msg = descendants.length > 0
+      ? (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်ရင် Sub-category ${descendants.length} ခုလည်း ဖျက်မည်။ ဆက်မည်လား?` : `Deleting "${cat.name}" will also delete ${descendants.length} sub-categories. Continue?`)
       : (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်မည်လား?` : `Delete "${cat.name}"?`)
     if (!(await confirmDialog(msg))) return
-    await supabase.from('categories').delete().eq('id', cat.id)
+    // Descendants are collected parent-before-child, so reversed
+    // order deletes deepest first, then the parent itself.
+    for (const child of [...descendants].reverse()) {
+      const { error } = await supabase.from('categories').delete().eq('id', child.id)
+      if (error) { await reportDeleteBlocked(child, error); return }
+    }
+    const { error } = await supabase.from('categories').delete().eq('id', cat.id)
+    if (error) { await reportDeleteBlocked(cat, error); return }
+    showSuccess(lang === 'mm' ? 'ဖျက်ပြီးပါပြီ' : 'Deleted')
     load()
   }
 
   async function handleToggle(cat) {
-    await supabase.from('categories').update({ is_active: !cat.is_active }).eq('id', cat.id)
+    const { error } = await supabase.from('categories').update({ is_active: !cat.is_active }).eq('id', cat.id)
+    if (error) {
+      showError('ပြောင်းရာတွင် အမှားရှိသည်: ' + error.message)
+      return
+    }
     load()
   }
 

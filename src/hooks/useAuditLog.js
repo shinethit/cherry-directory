@@ -5,15 +5,12 @@ export function useAuditLog() {
   const { user } = useAuth()
 
   /**
-   * Log an action with optional before/after diff
-   * @param {object} opts
-   * @param {string} opts.action     - 'create' | 'update' | 'delete' | 'approve' | 'reject' | 'bulk_import'
-   * @param {string} opts.table      - target table name
-   * @param {string} opts.id         - target record uuid
-   * @param {string} opts.name       - human-readable label (e.g. listing name)
-   * @param {object} opts.before     - snapshot before change { field: value }
-   * @param {object} opts.after      - snapshot after change  { field: value }
-   * @param {object} opts.meta       - extra context
+   * Log an action. Returns true when the audit row was written,
+   * false when it failed (e.g. RLS — audit_logs INSERT is
+   * admin/mod/super_admin only). Callers must check the return
+   * value; a failed audit must never look like a success, but it
+   * also never blocks the action itself.
+   * @returns {Promise<boolean>}
    */
   async function log({ action, table, id, name, before = null, after = null, meta = {} }) {
     let changes = null
@@ -33,7 +30,7 @@ export function useAuditLog() {
     }
 
     try {
-      await supabase.from('audit_logs').insert({
+      const { error } = await supabase.from('audit_logs').insert({
         user_id: user?.id || null,
         action,
         target_table: table,
@@ -42,9 +39,16 @@ export function useAuditLog() {
         changes,
         meta,
       })
+      if (error) {
+        console.warn('Audit log failed:', error.message)
+        return false
+      }
+      return true
     } catch (err) {
-      // Non-blocking — log failure should never break the UI
+      // Non-blocking — log failure should never break the UI,
+      // but the caller gets `false` so it is not silent success.
       console.warn('Audit log failed:', err)
+      return false
     }
   }
 

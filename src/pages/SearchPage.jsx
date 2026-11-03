@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, X, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
+import { escapePostgrestOr } from '../hooks/useListings'
 
 // Search across multiple tables
 const SEARCH_SOURCES = [
@@ -105,6 +106,9 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [activeTab, setActiveTab] = useState('all')
+  const [searchError, setSearchError] = useState(false)
+  // Request guard: a slow earlier keystroke must never overwrite newer results.
+  const searchTokenRef = useRef(0)
 
   useSEO({ title: lang === 'mm' ? 'ရှာဖွေရန်' : 'Search' })
 
@@ -124,16 +128,20 @@ export default function SearchPage() {
   }, [query])
 
   async function runSearch(q) {
+    const token = ++searchTokenRef.current
     setLoading(true)
     setSearched(true)
+    setSearchError(false)
     const newResults = {}
+    let hadError = false
 
     // Run all searches in parallel
     const promises = SEARCH_SOURCES.map(async (source) => {
       try {
-        // Build OR filter for search fields
+        // Build OR filter for search fields (escaped: raw `,`/`(`/`)`/`%` break it)
+        const esc = escapePostgrestOr(q)
         const orFilter = source.searchFields
-          .map(field => `${field}.ilike.%${q}%`)
+          .map(field => `${field}.ilike.%${esc}%`)
           .join(',')
 
         let query = supabase
@@ -151,15 +159,20 @@ export default function SearchPage() {
         if (!error && data) {
           newResults[source.id] = data
         } else {
+          hadError = true
           newResults[source.id] = []
         }
       } catch (e) {
+        hadError = true
         newResults[source.id] = []
       }
     })
 
     await Promise.all(promises)
+    // A newer keystroke may have started since — never let stale results win.
+    if (token !== searchTokenRef.current) return
     setResults(newResults)
+    setSearchError(hadError)
     setLoading(false)
 
     // Update URL
@@ -216,6 +229,10 @@ export default function SearchPage() {
             <span className="flex items-center gap-1">
               <Loader2 size={10} className="animate-spin" />
               {lang === 'mm' ? 'ရှာနေသည်...' : 'Searching...'}
+            </span>
+          ) : searchError && !loading ? (
+            <span className="text-red-400 font-myanmar">
+              {lang === 'mm' ? 'ရှာဖွေရာတွင် အမှားဖြစ်သွားသည် — ပြန်ကြိုးစားပါ' : 'Search failed — please try again'}
             </span>
           ) : searched && query.length >= 2 ? (
             <span>

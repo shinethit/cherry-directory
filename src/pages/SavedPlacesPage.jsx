@@ -50,8 +50,14 @@ export default function SavedPlacesPage() {
 
   async function handleDelete(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
-    await supabase.from('saved_places').delete().eq('id', id)
+    const prev = places
     setPlaces(prev => prev.filter(p => p.id !== id))
+    const { error } = await supabase.from('saved_places').delete().eq('id', id)
+    if (error) {
+      console.error('Delete place failed:', error)
+      showError(error.message || (lang === 'mm' ? 'ဖျက်မရပါ — ထပ်ကြိုးစားပါ' : 'Could not delete — please try again'))
+      setPlaces(prev)
+    }
   }
 
   function openGoogleMaps(lat, lng) {
@@ -274,12 +280,16 @@ export function PlaceForm({ lang, initial, userId, onClose, onSaved }) {
       user_id: userId,
       updated_at: new Date().toISOString(),
     }
-    if (initial) {
-      await supabase.from('saved_places').update(payload).eq('id', initial.id)
-    } else {
-      await supabase.from('saved_places').insert(payload)
-    }
+    // A failed save must never look successful — check the error first.
+    const { error } = initial
+      ? await supabase.from('saved_places').update(payload).eq('id', initial.id)
+      : await supabase.from('saved_places').insert(payload)
     setSaving(false)
+    if (error) {
+      console.error('Save place failed:', error)
+      showError(error.message || (lang === 'mm' ? 'သိမ်းမရပါ — ထပ်ကြိုးစားပါ' : 'Could not save — please try again'))
+      return
+    }
     onSaved()
   }
 

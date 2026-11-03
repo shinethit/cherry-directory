@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Calendar, MapPin, Users, BookOpen, Plus, Edit2, Trash2, Clock, CheckCircle, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -12,6 +12,7 @@ import { Skeleton } from '../components/UI'
 import ShareButton from '../components/ShareButton'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { formatMyanmarDate } from '../lib/myanmarDate'
 
 const HISTORY_CATS = [
   { id: 'all',        mm: 'အားလုံး',          en: 'All',         icon: '📜' },
@@ -84,7 +85,7 @@ function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
 
         <div className="flex items-center gap-3 text-[10px] text-white/30 pt-1 flex-wrap">
           {post.event_date && (
-            <span className="flex items-center gap-1"><Calendar size={10} /> {new Date(post.event_date).toLocaleDateString('my-MM')}</span>
+            <span className="flex items-center gap-1"><Calendar size={10} /> {formatMyanmarDate(post.event_date)}</span>
           )}
           <span className="flex items-center gap-1"><Clock size={10} /> {timeAgo(post.created_at, lang)}</span>
           {post.content_mm && (
@@ -141,16 +142,26 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
 
   async function handleCoverUpload(file) {
     setCoverLoading(true)
-    const url = await uploadImage(file, 'history/covers')
-    setCoverUrl(url)
-    setCoverLoading(false)
+    try {
+      const url = await uploadImage(file, 'history/covers')
+      setCoverUrl(url)
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+    } finally {
+      setCoverLoading(false)
+    }
   }
 
   async function handleImageUpload(file) {
     setImgLoading(true)
-    const url = await uploadImage(file, 'history/gallery')
-    setImages(prev => [...prev, url])
-    setImgLoading(false)
+    try {
+      const url = await uploadImage(file, 'history/gallery')
+      setImages(prev => [...prev, url])
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+    } finally {
+      setImgLoading(false)
+    }
   }
 
   async function submit() {
@@ -158,12 +169,13 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
     setSubmitting(true)
     const payload = {
       ...form,
+      // `title` is NOT NULL in the schema; fall back to the Myanmar title.
+      title: form.title || form.title_mm,
       cover_url: coverUrl || null,
       images,
       author_id: user?.id,
       author_name: form.author_name || profile?.full_name || profile?.nickname,
       status: 'published',
-      created_at: new Date().toISOString(),
     }
     
     if (editPost) {
@@ -175,7 +187,8 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
         return
       }
     } else {
-      const { error } = await supabase.from('history').insert(payload)
+      // created_at only on insert — edits must not reset the post date.
+      const { error } = await supabase.from('history').insert({ ...payload, created_at: new Date().toISOString() })
       if (error) {
         console.error('Insert error:', error)
         showError(error.message)
@@ -265,13 +278,23 @@ export function HistoryDetailPage() {
   const { lang } = useLang()
   const [post, setPost] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [related, setRelated] = useState([])
 
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const { data } = await supabase.from('history').select('*').eq('id', id).single()
+      setLoading(true)
+      setLoadError('')
+      // Drafts must not be readable by direct URL.
+      const { data, error } = await supabase.from('history').select('*').eq('id', id).eq('status', 'published').single()
       if (cancelled) return
+      if (error) {
+        setLoadError(error.message)
+        setPost(null)
+        setLoading(false)
+        return
+      }
       setPost(data)
       setLoading(false)
 
@@ -298,7 +321,15 @@ export function HistoryDetailPage() {
       <Skeleton className="h-32 mt-4" />
     </div>
   )
-  
+
+  if (loadError) return (
+    <div className="p-4 text-center">
+      <p className="text-white/40 mb-1">{lang === 'mm' ? 'မတွေ့ပါ' : 'Not found'}</p>
+      <p className="text-red-400/70 text-xs mb-3">{loadError}</p>
+      <button onClick={() => navigate('/history')} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'သမိုင်းစာမျက်နှာသို့ ပြန်မည်' : 'Back to History'}</button>
+    </div>
+  )
+
   if (!post) return (
     <div className="p-4 text-center text-white/40">
       {lang === 'mm' ? 'မတွေ့ပါ' : 'Not found'}
@@ -342,7 +373,7 @@ export function HistoryDetailPage() {
         
         <div className="flex items-center gap-3 text-xs text-white/40 flex-wrap">
           {post.event_date && (
-            <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(post.event_date).toLocaleDateString('my-MM', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            <span className="flex items-center gap-1"><Calendar size={12} /> {formatMyanmarDate(post.event_date, { year: true })}</span>
           )}
           {post.author_name && <span className="flex items-center gap-1"><BookOpen size={12} /> {post.author_name}</span>}
           <span>{timeAgo(post.created_at, lang)}</span>
@@ -409,7 +440,7 @@ export function HistoryDetailPage() {
                       <div className="flex items-center gap-2 mt-0.5 text-[10px] text-white/40">
                         <span>{rCat.icon} {lang === 'mm' ? rCat.mm : rCat.en}</span>
                         {r.event_date && (
-                          <span>· {new Date(r.event_date).toLocaleDateString('my-MM')}</span>
+                          <span>· {formatMyanmarDate(r.event_date)}</span>
                         )}
                       </div>
                     </div>
@@ -434,13 +465,22 @@ export default function HistoryPage() {
 
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [catFilter, setCatFilter] = useState('all')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
 
+  // Debounce search 300ms so typing does not re-query on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError('')
     try {
       let q = supabase
         .from('history')
@@ -453,42 +493,49 @@ export default function HistoryPage() {
         q = q.eq('category', catFilter)
       }
 
-      if (search.trim()) {
-        const term = `%${search.trim()}%`
+      if (debouncedSearch.trim()) {
+        const term = `%${debouncedSearch.trim()}%`
         q = q.or(`title.ilike.${term},title_mm.ilike.${term},excerpt_mm.ilike.${term},content_mm.ilike.${term}`)
       }
 
       const { data, error } = await q
-      
+
       if (error) {
         console.error('History load error:', error)
+        setLoadError(error.message)
       } else {
         setPosts(data || [])
       }
     } catch (e) {
       console.error('History load exception:', e)
+      setLoadError(e.message || 'Failed to load history')
     }
     setLoading(false)
-  }, [catFilter, search])
+  }, [catFilter, debouncedSearch])
 
   useEffect(() => {
     load()
-    
+  }, [load])
+
+  // Subscribe to realtime only once — never re-subscribe on keystroke.
+  const loadRef = useRef(load)
+  loadRef.current = load
+  useEffect(() => {
     const channel = supabase
       .channel('history-live')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'history' 
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'history'
       }, () => {
-        load()
+        loadRef.current()
       })
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [load])
+  }, [])
 
   async function deletePost(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
@@ -559,6 +606,13 @@ export default function HistoryPage() {
       <div className="px-4 space-y-3 pb-24">
         {loading ? (
           [1,2,3].map(n => <div key={n} className="h-48 rounded-2xl shimmer" />)
+        ) : loadError ? (
+          <div className="flex flex-col items-center py-14 text-center">
+            <span className="text-4xl mb-3">⚠️</span>
+            <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ရယူရာတွင် အမှားရှိသည်' : 'Failed to load'}</p>
+            <p className="text-red-400/70 text-xs mt-1 mb-3">{loadError}</p>
+            <button onClick={load} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button>
+          </div>
         ) : posts.length === 0 ? (
           <div className="flex flex-col items-center py-14 text-center">
             <span className="text-4xl mb-3">📜</span>

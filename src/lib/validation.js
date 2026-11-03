@@ -8,14 +8,32 @@ export const validateEmail = (email) => {
   return emailRegex.test(email);
 };
 
+const MYANMAR_DIGITS = '၀၁၂၃၄၅၆၇၈၉'
+
+/** Convert Myanmar digits ၀-၉ to Latin 0-9 */
+export const toLatinDigits = (value) => {
+  if (value == null) return ''
+  return String(value).replace(/[၀-၉]/g, d => MYANMAR_DIGITS.indexOf(d))
+}
+
+/** Canonical phone for comparison: Latin digits only, +95/0 prefix stripped */
+export const normalizePhone = (phone) => {
+  let p = toLatinDigits(phone || '').replace(/[\s\-()]/g, '')
+  if (p.startsWith('+95')) p = p.slice(3)
+  else if (p.startsWith('95')) p = p.slice(2)
+  p = p.replace(/^0+/, '')
+  return p
+}
+
 /**
- * Validate phone number format
+ * Validate phone number format (Myanmar digits allowed)
  * @param {string} phone - Phone number to validate
  * @returns {boolean} True if valid
  */
 export const validatePhone = (phone) => {
+  const latin = toLatinDigits(phone || '')
   const phoneRegex = /^[0-9\-\+\(\)\s]{7,}$/;
-  return phoneRegex.test(phone);
+  return phoneRegex.test(latin);
 };
 
 /**
@@ -40,7 +58,11 @@ export const validateUrl = (url) => {
 export const validateListing = (data) => {
   const errors = [];
 
-  if (!data.name || data.name.trim().length === 0) {
+  // Primary name is name_mm; English name alone is also fine. Myanmar-only
+  // submissions must pass — never require data.name by itself.
+  const hasName = (data.name_mm && data.name_mm.trim().length > 0) ||
+    (data.name && data.name.trim().length > 0)
+  if (!hasName) {
     errors.push('အမည် ထည့်သွင်းရန် လိုအပ်သည်။');
   }
 
@@ -48,8 +70,13 @@ export const validateListing = (data) => {
     errors.push('အမျိုးအစား ရွေးချယ်ရန် လိုအပ်သည်။');
   }
 
-  if (data.phone_1 && !validatePhone(data.phone_1)) {
-    errors.push('ဖုန်းနံပါတ် မှားမှားမှားနေသည်။');
+  // Phones may be in form.phones[] (submit form) or phone_1/phone_2.
+  const phones = Array.isArray(data.phones) ? data.phones : [data.phone_1, data.phone_2]
+  for (const phone of phones) {
+    if (phone && !validatePhone(phone)) {
+      errors.push('ဖုန်းနံပါတ် မှားမှားမှားနေသည်။');
+      break
+    }
   }
 
   if (data.website && !validateUrl(data.website)) {
@@ -156,9 +183,10 @@ export const validateAndSanitizeListing = (data) => {
     errors: [],
     data: {
       ...data,
-      name: sanitizeInput(data.name),
-      description: sanitizeInput(data.description),
-      address: sanitizeInput(data.address),
+      name: data.name ? sanitizeInput(data.name) : data.name,
+      name_mm: data.name_mm ? sanitizeInput(data.name_mm) : data.name_mm,
+      description: data.description ? sanitizeInput(data.description) : data.description,
+      address: data.address ? sanitizeInput(data.address) : data.address,
     },
   };
 };

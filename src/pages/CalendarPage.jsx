@@ -8,6 +8,8 @@ import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { getCountdown } from '../lib/countdown'
+import { mmtParts, formatMyanmarDate } from '../lib/myanmarDate'
+import { showError } from '../lib/toast'
 import WeeklyView from '../components/WeeklyView'
 
 // Myanmar month names
@@ -22,16 +24,27 @@ function isSameDay(a, b) {
 
 function formatTime(iso, lang) {
   if (!iso) return ''
-  return new Date(iso).toLocaleTimeString(lang === 'mm' ? 'my-MM' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: true })
+  const p = mmtParts(iso)
+  if (!p) return ''
+  const h12 = p.hh % 12 === 0 ? 12 : p.hh % 12
+  const mm = String(p.mm).padStart(2, '0')
+  if (lang === 'mm') {
+    const part = p.hh < 12 ? 'မနက်' : p.hh < 17 ? 'နေ့လယ်' : 'ည'
+    return `${part} ${h12}:${mm}`
+  }
+  return `${h12}:${mm} ${p.hh < 12 ? 'AM' : 'PM'}`
 }
 
 function formatDateRange(start, end, lang) {
   const s = new Date(start)
   const e = end ? new Date(end) : null
+  if (lang === 'mm') {
+    if (!e || isSameDay(s, e)) return formatMyanmarDate(start, { year: true })
+    return `${formatMyanmarDate(start)} – ${formatMyanmarDate(end)}`
+  }
   const opts = { month: 'short', day: 'numeric' }
-  const locale = lang === 'mm' ? 'my-MM' : 'en-US'
-  if (!e || isSameDay(s, e)) return s.toLocaleDateString(locale, { ...opts, year: 'numeric' })
-  return `${s.toLocaleDateString(locale, opts)} – ${e.toLocaleDateString(locale, opts)}`
+  if (!e || isSameDay(s, e)) return s.toLocaleDateString('en-US', { ...opts, year: 'numeric' })
+  return `${s.toLocaleDateString('en-US', opts)} – ${e.toLocaleDateString('en-US', opts)}`
 }
 
 // ── RSVP Button ───────────────────────────────────────────────
@@ -61,15 +74,20 @@ function RsvpButton({ postId }) {
   }, [postId, user])
 
   async function rsvp(newStatus) {
-    if (!isLoggedIn) { navigate('/login'); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ RSVP လုပ်နိုင်မည်'); navigate('/login'); return }
     setLoading(true)
     if (status === newStatus) {
-      await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
+      const { error } = await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
+      if (error) { showError(error.message); setLoading(false); return }
       setCounts(c => ({ ...c, [newStatus]: Math.max(0, c[newStatus] - 1) }))
       setStatus(null)
     } else {
+      const { error } = await supabase.from('event_rsvps').upsert(
+        { post_id: postId, user_id: user.id, status: newStatus },
+        { onConflict: 'post_id,user_id' }
+      )
+      if (error) { showError(error.message); setLoading(false); return }
       if (status) setCounts(c => ({ ...c, [status]: Math.max(0, c[status] - 1) }))
-      await supabase.from('event_rsvps').upsert({ post_id: postId, user_id: user.id, status: newStatus })
       setCounts(c => ({ ...c, [newStatus]: c[newStatus] + 1 }))
       setStatus(newStatus)
     }
@@ -155,7 +173,7 @@ function EventCard({ event, compact = false }) {
           {event.event_start && (
             <div className="flex-shrink-0 w-12 text-center bg-brand-600/30 border border-brand-400/25 rounded-xl py-1.5 px-1">
               <p className="text-[9px] text-brand-300 font-display font-bold uppercase leading-none">
-                {new Date(event.event_start).toLocaleDateString(lang === 'mm' ? 'my-MM' : 'en-US', { month: 'short' })}
+                {lang === 'mm' ? MM_MONTHS[new Date(event.event_start).getMonth()] : new Date(event.event_start).toLocaleDateString('en-US', { month: 'short' })}
               </p>
               <p className="text-lg font-display font-bold text-white leading-tight">
                 {new Date(event.event_start).getDate()}
@@ -244,16 +262,29 @@ export default function CalendarPage() {
     const from = new Date(viewYear, viewMonth, 1).toISOString()
     const to   = new Date(viewYear, viewMonth + 1, 1).toISOString()
 
-    const { data } = await supabase
+    // Overlap query: an event belongs to this month if it starts before the
+    // month ends AND (starts in the month OR ends in/after it) — the old
+    // gte/lt on event_start alone dropped multi-day events that started
+    // in the previous month. posts DOES have event_end (schema).
+    const { data, error } = await supabase
       .from('posts')
       .select('id, title, title_mm, cover_url, event_start, event_end, event_location, type, status, author_id, category_id')
       .eq('type', 'event')
       .eq('status', 'published')
-      .gte('event_start', from)
       .lt('event_start', to)
+      .or(`event_start.gte.${from},event_end.gte.${from}`)
       .order('event_start')
 
+    if (error) { console.warn(error); setEvents([]); setEventCats([]); setLoading(false); return }
     setEvents(data || [])
+    // Populate the category filter from the events actually loaded.
+    const catIds = [...new Set((data || []).map(e => e.category_id).filter(Boolean))]
+    if (catIds.length > 0) {
+      const { data: cats } = await supabase.from('categories').select('id, name, name_mm, icon').in('id', catIds)
+      setEventCats(cats || [])
+    } else {
+      setEventCats([])
+    }
     setLoading(false)
   }, [viewYear, viewMonth])
 
@@ -264,7 +295,9 @@ export default function CalendarPage() {
       .select('id, title, title_mm, cover_url, event_start, event_end, event_location, type, author_id')
       .eq('type', 'event')
       .eq('status', 'published')
-      .gte('event_start', today.toISOString())
+      // Include multi-day events still in progress (event_end >= now),
+      // not only events starting in the future.
+      .or(`event_start.gte.${today.toISOString()},event_end.gte.${today.toISOString()}`)
       .order('event_start')
       .limit(10)
       .then(({ data }) => setUpcoming(data || []))
@@ -281,11 +314,19 @@ export default function CalendarPage() {
     else setViewMonth(m => m + 1)
   }
 
-  // Events that have a dot on a given day
+  // Events on a given day — multi-day events appear on EVERY day in
+  // [event_start, event_end], not just the start day.
   function eventsOnDay(date) {
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
     return events
       .filter(ev => !selEventCat || ev.category_id === selEventCat)
-      .filter(ev => ev.event_start && isSameDay(new Date(ev.event_start), date))
+      .filter(ev => {
+        if (!ev.event_start) return false
+        const start = new Date(ev.event_start)
+        const end = ev.event_end ? new Date(ev.event_end) : start
+        return start < dayEnd && end >= dayStart
+      })
   }
 
   // Events for selected day
@@ -456,9 +497,9 @@ export default function CalendarPage() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <p className="font-display font-bold text-sm text-white">
-              {selected.toLocaleDateString(lang === 'mm' ? 'my-MM' : 'en-US', {
-                weekday: 'long', month: 'long', day: 'numeric'
-              })}
+              {lang === 'mm'
+                ? formatMyanmarDate(selected.toISOString(), { weekday: true, year: true })
+                : selected.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
             {selectedEvents.length === 0 && (
               <p className="text-xs text-white/30 mt-0.5 font-myanmar">

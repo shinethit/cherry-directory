@@ -90,6 +90,11 @@ export default function PointsGuidePage() {
             </div>
           ))}
         </div>
+        <p className="text-[10px] text-white/30 font-myanmar mt-2">
+          {lang === 'mm'
+            ? 'Approved / Claim Points များသည် Admin အတည်ပြုပြီးမှ ရရှိပါသည်။ Chat Points သည် တစ်နေ့ အများဆုံး ၁၀ Points သာ ရသည်။'
+            : 'Approved / Claim points are awarded only after Admin approval. Chat points are capped at 10 per day.'}
+        </p>
       </div>
 
       <div className="px-4">

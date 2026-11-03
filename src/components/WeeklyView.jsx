@@ -1,3 +1,17 @@
+import { mmtParts, MY_MONTHS, MY_WEEKDAYS } from '../lib/myanmarDate'
+
+function formatTime(iso, lang) {
+  const p = mmtParts(iso)
+  if (!p) return ''
+  const h12 = p.hh % 12 === 0 ? 12 : p.hh % 12
+  const mm = String(p.mm).padStart(2, '0')
+  if (lang === 'mm') {
+    const part = p.hh < 12 ? 'မနက်' : p.hh < 17 ? 'နေ့လယ်' : 'ည'
+    return `${part} ${h12}:${mm}`
+  }
+  return `${h12}:${mm} ${p.hh < 12 ? 'AM' : 'PM'}`
+}
+
 function isSameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
@@ -12,10 +26,15 @@ export default function WeeklyView({ events = [], selected, setSelected, lang = 
     return d
   })
 
+  // Multi-day events appear on every day in [event_start, event_end].
   function eventsOnDay(date) {
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
     return events.filter(ev => {
       if (!ev.event_start) return false
-      return isSameDay(new Date(ev.event_start), date)
+      const start = new Date(ev.event_start)
+      const end = ev.event_end ? new Date(ev.event_end) : start
+      return start < dayEnd && end >= dayStart
     })
   }
 
@@ -44,10 +63,10 @@ export default function WeeklyView({ events = [], selected, setSelected, lang = 
                 <span className={'text-sm font-display font-bold ' + (
                   isSel ? 'text-white' : isToday ? 'text-gold-400' : 'text-white/70'
                 )}>
-                  {day.toLocaleDateString(lang === 'mm' ? 'my-MM' : 'en-US', { weekday: 'short' })}
+                  {lang === 'mm' ? MY_WEEKDAYS[day.getDay()] : day.toLocaleDateString('en-US', { weekday: 'short' })}
                 </span>
                 <span className="text-xs text-white/50">
-                  {day.getDate()} {day.toLocaleDateString(lang === 'mm' ? 'my-MM' : 'en-US', { month: 'short' })}
+                  {day.getDate()} {lang === 'mm' ? MY_MONTHS[day.getMonth()] : day.toLocaleDateString('en-US', { month: 'short' })}
                 </span>
                 {isToday && (
                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400">Today</span>
@@ -74,7 +93,7 @@ export default function WeeklyView({ events = [], selected, setSelected, lang = 
                       </p>
                       {ev.event_start && (
                         <p className="text-[9px] text-white/40 font-mono truncate">
-                          {new Date(ev.event_start).toLocaleTimeString(lang === 'mm' ? 'my-MM' : 'en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                          {formatTime(ev.event_start, lang)}
                           {ev.event_location && ' · ' + ev.event_location}
                         </p>
                       )}

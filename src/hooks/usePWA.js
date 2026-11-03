@@ -1,14 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || ''
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = atob(base64)
-  return new Uint8Array([...rawData].map(c => c.charCodeAt(0)))
-}
+import { showInfo } from '../lib/toast'
 
 export function usePWA() {
   const [swReady, setSwReady] = useState(false)
@@ -17,13 +9,14 @@ export function usePWA() {
   const [deferredPrompt, setDeferredPrompt] = useState(null)
 
   useEffect(() => {
-    // Register service worker
+    // NOTE: the service worker is registered once, in main.jsx. Do NOT
+    // register it here again — the duplicate registration served no purpose.
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').then(reg => {
+      navigator.serviceWorker.ready.then(reg => {
         setSwReady(true)
         // Check existing push subscription
-        reg.pushManager.getSubscription().then(sub => setPushEnabled(!!sub))
-      }).catch(err => console.warn('SW registration failed:', err))
+        reg.pushManager.getSubscription().then(sub => setPushEnabled(!!sub)).catch(() => {})
+      }).catch(() => {})
     }
 
     // PWA install prompt
@@ -32,26 +25,13 @@ export function usePWA() {
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
-  async function enablePush(userId) {
-    try {
-      const reg = await navigator.serviceWorker.ready
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-      })
-      // Save subscription to Supabase
-      await supabase.from('push_subscriptions').upsert({
-        user_id: userId,
-        endpoint: sub.endpoint,
-        p256dh: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh')))),
-        auth: btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth')))),
-      })
-      setPushEnabled(true)
-      return true
-    } catch (err) {
-      console.warn('Push subscription failed:', err)
-      return false
-    }
+  async function enablePush() {
+    // Honest stub: there is no push server and sw.js has no 'push' listener,
+    // so subscribing would create a device that can never be notified.
+    // (ProfilePage still calls this; it now gets a truthful toast instead of
+    // a silent dead subscription.)
+    showInfo('Push notification မရသေးပါ — နောက်ထပ် version တွင် ရနိုင်မည်')
+    return false
   }
 
   async function disablePush() {

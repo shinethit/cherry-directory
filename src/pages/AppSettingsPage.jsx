@@ -4,11 +4,12 @@ import { ArrowLeft, Save, Plus, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
+import { showError, showSuccess } from '../lib/toast'
 import { invalidateAppConfig } from '../contexts/AppConfigContext'
 
 export default function AppSettingsPage() {
   const navigate = useNavigate()
-  const { isAdmin } = useAuth()
+  const { isAdmin, loading: authLoading } = useAuth()
   useSEO({ title: 'App Settings' })
 
   const [cities, setCities]   = useState([])
@@ -16,11 +17,14 @@ export default function AppSettingsPage() {
   const [appName, setAppName] = useState('')
   const [appCity, setAppCity] = useState('')
   const [saving, setSaving]   = useState(false)
-  const [toast, setToast]     = useState('')
 
   useEffect(() => {
     if (!isAdmin) return
-    supabase.from('app_config').select('*').then(({ data }) => {
+    supabase.from('app_config').select('*').then(({ data, error }) => {
+      if (error) {
+        showError('Settings ရယူရာတွင် အမှားရှိသည်: ' + error.message)
+        return
+      }
       if (!data) return
       data.forEach(({ key, value }) => {
         try {
@@ -36,17 +40,21 @@ export default function AppSettingsPage() {
   async function save() {
     setSaving(true)
     try {
-      await Promise.all([
+      // supabase upsert() returns { error } — it never throws, so
+      // each result must be checked or a failed save looks saved.
+      const results = await Promise.all([
         supabase.from('app_config').upsert({ key: 'app_name', value: JSON.stringify(appName), label: 'App Name' }),
         supabase.from('app_config').upsert({ key: 'app_city', value: JSON.stringify(appCity), label: 'City Name (Myanmar)' }),
         supabase.from('app_config').upsert({ key: 'cities',   value: JSON.stringify(cities),  label: 'Cities List' }),
       ])
+      const failed = results.find(r => r.error)
+      if (failed) throw failed.error
+      // invalidateAppConfig() now actually re-fetches in the provider,
+      // so the app shows the new values without a reload.
       invalidateAppConfig()
-      setToast('✓ သိမ်းပြီး')
-      setTimeout(() => setToast(''), 3000)
+      showSuccess('✓ သိမ်းပြီး')
     } catch (err) {
-      setToast('✗ Error: ' + err.message)
-      setTimeout(() => setToast(''), 4000)
+      showError('✗ Error: ' + err.message)
     }
     setSaving(false)
   }
@@ -60,6 +68,16 @@ export default function AppSettingsPage() {
 
   function removeCity(c) {
     setCities(prev => prev.filter(x => x !== c))
+  }
+
+  // While auth is loading the role is unknown — wait instead of
+  // flashing the lock screen to a signed-in admin.
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60dvh]">
+        <p className="text-white/40 font-myanmar">စစ်ဆေးနေသည်...</p>
+      </div>
+    )
   }
 
   if (!isAdmin) return (
@@ -135,12 +153,6 @@ export default function AppSettingsPage() {
           <Save size={16} />
           {saving ? 'သိမ်းနေသည်...' : 'Settings သိမ်းမည်'}
         </button>
-
-        {toast && (
-          <p className={`text-sm text-center font-myanmar ${toast.startsWith('✓') ? 'text-green-400' : 'text-red-400'}`}>
-            {toast}
-          </p>
-        )}
       </div>
     </div>
   )

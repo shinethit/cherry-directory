@@ -12,34 +12,59 @@ import Zoom from 'yet-another-react-lightbox/plugins/zoom'
 import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
 import { confirmDialog } from '../lib/confirmDialog'
-import { showError } from '../lib/toast'
+import { showError, showSuccess } from '../lib/toast'
+import { maskPhone, toTelHref } from '../lib/phoneMask'
+
+const LF_TYPES = [
+  { id: 'lost',  mm: 'ပျောက်ဆုံး', en: 'Lost' },
+  { id: 'found', mm: 'တွေ့ရှိ',   en: 'Found' },
+]
+const LF_CATS = [
+  { id: 'person', mm: 'လူ',        en: 'Person' },
+  { id: 'child',  mm: 'ကလေး',     en: 'Child' },
+  { id: 'animal', mm: 'တိရိစ္ဆာန်', en: 'Animal' },
+  { id: 'item',   mm: 'ပစ္စည်း',   en: 'Item' },
+]
 
 export default function LostFoundDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { lang } = useLang()
-  const { user, isModerator } = useAuth()
+  const { user, isModerator, isLoggedIn } = useAuth()
   const [post, setPost] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({})
+  const [claimed, setClaimed] = useState(false)
+  const [resolving, setResolving] = useState(false)
+  const [reporting, setReporting] = useState(false)
+  const [reportReason, setReportReason] = useState('')
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxImages, setLightboxImages] = useState([])
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
+  async function loadPost() {
+    setLoading(true)
+    setLoadError('')
+    const { data, error } = await supabase.from('lost_found').select('*').eq('id', id).single()
+    if (error) {
+      setLoadError(error.message)
+      setPost(null)
+    } else {
+      setPost(data)
+      setEditForm(data)
+      if (data?.images?.length) {
+        setLightboxImages(data.images.map(src => ({ src })))
+      }
+    }
+    setLoading(false)
+  }
+
   useEffect(() => {
-    supabase.from('lost_found').select('*').eq('id', id).single()
-      .then(({ data }) => {
-        setPost(data)
-        setEditForm(data)
-        if (data?.images?.length) {
-          setLightboxImages(data.images.map(src => ({ src })))
-        }
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
+    loadPost()
   }, [id])
 
   async function handleDelete() {
@@ -50,12 +75,62 @@ export default function LostFoundDetailPage() {
   }
 
   async function handleUpdate() {
-    const { error } = await supabase.from('lost_found').update(editForm).eq('id', id)
+    // Whitelist editable columns — never send id/timestamps through.
+    const payload = {
+      title: editForm.title || editForm.title_mm || null,
+      title_mm: editForm.title_mm || null,
+      description_mm: editForm.description_mm || null,
+      location_mm: editForm.location_mm || null,
+      contact_phone: editForm.contact_phone || null,
+      contact_name: editForm.contact_name || null,
+      reward: editForm.reward || null,
+      type: editForm.type,
+      category: editForm.category,
+      is_urgent: !!editForm.is_urgent,
+    }
+    const { error } = await supabase.from('lost_found').update(payload).eq('id', id)
     if (error) showError(error.message)
     else {
-      setPost(editForm)
+      setPost(p => ({ ...p, ...payload }))
       setEditing(false)
     }
+  }
+
+  async function handleResolve() {
+    if (!(await confirmDialog(lang === 'mm' ? 'ဒီ Post ကို ဖြေရှင်းပြီးအဖြစ် သတ်မှတ်မည်လား?' : 'Mark this post as resolved?'))) return
+    setResolving(true)
+    const { error } = await supabase.from('lost_found').update({ status: 'resolved' }).eq('id', id)
+    setResolving(false)
+    if (error) { showError(error.message); return }
+    setPost(p => ({ ...p, status: 'resolved' }))
+    showSuccess(lang === 'mm' ? 'ဖြေရှင်းပြီးအဖြစ် သတ်မှတ်ပြီးပါပြီ' : 'Marked as resolved')
+  }
+
+  // Claim: the lost_found status CHECK is ('active','resolved','expired') —
+  // there is NO 'claimed' status, so a claim cannot change the status.
+  // Claiming only reveals the poster's contact to a logged-in user.
+  function handleClaim() {
+    if (!isLoggedIn) {
+      showError(lang === 'mm' ? 'Claim လုပ်ရန် Login ဝင်ပါ' : 'Please log in to claim')
+      return
+    }
+    setClaimed(true)
+    showSuccess(lang === 'mm' ? 'Claim မှတ်တမ်းတင်ပြီးပါပြီ — ဆက်သွယ်ရန် အချက်အလက်ကို အောက်မှာ ပြသထားသည်' : 'Claim noted — contact details are shown below')
+  }
+
+  async function handleReport() {
+    if (!reportReason.trim()) return
+    const { error } = await supabase.from('reports').insert({
+      target_type: 'lost_found',
+      target_id: id,
+      reason: reportReason.trim(),
+      reporter_id: user?.id || null,
+      status: 'pending',
+    })
+    if (error) { showError(error.message); return }
+    setReporting(false)
+    setReportReason('')
+    showSuccess(lang === 'mm' ? 'Report တင်ပြီးပါပြီ — Admin မှ စစ်ဆေးမည်' : 'Report submitted — an admin will review it')
   }
 
   function openLightbox(startIndex = 0) {
@@ -64,12 +139,22 @@ export default function LostFoundDetailPage() {
   }
 
   if (loading) return <div className="p-4"><Skeleton className="h-64" /></div>
+  if (loadError) return (
+    <div className="p-4 text-center">
+      <p className="text-red-400 text-sm mb-3">{loadError}</p>
+      <button onClick={loadPost} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button>
+    </div>
+  )
   if (!post) return <div className="p-4 text-center text-white/40">မတွေ့ပါ</div>
 
   const isLost = post.type === 'lost'
   const cover = post.images?.[0] ? getOptimizedUrl(post.images[0], { width: 500 }) : null
   const isOwner = user?.id === post.poster_id
   const canEdit = isOwner || isModerator
+  // Contact is shown directly for 'lost' posts (the poster wants to be
+  // reached). For 'found' posts it is revealed only after a logged-in
+  // user claims the item — or to the owner / a moderator.
+  const contactVisible = isOwner || isModerator || claimed || post.type === 'lost'
 
   if (editing) {
     return (
@@ -82,11 +167,31 @@ export default function LostFoundDetailPage() {
           <button onClick={handleUpdate} className="btn-primary text-xs px-4 py-2">သိမ်းမည်</button>
         </div>
         <div className="px-4 space-y-4">
+          <div>
+            <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
+            <div className="flex gap-2">
+              {LF_TYPES.map(t => (
+                <button key={t.id} onClick={() => setEditForm({...editForm, type: t.id})} className={`flex-1 py-2 rounded-xl text-sm font-bold border ${editForm.type === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{lang === 'mm' ? t.mm : t.en}</button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-white/50 mb-1.5">အုပ်စု</label>
+            <div className="flex gap-2 flex-wrap">
+              {LF_CATS.map(c => (
+                <button key={c.id} onClick={() => setEditForm({...editForm, category: c.id})} className={`px-3 py-1.5 rounded-full text-xs border ${editForm.category === c.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{lang === 'mm' ? c.mm : c.en}</button>
+              ))}
+            </div>
+          </div>
           <input type="text" value={editForm.title_mm || ''} onChange={e => setEditForm({...editForm, title_mm: e.target.value})} className="input-dark" placeholder="ခေါင်းစဉ်" />
           <textarea value={editForm.description_mm || ''} onChange={e => setEditForm({...editForm, description_mm: e.target.value})} className="input-dark resize-none h-32" placeholder="ဖော်ပြချက်" />
           <input type="text" value={editForm.location_mm || ''} onChange={e => setEditForm({...editForm, location_mm: e.target.value})} className="input-dark" placeholder="နေရာ" />
+          <input type="text" value={editForm.contact_name || ''} onChange={e => setEditForm({...editForm, contact_name: e.target.value})} className="input-dark" placeholder="ဆက်သွယ်ရမည့်သူ" />
           <input type="text" value={editForm.contact_phone || ''} onChange={e => setEditForm({...editForm, contact_phone: e.target.value})} className="input-dark" placeholder="ဖုန်း" />
           <input type="text" value={editForm.reward || ''} onChange={e => setEditForm({...editForm, reward: e.target.value})} className="input-dark" placeholder="ဆုကြေး" />
+          <button onClick={() => setEditForm({...editForm, is_urgent: !editForm.is_urgent})} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${editForm.is_urgent ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
+            ⚠️ {lang === 'mm' ? 'Urgent — အရေးပေါ်' : 'Mark as Urgent'}
+          </button>
         </div>
       </div>
     )
@@ -126,7 +231,7 @@ export default function LostFoundDetailPage() {
           {post.is_urgent && <span className="text-[9px] text-amber-400 font-bold">⚠️ Urgent</span>}
         </div>
 
-        <h1 className="font-display font-bold text-2xl text-white">{post.title_mm || post.title}</h1>
+        <h1 className="font-display font-bold text-2xl text-white">{lang === 'mm' ? (post.title_mm || post.title) : (post.title || post.title_mm)}</h1>
 
         {post.description_mm && (
           <p className="text-sm text-white/70 font-myanmar leading-relaxed whitespace-pre-wrap">{post.description_mm}</p>
@@ -146,20 +251,74 @@ export default function LostFoundDetailPage() {
           </div>
         )}
 
-        {post.contact_phone && (
-          <a href={`tel:${post.contact_phone}`} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
-            <Phone size={16} /> {post.contact_phone}
-          </a>
+        {contactVisible ? (
+          <>
+            {post.contact_phone && (
+              isLoggedIn ? (
+                <a href={toTelHref(post.contact_phone)} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
+                  <Phone size={16} /> {post.contact_name ? `${post.contact_name} · ` : ''}{post.contact_phone}
+                </a>
+              ) : (
+                <span className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/10 border border-green-500/20 text-green-400/80 font-semibold text-sm">
+                  <Phone size={16} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.contact_phone, false)}
+                </span>
+              )
+            )}
+            {!post.contact_phone && post.contact_name && (
+              <p className="text-sm text-white/50 font-myanmar">ဆက်သွယ်ရမည့်သူ: {post.contact_name}</p>
+            )}
+            {!isLoggedIn && post.contact_phone && (
+              <p className="text-[10px] text-white/30 text-center font-myanmar">ဖုန်းအပြည့်အစုံ မြင်ရန် Login ဝင်ပါ</p>
+            )}
+          </>
+        ) : (
+          <div className="space-y-2">
+            <button onClick={handleClaim} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-brand-600/30 border border-brand-400/40 text-brand-200 font-semibold text-sm hover:bg-brand-600/40 transition-colors">
+              🙋 {lang === 'mm' ? 'ဒါ ကျွန်တော့်ပစ္စည်းပါ' : 'This is mine'}
+            </button>
+            <p className="text-[10px] text-white/30 text-center font-myanmar">Claim လုပ်ပြီးမှ ပိုင်ရှင်နှင့် ဆက်သွယ်နိုင်မည် (Login လိုအပ်သည်)</p>
+          </div>
         )}
 
-        {post.contact_name && (
-          <p className="text-sm text-white/50 font-myanmar">ဆက်သွယ်ရမည့်သူ: {post.contact_name}</p>
+        {claimed && post.type === 'found' && (
+          <p className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl p-3 font-myanmar">✓ Claim မှတ်တမ်းတင်ပြီးပါပြီ — အထက်ပါ ဖုန်းဖြင့် ပိုင်ရှင်ကို ဆက်သွယ်ပါ</p>
         )}
 
         {post.status === 'resolved' && (
           <div className="flex items-center gap-2 text-green-400 bg-green-500/10 rounded-xl p-3">
             <CheckCircle size={16} />
             <span className="text-sm font-myanmar">ဖြေရှင်းပြီးပါပြီ</span>
+          </div>
+        )}
+
+        {canEdit && post.status !== 'resolved' && (
+          <button onClick={handleResolve} disabled={resolving} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors disabled:opacity-50">
+            <CheckCircle size={16} /> {resolving ? '...' : (lang === 'mm' ? 'ဖြေရှင်းပြီးပါပြီ' : 'Mark as resolved')}
+          </button>
+        )}
+
+        {/* Report */}
+        {!reporting ? (
+          <button onClick={() => setReporting(true)} className="w-full py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white/40 hover:text-red-400 hover:border-red-500/30 transition-colors">
+            🚩 {lang === 'mm' ? 'Report လုပ်မည်' : 'Report this post'}
+          </button>
+        ) : (
+          <div className="space-y-2 rounded-2xl bg-white/5 border border-white/10 p-3">
+            <input
+              type="text"
+              value={reportReason}
+              onChange={e => setReportReason(e.target.value)}
+              placeholder={lang === 'mm' ? 'Report လုပ်ရသည့် အကြောင်းရင်း...' : 'Reason for reporting...'}
+              className="input-dark text-sm font-myanmar"
+            />
+            <div className="flex gap-2">
+              <button onClick={handleReport} disabled={!reportReason.trim()} className="flex-1 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold disabled:opacity-40">
+                {lang === 'mm' ? 'Report တင်မည်' : 'Submit report'}
+              </button>
+              <button onClick={() => { setReporting(false); setReportReason('') }} className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs">
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 

@@ -2,6 +2,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { handleSupabaseError } from '../lib/errorHandler';
 
+/**
+ * Escape a raw search string for PostgREST .or() filters.
+ * Unescaped `,` / `(` / `)` break the OR syntax and `%` / `_` act as
+ * wildcards, so a search for e.g. "a,b" or "100%" silently returns wrong rows.
+ */
+export function escapePostgrestOr(value) {
+  const BS = String.fromCharCode(92)
+  return String(value ?? '')
+    .replaceAll(BS, BS + BS)
+    .replaceAll('%', BS + '%')
+    .replaceAll('_', BS + '_')
+    .replaceAll(',', BS + ',')
+    .replaceAll('(', BS + '(')
+    .replaceAll(')', BS + ')')
+}
+
 const LISTINGS_QUERY_KEY = 'listings';
 const PAGE_SIZE = 20;
 
@@ -60,7 +76,8 @@ export const useListings = (filters = {}, page = 1) => {
         query = query.eq('is_verified', true);
       }
       if (filters.search) {
-        query = query.or(`name.ilike.%${filters.search}%,name_mm.ilike.%${filters.search}%`);
+        const esc = escapePostgrestOr(filters.search);
+        query = query.or(`name.ilike.%${esc}%,name_mm.ilike.%${esc}%`);
       }
 
       // Pagination

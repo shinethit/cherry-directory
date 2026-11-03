@@ -109,19 +109,23 @@ export const useCreateReview = (listingId) => {
 };
 
 /**
- * Delete review
+ * Delete review — owner deletes their own, admin/moderator can delete any.
+ * There is no delete button in this hook's own files: the button lives in
+ * ListingDetailPage (another cluster's file) — see the patch text in the
+ * v0.9.1 report. The DELETE policy comes from the SQL migration.
  */
 export const useDeleteReview = (listingId, reviewId) => {
-  const { user } = useAuth();
+  const { user, isAdmin, isModerator } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from('reviews')
-        .delete()
-        .eq('id', reviewId)
-        .eq('user_id', user.id);
+      if (!user) throw new Error('အကောင့် ဝင်ရောက်ရန် လိုအပ်သည်။');
+      // Owners are scoped to their own review; admins/moderators are not.
+      let query = supabase.from('reviews').delete().eq('id', reviewId);
+      if (!isAdmin && !isModerator) query = query.eq('user_id', user.id);
+
+      const { error } = await query;
 
       if (error) {
         handleSupabaseError(error, 'Delete Review');

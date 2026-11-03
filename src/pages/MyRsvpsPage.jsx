@@ -9,6 +9,15 @@ import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { getCountdown } from '../lib/countdown'
 import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
+
+// RSVP status → honest label (never collapse a real status into "Interested").
+const RSVP_STATUS = {
+  going:       { mm: 'တက်မည်',        en: 'Going',       cls: 'bg-green-500/15 text-green-400 border-green-500/30', icon: CheckCircle },
+  interested:  { mm: 'စိတ်ဝင်စား',     en: 'Interested',  cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30', icon: Star },
+  not_going:   { mm: 'မတက်ပါ',        en: 'Not going',   cls: 'bg-white/10 text-white/50 border-white/15',        icon: Clock },
+  maybe:       { mm: 'မသေချာသေး',     en: 'Maybe',       cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30', icon: Star },
+}
 
 export default function MyRsvpsPage() {
   const navigate = useNavigate()
@@ -24,13 +33,17 @@ export default function MyRsvpsPage() {
     if (!user) { setLoading(false); return }
     setLoading(true)
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('event_rsvps')
         .select('status, post:posts(id, title, title_mm, cover_url, event_start, event_end, event_location, type, status)')
         .eq('user_id', user.id)
+      if (error) throw error
+      // Keep RSVPs whose event is unpublished/withdrawn — show them as
+      // "ပွဲဖျက်သိမ်းပြီး/မထုတ်ဝေတော့ပါ" instead of silently dropping them.
+      // Only drop rows whose event no longer exists at all (post === null).
       const list = (data || [])
         .map(r => (r.post ? { ...r.post, _rsvp: r.status } : null))
-        .filter(p => p && p.type === 'event' && p.status === 'published')
+        .filter(p => p && p.type === 'event')
       setItems(list)
     } catch (e) { console.warn(e) }
     setLoading(false)
@@ -40,8 +53,14 @@ export default function MyRsvpsPage() {
 
   async function cancelRsvp(postId) {
     if (!(await confirmDialog(lang === 'mm' ? 'RSVP ပယ်ဖျက်မှာ သေချာလား?' : 'Cancel RSVP?'))) return
-    await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
+    const prev = items
     setItems(prev => prev.filter(i => i.id !== postId))
+    const { error } = await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
+    if (error) {
+      console.error('Cancel RSVP failed:', error)
+      showError(error.message || (lang === 'mm' ? 'RSVP ပယ်ဖျက်မရပါ — ထပ်ကြိုးစားပါ' : 'Could not cancel RSVP — please try again'))
+      setItems(prev)
+    }
   }
 
   if (!isLoggedIn) {
@@ -126,8 +145,11 @@ export default function MyRsvpsPage() {
             const cover = ev.cover_url ? getOptimizedUrl(ev.cover_url, { width: 300 }) : null
             const cd = getCountdown(ev.event_start, lang)
             const isPast = new Date(ev.event_end || ev.event_start) < now
+            const isUnpublished = ev.status !== 'published'
+            const rsvpMeta = RSVP_STATUS[ev._rsvp] || RSVP_STATUS.interested
+            const RsvpIcon = rsvpMeta.icon
             return (
-              <div key={ev.id} className={'card-dark rounded-2xl overflow-hidden ' + (isPast ? 'opacity-60' : '')}>
+              <div key={ev.id} className={'card-dark rounded-2xl overflow-hidden ' + (isPast || isUnpublished ? 'opacity-60' : '')}>
                 <div onClick={() => navigate('/news/' + ev.id)} className="flex gap-3 p-3 cursor-pointer">
                   <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
                     {cover ? (
@@ -140,16 +162,15 @@ export default function MyRsvpsPage() {
                     <p className="text-sm font-semibold text-white truncate font-myanmar">
                       {lang === 'mm' ? (ev.title_mm || ev.title) : ev.title}
                     </p>
+                    {isUnpublished && (
+                      <p className="text-[10px] text-red-400 font-myanmar mt-0.5">
+                        {lang === 'mm' ? '⚠️ ပွဲဖျက်သိမ်းပြီး / မထုတ်ဝေတော့ပါ' : '⚠️ Event cancelled / unpublished'}
+                      </p>
+                    )}
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className={'inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ' + (
-                        ev._rsvp === 'going'
-                          ? 'bg-green-500/15 text-green-400 border-green-500/30'
-                          : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                      )}>
-                        {ev._rsvp === 'going' ? <CheckCircle size={9} /> : <Star size={9} />}
-                        {ev._rsvp === 'going'
-                          ? (lang === 'mm' ? 'တက်မည်' : 'Going')
-                          : (lang === 'mm' ? 'စိတ်ဝင်စား' : 'Interested')}
+                      <span className={'inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ' + rsvpMeta.cls}>
+                        <RsvpIcon size={9} />
+                        {lang === 'mm' ? rsvpMeta.mm : rsvpMeta.en}
                       </span>
                       {cd && <span className={'text-[10px] font-bold ' + cd.cls}>{cd.label}</span>}
                     </div>

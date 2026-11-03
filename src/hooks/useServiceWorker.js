@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export function useServiceWorker() {
   const [ready, setReady] = useState(false)
   const [swState, setSwState] = useState('initializing')
+  const [updateAvailable, setUpdateAvailable] = useState(false)
+  const waitingRef = useRef(null)
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
@@ -34,6 +36,8 @@ export function useServiceWorker() {
           installing.onstatechange = () => {
             if (installing.state === 'installed' && navigator.serviceWorker.controller) {
               console.log('[SW] New version available — refresh to update')
+              waitingRef.current = installing
+              setUpdateAvailable(true)
             }
           }
         }
@@ -44,5 +48,16 @@ export function useServiceWorker() {
       })
   }, [])
 
-  return { ready, swState }
+  // Tell the waiting worker to activate, then reload once it takes over.
+  // (sw.js only skipWaits on this message — never on install.)
+  async function applyUpdate() {
+    const onControllerChange = () => window.location.reload()
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange, { once: true })
+    const reg = await navigator.serviceWorker.getRegistration()
+    const waiting = waitingRef.current || reg?.waiting
+    if (waiting) waiting.postMessage('SKIP_WAITING')
+    else window.location.reload()
+  }
+
+  return { ready, swState, updateAvailable, applyUpdate }
 }

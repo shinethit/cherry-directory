@@ -7,6 +7,8 @@ import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { useNavigate } from 'react-router-dom'
 import { confirmDialog } from '../lib/confirmDialog'
+import { toTelHref } from '../lib/phoneMask'
+import { showError } from '../lib/toast'
 
 // ── Category config ───────────────────────────────────────────
 const CATS = [
@@ -18,6 +20,7 @@ const CATS = [
   { id: 'electricity', mm: 'လျှပ်စစ်',   en: 'Electricity',  icon: '⚡', color: 'text-amber-400'  },
   { id: 'water',       mm: 'ရေ',          en: 'Water',        icon: '💧', color: 'text-cyan-400'   },
   { id: 'rescue',      mm: 'ကယ်ဆယ်',     en: 'Rescue',       icon: '🆘', color: 'text-green-400'  },
+  { id: 'gas',        mm: 'ဂတ်စ်',      en: 'Gas',          icon: '🔥', color: 'text-amber-400'  },
   { id: 'other',       mm: 'အခြား',       en: 'Other',        icon: '📞', color: 'text-white/50'   },
 ]
 
@@ -93,7 +96,7 @@ function ContactCard({ contact, lang, isMod, onEdit, onDelete }) {
         {phones.map((phone, i) => (
           <a
             key={i}
-            href={`tel:${phone}`}
+            href={toTelHref(phone)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-display font-bold text-sm transition-all active:scale-95 ${
               i === 0
                 ? 'bg-green-500 text-white shadow-lg shadow-green-900/40 flex-1 justify-center'
@@ -127,12 +130,12 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
     if (!form.phone_1) return
     setSaving(true)
     const payload = { ...form, updated_at: new Date().toISOString() }
-    if (initial?.id) {
-      await supabase.from('emergency_contacts').update(payload).eq('id', initial.id)
-    } else {
-      await supabase.from('emergency_contacts').insert(payload)
-    }
+    const { error } = initial?.id
+      ? await supabase.from('emergency_contacts').update(payload).eq('id', initial.id)
+      : await supabase.from('emergency_contacts').insert(payload)
     setSaving(false)
+    // Never close the form on a failed save.
+    if (error) { showError(error.message); return }
     onSaved()
   }
 
@@ -245,17 +248,20 @@ export default function EmergencyPage() {
   const [catFilter, setCatFilter] = useState('all')
   const [editTarget, setEditTarget] = useState(null)  // null=closed, {}=new, {id}=edit
   const [showForm, setShowForm]    = useState(false)
+  const [loadError, setLoadError]  = useState(false)
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('emergency_contacts')
       .select('*')
       .eq('is_active', true)
       .order('sort_order')
+    if (error) throw error
     setContacts(data || [])
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
 
@@ -263,7 +269,8 @@ export default function EmergencyPage() {
 
   async function handleDelete(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this contact?'))) return
-    await supabase.from('emergency_contacts').update({ is_active: false }).eq('id', id)
+    const { error } = await supabase.from('emergency_contacts').update({ is_active: false }).eq('id', id)
+    if (error) { showError(error.message); return }
     load()
   }
 
@@ -376,6 +383,11 @@ export default function EmergencyPage() {
       <div className="px-4 space-y-5 pb-24">
         {loading ? (
           [1,2,3].map(n => <div key={n} className="h-28 rounded-2xl shimmer" />)
+        ) : loadError ? (
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+            <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+            <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
         ) : grouped.length === 0 ? (
           <div className="flex flex-col items-center py-14 text-center">
             <span className="text-4xl mb-3">📞</span>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Phone, MapPin, Home, Users, CheckCircle, XCircle, Clock, ArrowLeft, Trash2, Edit2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -10,6 +10,7 @@ import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { maskPhone, toTelHref } from '../lib/phoneMask'
 
 const RENT_TYPES = [
   { id: 'all',      mm: 'အားလုံး',        en: 'All',         icon: '🏠' },
@@ -26,6 +27,13 @@ const POST_TYPES = [
   { id: 'tenant', mm: 'အိမ်ငှား',    en: 'Tenant/Renter',  icon: '👤' },
 ]
 
+// Home deep links use ?type=available|seeker; accept the raw values too.
+function normalizePostType(v) {
+  if (v === 'available' || v === 'owner') return 'owner'
+  if (v === 'seeker' || v === 'tenant') return 'tenant'
+  return 'all'
+}
+
 const STATUSES = {
   available:   { mm: 'ငှားလို့ရ',    en: 'Available',   color: 'text-green-400', bg: 'bg-green-500/15', icon: '✅' },
   pending:     { mm: 'စောင့်ဆိုင်းဆဲ', en: 'Pending',     color: 'text-amber-400', bg: 'bg-amber-500/15', icon: '⏳' },
@@ -40,16 +48,18 @@ function timeAgo(iso, lang) {
   return `${Math.floor(h/24)}${lang === 'mm' ? 'ရက်' : 'd'}`
 }
 
-function RentCard({ post, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChange }) {
+function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelete, onStatusChange }) {
   const navigate = useNavigate()
+  const [expanded, setExpanded] = useState(false)
   const type = RENT_TYPES.find(t => t.id === post.property_type) || RENT_TYPES[0]
   const postType = POST_TYPES.find(t => t.id === post.post_type) || POST_TYPES[1]
   const status = STATUSES[post.status] || STATUSES.available
   const isOwner = isLoggedIn && (post.user_id === userId)
 
   const handleContact = () => {
+    if (!isLoggedIn) return
     if (post.phone) {
-      window.location.href = `tel:${post.phone}`
+      window.location.href = toTelHref(post.phone)
     } else if (post.user_id) {
       navigate(`/profile/${post.user_id}`)
     }
@@ -57,6 +67,17 @@ function RentCard({ post, lang, isLoggedIn, userId, onEdit, onDelete, onStatusCh
 
   return (
     <div className={`card-dark rounded-2xl p-4 space-y-3 border-l-4 ${status.color === 'text-green-400' ? 'border-l-green-500/60' : status.color === 'text-amber-400' ? 'border-l-amber-500/60' : 'border-l-red-500/60'}`}>
+      {post.images?.length > 0 && (
+        <div className="rounded-xl overflow-hidden -mx-0">
+          <img
+            src={post.images[0]}
+            alt=""
+            loading="lazy"
+            onError={e => { e.currentTarget.style.display = 'none' }}
+            className="w-full h-36 object-cover"
+          />
+        </div>
+      )}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1">
           <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -89,6 +110,20 @@ function RentCard({ post, lang, isLoggedIn, userId, onEdit, onDelete, onStatusCh
           {post.description_mm && (
             <p className="text-[10px] text-white/50 mt-1 font-myanmar line-clamp-2">{post.description_mm}</p>
           )}
+          {expanded && (
+            <div className="space-y-2 pt-1 border-t border-white/6">
+              {(post.description || (post.description_mm && post.description_mm !== post.description)) && post.description && (
+                <p className="text-xs text-white/60 leading-relaxed whitespace-pre-wrap">{post.description}</p>
+              )}
+              {post.images?.length > 1 && (
+                <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+                  {post.images.slice(1).map((img, i) => (
+                    <img key={i} src={img} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10 flex-shrink-0" />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Status badge */}
@@ -99,23 +134,39 @@ function RentCard({ post, lang, isLoggedIn, userId, onEdit, onDelete, onStatusCh
 
       {/* Contact & Actions */}
       <div className="flex items-center justify-between pt-1">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center flex-wrap">
           {post.phone && (
-            <button onClick={handleContact} className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300">
-              <Phone size={10} /> {post.phone}
-            </button>
+            isLoggedIn ? (
+              <button onClick={handleContact} className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300">
+                <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{post.phone}
+              </button>
+            ) : (
+              <span className="flex items-center gap-1 text-[10px] text-green-400/70">
+                <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.phone, false)}
+              </span>
+            )
+          )}
+          {!post.phone && post.contact_name && (
+            <span className="text-[10px] text-white/40 font-myanmar">{post.contact_name}</span>
           )}
           <span className="text-[9px] text-white/30">{timeAgo(post.created_at, lang)}</span>
+          <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-brand-300 hover:text-brand-200">
+            {expanded ? (lang === 'mm' ? '▲ ချုံ့မည်' : '▲ Less') : (lang === 'mm' ? '▼ အသေးစိတ်' : '▼ Details')}
+          </button>
         </div>
-        
-        {isOwner && (
+
+        {(isOwner || isModerator) && (
           <div className="flex gap-1">
-            <button onClick={() => onStatusChange(post)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12" title="Status ပြောင်း">
-              <Clock size={11} className="text-white/40" />
-            </button>
-            <button onClick={() => onEdit(post)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12">
-              <Edit2 size={11} className="text-white/40" />
-            </button>
+            {isOwner && (
+              <>
+                <button onClick={() => onStatusChange(post)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12" title="Status ပြောင်း">
+                  <Clock size={11} className="text-white/40" />
+                </button>
+                <button onClick={() => onEdit(post)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12">
+                  <Edit2 size={11} className="text-white/40" />
+                </button>
+              </>
+            )}
             <button onClick={() => onDelete(post.id)} className="w-6 h-6 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20">
               <Trash2 size={11} className="text-red-400" />
             </button>
@@ -172,9 +223,14 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
 
   async function handleImageUpload(file) {
     setImgLoading(true)
-    const url = await uploadImage(file, 'rentals')
-    setImages(prev => [...prev, url])
-    setImgLoading(false)
+    try {
+      const url = await uploadImage(file, 'rentals')
+      setImages(prev => [...prev, url])
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+    } finally {
+      setImgLoading(false)
+    }
   }
 
   async function submit() {
@@ -282,7 +338,8 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
   const [status, setStatus] = useState(post.status)
 
   const updateStatus = async () => {
-    await supabase.from('rentals').update({ status }).eq('id', post.id)
+    const { error } = await supabase.from('rentals').update({ status }).eq('id', post.id)
+    if (error) { showError(error.message); return }
     onUpdate()
     onClose()
   }
@@ -313,10 +370,11 @@ export default function RentPage() {
   const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'အိမ်/အခန်း ငှားရမ်းခြင်း' : 'Rentals' })
 
+  const [searchParams] = useSearchParams()
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
   const [propertyFilter, setPropertyFilter] = useState('all')
-  const [postTypeFilter, setPostTypeFilter] = useState('all')
+  const [postTypeFilter, setPostTypeFilter] = useState(() => normalizePostType(searchParams.get('type')))
   const [statusFilter, setStatusFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
@@ -331,7 +389,10 @@ export default function RentPage() {
       if (statusFilter !== 'all') q = q.eq('status', statusFilter)
       const { data, error } = await q
       if (error) throw error
-      setPosts(data || [])
+      // No expiry concept in the rentals schema; hide expired rows only if an
+      // expires_at column ever exists (guarded so it is a no-op otherwise).
+      const now = Date.now()
+      setPosts((data || []).filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now))
     } catch (e) { console.warn(e) }
     setLoading(false)
   }
@@ -349,7 +410,8 @@ export default function RentPage() {
 
   async function deletePost(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
-    await supabase.from('rentals').delete().eq('id', id)
+    const { error } = await supabase.from('rentals').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     load()
   }
 
@@ -402,6 +464,7 @@ export default function RentPage() {
              lang={lang}
              isLoggedIn={isLoggedIn}
              userId={user?.id}
+             isModerator={isModerator}
              onEdit={(post) => { setEditTarget(post); setShowForm(true) }}
              onDelete={deletePost}
              onStatusChange={(post) => setStatusTarget(post)}

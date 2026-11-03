@@ -4,6 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import './index.css'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { initErrorTracking } from './lib/errorHandler'
+import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
+import PWAInstallBanner from './components/PWAInstallBanner'
+import UpdatePrompt from './components/UpdatePrompt'
 
 // Create a client
 const queryClient = new QueryClient({
@@ -16,6 +21,9 @@ const queryClient = new QueryClient({
     },
   },
 })
+
+// Sentry stays completely off unless VITE_SENTRY_DSN is set (Vercel env var).
+initErrorTracking(import.meta.env.VITE_SENTRY_DSN)
 
 console.log('=== APP STARTING ===')
 console.log('Environment:', import.meta.env.MODE)
@@ -41,6 +49,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <QueryClientProvider client={queryClient}>
     <ErrorBoundary>
       <App />
+      {/* PWA install banner needs no contexts, so it lives here as a sibling. */}
+      <PWAInstallBanner />
+      <UpdatePrompt />
+      {/* ToastContainer must exist or showError/showSuccess toasts are invisible. */}
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </ErrorBoundary>
   </QueryClientProvider>
 )

@@ -5,10 +5,12 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
 import { useSEO } from '../hooks/useSEO'
+import { showError, showSuccess } from '../lib/toast'
+import { formatMyanmarDate } from '../lib/myanmarDate'
 
 const STATUS_META = {
   pending:   { mm: 'စစ်ဆေးဆဲ',  en: 'Pending',   cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30',  icon: Clock },
-  resolved:  { mm: 'ဖြေရှင်းပြီး', en: 'Resolved',  cls: 'bg-green-500/15 text-green-400 border-green-500/30', icon: CheckCircle },
+  reviewed:  { mm: 'ဖြေရှင်းပြီး', en: 'Reviewed',  cls: 'bg-green-500/15 text-green-400 border-green-500/30', icon: CheckCircle },
   dismissed: { mm: 'ပယ်ချပြီး',   en: 'Dismissed', cls: 'bg-white/10 text-white/50 border-white/15',         icon: XCircle },
 }
 
@@ -23,7 +25,7 @@ const REASON_LABEL = {
 
 export default function AdminReportsPage() {
   const navigate = useNavigate()
-  const { isAdmin, isModerator } = useAuth()
+  const { user, isAdmin, isModerator, loading: authLoading } = useAuth()
   const { lang } = useLang()
   useSEO({ title: 'Reports' })
 
@@ -31,7 +33,10 @@ export default function AdminReportsPage() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('pending')
 
+  // Guard BEFORE fetching: non-admins never trigger the query.
   const load = useCallback(async () => {
+    if (authLoading) return
+    if (!isAdmin && !isModerator) { setLoading(false); return }
     setLoading(true)
     try {
       const { data } = await supabase
@@ -54,16 +59,44 @@ export default function AdminReportsPage() {
       setItems((data || []).map(r => ({ ...r, _target: listingMap[r.target_id] || null })))
     } catch (e) { console.warn(e) }
     setLoading(false)
-  }, [tab])
+  }, [tab, authLoading, isAdmin, isModerator])
 
   useEffect(() => { load() }, [load])
 
-  async function updateStatus(id, status) {
+  // Close the loop: reviewing a listing report also suspends the
+  // reported listing (it stays suspended until an admin re-approves
+  // it). Always records who reviewed it and when.
+  async function updateStatus(report, status) {
     const { error } = await supabase
       .from('reports')
-      .update({ status, reviewed_at: new Date().toISOString() })
-      .eq('id', id)
-    if (!error) setItems(prev => prev.filter(r => r.id !== id))
+      .update({ status, reviewed_at: new Date().toISOString(), reviewed_by: user?.id || null })
+      .eq('id', report.id)
+    if (error) {
+      showError('Report အပ်ဒိတ်လုပ်ရာတွင် အမှားရှိသည်: ' + error.message)
+      return
+    }
+    if (status === 'reviewed' && report.target_type === 'listing' && report.target_id) {
+      const { error: susErr } = await supabase
+        .from('listings')
+        .update({ status: 'suspended' })
+        .eq('id', report.target_id)
+      if (susErr) {
+        showError('Report ဖြေရှင်းပြီးပေမယ့် လုပ်ငန်း ဆိုင်းငံ့မရပါ: ' + susErr.message)
+        return
+      }
+    }
+    showSuccess(status === 'reviewed' ? '✓ ဖြေရှင်းပြီးပါပြီ' : 'Report ပယ်ချပြီးပါပြီ')
+    setItems(prev => prev.filter(r => r.id !== report.id))
+  }
+
+  // While the role is still loading, wait — do not flash the lock
+  // screen (or the panel) before the role is known.
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60dvh] px-8 text-center">
+        <p className="text-white/50 font-myanmar">စစ်ဆေးနေသည်...</p>
+      </div>
+    )
   }
 
   if (!isAdmin && !isModerator) {
@@ -76,7 +109,7 @@ export default function AdminReportsPage() {
 
   const TABS = [
     { id: 'pending',   mm: 'စစ်ဆေးဆဲ',   en: 'Pending' },
-    { id: 'resolved',  mm: 'ဖြေရှင်းပြီး', en: 'Resolved' },
+    { id: 'reviewed',  mm: 'ဖြေရှင်းပြီး', en: 'Reviewed' },
     { id: 'dismissed', mm: 'ပယ်ချပြီး',   en: 'Dismissed' },
   ]
 
@@ -157,7 +190,7 @@ export default function AdminReportsPage() {
 
                 <div className="flex items-center justify-between text-[10px] text-white/30">
                   <span>{r.reporter?.full_name || r.reporter?.nickname || (lang === 'mm' ? 'ဧည့်သည်' : 'Guest')}</span>
-                  <span>{new Date(r.created_at).toLocaleDateString('my-MM')}</span>
+                  <span>{formatMyanmarDate(r.created_at)}</span>
                 </div>
 
                 <div className="flex gap-2 pt-1">
@@ -172,13 +205,13 @@ export default function AdminReportsPage() {
                   {r.status === 'pending' && (
                     <>
                       <button
-                        onClick={() => updateStatus(r.id, 'resolved')}
+                        onClick={() => updateStatus(r, 'reviewed')}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-green-400 bg-green-500/10 rounded-xl hover:bg-green-500/20 transition-colors"
                       >
                         <CheckCircle size={11} /> {lang === 'mm' ? 'ဖြေရှင်း' : 'Resolve'}
                       </button>
                       <button
-                        onClick={() => updateStatus(r.id, 'dismissed')}
+                        onClick={() => updateStatus(r, 'dismissed')}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-white/40 bg-white/8 rounded-xl hover:bg-white/12 transition-colors"
                       >
                         <XCircle size={11} /> {lang === 'mm' ? 'ပယ်ချ' : 'Dismiss'}

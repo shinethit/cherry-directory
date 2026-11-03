@@ -10,10 +10,59 @@ import { StarRating, ReactionBar, Skeleton } from '../components/UI'
 import MapEmbed from '../components/MapEmbed'
 import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
+import { showError, showSuccess } from '../lib/toast'
+import { confirmDialog } from '../lib/confirmDialog'
+import { useDeleteReview } from '../hooks/useReviews'
+import { toTelHref, toWaHref } from '../lib/phoneMask'
+import { formatMyanmarDate } from '../lib/myanmarDate'
 import Lightbox from '../components/Lightbox'
 import ShareButton from '../components/ShareButton'
 import BusinessHours from '../components/BusinessHours'
 import SimilarBusinesses from '../components/SimilarBusinesses'
+
+// One review card. A child component (not a hook call inside .map()) so
+// useDeleteReview follows the rules of hooks. Delete is allowed for the
+// review owner and for admin/mod (enforced again by RLS); the local list
+// is updated via onDeleted because this page keeps reviews in local state.
+function ReviewRow({ r, listingId, onDeleted }) {
+  const { profile, isAdmin, isModerator } = useAuth()
+  const deleteReview = useDeleteReview(listingId, r.id)
+
+  async function handleDeleteReview() {
+    if (!(await confirmDialog('ဒီ Review ကို ဖျက်မည်လား?'))) return
+    try {
+      await deleteReview.mutateAsync()
+      showSuccess('Review ဖျက်ပြီးပါပြီ')
+      onDeleted()
+    } catch (err) {
+      showError(err?.message || 'Review ဖျက်မရပါ')
+    }
+  }
+
+  return (
+    <div className="card-dark p-4 rounded-2xl mb-2">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-8 h-8 rounded-full bg-brand-700 flex items-center justify-center text-sm font-bold text-white">
+          {r.user?.full_name?.[0] || '?'}
+        </div>
+        <div>
+          <p className="text-xs font-semibold text-white">{r.user?.full_name || 'Anonymous'}</p>
+          <StarRating rating={r.rating} size={11} />
+        </div>
+        <span className="ml-auto text-[10px] text-white/30">{formatMyanmarDate(r.created_at, { year: true })}</span>
+        {(profile?.id === r.user_id || isAdmin || isModerator) && (
+          <button
+            onClick={handleDeleteReview}
+            className="ml-2 text-[10px] text-red-400 hover:text-red-300"
+          >
+            ဖျက်
+          </button>
+        )}
+      </div>
+      {r.comment && <p className="text-sm text-white/60 font-myanmar">{r.comment}</p>}
+    </div>
+  )
+}
 
 export default function ListingDetailPage() {
   const { id } = useParams()
@@ -25,11 +74,12 @@ export default function ListingDetailPage() {
   const removeBookmark = useRemoveBookmark()
 
   function toggleBookmark() {
-    if (!isLoggedIn) { navigate('/login'); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ သိမ်းနိုင်မည်'); navigate('/login'); return }
+    const onError = (err) => showError(err?.message || 'သိမ်းရာတွင် အမှားဖြစ်သွားသည်')
     if (bookmarked) {
-      removeBookmark.mutate({ targetId: id, targetType: 'listing' })
+      removeBookmark.mutate({ targetId: id, targetType: 'listing' }, { onError })
     } else {
-      addBookmark.mutate({ targetId: id, targetType: 'listing' })
+      addBookmark.mutate({ targetId: id, targetType: 'listing' }, { onError })
     }
   }
   const [listing, setListing] = useState(null)
@@ -43,6 +93,10 @@ export default function ListingDetailPage() {
   const [voteLoading, setVoteLoading] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [hasMenu, setHasMenu] = useState(false)
 
   useSEO({
     title: listing ? (lang === 'mm' ? listing.name_mm || listing.name : listing.name) : 'Business',
@@ -54,13 +108,22 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true)
+      setNotFound(false)
+      setLoadError(false)
       try {
-        const [{ data: l }, { data: r }] = await Promise.all([
+        const [{ data: l, error: lErr }, { data: r, error: rErr }] = await Promise.all([
           supabase.from('listings').select('*, category:categories(name, name_mm, icon), owner:profiles!owner_id(full_name, avatar_url)').eq('id', id).single(),
           supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(20),
         ])
+        if (lErr && lErr.code !== 'PGRST116') { setLoadError(true); setLoading(false); return }
+        if (!l) { setNotFound(true); setLoading(false); return }
+        if (rErr) console.warn(rErr)
         setListing(l)
         setReviews(r || [])
+        // "View Menu & Prices" only when the listing actually has menu items.
+        const { count: menuCount } = await supabase.from('menu_items').select('id', { count: 'exact', head: true }).eq('listing_id', id)
+        setHasMenu((menuCount || 0) > 0)
         supabase.from('listings').update({ view_count: (l?.view_count || 0) + 1 }).eq('id', id)
 
         if (profile) {
@@ -71,7 +134,8 @@ export default function ListingDetailPage() {
           if (claim) setClaimStatus(claim.status)
           setMyVote(!!vote)
         }
-      } catch (e) { console.warn(e) }
+      } catch (e) { console.warn(e); setLoadError(true) }
+      finally { setLoading(false) }
     }
     load()
   }, [id, profile])
@@ -80,11 +144,13 @@ export default function ListingDetailPage() {
     if (!isLoggedIn || voteLoading) return
     setVoteLoading(true)
     if (myVote) {
-      await supabase.from('listing_votes').delete().match({ listing_id: id, user_id: profile.id })
+      const { error } = await supabase.from('listing_votes').delete().match({ listing_id: id, user_id: profile.id })
+      if (error) { showError(error.message); setVoteLoading(false); return }
       setMyVote(false)
       setListing(l => ({ ...l, community_votes: Math.max(0, (l.community_votes || 0) - 1) }))
     } else {
-      await supabase.from('listing_votes').insert({ listing_id: id, user_id: profile.id })
+      const { error } = await supabase.from('listing_votes').insert({ listing_id: id, user_id: profile.id })
+      if (error) { showError(error.message); setVoteLoading(false); return }
       setMyVote(true)
       setListing(l => ({ ...l, community_votes: (l.community_votes || 0) + 1 }))
     }
@@ -94,18 +160,42 @@ export default function ListingDetailPage() {
   async function submitReview() {
     if (!isLoggedIn || myRating === 0) return
     setSubmitting(true)
-    await supabase.from('reviews').upsert({ listing_id: id, user_id: profile.id, rating: myRating, comment: myComment })
+    const { error } = await supabase.from('reviews').upsert(
+      { listing_id: id, user_id: profile.id, rating: myRating, comment: myComment },
+      { onConflict: 'listing_id,user_id' }
+    )
+    if (error) { showError(error.message); setSubmitting(false); return }
     const { data } = await supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(20)
     setReviews(data || [])
-    setMyComment(''); setSubmitting(false)
+    // Clear only on success — a failed submit keeps the user's text.
+    setMyComment(''); setMyRating(0); setSubmitting(false)
   }
 
-  if (!listing) return (
+  if (loading) return (
     <div className="p-4 space-y-3">
       <Skeleton className="h-64" /><Skeleton className="h-32" /><Skeleton className="h-20" />
     </div>
   )
 
+  if (notFound) return (
+    <div className="p-4 py-16 text-center space-y-3">
+      <p className="text-5xl">😶</p>
+      <p className="font-display font-semibold text-white/70">မတွေ့ပါ</p>
+      <p className="text-xs text-white/40 font-myanmar">ဤလုပ်ငန်း မရှိတော့ပါ (ဖျက်လိုက်ပြီ ဖြစ်နိုင်သည်)</p>
+      <button onClick={() => navigate('/directory')} className="btn-primary text-sm px-5 py-2.5">နောက်သို့</button>
+    </div>
+  )
+
+  if (loadError) return (
+    <div className="p-4 py-16 text-center space-y-3">
+      <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+      <button onClick={() => window.location.reload()} className="btn-primary text-sm px-5 py-2.5">ပြန်ကြိုးစားမည်</button>
+    </div>
+  )
+
+  if (!listing) return null
+
+  const fbUrl = listing.facebook && (listing.facebook.startsWith('http://') || listing.facebook.startsWith('https://')) ? listing.facebook : null
   const allImages = [listing.cover_url, listing.logo_url, ...(listing.images || [])].filter(Boolean)
   const cover = allImages[activeImg] ? getOptimizedUrl(allImages[activeImg], { width: 800 }) : null
   const displayName = lang === 'mm' ? (listing.name_mm || listing.name) : listing.name
@@ -148,7 +238,7 @@ export default function ListingDetailPage() {
       {/* Images gallery with lightbox */}
       {cover && (
         <div className="relative h-52 overflow-hidden mx-4 rounded-2xl mb-4 cursor-pointer" onClick={() => openLightbox(activeImg)}>
-          <img src={cover} alt={displayName} className="w-full h-full object-cover" />
+          <img src={cover} alt={displayName} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           {allImages.length > 1 && (
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
@@ -165,7 +255,7 @@ export default function ListingDetailPage() {
           <div className="flex items-start gap-3">
             {listing.logo_url && (
               <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0 cursor-pointer" onClick={() => openLightbox(allImages.indexOf(listing.logo_url))}>
-                <img src={getOptimizedUrl(listing.logo_url, { width: 120 })} alt="" className="w-full h-full object-contain" />
+                <img src={getOptimizedUrl(listing.logo_url, { width: 120 })} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none' }} />
               </div>
             )}
             <div className="flex-1">
@@ -249,12 +339,12 @@ export default function ListingDetailPage() {
 
         <div className="grid grid-cols-2 gap-2">
           {listing.phone_1 && (
-            <a href={`tel:${listing.phone_1}`} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
+            <a href={toTelHref(listing.phone_1)} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
               <Phone size={16} /> {listing.phone_1}
             </a>
           )}
           {listing.phone_2 && (
-            <a href={`tel:${listing.phone_2}`} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/5 border border-white/10 text-white/70 text-sm hover:bg-white/8 transition-colors">
+            <a href={toTelHref(listing.phone_2)} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/5 border border-white/10 text-white/70 text-sm hover:bg-white/8 transition-colors">
               <Phone size={16} /> {listing.phone_2}
             </a>
           )}
@@ -269,18 +359,19 @@ export default function ListingDetailPage() {
             </a>
           )}
           {listing.whatsapp && (
-            <a href={`https://wa.me/${listing.whatsapp.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-700/20 border border-green-600/30 text-green-300 text-sm hover:bg-green-700/30 transition-colors">
+            <a href={toWaHref(listing.whatsapp)} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-700/20 border border-green-600/30 text-green-300 text-sm hover:bg-green-700/30 transition-colors">
               💬 WhatsApp
             </a>
           )}
-          {listing.facebook && (
-            <a href={listing.facebook} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-center gap-2 py-3 rounded-2xl bg-blue-600/20 border border-blue-500/30 text-blue-300 text-sm hover:bg-blue-600/30 transition-colors ${!listing.whatsapp ? 'col-span-2' : ''}`}>
+          {fbUrl && (
+            <a href={fbUrl} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-center gap-2 py-3 rounded-2xl bg-blue-600/20 border border-blue-500/30 text-blue-300 text-sm hover:bg-blue-600/30 transition-colors ${!listing.whatsapp ? 'col-span-2' : ''}`}>
               <ExternalLink size={16} /> Facebook Page
             </a>
           )}
         </div>
 
-        {/* Prominent Menu Button */}
+        {/* Prominent Menu Button — only when the listing actually has menu items */}
+        {hasMenu && (
         <button
           onClick={() => navigate(`/directory/${id}/menu`)}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-brand-600/40 to-brand-700/40 border border-brand-400/50 text-brand-200 font-semibold text-base hover:from-brand-600/60 hover:to-brand-700/60 transition-all"
@@ -288,6 +379,7 @@ export default function ListingDetailPage() {
           <UtensilsCrossed size={20} className="text-brand-300" />
           <span className="font-display font-bold">View Menu & Prices</span>
         </button>
+        )}
 
         {/* Owner verification section */}
         {listing.is_verified && listing.owner ? (
@@ -429,19 +521,7 @@ export default function ListingDetailPage() {
           )}
 
           {reviews.map(r => (
-            <div key={r.id} className="card-dark p-4 rounded-2xl mb-2">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded-full bg-brand-700 flex items-center justify-center text-sm font-bold text-white">
-                  {r.user?.full_name?.[0] || '?'}
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-white">{r.user?.full_name || 'Anonymous'}</p>
-                  <StarRating rating={r.rating} size={11} />
-                </div>
-                <span className="ml-auto text-[10px] text-white/30">{new Date(r.created_at).toLocaleDateString('my-MM')}</span>
-              </div>
-              {r.comment && <p className="text-sm text-white/60 font-myanmar">{r.comment}</p>}
-            </div>
+            <ReviewRow key={r.id} r={r} listingId={id} onDeleted={() => setReviews(prev => prev.filter(x => x.id !== r.id))} />
           ))}
         </div>
         <SimilarBusinesses listingId={id} categoryId={listing.category_id} lang={lang} />

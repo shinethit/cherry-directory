@@ -10,6 +10,8 @@ import { ImageUploader } from '../components/UI'
 import { uploadImage } from '../lib/cloudinary'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { yangonToday } from '../lib/myanmarDate'
+import ShareButton from '../components/ShareButton'
 
 // ─────────────────────────────────────────────────────────────
 // WEATHER ALERT PAGE (unchanged, same as before)
@@ -97,7 +99,9 @@ export function DonationPage() {
     try {
       const url = await uploadImage(file, 'donations')
       setForm(f => ({ ...f, images: [...f.images, url] }))
-    } catch (e) { console.warn(e) }
+    } catch (e) {
+      showError(e.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+    }
     setImgLoading(false)
   }
   const [submitting, setSubmitting] = useState(false)
@@ -127,23 +131,41 @@ export function DonationPage() {
   async function submit() {
     if (!form.title_mm || !isLoggedIn) return
     setSubmitting(true)
-    await supabase.from('donations').insert({
-      ...form,
-      target_amount: form.target_amount ? parseInt(form.target_amount) : null,
-      deadline: form.deadline || null,
-      organizer_id: user.id,
-    })
-    setSubmitting(false); setShowForm(false); load()
+    try {
+      const { error } = await supabase.from('donations').insert({
+        category: form.category,
+        // `title` is NOT NULL in the schema; the form only collects title_mm.
+        title: form.title_mm,
+        title_mm: form.title_mm,
+        description_mm: form.description_mm || null,
+        target_amount: form.target_amount ? parseInt(form.target_amount) : null,
+        deadline: form.deadline || null,
+        contact_name: form.contact_name || null,
+        contact_phone: form.contact_phone || null,
+        kbz_pay: form.kbz_pay || null,
+        wave_pay: form.wave_pay || null,
+        bank_name: form.bank_name || null,
+        bank_account: form.bank_account || null,
+        bank_holder: form.bank_holder || null,
+        images: form.images || [],
+        is_urgent: form.is_urgent,
+        organizer_id: user.id,
+      })
+      if (error) throw error
+      setShowForm(false)
+      load()
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post campaign'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function deleteDonation(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
-    await supabase.from('donations').delete().eq('id', id); load()
-  }
-
-  function pct(d) {
-    if (!d.target_amount || !d.collected_amount) return null
-    return Math.min(100, Math.round(d.collected_amount / d.target_amount * 100))
+    const { error } = await supabase.from('donations').delete().eq('id', id)
+    if (error) { showError(error.message); return }
+    load()
   }
 
   return (
@@ -173,7 +195,6 @@ export function DonationPage() {
         {loading ? [1,2].map(n => <div key={n} className="h-36 rounded-2xl shimmer" />) :
          items.length === 0 ? <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">❤️</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Campaign မရှိသေး' : 'No campaigns yet'}</p></div> :
          items.map(d => {
-           const progress = pct(d)
            const cat = DON_CATS.find(c => c.id === d.category)
            return (
              <div key={d.id} className="card-dark rounded-2xl p-4 space-y-3">
@@ -183,7 +204,7 @@ export function DonationPage() {
                      <span className="text-lg">{cat?.icon}</span>
                      {d.is_urgent && <span className="text-[9px] text-red-400 font-bold bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded-full">⚡ Urgent</span>}
                    </div>
-                   <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (d.title_mm || d.title) : d.title}</h3>
+                   <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (d.title_mm || d.title) : (d.title || d.title_mm)}</h3>
                    {d.description_mm && <p className="text-xs text-white/50 mt-1 font-myanmar line-clamp-2">{d.description_mm}</p>}
                  </div>
                  {(isModerator || d.organizer_id === user?.id) && (
@@ -191,15 +212,12 @@ export function DonationPage() {
                  )}
                </div>
 
-               {progress !== null && (
-                 <div>
-                   <div className="flex items-center justify-between text-xs mb-1">
-                     <span className="text-white/50">{Number(d.collected_amount).toLocaleString()} / {Number(d.target_amount).toLocaleString()} Ks</span>
-                     <span className="text-brand-300 font-bold">{progress}%</span>
-                   </div>
-                   <div className="h-2 bg-white/8 rounded-full overflow-hidden">
-                     <div className="h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full transition-all" style={{ width: `${progress}%` }} />
-                   </div>
+               {/* Goal + collected amounts only — nothing ever writes
+                   collected_amount, so a progress bar could never move. */}
+               {(d.target_amount || d.collected_amount > 0) && (
+                 <div className="flex items-center gap-3 text-xs flex-wrap">
+                   {d.target_amount && <span className="text-white/50">{lang === 'mm' ? 'ပန်းတိုင်' : 'Goal'}: <span className="text-white font-bold font-mono">{Number(d.target_amount).toLocaleString()} Ks</span></span>}
+                   {d.collected_amount > 0 && <span className="text-green-400">{lang === 'mm' ? 'ရရှိပြီး' : 'Collected'}: <span className="font-bold font-mono">{Number(d.collected_amount).toLocaleString()} Ks</span></span>}
                  </div>
                )}
 
@@ -368,7 +386,7 @@ function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
             {service.is_urgent && <span className="text-[9px] text-red-400 font-bold">⚡ Urgent</span>}
             {service.is_verified && <span className="text-[9px] text-gold-400">✓ Verified</span>}
           </div>
-          <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (service.title_mm || service.title) : service.title}</h3>
+          <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (service.title_mm || service.title) : (service.title || service.title_mm)}</h3>
           {service.organizer_mm && <p className="text-[10px] text-brand-300 font-myanmar">{service.organizer_mm}</p>}
           {service.description_mm && <p className="text-xs text-white/50 mt-1 font-myanmar line-clamp-2">{service.description_mm}</p>}
         </div>
@@ -451,9 +469,14 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
 
   async function handleImageUpload(file) {
     setImgLoading(true)
-    const url = await uploadImage(file, 'health')
-    setImages(prev => [...prev, url])
-    setImgLoading(false)
+    try {
+      const url = await uploadImage(file, 'health')
+      setImages(prev => [...prev, url])
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+    } finally {
+      setImgLoading(false)
+    }
   }
 
   async function submit() {
@@ -462,6 +485,8 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
 
     const payload = {
       ...form,
+      // `title` is NOT NULL in the schema; fall back to the Myanmar title.
+      title: form.title || form.title_mm,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
       start_time: form.start_time || null,
@@ -594,7 +619,8 @@ export function HealthServicePage() {
 
   async function deleteItem(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
-    await supabase.from('health_services').delete().eq('id', id)
+    const { error } = await supabase.from('health_services').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     load()
   }
 
@@ -669,36 +695,58 @@ export function HealthServicePage() {
 // ─────────────────────────────────────────────────────────────
 // BUS SCHEDULE PAGE (unchanged, same as before)
 // ─────────────────────────────────────────────────────────────
-const BUS_ROUTES_DEF = [
-  { id: 'all', mm: 'အားလုံး', en: 'All', icon: '🚌' },
-  { id: 'local', mm: 'မြို့တွင်း', en: 'Local', icon: '🏙️' },
-  { id: 'long_distance', mm: 'အဝေး', en: 'Long Distance', icon: '🛣️' },
-]
+// ─────────────────────────────────────────────────────────────
+// BUS SCHEDULE PAGE — rewritten to the bus_departures table model
+// (daily departure reports, NOT a static timetable).
+// bus_departures columns: route_id FK, departure_date, departure_time,
+// seats_available ('many'|'few'|'full'|'unknown'), actual_fare, notes,
+// reporter_id, reported_at. No contact / arrival_time / price column.
+// ─────────────────────────────────────────────────────────────
+const SEAT_LABELS = {
+  many:    { mm: 'နေရာများများ',  en: 'Many seats', color: 'text-green-400' },
+  few:     { mm: 'နေရာနည်းနည်း',  en: 'Few seats',  color: 'text-amber-400' },
+  full:    { mm: 'ပြည့်သွားပြီ',   en: 'Full',       color: 'text-red-400' },
+  unknown: { mm: 'မသိရ',          en: 'Unknown',    color: 'text-white/40' },
+}
 
 export function BusSchedulePage() {
   const { lang } = useLang()
-  const { user, isModerator, profile, isLoggedIn } = useAuth()
+  const { user, isModerator, isLoggedIn } = useAuth()
   const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule' })
 
-  const [schedules, setSchedules] = useState([])
+  const [routes, setRoutes] = useState([])
+  const [departures, setDepartures] = useState([])
   const [loading, setLoading] = useState(true)
-  const [typeFilter, setType] = useState('all')
+  const [routeFilter, setRouteFilter] = useState('all')
+  const [dateFilter, setDateFilter] = useState(() => yangonToday())
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ route_mm: '', departure_time: '', arrival_time: '', price: '', contact_phone: '', notes_mm: '', type: 'long_distance' })
+  const [form, setForm] = useState({ route_id: '', departure_date: yangonToday(), departure_time: '', seats_available: 'unknown', actual_fare: '', notes: '' })
   const [submitting, setSubmitting] = useState(false)
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
+
+  async function loadRoutes() {
+    const { data, error } = await supabase.from('bus_routes').select('*').eq('is_active', true).order('sort_order', { ascending: true })
+    if (error) { console.warn(error); return }
+    setRoutes(data || [])
+  }
 
   async function load() {
     setLoading(true)
     try {
-      let q = supabase.from('bus_departures').select('*').order('departure_time', { ascending: true })
-      if (typeFilter !== 'all') q = q.eq('type', typeFilter)
+      let q = supabase.from('bus_departures')
+        .select('*, bus_routes(from_city, to_city, operator, type, normal_fare)')
+        .eq('departure_date', dateFilter)
+        .order('departure_time', { ascending: true })
+      if (routeFilter !== 'all') q = q.eq('route_id', routeFilter)
       const { data, error } = await q
-      if (!error) setSchedules(data || [])
+      if (error) throw error
+      setDepartures(data || [])
     } catch (e) { console.warn(e) }
     setLoading(false)
   }
+
+  useEffect(() => { loadRoutes() }, [])
 
   useEffect(() => {
     load()
@@ -708,82 +756,125 @@ export function BusSchedulePage() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bus_departures' }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [typeFilter])
+  }, [routeFilter, dateFilter])
 
   async function submit() {
-    if (!form.route_mm || !form.departure_time) return
+    if (!form.route_id || !form.departure_time) return
     setSubmitting(true)
     try {
-      await supabase.from('bus_departures').insert({ ...form, price: form.price ? parseInt(form.price) : null, reporter_id: user?.id || null })
-      setShowForm(false); load()
-    } catch (e) { console.warn(e) }
-    setSubmitting(false)
+      const { error } = await supabase.from('bus_departures').insert({
+        route_id: form.route_id,
+        departure_date: form.departure_date || dateFilter,
+        departure_time: form.departure_time,
+        seats_available: form.seats_available,
+        actual_fare: form.actual_fare ? parseInt(form.actual_fare) : null,
+        notes: form.notes || null,
+        reporter_id: user?.id || null,
+      })
+      if (error) throw error
+      setShowForm(false)
+      load()
+    } catch (e) {
+      showError(e.message || (lang === 'mm' ? 'ထည့်ရာတွင် အမှားရှိသည်' : 'Failed to add departure'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function deleteSchedule(id) {
-    try { await supabase.from('bus_departures').delete().eq('id', id) } catch (e) {}
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    const { error } = await supabase.from('bus_departures').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     load()
   }
+
+  const routeLabel = (r) => r ? `${r.from_city} → ${r.to_city}${r.operator ? ` (${r.operator})` : ''}` : ''
 
   return (
     <div className="pb-8">
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🚌 {lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကားထွက်ချိန် Community Report` : 'Community reported bus schedules'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကားထွက်ချိန် Community Report` : 'Community reported bus departures'}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
       </div>
-      <div className="px-4 mb-4">
+      <div className="px-4 mb-4 space-y-2">
         <div className="relative">
-          <select value={typeFilter} onChange={e => setType(e.target.value)} className="select-dark">
-            {BUS_ROUTES_DEF.map(t => <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030' }}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>)}
+          <select value={routeFilter} onChange={e => setRouteFilter(e.target.value)} className="select-dark">
+            <option value="all" style={{ backgroundColor: '#1a0030' }}>🚌 {lang === 'mm' ? 'လမ်းကြောင်း အားလုံး' : 'All routes'}</option>
+            {routes.map(r => (
+              <option key={r.id} value={r.id} style={{ backgroundColor: '#1a0030' }}>{routeLabel(r)}</option>
+            ))}
           </select>
           <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div>
+          <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ရက်စွဲ' : 'Date'}</label>
+          <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input-dark" />
         </div>
       </div>
       <div className="px-4 space-y-2">
         {loading ? [1,2,3].map(n => <div key={n} className="h-20 rounded-2xl shimmer" />) :
-         schedules.length === 0 ? (
+         departures.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center">
              <span className="text-4xl mb-3">🚌</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ကားထွက်ချိန် မရှိသေး' : 'No schedules yet'}</p>
+             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ဒီနေ့ ကားထွက်ချိန် မရှိသေး' : 'No departures reported for this date'}</p>
            </div>
          ) :
-         schedules.map(s => (
-           <div key={s.id} className="card-dark rounded-2xl p-4">
-             <div className="flex items-start justify-between gap-2">
-               <div className="flex-1">
-                 <p className="font-display font-semibold text-sm text-white font-myanmar">{s.route_mm}</p>
-                 <div className="flex items-center gap-3 mt-1 flex-wrap">
-                   {s.departure_time && <span className="text-xs text-brand-300">🕐 {s.departure_time}</span>}
-                   {s.arrival_time && <span className="text-xs text-white/50">→ {s.arrival_time}</span>}
-                   {s.price && <span className="text-xs text-gold-400 font-mono">{Number(s.price).toLocaleString()} Ks</span>}
+         departures.map(s => {
+           const seat = SEAT_LABELS[s.seats_available] || SEAT_LABELS.unknown
+           return (
+             <div key={s.id} className="card-dark rounded-2xl p-4">
+               <div className="flex items-start justify-between gap-2">
+                 <div className="flex-1">
+                   <p className="font-display font-semibold text-sm text-white font-myanmar">{routeLabel(s.bus_routes)}</p>
+                   <div className="flex items-center gap-3 mt-1 flex-wrap">
+                     {s.departure_time && <span className="text-xs text-brand-300">🕐 {s.departure_time}</span>}
+                     <span className={`text-xs font-bold ${seat.color}`}>{lang === 'mm' ? seat.mm : seat.en}</span>
+                     {s.actual_fare
+                       ? <span className="text-xs text-gold-400 font-mono">{Number(s.actual_fare).toLocaleString()} Ks</span>
+                       : (s.bus_routes?.normal_fare ? <span className="text-xs text-white/40 font-mono">~{Number(s.bus_routes.normal_fare).toLocaleString()} Ks</span> : null)}
+                   </div>
+                   {s.notes && <p className="text-xs text-white/40 mt-1 font-myanmar">{s.notes}</p>}
                  </div>
-                 {s.notes_mm && <p className="text-xs text-white/40 mt-1 font-myanmar">{s.notes_mm}</p>}
-                 {s.contact_phone && <a href={`tel:${s.contact_phone}`} className="text-xs text-green-400 mt-1 block">📞 {s.contact_phone}</a>}
+                 {isModerator && <button onClick={() => deleteSchedule(s.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400"><Trash2 size={12} /></button>}
                </div>
-               {isModerator && <button onClick={() => deleteSchedule(s.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400"><Trash2 size={12} /></button>}
              </div>
-           </div>
-         ))}
+           )
+         })}
       </div>
       {showForm && (
         <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] pt-safe">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
-            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကားထွက်ချိန် ထည့်မည်' : 'Add Bus Schedule'}</h2>
-            <button onClick={submit} disabled={!form.route_mm || !form.departure_time || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
+            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကားထွက်ချိန် ထည့်မည်' : 'Report a Departure'}</h2>
+            <button onClick={submit} disabled={!form.route_id || !form.departure_time || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-            <div><label className="block text-xs text-white/50 mb-1.5">လမ်းကြောင်း *</label><input autoFocus value={form.route_mm} onChange={e => set('route_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: တောင်ကြီး → ရန်ကုန်" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">ထွက်ချိန် *</label><input type="time" value={form.departure_time} onChange={e => set('departure_time', e.target.value)} className="input-dark" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ရောက်ချိန်</label><input type="time" value={form.arrival_time} onChange={e => set('arrival_time', e.target.value)} className="input-dark" /></div>
+            <div>
+              <label className="block text-xs text-white/50 mb-1.5">လမ်းကြောင်း *</label>
+              <select value={form.route_id} onChange={e => set('route_id', e.target.value)} className="select-dark">
+                <option value="">{lang === 'mm' ? 'လမ်းကြောင်း ရွေးပါ' : 'Choose a route'}</option>
+                {routes.map(r => (
+                  <option key={r.id} value={r.id}>{routeLabel(r)}</option>
+                ))}
+              </select>
             </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ဈေးနှုန်း (Ks)</label><input type="number" value={form.price} onChange={e => set('price', e.target.value)} className="input-dark font-mono" /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark" placeholder="09..." /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">မှတ်ချက်</label><input value={form.notes_mm} onChange={e => set('notes_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-[10px] text-white/40 mb-1">ရက်စွဲ *</label><input type="date" value={form.departure_date} onChange={e => set('departure_date', e.target.value)} className="input-dark" /></div>
+              <div><label className="block text-[10px] text-white/40 mb-1">ထွက်ချိန် *</label><input type="time" value={form.departure_time} onChange={e => set('departure_time', e.target.value)} className="input-dark" /></div>
+            </div>
+            <div>
+              <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'နေရာ အခြေအနေ' : 'Seat availability'}</label>
+              <select value={form.seats_available} onChange={e => set('seats_available', e.target.value)} className="select-dark">
+                {Object.entries(SEAT_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{lang === 'mm' ? v.mm : v.en}</option>
+                ))}
+              </select>
+            </div>
+            <div><label className="block text-xs text-white/50 mb-1.5">အမှန်တကယ် ဈေးနှုန်း (Ks)</label><input type="number" value={form.actual_fare} onChange={e => set('actual_fare', e.target.value)} className="input-dark font-mono" /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">မှတ်ချက်</label><input value={form.notes} onChange={e => set('notes', e.target.value)} className="input-dark font-myanmar" /></div>
           </div>
         </div>
       )}
@@ -792,18 +883,30 @@ export function BusSchedulePage() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// TOURS PAGE (unchanged, same as before)
+// TOURS PAGE — rewritten to the tour_packages table (it exists in the
+// schema). tour_packages columns: guide_id, name, name_mm, description,
+// description_mm, duration_days, type (trekking|boat|cycling|cultural|
+// day_trip|multi_day), start_location, end_location, difficulty
+// (easy|moderate|hard), includes (text), price_usd, price_mmk, images,
+// is_active. Guide contact lives on tour_guides, not on packages —
+// packages have no phone/facebook columns, so the submit form does not
+// collect them; guide_id stays null (no guide picker yet).
 // ─────────────────────────────────────────────────────────────
 const TOUR_TYPES = [
   { id: 'all',      mm: 'အားလုံး',    en: 'All',       icon: '🏔️' },
   { id: 'trekking', mm: 'Trekking',   en: 'Trekking',  icon: '🥾' },
   { id: 'boat',     mm: 'လှေ/ရေ',     en: 'Boat Tour', icon: '⛵' },
+  { id: 'cycling',  mm: 'စက်ဘီး',     en: 'Cycling',   icon: '🚲' },
   { id: 'cultural', mm: 'ယဉ်ကျေးမှု', en: 'Cultural',  icon: '🏛️' },
   { id: 'day_trip', mm: 'Day Trip',   en: 'Day Trip',  icon: '🌄' },
-  { id: 'other',    mm: 'အခြား',      en: 'Other',     icon: '📍' },
+  { id: 'multi_day',mm: 'Multi-day',  en: 'Multi-day', icon: '🗺️' },
 ]
 
-const TOUR_LANGUAGES = ['မြန်မာ', 'English', 'ไทย', '中文', '日本語', '한국어', 'Français']
+const TOUR_DIFFICULTIES = [
+  { id: 'easy',     mm: 'လွယ်ကူ',    en: 'Easy' },
+  { id: 'moderate', mm: 'အလယ်အလတ်', en: 'Moderate' },
+  { id: 'hard',     mm: 'ခက်ခဲ',     en: 'Hard' },
+]
 
 const TOUR_INCLUDES = [
   { id: 'meals',     icon: '🍽️', mm: 'အစားအသောက်',      en: 'Meals' },
@@ -816,7 +919,7 @@ const TOUR_INCLUDES = [
 
 export function ToursPage() {
   const { lang } = useLang()
-  const { user, isModerator, profile, isLoggedIn } = useAuth()
+  const { isModerator } = useAuth()
   const config = useAppConfig()
   useSEO({ title: 'Tour Guide' })
 
@@ -825,23 +928,14 @@ export function ToursPage() {
   const [typeFilter, setType] = useState('all')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
-    title_mm: '', description_mm: '', type: 'trekking',
-    price_from: '', price_to: '', duration_mm: '',
-    contact_name: '', contact_phone: '', facebook: '',
-    languages: [], includes: [], images: [],
+    name_mm: '', description_mm: '', type: 'trekking',
+    duration_days: '', price_mmk: '', price_usd: '',
+    start_location: '', end_location: '', difficulty: '',
+    includes: [], images: [],
   })
   const [submitting, setSubmitting] = useState(false)
   const [imgLoading, setImgLoading] = useState(false)
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
-
-  function toggleLanguage(lg) {
-    setForm(f => ({
-      ...f,
-      languages: f.languages.includes(lg)
-        ? f.languages.filter(x => x !== lg)
-        : [...f.languages, lg],
-    }))
-  }
 
   function toggleInclude(inc) {
     setForm(f => ({
@@ -857,18 +951,23 @@ export function ToursPage() {
     try {
       const url = await uploadImage(file, 'tours')
       setForm(f => ({ ...f, images: [...f.images, url] }))
-    } catch (e) { console.warn(e) }
-    setImgLoading(false)
+    } catch (e) {
+      showError(e.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+    } finally {
+      setImgLoading(false)
+    }
   }
 
   async function load() {
     setLoading(true)
     try {
+      // tour_packages has no created_at; order by name. Public rows are
+      // is_active = true (RLS "Packages public").
       let q = supabase
-        .from('tour_guides')
+        .from('tour_packages')
         .select('*')
         .eq('is_active', true)
-        .order('created_at', { ascending: false })
+        .order('name', { ascending: true })
 
       if (typeFilter !== 'all') {
         q = q.eq('type', typeFilter)
@@ -891,16 +990,16 @@ export function ToursPage() {
   useEffect(() => {
     const channel = supabase
       .channel('tours-live')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'tour_guides' },
+      .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'tour_packages' },
         () => load()
       )
       .on('postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'tour_guides' },
+        { event: 'UPDATE', schema: 'public', table: 'tour_packages' },
         () => load()
       )
       .on('postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'tour_guides' },
+        { event: 'DELETE', schema: 'public', table: 'tour_packages' },
         () => load()
       )
       .subscribe()
@@ -911,36 +1010,41 @@ export function ToursPage() {
   }, [typeFilter])
 
   async function submit() {
-    if (!form.title_mm) return
+    if (!form.name_mm) return
     setSubmitting(true)
     try {
-      const { error } = await supabase.from('tour_guides').insert({
-        ...form,
-        price_from: form.price_from ? parseInt(form.price_from) : null,
-        price_to: form.price_to ? parseInt(form.price_to) : null,
-        languages: form.languages || [],
-        includes: form.includes || [],
+      const { error } = await supabase.from('tour_packages').insert({
+        name: form.name_mm,
+        name_mm: form.name_mm,
+        description: form.description_mm || null,
+        description_mm: form.description_mm || null,
+        duration_days: form.duration_days ? parseInt(form.duration_days) : 1,
+        type: form.type,
+        start_location: form.start_location || null,
+        end_location: form.end_location || null,
+        difficulty: form.difficulty || null,
+        // `includes` is a plain text column in tour_packages.
+        includes: form.includes.length ? form.includes.join(', ') : null,
+        price_mmk: form.price_mmk ? parseInt(form.price_mmk) : null,
+        price_usd: form.price_usd ? parseInt(form.price_usd) : null,
         images: form.images || [],
-        reporter_id: user?.id || null,
+        is_active: true,
       })
-      if (error) {
-        console.warn('Submit error:', error)
-      }
+      if (error) throw error
       setShowForm(false)
       load()
     } catch (e) {
-      console.warn(e)
+      showError(e.message || (lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post tour package'))
+    } finally {
+      setSubmitting(false)
     }
-    setSubmitting(false)
   }
 
   async function deleteTour(id) {
-    try {
-      await supabase.from('tour_guides').delete().eq('id', id)
-      load()
-    } catch (e) {
-      console.warn(e)
-    }
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    const { error } = await supabase.from('tour_packages').delete().eq('id', id)
+    if (error) { showError(error.message); return }
+    load()
   }
 
   return (
@@ -948,7 +1052,7 @@ export function ToursPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🏔️ Tour Guide / Trekking</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} Trekking / Boat Trip Guide တွေ` : 'Local trekking & boat tour guides'}</p>
+          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} Trekking / Boat Trip ခရီးစဉ်များ` : 'Local trekking & boat tour packages'}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
       </div>
@@ -965,11 +1069,13 @@ export function ToursPage() {
          tours.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center">
              <span className="text-4xl mb-3">🏔️</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Tour Guide မရှိသေး' : 'No guides yet'}</p>
+             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Tour Package မရှိသေး' : 'No tour packages yet'}</p>
            </div>
          ) :
          tours.map(t => {
            const tt = TOUR_TYPES.find(x => x.id === t.type)
+           const diff = TOUR_DIFFICULTIES.find(x => x.id === t.difficulty)
+           const includes = t.includes ? String(t.includes).split(',').map(s => s.trim()).filter(Boolean) : []
            return (
              <div key={t.id} className="card-dark rounded-2xl p-4 space-y-2">
                <div className="flex items-start justify-between gap-2">
@@ -989,36 +1095,30 @@ export function ToursPage() {
                        )}
                      </div>
                    )}
-                   <div className="flex items-center gap-2 mb-1">
+                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                      <span>{tt?.icon}</span>
                      <span className="text-[9px] text-brand-300 bg-brand-600/15 border border-brand-400/20 px-1.5 py-0.5 rounded-full font-bold">{lang === 'mm' ? tt?.mm : tt?.en}</span>
+                     {diff && <span className="text-[9px] text-white/50 bg-white/8 px-1.5 py-0.5 rounded-full">{lang === 'mm' ? diff.mm : diff.en}</span>}
                    </div>
-                   <h3 className="font-display font-semibold text-sm text-white font-myanmar">{t.title_mm}</h3>
+                   <h3 className="font-display font-semibold text-sm text-white font-myanmar">{lang === 'mm' ? (t.name_mm || t.name) : (t.name || t.name_mm)}</h3>
                    {t.description_mm && <p className="text-xs text-white/50 mt-1 font-myanmar line-clamp-2">{t.description_mm}</p>}
                    <div className="flex items-center gap-3 mt-1.5 flex-wrap text-[10px]">
-                     {(t.price_from || t.price_to) && <span className="text-gold-400 font-mono">{t.price_from ? Number(t.price_from).toLocaleString() : '?'}{t.price_to ? ` – ${Number(t.price_to).toLocaleString()}` : '+'} Ks</span>}
-                     {t.duration_mm && <span className="text-white/40 font-myanmar">⏱ {t.duration_mm}</span>}
-                     {t.rating_avg > 0 && (
-                       <span className="flex items-center gap-1 text-amber-400">
-                         ⭐ {Number(t.rating_avg).toFixed(1)}
-                         <span className="text-white/30">({t.rating_count || 0})</span>
+                     {t.duration_days && <span className="text-white/40 font-myanmar">⏱ {t.duration_days} {lang === 'mm' ? 'ရက်' : t.duration_days > 1 ? 'days' : 'day'}</span>}
+                     {(t.price_mmk || t.price_usd) && (
+                       <span className="text-gold-400 font-mono">
+                         {t.price_mmk ? `${Number(t.price_mmk).toLocaleString()} Ks` : ''}
+                         {t.price_mmk && t.price_usd ? ' · ' : ''}
+                         {t.price_usd ? `$${Number(t.price_usd).toLocaleString()}` : ''}
                        </span>
+                     )}
+                     {(t.start_location || t.end_location) && (
+                       <span className="text-white/40 font-myanmar">📍 {t.start_location || ''}{t.start_location && t.end_location ? ' → ' : ''}{t.end_location || ''}</span>
                      )}
                    </div>
 
-                   {t.languages?.length > 0 && (
+                   {includes.length > 0 && (
                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                       <span className="text-[9px] text-white/40">🌐</span>
-                       {t.languages.slice(0, 4).map((lg, i) => (
-                         <span key={i} className="text-[9px] text-blue-300 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded-full">{lg}</span>
-                       ))}
-                       {t.languages.length > 4 && <span className="text-[9px] text-white/40">+{t.languages.length - 4}</span>}
-                     </div>
-                   )}
-
-                   {t.includes?.length > 0 && (
-                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                       {t.includes.slice(0, 4).map((inc, i) => {
+                       {includes.slice(0, 4).map((inc, i) => {
                          const cfg = TOUR_INCLUDES.find(x => x.id === inc) || { icon: '✓', mm: inc, en: inc }
                          return (
                            <span key={i} className="text-[9px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">
@@ -1031,10 +1131,6 @@ export function ToursPage() {
                  </div>
                  {isModerator && <button onClick={() => deleteTour(t.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 flex-shrink-0"><Trash2 size={12} /></button>}
                </div>
-               <div className="flex gap-3">
-                 {t.contact_phone && <a href={`tel:${t.contact_phone}`} className="text-xs text-green-400">📞 {t.contact_phone}</a>}
-                 {t.facebook && <a href={t.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400">FB →</a>}
-               </div>
              </div>
            )
          })}
@@ -1043,38 +1139,39 @@ export function ToursPage() {
         <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] pt-safe">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
-            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Tour Guide ထည့်မည်' : 'Add Tour Guide'}</h2>
-            <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
+            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Tour Package ထည့်မည်' : 'Add Tour Package'}</h2>
+            <button onClick={submit} disabled={!form.name_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
-            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">ဈေး စတင် (Ks)</label><input type="number" value={form.price_from} onChange={e => set('price_from', e.target.value)} className="input-dark font-mono" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ဈေး အများဆုံး (Ks)</label><input type="number" value={form.price_to} onChange={e => set('price_to', e.target.value)} className="input-dark font-mono" /></div>
-            </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ကြာချိန်</label><input value={form.duration_mm} onChange={e => set('duration_mm', e.target.value)} className="input-dark font-myanmar" /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">Guide အမည်</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar text-sm" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark text-sm" placeholder="09..." /></div>
-            </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">Facebook</label><input value={form.facebook} onChange={e => set('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." /></div>
-
-            {/* Languages */}
             <div>
-              <label className="block text-xs text-white/50 mb-1.5">🌐 {lang === 'mm' ? 'ပြောဆိုနိုင်သော ဘာသာစကားများ' : 'Languages'}</label>
+              <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
               <div className="flex gap-2 flex-wrap">
-                {TOUR_LANGUAGES.map(lg => (
-                  <button
-                    key={lg}
-                    type="button"
-                    onClick={() => toggleLanguage(lg)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${form.languages.includes(lg) ? 'bg-blue-500/25 border-blue-500/40 text-blue-300' : 'bg-white/5 border-white/10 text-white/40'}`}
-                  >
-                    {lg}
-                  </button>
+                {TOUR_TYPES.filter(t => t.id !== 'all').map(t => (
+                  <button key={t.id} onClick={() => set('type', t.id)} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border ${form.type === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{t.icon} {lang === 'mm' ? t.mm : t.en}</button>
                 ))}
               </div>
+            </div>
+            <div><label className="block text-xs text-white/50 mb-1.5">ခရီးစဉ် အမည် *</label><input autoFocus value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-[10px] text-white/40 mb-1">ကြာချိန် (ရက်)</label><input type="number" min="1" value={form.duration_days} onChange={e => set('duration_days', e.target.value)} className="input-dark font-mono" placeholder="1" /></div>
+              <div>
+                <label className="block text-[10px] text-white/40 mb-1">ခက်ခဲမှု</label>
+                <select value={form.difficulty} onChange={e => set('difficulty', e.target.value)} className="select-dark">
+                  <option value="">{lang === 'mm' ? 'မသတ်မှတ်ပါ' : 'Not specified'}</option>
+                  {TOUR_DIFFICULTIES.map(d => (
+                    <option key={d.id} value={d.id}>{lang === 'mm' ? d.mm : d.en}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-[10px] text-white/40 mb-1">ဈေး (Ks)</label><input type="number" value={form.price_mmk} onChange={e => set('price_mmk', e.target.value)} className="input-dark font-mono" /></div>
+              <div><label className="block text-[10px] text-white/40 mb-1">ဈေး (USD)</label><input type="number" value={form.price_usd} onChange={e => set('price_usd', e.target.value)} className="input-dark font-mono" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="block text-[10px] text-white/40 mb-1">စတင်ရာ</label><input value={form.start_location} onChange={e => set('start_location', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကလော" /></div>
+              <div><label className="block text-[10px] text-white/40 mb-1">ပြီးဆုံးရာ</label><input value={form.end_location} onChange={e => set('end_location', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: အင်းလေး" /></div>
             </div>
 
             {/* Includes */}

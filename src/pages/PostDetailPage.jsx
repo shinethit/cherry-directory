@@ -14,9 +14,11 @@ import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { formatMyanmarDate, formatMyanmarDateTime } from '../lib/myanmarDate'
 
-// Inline RSVP (unchanged)
-async function RsvpSection({ postId }) {
+// Inline RSVP — a normal sync component (React 19 async components are not
+// relied on here).
+function RsvpSection({ postId }) {
   const { isLoggedIn, user } = useAuth()
   const navigate = useNavigate()
   const [status, setStatus] = useState(null)
@@ -40,15 +42,20 @@ async function RsvpSection({ postId }) {
   }, [postId, user])
 
   async function rsvp(newStatus) {
-    if (!isLoggedIn) { navigate('/login'); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ RSVP လုပ်နိုင်မည်'); navigate('/login'); return }
     setLoading(true)
     if (status === newStatus) {
-      await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
+      const { error } = await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
+      if (error) { showError(error.message); setLoading(false); return }
       setCounts(c => ({ ...c, [newStatus]: Math.max(0, c[newStatus] - 1) }))
       setStatus(null)
     } else {
+      const { error } = await supabase.from('event_rsvps').upsert(
+        { post_id: postId, user_id: user.id, status: newStatus },
+        { onConflict: 'post_id,user_id' }
+      )
+      if (error) { showError(error.message); setLoading(false); return }
       if (status) setCounts(c => ({ ...c, [status]: Math.max(0, c[status] - 1) }))
-      await supabase.from('event_rsvps').upsert({ post_id: postId, user_id: user.id, status: newStatus })
       setCounts(c => ({ ...c, [newStatus]: c[newStatus] + 1 }))
       setStatus(newStatus)
     }
@@ -104,11 +111,21 @@ export default function PostDetailPage() {
   const [lightboxImages, setLightboxImages] = useState([])
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+
   useEffect(() => {
-    supabase.from('posts').select('*, author:profiles(full_name, avatar_url), category:categories(name, name_mm, icon)').eq('id', id).single().then(({ data }) => {
+    setLoading(true)
+    setNotFound(false)
+    setLoadError(false)
+    supabase.from('posts').select('*, author:profiles(full_name, avatar_url), category:categories(name, name_mm, icon)').eq('id', id).single().then(({ data, error }) => {
+      if (error && error.code !== 'PGRST116') { setLoadError(true); setLoading(false); return }
+      if (!data) { setNotFound(true); setLoading(false); return }
       setPost(data)
-      if (data) supabase.from('posts').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id)
-    })
+      supabase.from('posts').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id)
+      setLoading(false)
+    }).catch(() => { setLoadError(true); setLoading(false) })
   }, [id])
 
   async function handleDelete() {
@@ -127,7 +144,25 @@ export default function PostDetailPage() {
     setLightboxOpen(true)
   }
 
-  if (!post) return <div className="p-4 space-y-3"><Skeleton className="h-64" /><Skeleton className="h-48" /></div>
+  if (loading) return <div className="p-4 space-y-3"><Skeleton className="h-64" /><Skeleton className="h-48" /></div>
+
+  if (notFound) return (
+    <div className="p-4 py-16 text-center space-y-3">
+      <p className="text-5xl">😶</p>
+      <p className="font-display font-semibold text-white/70">မတွေ့ပါ</p>
+      <p className="text-xs text-white/40 font-myanmar">ဤ Post မရှိတော့ပါ (ဖျက်လိုက်ပြီ ဖြစ်နိုင်သည်)</p>
+      <button onClick={() => navigate('/news')} className="btn-primary text-sm px-5 py-2.5">နောက်သို့</button>
+    </div>
+  )
+
+  if (loadError) return (
+    <div className="p-4 py-16 text-center space-y-3">
+      <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+      <button onClick={() => window.location.reload()} className="btn-primary text-sm px-5 py-2.5">ပြန်ကြိုးစားမည်</button>
+    </div>
+  )
+
+  if (!post) return null
 
   const cover = post.cover_url ? getOptimizedUrl(post.cover_url, { width: 800 }) : null
   const eventCountdown = post.type === 'event' ? getCountdown(post.event_start) : null
@@ -181,7 +216,7 @@ export default function PostDetailPage() {
         </div>
 
         <div className="flex flex-wrap gap-3 text-xs text-white/40">
-          <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(post.created_at).toLocaleDateString('my-MM', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+          <span className="flex items-center gap-1"><Calendar size={12} /> {formatMyanmarDate(post.created_at, { year: true })}</span>
           {post.author?.full_name && <span>✍️ {post.author.full_name}</span>}
           {post.view_count > 0 && <span className="flex items-center gap-1"><Eye size={12} /> {post.view_count}</span>}
         </div>
@@ -198,8 +233,8 @@ export default function PostDetailPage() {
             {post.event_start && (
               <div className="flex items-center gap-2 text-sm">
                 <Calendar size={14} className="text-green-400" />
-                <span className="text-white/70">{new Date(post.event_start).toLocaleString('my-MM')}</span>
-                {post.event_end && <span className="text-white/40">— {new Date(post.event_end).toLocaleString('my-MM')}</span>}
+                <span className="text-white/70">{formatMyanmarDateTime(post.event_start)}</span>
+                {post.event_end && <span className="text-white/40">— {formatMyanmarDateTime(post.event_end)}</span>}
               </div>
             )}
             {post.event_location && (

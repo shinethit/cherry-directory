@@ -36,7 +36,10 @@ export default function AnnouncementBanner() {
       <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
         <div className="flex-1 overflow-hidden whitespace-nowrap">
           <div className="animate-marquee inline-block">
+            {/* Two copies so the -50% loop is seamless (one copy left half
+                of every 20s cycle blank). */}
             <span className="text-amber-300 text-sm font-myanmar">📢 {current.content} &nbsp;&nbsp;•&nbsp;&nbsp;</span>
+            <span className="text-amber-300 text-sm font-myanmar" aria-hidden="true">📢 {current.content} &nbsp;&nbsp;•&nbsp;&nbsp;</span>
           </div>
         </div>
         <button

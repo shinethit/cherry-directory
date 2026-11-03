@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Phone, MapPin, ArrowLeft, Trash2, Edit2, Clock, Briefcase, Users, CheckCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,6 +9,9 @@ import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
+import { maskPhone, toTelHref } from '../lib/phoneMask'
+import { formatMyanmarDate } from '../lib/myanmarDate'
 
 const JOB_CATS = [
   { id: 'all',          mm: 'အားလုံး',        en: 'All',          icon: '💼' },
@@ -28,19 +31,26 @@ const JOB_TYPES = [
   { id: 'parttime',   mm: 'အချိန်ပိုင်း',  en: 'Part-time'  },
   { id: 'freelance',  mm: 'Freelance',    en: 'Freelance'  },
   { id: 'temporary',  mm: 'ယာယီ',         en: 'Temporary'  },
-  { id: 'internship', mm: 'အလုပ်သင်ကာလ', en: 'Internship' },
 ]
 
 const POST_TYPES = [
   { id: 'all',     mm: 'အားလုံး',    en: 'All' },
-  { id: 'employer',mm: 'အလုပ်ရှင်',  en: 'Employer',  icon: '👔' },
-  { id: 'jobseeker',mm: 'အလုပ်ရှာ', en: 'Job Seeker', icon: '🔍' },
+  { id: 'offer',   mm: 'အလုပ်ရှင်',  en: 'Employer',  icon: '👔' },
+  { id: 'seeker',  mm: 'အလုပ်ရှာ', en: 'Job Seeker', icon: '🔍' },
 ]
 
+// Home deep links use ?type=offer|seeker; accept the legacy UI values too.
+function normalizePostType(v) {
+  if (v === 'employer') return 'offer'
+  if (v === 'jobseeker') return 'seeker'
+  if (v === 'offer' || v === 'seeker') return v
+  return 'all'
+}
+
 const STATUSES = {
-  available:   { mm: 'လျှောက်လို့ရ',  en: 'Open',       color: 'text-green-400', bg: 'bg-green-500/15', icon: '✅' },
-  pending:     { mm: 'စောင့်ဆိုင်းဆဲ', en: 'Pending',     color: 'text-amber-400', bg: 'bg-amber-500/15', icon: '⏳' },
-  filled:      { mm: 'ပြည့်သွားပြီ',  en: 'Filled',      color: 'text-red-400',   bg: 'bg-red-500/15',   icon: '❌' },
+  active:    { mm: 'လျှောက်လို့ရ',  en: 'Open',       color: 'text-green-400', bg: 'bg-green-500/15', icon: '✅' },
+  filled:    { mm: 'ပြည့်သွားပြီ',  en: 'Filled',      color: 'text-red-400',   bg: 'bg-red-500/15',   icon: '❌' },
+  expired:   { mm: 'သက်တမ်းကုန်',   en: 'Expired',     color: 'text-white/40',  bg: 'bg-white/8',      icon: '⌛' },
 }
 
 function timeAgo(iso, lang) {
@@ -53,26 +63,28 @@ function timeAgo(iso, lang) {
 
 function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChange }) {
   const navigate = useNavigate()
+  const [expanded, setExpanded] = useState(false)
   const cat = JOB_CATS.find(c => c.id === job.category) || JOB_CATS[0]
   const type = JOB_TYPES.find(t => t.id === job.type) || JOB_TYPES[0]
   const postType = POST_TYPES.find(t => t.id === job.post_type) || POST_TYPES[1]
-  const status = STATUSES[job.status] || STATUSES.available
-  const isOwner = isLoggedIn && (job.user_id === userId)
+  const status = STATUSES[job.status] || STATUSES.active
+  const isOwner = isLoggedIn && (job.poster_id === userId)
 
   const salaryStr = job.salary_min
     ? `${Number(job.salary_min).toLocaleString()}${job.salary_max ? '–' + Number(job.salary_max).toLocaleString() : '+'} Ks/${lang === 'mm' ? (job.salary_unit === 'day' ? 'ရက်' : job.salary_unit === 'week' ? 'ပတ်' : 'လ') : job.salary_unit}`
     : (lang === 'mm' ? 'သဘောတူညီ' : 'Negotiable')
 
   const handleContact = () => {
+    if (!isLoggedIn) return
     if (job.contact_phone) {
-      window.location.href = `tel:${job.contact_phone}`
-    } else if (job.user_id) {
-      navigate(`/profile/${job.user_id}`)
+      window.location.href = toTelHref(job.contact_phone)
+    } else if (job.poster_id) {
+      navigate(`/profile/${job.poster_id}`)
     }
   }
 
   // Distinct styles for employer vs job seeker
-  const postTypeStyle = job.post_type === 'employer'
+  const postTypeStyle = job.post_type === 'offer'
     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-sm shadow-blue-500/10'
     : 'bg-green-500/20 text-green-400 border border-green-500/30 shadow-sm shadow-green-500/10'
 
@@ -89,9 +101,9 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
               {postType.icon} {lang === 'mm' ? postType.mm : postType.en}
             </span>
           </div>
-          <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (job.title_mm || job.title) : job.title}</h3>
+          <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (job.title_mm || job.title) : (job.title || job.title_mm)}</h3>
           {(job.company_mm || job.company) && (
-            <p className="text-xs text-white/50 font-myanmar">{lang === 'mm' ? (job.company_mm || job.company) : job.company}</p>
+            <p className="text-xs text-white/50 font-myanmar">{lang === 'mm' ? (job.company_mm || job.company) : (job.company || job.company_mm)}</p>
           )}
           {job.location_mm && (
             <div className="flex items-center gap-1 mt-1 text-white/40">
@@ -114,14 +126,40 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
         <p className="text-[10px] text-white/40 font-myanmar line-clamp-1">📋 {job.requirements_mm}</p>
       )}
 
+      {expanded && (
+        <div className="space-y-2 pt-1 border-t border-white/6">
+          {(job.description_mm || job.description) && (
+            <p className="text-xs text-white/60 font-myanmar leading-relaxed whitespace-pre-wrap">{job.description_mm || job.description}</p>
+          )}
+          {job.requirements && job.requirements !== job.requirements_mm && (
+            <p className="text-xs text-white/50 leading-relaxed">📋 {job.requirements}</p>
+          )}
+          {job.expires_at && (
+            <p className="text-[10px] text-white/40">⏳ {lang === 'mm' ? 'သက်တမ်းကုန်' : 'Expires'}: {formatMyanmarDate(job.expires_at)}</p>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between pt-1">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center flex-wrap">
           {job.contact_phone && (
-            <button onClick={handleContact} className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300">
-              <Phone size={10} /> {job.contact_phone}
-            </button>
+            isLoggedIn ? (
+              <button onClick={handleContact} className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300">
+                <Phone size={10} /> {job.contact_name ? `${job.contact_name} · ` : ''}{job.contact_phone}
+              </button>
+            ) : (
+              <span className="flex items-center gap-1 text-[10px] text-green-400/70">
+                <Phone size={10} /> {job.contact_name ? `${job.contact_name} · ` : ''}{maskPhone(job.contact_phone, false)}
+              </span>
+            )
+          )}
+          {!job.contact_phone && job.contact_name && (
+            <span className="text-[10px] text-white/40 font-myanmar">{job.contact_name}</span>
           )}
           <span className="text-[10px] text-white/30">{timeAgo(job.posted_at, lang)}</span>
+          <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-brand-300 hover:text-brand-200">
+            {expanded ? (lang === 'mm' ? '▲ ချုံ့မည်' : '▲ Less') : (lang === 'mm' ? '▼ အသေးစိတ်' : '▼ Details')}
+          </button>
         </div>
         
         {isOwner && (
@@ -143,14 +181,14 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
 }
 
 function JobForm({ onClose, onSuccess, lang, editPost }) {
-  const { user, profile, isLoggedIn } = useAuth()
+  const { user, isLoggedIn } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({
-    title: '', title_mm: '', company_mm: '', description_mm: '', requirements_mm: '',
-    type: 'fulltime', category: 'other', post_type: 'employer',
+    title: '', title_mm: '', company: '', company_mm: '', description_mm: '', requirements_mm: '',
+    type: 'fulltime', category: 'other', post_type: 'offer',
     salary_min: '', salary_max: '', salary_unit: 'month',
     location_mm: '', contact_name: '', contact_phone: '', contact_fb: '',
-    is_urgent: false, status: 'available',
+    is_urgent: false, status: 'active',
   })
   const [submitting, setSubmitting] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -160,12 +198,13 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
       setForm({
         title: editPost.title || '',
         title_mm: editPost.title_mm || '',
+        company: editPost.company || '',
         company_mm: editPost.company_mm || '',
         description_mm: editPost.description_mm || '',
         requirements_mm: editPost.requirements_mm || '',
         type: editPost.type || 'fulltime',
         category: editPost.category || 'other',
-        post_type: editPost.post_type || 'employer',
+        post_type: normalizePostType(editPost.post_type) === 'all' ? 'offer' : normalizePostType(editPost.post_type),
         salary_min: editPost.salary_min || '',
         salary_max: editPost.salary_max || '',
         salary_unit: editPost.salary_unit || 'month',
@@ -174,7 +213,7 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
         contact_phone: editPost.contact_phone || '',
         contact_fb: editPost.contact_fb || '',
         is_urgent: editPost.is_urgent || false,
-        status: editPost.status || 'available',
+        status: editPost.status || 'active',
       })
     }
   }, [editPost])
@@ -192,24 +231,42 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
   async function submit() {
     if (!form.title_mm && !form.title) return
     setSubmitting(true)
-    const payload = {
-      ...form,
-      salary_min: form.salary_min ? parseInt(form.salary_min) : null,
-      salary_max: form.salary_max ? parseInt(form.salary_max) : null,
-      user_id: user.id,
-      poster_name: profile?.full_name || profile?.nickname,
-      posted_at: new Date().toISOString(),
+    try {
+      const payload = {
+        title: form.title || form.title_mm,
+        title_mm: form.title_mm || null,
+        company: form.company || form.company_mm || null,
+        company_mm: form.company_mm || null,
+        description_mm: form.description_mm || null,
+        requirements_mm: form.requirements_mm || null,
+        type: form.type,
+        category: form.category,
+        post_type: form.post_type,
+        salary_min: form.salary_min ? parseInt(form.salary_min) : null,
+        salary_max: form.salary_max ? parseInt(form.salary_max) : null,
+        salary_unit: form.salary_unit,
+        location_mm: form.location_mm || null,
+        contact_name: form.contact_name || null,
+        contact_phone: form.contact_phone || null,
+        contact_fb: form.contact_fb || null,
+        is_urgent: form.is_urgent,
+        status: form.status,
+        poster_id: user.id,
+      }
+
+      if (editPost) {
+        const { error } = await supabase.from('jobs').update(payload).eq('id', editPost.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('jobs').insert(payload)
+        if (error) throw error
+      }
+      onSuccess()
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post'))
+    } finally {
+      setSubmitting(false)
     }
-    
-    if (editPost) {
-      const { error } = await supabase.from('jobs').update(payload).eq('id', editPost.id)
-      if (error) throw error
-    } else {
-      const { error } = await supabase.from('jobs').insert(payload)
-      if (error) throw error
-    }
-    setSubmitting(false)
-    onSuccess()
   }
 
   return (
@@ -234,7 +291,9 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
         </div>
 
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကော်ဖီဆိုင် Cashier လိုသည် / စာရေးအလုပ်ရှာသည်" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (အင်္ဂလိပ်)' : 'Title (English)'}</label><input value={form.title} onChange={e => set('title', e.target.value)} className="input-dark" placeholder="e.g. Cashier wanted" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကုမ္ပဏီ/လုပ်ငန်းအမည်' : 'Company Name'}</label><input value={form.company_mm} onChange={e => set('company_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကုမ္ပဏီ/လုပ်ငန်းအမည် (အင်္ဂလိပ်)' : 'Company Name (English)'}</label><input value={form.company} onChange={e => set('company', e.target.value)} className="input-dark" /></div>
         
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -286,7 +345,8 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
   const [status, setStatus] = useState(post.status)
 
   const updateStatus = async () => {
-    await supabase.from('jobs').update({ status }).eq('id', post.id)
+    const { error } = await supabase.from('jobs').update({ status }).eq('id', post.id)
+    if (error) { showError(error.message); return }
     onUpdate()
     onClose()
   }
@@ -317,32 +377,41 @@ export default function JobBoardPage() {
   const { user, isLoggedIn } = useAuth()
   useSEO({ title: lang === 'mm' ? 'အလုပ်ကြော်ငြာ' : 'Job Board' })
 
+  const [searchParams] = useSearchParams()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [catFilter, setCatFilter] = useState('all')
-  const [postTypeFilter, setPostTypeFilter] = useState('all')
+  const [postTypeFilter, setPostTypeFilter] = useState(() => normalizePostType(searchParams.get('type')))
   const [statusFilter, setStatusFilter] = useState('all')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [statusTarget, setStatusTarget] = useState(null)
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const PAGE_SIZE = 20
 
   async function load() {
     setLoading(true)
     try {
+      const limit = (page + 1) * PAGE_SIZE
       let q = supabase
         .from('jobs')
         .select('*')
         .order('is_urgent', { ascending: false })
         .order('posted_at', { ascending: false })
-        .limit(50)
-      
+        .range(0, limit - 1)
+
       if (catFilter !== 'all') q = q.eq('category', catFilter)
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
       if (statusFilter !== 'all') q = q.eq('status', statusFilter)
-      
+
       const { data, error } = await q
       if (error) throw error
-      setJobs(data || [])
+      // Client-side expiry: schema sets expires_at +30d but nothing flips the status.
+      const now = Date.now()
+      const visible = (data || []).filter(j => !j.expires_at || new Date(j.expires_at).getTime() >= now)
+      setJobs(visible)
+      setHasMore((data || []).length === limit)
     } catch (e) { console.warn(e) }
     setLoading(false)
   }
@@ -356,11 +425,12 @@ export default function JobBoardPage() {
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'jobs' }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [catFilter, postTypeFilter, statusFilter])
+  }, [catFilter, postTypeFilter, statusFilter, page])
 
   async function deleteJob(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
-    await supabase.from('jobs').delete().eq('id', id)
+    const { error } = await supabase.from('jobs').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     load()
   }
 
@@ -380,14 +450,14 @@ export default function JobBoardPage() {
       <div className="px-4 space-y-2 mb-4">
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
-            <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="select-dark text-xs">
+            <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
               {JOB_CATS.map(c => (
                 <option key={c.id} value={c.id}>{c.icon} {lang === 'mm' ? c.mm : c.en}</option>
               ))}
             </select>
           </div>
           <div className="relative">
-            <select value={postTypeFilter} onChange={e => setPostTypeFilter(e.target.value)} className="select-dark text-xs">
+            <select value={postTypeFilter} onChange={e => { setPostTypeFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
               {POST_TYPES.map(t => (
                 <option key={t.id} value={t.id}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>
               ))}
@@ -395,7 +465,7 @@ export default function JobBoardPage() {
           </div>
         </div>
         <div className="relative">
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="select-dark text-xs">
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
             <option value="all">📋 {lang === 'mm' ? 'အားလုံး' : 'All Status'}</option>
             {Object.entries(STATUSES).map(([key, val]) => (
               <option key={key} value={key}>{val.icon} {lang === 'mm' ? val.mm : val.en}</option>
@@ -424,6 +494,11 @@ export default function JobBoardPage() {
              onStatusChange={(job) => setStatusTarget(job)}
            />
          ))}
+        {hasMore && !loading && (
+          <button onClick={() => setPage(p => p + 1)} className="w-full py-3 rounded-2xl bg-white/6 border border-white/10 text-sm text-white/70 hover:bg-white/10">
+            {lang === 'mm' ? 'နောက်ထပ် ပြမည်' : 'Load more'}
+          </button>
+        )}
       </div>
 
       {showForm && (

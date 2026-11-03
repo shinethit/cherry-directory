@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Moon, Sun, Info  } from 'lucide-react'
+import { ArrowLeft, Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Info  } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
-import { useTheme } from '../contexts/ThemeContext'
+import { useUnreadNotificationCount } from '../hooks/useNotifications'
 // Main navigation pages — no back button needed
 const MAIN_NAV_PATHS = ['/', '/directory', '/community', '/calendar', '/profile']
 
@@ -14,7 +14,7 @@ export default function Header() {
   const { profile, isLoggedIn, isAdmin, isModerator, signOut } = useAuth()
   const { lang, toggleLang } = useLang()
   const config = useAppConfig()
-  const { darkMode, toggleDarkMode } = useTheme()
+  const unreadCount = useUnreadNotificationCount()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -35,20 +35,29 @@ export default function Header() {
     setMenuOpen(false)
   }, [location])
 
-  // Auto-show Change Log on new version or first visit
+  // Auto-show Change Log on new version — only AFTER the onboarding guide
+  // has been dismissed (first-launch sequence: splash → onboarding → changelog).
+  // The version is marked seen ONLY when the user dismisses the modal, never on a timer.
   useEffect(() => {
-    const CURRENT_VERSION = '0.9.0';
+    const CURRENT_VERSION = '0.9.1';
     const lastSeen = localStorage.getItem('cherry_last_seen_version');
-    
-    if (lastSeen !== CURRENT_VERSION) {
-      // Delay a bit to let the app load first
-      const timer = setTimeout(() => {
-        setShowChangelog(true);
-        localStorage.setItem('cherry_last_seen_version', CURRENT_VERSION);
-      }, 1500);
-      return () => clearTimeout(timer);
+    if (lastSeen === CURRENT_VERSION) return;
+    let timer;
+    const show = () => { timer = setTimeout(() => setShowChangelog(true), 1500); };
+    if (localStorage.getItem('cherry_onboarding_done')) {
+      show();
+    } else {
+      const onDone = () => show();
+      window.addEventListener('cherry:onboarding-done', onDone);
+      return () => { window.removeEventListener('cherry:onboarding-done', onDone); clearTimeout(timer); };
     }
+    return () => clearTimeout(timer);
   }, []);
+
+  function closeChangelog() {
+    setShowChangelog(false);
+    localStorage.setItem('cherry_last_seen_version', '0.9.1');
+  }
 
   function handleBack() {
     // If there's history to go back to, use it. Otherwise go home.
@@ -140,18 +149,17 @@ export default function Header() {
 
                         <button
               onClick={() => navigate('/notifications')}
-              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
+              className="relative w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
               aria-label="Notifications"
             >
               <Bell size={14} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
 
-            <button
-              onClick={toggleDarkMode}
-              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90 transition-colors"
-            >
-              {darkMode ? <Sun size={14} /> : <Moon size={14} />}
-            </button>
 
             <button
               onClick={toggleLang}
@@ -265,7 +273,7 @@ export default function Header() {
             </div>
 
             <p className="text-[9px] text-white/20 text-center py-4">
-              {config.app_name} v2.0 • {config.app_city}
+              {config.app_name} v0.9.1 • {config.app_city}
             </p>
           </div>
         </div>
@@ -273,19 +281,20 @@ export default function Header() {
 
       {/* Change Log Modal */}
       {showChangelog && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pt-safe bg-black/80 backdrop-blur-md" onClick={() => setShowChangelog(false)}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pt-safe bg-black/80 backdrop-blur-md" onClick={closeChangelog}>
           <div className="w-full max-w-sm bg-[#140020] border border-white/10 rounded-3xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#140020] z-10">
               <div>
                 <h3 className="font-display font-bold text-white text-base">Change Log</h3>
-                <p className="text-[10px] text-white/40 font-myanmar">Version 0.9.0</p>
+                <p className="text-[10px] text-white/40 font-myanmar">Version 0.9.1</p>
               </div>
-              <button onClick={() => setShowChangelog(false)} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white">
+              <button onClick={closeChangelog} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white">
                 <X size={16} />
               </button>
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
+                { v: '0.9.1', date: '2026-11-03', items: ['လုံခြုံရေး ပြင်ဆင်ခြင်း — ကိုယ့်ဘာသာ Admin ဖြစ်လို့မရတော့ပါ', 'Toast အသိပေးချက်များ ပေါ်လာခြင်း', 'ဧည့်သည် လုပ်ငန်းတင်နိုင်ခြင်း (Admin စစ်ပြီးမှ ပေါ်မည်)', 'အလုပ်အကိုင် / ဘတ်စ်ကား / ခရီးစဉ် / Chat / အိမ်ငှား / ကျူရှင် / မှတ်တမ်း ပြင်ဆင်ခြင်း', 'Admin Panel အကာအကွယ် + Claim စစ်ဆေးခြင်း', 'Google ဖြင့် ဝင်ရောက်ခြင်း + စကားဝှက် ပြန်ယူခြင်း', 'ဆီဆိုင် စာမျက်နှာ ပြန်ဖွင့်ခြင်း', 'Directory "ထပ်တင်ရန်" ပြင်ဆင်ခြင်း'] },
                 { v: '0.9.0', date: '2026-10-20', items: ['OSM Bulk Import စနစ်', 'ဒေတာတူညီမှု တင်းကျပ်စွာ စစ်ဆေးခြင်း', 'iOS PWA Safe-area ပြင်ဆင်ခြင်း', 'History RLS 401 Error ပြင်ဆင်ခြင်း', 'Batch Insert 503 Timeout ပြင်ဆင်ခြင်း'] },
                 { v: '0.8.0', date: '2026-10-19', items: ['Saved Hub စုစည်းခြင်း', 'လုပ်ငန်းဖွင့်ချိန် ပြသခြင်း', 'ဆင်တူလုပ်ငန်းများ ပြသခြင်း', 'My Submissions & RSVPs', 'Report Spam စနစ်', 'အနီးအနား ရှာဖွေခြင်း (GPS)'] },
                 { v: '0.7.0', date: '2026-10-18', items: ['React.lazy ဖြင့် Bundle ခွဲခြင်း', 'Super Admin အခန်းကဏ္ဍ ပြင်ဆင်ခြင်း', 'Audit Log RLS ပြင်ဆင်ခြင်း'] },

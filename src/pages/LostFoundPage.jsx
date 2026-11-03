@@ -9,6 +9,7 @@ import { useSEO } from '../hooks/useSEO'
 import { uploadImage } from '../lib/cloudinary'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
+import { showError } from '../lib/toast'
 
 const CATS = [
   { id: 'all',    mm: 'အားလုံး',   en: 'All',     icon: '🔍' },
@@ -103,22 +104,35 @@ function PostForm({ onClose, onSuccess, lang }) {
   async function handleImg(file) {
     if (images.length >= 3) return
     setImgLoading(true)
-    const url = await uploadImage(file, 'lost-found')
-    setImages(prev => [...prev, url])
-    setImgLoading(false)
+    try {
+      const url = await uploadImage(file, 'lost-found')
+      setImages(prev => [...prev, url])
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+    } finally {
+      setImgLoading(false)
+    }
   }
 
   async function submit() {
     if (!form.title && !form.title_mm) return
     setSubmitting(true)
-    await supabase.from('lost_found').insert({
-      ...form,
-      images,
-      poster_id:   user?.id || null,
-      poster_name: user ? (profile?.full_name || profile?.nickname) : form.poster_name,
-    })
-    setSubmitting(false)
-    onSuccess()
+    try {
+      const { error } = await supabase.from('lost_found').insert({
+        ...form,
+        // `title` is NOT NULL in the schema; fall back to the Myanmar title.
+        title: form.title || form.title_mm,
+        images,
+        poster_id:   user?.id || null,
+        poster_name: user ? (profile?.full_name || profile?.nickname) : form.poster_name,
+      })
+      if (error) throw error
+      onSuccess()
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const setField = (k, v) => set(k, v)
@@ -238,20 +252,30 @@ export default function LostFoundPage() {
   const [typeFilter, setTypeFilter] = useState('all')
   const [catFilter, setCatFilter]   = useState('all')
   const [showForm, setShowForm]     = useState(false)
+  const [search, setSearch]         = useState('')
+  const [page, setPage]             = useState(0)
+  const [hasMore, setHasMore]       = useState(false)
+  const PAGE_SIZE = 20
 
   async function load() {
     setLoading(true)
     try {
-      let q = supabase.from('lost_found').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('reported_at', { ascending: false }).limit(50)
+      const limit = (page + 1) * PAGE_SIZE
+      let q = supabase.from('lost_found').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('reported_at', { ascending: false }).range(0, limit - 1)
       if (typeFilter !== 'all') q = q.eq('type', typeFilter)
       if (catFilter !== 'all')  q = q.eq('category', catFilter)
-      const { data } = await q
-      setPosts(data || [])
+      const { data, error } = await q
+      if (error) throw error
+      // Client-side expiry: expires_at defaults to +30d but nothing flips
+      // the status, so hide expired posts here.
+      const now = Date.now()
+      setPosts((data || []).filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now))
+      setHasMore((data || []).length === limit)
     } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [typeFilter, catFilter])
+  useEffect(() => { load() }, [typeFilter, catFilter, page])
 
   // Realtime
   useEffect(() => {
@@ -282,7 +306,7 @@ export default function LostFoundPage() {
         <div className="relative flex-1">
           <select
             value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value)}
+            onChange={e => { setTypeFilter(e.target.value); setPage(0) }}
             className="select-dark"
           >
             {TYPES.map(t => (
@@ -296,7 +320,7 @@ export default function LostFoundPage() {
         <div className="relative flex-1">
           <select
             value={catFilter}
-            onChange={e => setCatFilter(e.target.value)}
+            onChange={e => { setCatFilter(e.target.value); setPage(0) }}
             className="select-dark"
           >
             {CATS.map(c => (
@@ -309,12 +333,37 @@ export default function LostFoundPage() {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="px-4 mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={lang === 'mm' ? 'ခေါင်းစဉ် / နေရာ ရှာရန်...' : 'Search title / location...'}
+          className="input-dark w-full text-sm font-myanmar"
+        />
+      </div>
+
       <div className="px-4 space-y-2 pb-24">
         {loading
           ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />)
-          : posts.length === 0
-          ? <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">🔍</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Post မရှိသေး' : 'No posts yet'}</p></div>
-          : posts.map(p => <PostCard key={p.id} post={p} lang={lang} />)
+          : (() => {
+            const term = search.trim().toLowerCase()
+            const visible = term
+              ? posts.filter(p => [p.title, p.title_mm, p.description, p.description_mm, p.location, p.location_mm].filter(Boolean).join(' ').toLowerCase().includes(term))
+              : posts
+            if (visible.length === 0) return <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">🔍</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Post မရှိသေး' : 'No posts yet'}</p></div>
+            return (
+              <>
+                {visible.map(p => <PostCard key={p.id} post={p} lang={lang} />)}
+                {hasMore && !term && (
+                  <button onClick={() => setPage(p => p + 1)} className="w-full py-3 rounded-2xl bg-white/6 border border-white/10 text-sm text-white/70 hover:bg-white/10">
+                    {lang === 'mm' ? 'နောက်ထပ် ပြမည်' : 'Load more'}
+                  </button>
+                )}
+              </>
+            )
+          })()
         }
       </div>
 

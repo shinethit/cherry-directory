@@ -10,6 +10,7 @@ import { usePoints } from '../hooks/usePoints'
 import { timeAgo } from '../hooks/usePresence'
 import { uploadImage } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
+import { showError } from '../lib/toast'
 import OfflineCachePanel from '../components/OfflineCachePanel'
 import TierBadge from '../components/TierBadge'
 
@@ -38,6 +39,17 @@ export default function ProfilePage() {
   const [myStats, setMyStats]     = useState({ listings: 0, reviews: 0, bookmarks: 0, rsvps: 0 })
   const [nickError, setNickError] = useState('')
 
+  // Profile loads async — the mount-time useState initializers above run
+  // before it arrives. Sync the fields when it lands, so saving cannot
+  // wipe them with ''. Only sync while not editing, to never clobber
+  // text the user is typing.
+  useEffect(() => {
+    if (!profile || editing) return
+    setName(profile.full_name || '')
+    setNickname(profile.nickname || '')
+    setBio(profile.bio || '')
+  }, [profile, editing])
+
   useEffect(() => {
     if (!user) return
     async function load() {
@@ -60,15 +72,21 @@ export default function ProfilePage() {
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
-    const url = await uploadImage(file, 'avatars')
-    await updateProfile({ avatar_url: url })
-    setUploading(false)
+    try {
+      const url = await uploadImage(file, 'avatars')
+      await updateProfile({ avatar_url: url })
+    } catch (err) {
+      console.warn('Avatar upload failed:', err)
+      showError(err?.message || 'Avatar တင်မရပါ — ထပ်ကြိုးစားပါ')
+    } finally {
+      setUploading(false)
+    }
   }
 
   async function saveProfile() {
     setNickError('')
     if (nickname && !/^[a-zA-Z0-9_]{3,20}$/.test(nickname)) {
-      setNickError('Nickname: 3-20 chars, letters/numbers/underscore only')
+      setNickError('Nickname: အက္ခရာ ၃-၂၀ လုံး၊ စာလုံး/ဂဏန်း/underscore (_) သာ')
       return
     }
     setSaving(true)
@@ -76,7 +94,11 @@ export default function ProfilePage() {
       await updateProfile({ full_name: name, nickname: nickname || null, bio })
       setEditing(false)
     } catch (err) {
-      if (err.message?.includes('unique')) setNickError('Nickname already taken')
+      // Surface ALL errors, not only unique-constraint ones.
+      const msg = err?.message || 'Profile သိမ်းမရပါ'
+      if (err.message?.includes('unique')) setNickError('ဒီ Nickname ကို တစ်ယောက်ယောက် သုံးထားပြီးပါပြီ')
+      else setNickError(msg)
+      showError(msg)
     }
     setSaving(false)
   }
@@ -143,7 +165,7 @@ export default function ProfilePage() {
                 />
               </div>
               {nickError && <p className="text-[10px] text-red-400 mt-1">{nickError}</p>}
-              <p className="text-[9px] text-white/25 mt-1">Letters, numbers, underscore only. 3-20 chars.</p>
+              <p className="text-[9px] text-white/25 mt-1">စာလုံး၊ ဂဏန်း၊ underscore (_) သာ — ၃ မှ ၂၀ လုံးအထိ။</p>
             </div>
             <div>
               <label className="block text-[10px] text-white/40 mb-1">Bio</label>

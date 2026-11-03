@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, X, Pin, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -14,6 +14,7 @@ import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { localInputToMMT } from '../lib/myanmarDate'
 
 const TYPES = [
   { value: '',             label: 'အားလုံး',        labelEn: 'All'           },
@@ -22,8 +23,9 @@ const TYPES = [
   { value: 'announcement', label: '📢 ကြေညာချက်',  labelEn: '📢 Announcement'},
 ]
 
-// PostForm (unchanged)
+// PostForm
 function PostForm({ onClose, onSuccess, lang }) {
+  const { user } = useAuth()
   const [form, setForm] = useState({
     title: '', title_mm: '', content: '', content_mm: '',
     type: 'announcement', is_pinned: false,
@@ -40,9 +42,14 @@ function PostForm({ onClose, onSuccess, lang }) {
 
   async function handleCover(file) {
     setCoverLoading(true)
-    const url = await uploadImage(file, 'news/covers')
-    setCoverUrl(url)
-    setCoverLoading(false)
+    try {
+      const url = await uploadImage(file, 'news/covers')
+      setCoverUrl(url)
+    } catch (err) {
+      setError(err?.message || 'ပုံတင်ရာတွင် အမှားဖြစ်သွားသည်')
+    } finally {
+      setCoverLoading(false)
+    }
   }
 
   async function handleGalleryUpload(file) {
@@ -51,9 +58,14 @@ function PostForm({ onClose, onSuccess, lang }) {
       return
     }
     setGalleryLoading(true)
-    const url = await uploadImage(file, 'news/gallery')
-    setImages(prev => [...prev, url])
-    setGalleryLoading(false)
+    try {
+      const url = await uploadImage(file, 'news/gallery')
+      setImages(prev => [...prev, url])
+    } catch (err) {
+      setError(err?.message || 'ပုံတင်ရာတွင် အမှားဖြစ်သွားသည်')
+    } finally {
+      setGalleryLoading(false)
+    }
   }
 
   function removeGalleryImage(index) {
@@ -76,7 +88,7 @@ function PostForm({ onClose, onSuccess, lang }) {
       is_pinned:   form.is_pinned,
       cover_url:   coverUrl || null,
       images:      images,
-      event_start: form.event_start || null,
+      event_start: form.event_start ? localInputToMMT(form.event_start) : null,
       event_location: form.event_location || null,
       author_id:   user?.id,
     }
@@ -262,7 +274,10 @@ export default function NewsPage() {
   const [posts, setPosts]   = useState([])
   const [pinned, setPinned] = useState([])
   const [loading, setLoading] = useState(true)
-  const [type, setType]     = useState('')
+  const [loadError, setLoadError] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Calendar "See all" links here as /news?type=event.
+  const [type, setType]     = useState(searchParams.get('type') || '')
   const [showForm, setShowForm] = useState(false)
 
   // Lightbox state
@@ -272,6 +287,7 @@ export default function NewsPage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
       let postsQuery = supabase
         .from('posts')
@@ -283,20 +299,25 @@ export default function NewsPage() {
 
       if (type) postsQuery = postsQuery.eq('type', type)
 
-      const [{ data: pinnedData }, { data: postsData }] = await Promise.all([
-        supabase
-          .from('posts')
-          .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
-          .eq('status', 'published')
-          .eq('is_pinned', true)
-          .order('created_at', { ascending: false })
-          .limit(3),
+      // Pinned posts must respect the type filter too.
+      let pinnedQuery = supabase
+        .from('posts')
+        .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
+        .eq('status', 'published')
+        .eq('is_pinned', true)
+        .order('created_at', { ascending: false })
+        .limit(3)
+      if (type) pinnedQuery = pinnedQuery.eq('type', type)
+
+      const [{ data: pinnedData, error: pinnedErr }, { data: postsData, error: postsErr }] = await Promise.all([
+        pinnedQuery,
         postsQuery,
       ])
+      if (pinnedErr || postsErr) throw (pinnedErr || postsErr)
 
       setPinned(pinnedData || [])
       setPosts(postsData || [])
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true); setPinned([]); setPosts([]) }
     setLoading(false)
   }
 
@@ -353,7 +374,7 @@ export default function NewsPage() {
         <div className="relative">
           <select
             value={type}
-            onChange={e => setType(e.target.value)}
+            onChange={e => { setType(e.target.value); if (e.target.value) setSearchParams({ type: e.target.value }, { replace: true }); else setSearchParams({}, { replace: true }) }}
             className="select-dark"
           >
             {TYPES.map(t => (
@@ -380,7 +401,7 @@ export default function NewsPage() {
                 {canEdit && (
                   <div className="absolute top-2 right-2 flex gap-1">
                     <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/admin/posts/${p.id}/edit`); }}
+                      onClick={(e) => { e.stopPropagation(); navigate(p.type === 'event' ? `/events/edit/${p.id}` : `/news/edit/${p.id}`); }}
                       className="p-1.5 bg-black/50 rounded-lg text-white/70 hover:text-white"
                       title="Edit"
                     >
@@ -405,6 +426,11 @@ export default function NewsPage() {
       <div className="px-4 space-y-3 pb-24">
         {loading ? (
           [1,2,3].map(n => <Skeleton key={n} className="h-48" />)
+        ) : loadError ? (
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+            <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+            <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
         ) : posts.length === 0 ? (
           <EmptyState
             icon="📰"
@@ -424,7 +450,7 @@ export default function NewsPage() {
               {canEdit && (
                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
-                    onClick={(e) => { e.stopPropagation(); navigate(`/admin/posts/${p.id}/edit`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(p.type === 'event' ? `/events/edit/${p.id}` : `/news/edit/${p.id}`); }}
                     className="p-1.5 bg-black/60 rounded-lg text-white/80 hover:text-white backdrop-blur-sm"
                     title="Edit"
                   >

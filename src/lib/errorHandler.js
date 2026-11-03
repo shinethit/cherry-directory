@@ -1,16 +1,21 @@
 import * as Sentry from '@sentry/react';
 /**
- * Initialize Sentry for error tracking
+ * Initialize Sentry for error tracking.
+ * No-op when no DSN is set — Sentry never initializes without
+ * VITE_SENTRY_DSN (set it in Vercel env vars). Call once from
+ * main.jsx: initErrorTracking(import.meta.env.VITE_SENTRY_DSN).
  * @param {string} dsn - Sentry DSN URL
  */
 export const initErrorTracking = (dsn) => {
-  if (dsn) {
-    Sentry.init({
-      dsn,
-      environment: import.meta.env.MODE,
-      tracesSampleRate: 1.0,
-    });
+  if (!dsn) {
+    // Sentry disabled (no DSN configured) — intentionally silent.
+    return
   }
+  Sentry.init({
+    dsn,
+    environment: import.meta.env.MODE,
+    tracesSampleRate: 0.1,
+  });
 };
 
 /**

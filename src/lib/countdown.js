@@ -21,8 +21,8 @@ export function getCountdown(iso, lang = 'mm') {
   if (days === 1) return { label: lang === 'mm' ? 'မနက်ဖန်' : 'Tomorrow',  cls: 'text-amber-400', urgent: true }
   if (days < 7)   return { label: lang === 'mm' ? days + ' ရက် ကျန်' : days + 'd left', cls: 'text-amber-400', urgent: days <= 3 }
   if (days < 30) {
-    const w = Math.round(days / 7)
-    return { label: lang === 'mm' ? (w * 7) + ' ရက် ကျန်' : w + 'w left', cls: 'text-white/50', urgent: false }
+    // Exact day count — rounding to whole weeks showed "7 ရက် ကျန်" for 10 days.
+    return { label: lang === 'mm' ? days + ' ရက် ကျန်' : days + 'd left', cls: 'text-white/50', urgent: false }
   }
   return null
 }

@@ -9,8 +9,9 @@ import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
+import { showError, showSuccess } from '../lib/toast'
 
-async function Field({ label, children, required }) {
+function Field({ label, children, required }) {
   return (
     <div>
       <label className="block text-xs text-white/50 mb-1.5">
@@ -30,7 +31,7 @@ const BLANK = {
 export default function NewsEditPage() {
   const { id } = useParams()          // undefined = create, uuid = edit
   const navigate = useNavigate()
-  const { user, isAdmin, isModerator } = useAuth()
+  const { user, isAdmin, isModerator, isLoggedIn } = useAuth()
   const { lang } = useLang()
   const { log } = useAuditLog()
   useSEO({ title: id ? 'Edit News' : 'Create News' })
@@ -73,6 +74,7 @@ export default function NewsEditPage() {
       })
     } else {
       // Create: admin/mod only
+      if (!isLoggedIn) { showError('အကောင့်ဝင်မှ သတင်းထည့်နိုင်မည်'); navigate('/login'); return }
       const allowed = isAdmin || isModerator
       setCanEdit(allowed)
       if (!allowed) navigate('/news')
@@ -83,9 +85,14 @@ export default function NewsEditPage() {
 
   async function handleCoverUpload(file) {
     setCoverUploading(true)
-    const url = await uploadImage(file, 'news/covers')
-    set('cover_url', url)
-    setCoverUploading(false)
+    try {
+      const url = await uploadImage(file, 'news/covers')
+      set('cover_url', url)
+    } catch (err) {
+      showError(err?.message || 'ပုံတင်ရာတွင် အမှားဖြစ်သွားသည်')
+    } finally {
+      setCoverUploading(false)
+    }
   }
 
   async function handleSave(e) {
@@ -101,24 +108,28 @@ export default function NewsEditPage() {
     }
 
     if (isEdit) {
-      await supabase.from('posts').update(payload).eq('id', id)
+      const { error } = await supabase.from('posts').update(payload).eq('id', id)
+      if (error) { showError(error.message); setSaving(false); return }
       await log({ action: 'update', table: 'posts', id, name: form.title || form.title_mm, before: original, after: payload })
     } else {
-      const { data } = await supabase.from('posts').insert({
+      const { data, error } = await supabase.from('posts').insert({
         ...payload,
         created_at: new Date().toISOString(),
       }).select().single()
+      if (error) { showError(error.message); setSaving(false); return }
       await log({ action: 'create', table: 'posts', id: data?.id, name: form.title || form.title_mm, after: payload })
     }
 
     setSaved(true)
     setSaving(false)
+    showSuccess('✓ သိမ်းပြီးပါပြီ')
     setTimeout(() => navigate('/news'), 1000)
   }
 
   async function handleDelete() {
     if (!(await confirmDialog((lang === 'mm' ? 'ဤသတင်းကို ဖျက်မည်လား?' : 'Delete this post?')))) return
-    await supabase.from('posts').delete().eq('id', id)
+    const { error } = await supabase.from('posts').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     await log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
     navigate('/news')
   }

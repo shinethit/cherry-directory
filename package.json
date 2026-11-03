@@ -1,18 +1,15 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.9.1",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
-    "build:safe": "npm run lint && npm run build",
+    "build:safe": "npm run build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "vite build --mode development --logLevel error",
-    "lint:fix": "echo \"no-op\"",
-    "format": "echo \"no-op\"",
-    "format:check": "echo \"no-op\"",
+    "test": "vitest run",
     "verify": "node verify.cjs",
     "pre-push": "npm run verify"
   },
@@ -50,6 +47,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
+    "vitest": "^2.1.9",
     "ws": "^8.22.0"
   }
 }

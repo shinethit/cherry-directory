@@ -99,6 +99,7 @@
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 12px;
     color: white;
+    font-size: 16px; /* iOS Safari zooms on focus below 16px */
     padding: 0.75rem 1rem;
     width: 100%;
     outline: none;

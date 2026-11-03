@@ -93,7 +93,27 @@ export function AuthProvider({ children }) {
   async function signUp({ email, password, fullName }) {
     const { data, error } = await supabase.auth.signUp({
       email, password,
-      options: { data: { full_name: fullName } },
+      options: {
+        data: { full_name: fullName },
+        emailRedirectTo: `${window.location.origin}/`,
+      },
+    })
+    if (error) throw error
+    return data
+  }
+
+  async function signInWithOAuth(provider) {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/` },
+    })
+    if (error) throw error
+    return data
+  }
+
+  async function resetPasswordForEmail(email) {
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
     })
     if (error) throw error
     return data
@@ -143,6 +163,8 @@ export function AuthProvider({ children }) {
       isLoggedIn, 
       signUp, 
       signIn, 
+      signInWithOAuth,
+      resetPasswordForEmail,
       signOut, 
       updateProfile, 
       refreshProfile 

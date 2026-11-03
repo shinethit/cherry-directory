@@ -13,24 +13,27 @@ export default function BookmarksPage() {
   const [listings, setListings] = useState([])
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   useSEO({ title: 'Saved Bookmarks' })
 
   useEffect(() => {
     async function load() {
       if (!isLoggedIn || !user) { setLoading(false); return }
       setLoading(true)
+      setLoadError('')
       try {
-        const { data: bmarks } = await supabase
+        const { data: bmarks, error: bmarksError } = await supabase
           .from('bookmarks')
           .select('target_id, target_type')
           .eq('user_id', user.id)
+        if (bmarksError) throw bmarksError
 
         if (!bmarks?.length) { setListings([]); setPosts([]); setLoading(false); return }
 
         const listingIds = bmarks.filter(b => b.target_type === 'listing').map(b => b.target_id)
         const postIds = bmarks.filter(b => b.target_type === 'post').map(b => b.target_id)
 
-        const [{ data: lData }, { data: pData }] = await Promise.all([
+        const [{ data: lData, error: lError }, { data: pData, error: pError }] = await Promise.all([
           listingIds.length
             ? supabase.from('listings').select('*, category:categories(name, name_mm, icon)').in('id', listingIds)
             : Promise.resolve({ data: [] }),
@@ -38,11 +41,15 @@ export default function BookmarksPage() {
             ? supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm)').in('id', postIds)
             : Promise.resolve({ data: [] }),
         ])
+        if (lError) throw lError
+        if (pError) throw pError
 
         setListings(lData || [])
         setPosts(pData || [])
       } catch (err) {
         console.warn('Bookmarks load error:', err)
+        setLoadError(err?.message || 'Saved များ ရယူမရပါ')
+        setListings([]); setPosts([])
       }
       setLoading(false)
     }
@@ -74,6 +81,13 @@ export default function BookmarksPage() {
       <div className="px-4 space-y-2">
         {loading ? (
           <p className="text-white/40 text-sm text-center py-12">Loading...</p>
+        ) : loadError ? (
+          <div className="flex flex-col items-center py-12 text-center px-8">
+            <span className="text-4xl mb-3">⚠️</span>
+            <p className="font-display font-semibold text-white/70">Saved များ ရယူမရပါ</p>
+            <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{loadError}</p>
+            <button onClick={() => window.location.reload()} className="btn-primary text-sm mt-4 px-5 py-2">ထပ်ကြိုးစားမည်</button>
+          </div>
         ) : tab === 'listings' ? (
           listings.length === 0
             ? <EmptyState icon="🔖" title="Saved လုပ်ငန်း မရှိသေး" message="Directory မှ လုပ်ငန်းတွေကို Bookmark လုပ်ပါ" />

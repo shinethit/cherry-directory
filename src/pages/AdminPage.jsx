@@ -3,12 +3,16 @@ import { useNavigate } from 'react-router-dom'
 import { 
   ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, 
   LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, 
-  UserCog, Search, RefreshCw, TrendingUp, Activity, FileText, Star,
-  EyeOff, Calendar, Megaphone, Shield   // ← added Megaphone for announcements
+  UserCog, Search, RefreshCw, TrendingUp, FileText, Star,
+  EyeOff, Calendar, Megaphone, Shield, BadgeCheck, Lock
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import CategoryManagerPage from './CategoryManagerPage'
 import { confirmDialog } from '../lib/confirmDialog'
+import { useAuth } from '../contexts/AuthContext'
+import { useAuditLog } from '../hooks/useAuditLog'
+import { showError, showSuccess } from '../lib/toast'
+import { yangonToday, formatMyanmarDate } from '../lib/myanmarDate'
 
 const PRESET_LINKS = [
   { url: '', label: '-- App ထဲရှိ စာမျက်နှာတစ်ခုကို ရွေးပါ --' },
@@ -16,7 +20,6 @@ const PRESET_LINKS = [
   { url: '/chat', label: '💬 Public Chat (ပြောဆိုရေး)', icon: '💬', title: 'Public Chat', title_mm: 'Public Chat', subtitle: 'ပြောဆိုရေး', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: '/submit', label: '➕ လုပ်ငန်းထည့်မည် (Submit Listing)', icon: '➕', title: 'Submit Listing', title_mm: 'လုပ်ငန်းထည့်မည်', subtitle: 'Submit Listing', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: '/emergency', label: '🆘 အရေးပေါ် (Emergency)', icon: '🆘', title: 'Emergency', title_mm: 'အရေးပေါ်', subtitle: 'Emergency', css: 'bg-gradient-to-br from-red-600/25 to-red-700/10 border border-red-500/30 text-white hover:border-red-500/50' },
-  { url: '/power', label: '⚡ လျှပ်စစ်အခြေအနေ (Power Status)', icon: '⚡', title: 'Power Status', title_mm: 'လျှပ်စစ်အခြေအနေ', subtitle: 'မီးပျက်/မီးလာ', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: '/fuel', label: '⛽ ဓာတ်ဆီအခြေအနေ (Fuel Status)', icon: '⛽', title: 'Fuel Status', title_mm: 'ဓာတ်ဆီအခြေအနေ', subtitle: 'ဆီရ/မရ', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: '/news', label: '📰 သတင်းနှင့် ဖြစ်ရပ်များ (News & Events)', icon: '📰', title: 'News & Events', title_mm: 'သတင်းများ', subtitle: 'နောက်ဆုံးရသတင်း', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: 'custom', label: '🔗 အခြားလင့်ခ် ကိုယ်တိုင်ထည့်မည် (Custom URL)' }
@@ -24,6 +27,10 @@ const PRESET_LINKS = [
 
 export default function AdminPage() {
   const navigate = useNavigate()
+  const { user, loading: authLoading, isAdmin, isModerator, isSuperAdmin } = useAuth()
+  const { log } = useAuditLog()
+  const isAuthorized = isAdmin || isModerator
+
   const [tab, setTab]                 = useState('dashboard') 
   const [data, setData]               = useState([])
   const [loading, setLoading]         = useState(true)
@@ -32,17 +39,15 @@ export default function AdminPage() {
   const [editForm, setEditForm]       = useState({})
   const [reports, setReports]         = useState({})
   const [showReports, setShowReports] = useState(null)
-  const [toast, setToast]             = useState(null)
   const [deleting, setDeleting]       = useState(null)
 
-  // Dashboard Stats
+  // Dashboard Stats (no "Online Now" / "Active Today" — nothing
+  // updates profiles on login/activity, so those tiles were fake)
   const [dashboardStats, setDashboardStats] = useState({
     totalUsers: 0,
-    onlineNow: 0,
-    activeToday: 0,
     newToday: 0,
     newLast7Days: 0,
-    listings: { approved: 0, pending: 0, hidden: 0 },
+    listings: { approved: 0, pending: 0, suspended: 0 },
     posts: { news: 0, events: 0, announcements: 0 },
     totalReviews: 0,
     usersByRole: { admin: 0, moderator: 0, member: 0 }
@@ -57,10 +62,9 @@ export default function AdminPage() {
   const [linkForm, setLinkForm] = useState({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
   const [linkLoading, setLinkLoading] = useState(false)
 
-  async function showToast(msg, type = 'success') {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 4000)
-  }
+  const [claims, setClaims] = useState([])
+  const [claimsLoading, setClaimsLoading] = useState(false)
+  const [claimBusy, setClaimBusy] = useState(null)
 
   async function loadListings() {
     setLoading(true)
@@ -70,12 +74,13 @@ export default function AdminPage() {
         .select('*, category:categories(name, name_mm), submitter:profiles!submitted_by(full_name)')
         .order('created_at', { ascending: false })
 
-      if (listingFilter === 'hidden')   query = query.eq('status', 'hidden')
-      else if (listingFilter === 'approved') query = query.eq('status', 'approved')
-      else if (listingFilter === 'pending')  query = query.eq('status', 'pending')
-      else query = query.neq('status', 'hidden')
+      if (listingFilter === 'suspended')      query = query.eq('status', 'suspended')
+      else if (listingFilter === 'approved')  query = query.eq('status', 'approved')
+      else if (listingFilter === 'pending')   query = query.eq('status', 'pending')
+      else query = query.neq('status', 'suspended')
 
-      const { data: rows } = await query
+      const { data: rows, error } = await query
+      if (error) throw error
       setData(rows || [])
 
       if (rows) {
@@ -89,24 +94,23 @@ export default function AdminPage() {
         }
         setReports(reportCounts)
       }
-    } catch (e) { console.error('loadListings error:', e) }
+    } catch (e) {
+      console.error('loadListings error:', e)
+      showError('Listings ရယူရာတွင် အမှားရှိသည်: ' + e.message)
+    }
     setLoading(false)
   }
 
   async function loadDashboardStats() {
     setStatsLoading(true)
     try {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const todayStr = today.toISOString()
+      // Myanmar day boundary — never UTC midnight.
+      const todayStr = yangonToday() + 'T00:00:00+06:30'
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-      const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
 
       const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
       const { count: newToday } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr)
       const { count: newLast7Days } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo)
-      const { count: activeToday } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', todayStr)
-      const { count: onlineNow } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('updated_at', fiveMinsAgo)
 
       const { data: roleCounts } = await supabase
         .from('profiles')
@@ -123,7 +127,7 @@ export default function AdminPage() {
 
       const { count: approvedListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved')
       const { count: pendingListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'pending')
-      const { count: hiddenListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'hidden')
+      const { count: suspendedListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'suspended')
 
       const { count: newsPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'news')
       const { count: eventPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'event')
@@ -133,14 +137,12 @@ export default function AdminPage() {
 
       setDashboardStats({
         totalUsers: totalUsers || 0,
-        onlineNow: onlineNow || 0,
-        activeToday: activeToday || 0,
         newToday: newToday || 0,
         newLast7Days: newLast7Days || 0,
         listings: {
           approved: approvedListings || 0,
           pending: pendingListings || 0,
-          hidden: hiddenListings || 0
+          suspended: suspendedListings || 0
         },
         posts: {
           news: newsPosts || 0,
@@ -157,14 +159,97 @@ export default function AdminPage() {
   async function loadUsers() {
     setLoading(true)
     try {
-      const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+      if (error) throw error
       setUsersList(data || [])
-    } catch (e) { console.warn('Load users error:', e) }
+    } catch (e) {
+      console.warn('Load users error:', e)
+      showError('Users ရယူရာတွင် အမှားရှိသည်: ' + e.message)
+    }
     setLoading(false)
   }
 
+  async function loadClaims() {
+    setClaimsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('listing_claims')
+        .select('*, listing:listings(name, name_mm), claimant:profiles!user_id(full_name, nickname)')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      setClaims(data || [])
+    } catch (e) {
+      console.error('loadClaims error:', e)
+      showError('Claims ရယူရာတွင် အမှားရှိသည်: ' + e.message)
+    }
+    setClaimsLoading(false)
+  }
+
+  async function handleClaimDecision(claim, approve) {
+    const verb = approve ? 'အတည်ပြု' : 'ပယ်ချ'
+    if (!(await confirmDialog(`"${claim.listing?.name_mm || claim.listing?.name || 'လုပ်ငန်း'}" ၏ Claim ကို ${verb}မည်လား?${approve ? ' (Claimant ကို +30 points ရပြီး လုပ်ငန်းပိုင်ရှင် ဖြစ်သွားမည်)' : ''}`))) return
+    setClaimBusy(claim.id)
+    try {
+      const { error } = await supabase
+        .from('listing_claims')
+        .update({ status: approve ? 'approved' : 'rejected', reviewed_by: user?.id || null })
+        .eq('id', claim.id)
+      if (error) throw error
+      // The DB trigger handle_claim_approved() verifies ownership
+      // (is_verified + owner_id); handle_claim_points() awards +30.
+      const ok = await log({
+        action: approve ? 'approve' : 'reject',
+        table: 'listing_claims',
+        id: claim.id,
+        name: claim.listing?.name_mm || claim.listing?.name,
+        after: { status: approve ? 'approved' : 'rejected' },
+      })
+      if (!ok) console.warn('Audit log failed for claim decision')
+      showSuccess(approve ? '✓ Claim အတည်ပြုပြီးပါပြီ (+30 points)' : 'Claim ပယ်ချပြီးပါပြီ')
+      loadClaims()
+      loadDashboardStats()
+    } catch (e) {
+      showError('Claim ' + verb + 'ရာတွင် အမှားရှိသည်: ' + e.message)
+    }
+    setClaimBusy(null)
+  }
+
   async function handleRoleChange(userId, newRole) {
-    if (!(await confirmDialog(`ဒီ User ကို ${newRole.toUpperCase()} Role ပြောင်းပေးမှာ သေချာပြီလား?`))) return
+    const target = usersList.find(u => u.id === userId)
+    const oldRole = target?.role || 'member'
+    if (newRole === oldRole) return
+    // Only a super_admin may change roles (DB trigger enforces it too).
+    if (!isSuperAdmin) {
+      showError('Role ပြောင်းရန် Super Admin သာ ခွင့်ရှိသည်')
+      return
+    }
+    // Never demote yourself.
+    if (userId === user?.id) {
+      showError('ကိုယ့်ရဲ့ Role ကို ကိုယ်တိုင်ပြောင်းလို့မရပါ')
+      loadUsers()
+      return
+    }
+    // Never demote the last super_admin.
+    if (oldRole === 'super_admin' && newRole !== 'super_admin') {
+      const { count, error } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'super_admin')
+      if (error) {
+        showError('Super Admin အရေအတွက် စစ်ဆေးမရပါ: ' + error.message)
+        return
+      }
+      if ((count || 0) <= 1) {
+        showError('နောက်ဆုံး Super Admin ဖြစ်နေလို့ Role ပြောင်းလို့မရပါ')
+        loadUsers()
+        return
+      }
+    }
+    if (!(await confirmDialog(`ဒီ User ကို ${newRole.toUpperCase()} Role ပြောင်းပေးမှာ သေချာပြီလား?`))) {
+      loadUsers()
+      return
+    }
     try {
       const { data: updated, error } = await supabase
         .from('profiles')
@@ -173,14 +258,24 @@ export default function AdminPage() {
         .select()
       if (error) throw error
       if (updated && updated.length > 0) {
-        showToast(`✓ Role ကို ${newRole} သို့ ပြောင်းလဲပြီးပါပြီ`)
+        const ok = await log({
+          action: 'update_role',
+          table: 'profiles',
+          id: userId,
+          name: target?.full_name || target?.nickname,
+          before: { role: oldRole },
+          after: { role: newRole },
+        })
+        if (!ok) console.warn('Audit log failed for role change')
+        showSuccess(`✓ Role ကို ${newRole} သို့ ပြောင်းလဲပြီးပါပြီ`)
         loadUsers()
         loadDashboardStats()
       } else {
         throw new Error('No rows updated – check RLS policy')
       }
     } catch (e) {
-      showToast(`Error: ${e.message}`, 'error')
+      showError(`Error: ${e.message}`)
+      loadUsers()
     }
   }
 
@@ -192,53 +287,87 @@ export default function AdminPage() {
       setQuickLinks(data || [])
     } catch (e) {
       console.error('loadQuickLinks error:', e)
-      showToast('Link များ ရယူရာတွင် အမှားရှိသည်', 'error')
+      showError('Link များ ရယူရာတွင် အမှားရှိသည်: ' + e.message)
     } finally {
       setLinkLoading(false)
     }
   }
 
   useEffect(() => {
+    if (authLoading || !isAuthorized) return
     if (tab === 'listings') loadListings()
     if (tab === 'dashboard') loadDashboardStats()
     if (tab === 'quicklinks') loadQuickLinks()
     if (tab === 'users') loadUsers()
-  }, [tab, listingFilter])
+    if (tab === 'claims') loadClaims()
+  }, [tab, listingFilter, authLoading, isAuthorized])
 
   async function handleApprove(id) {
-    await supabase
-      .from('listings')
-      .update({ 
-        status: 'approved',
-        is_verified: true,
-        verify_type: 'cherry'
-      })
-      .eq('id', id)
-    showToast('✓ အတည်ပြုပြီးပါပြီ (Cherry Verified) 🍒')
-    loadListings()
-    loadDashboardStats()
+    try {
+      const { data: updated, error } = await supabase
+        .from('listings')
+        .update({ 
+          status: 'approved',
+          is_verified: true,
+          verify_type: 'cherry'
+        })
+        .eq('id', id)
+        .select('name, name_mm')
+      if (error) throw error
+      const name = updated?.[0]?.name_mm || updated?.[0]?.name
+      const ok = await log({ action: 'approve', table: 'listings', id, name, after: { status: 'approved' } })
+      if (!ok) console.warn('Audit log failed for listing approve')
+      showSuccess('✓ အတည်ပြုပြီးပါပြီ (Cherry Verified) 🍒')
+      loadListings()
+      loadDashboardStats()
+    } catch (e) {
+      showError('အတည်ပြုရာတွင် အမှားရှိသည်: ' + e.message)
+    }
   }
 
-  async function handleHide(id) {
-    await supabase.from('listings').update({ status: 'hidden' }).eq('id', id)
-    showToast('ဝှက်သိမ်းပြီးပါပြီ')
-    loadListings()
-    loadDashboardStats()
+  async function handleSuspend(id) {
+    try {
+      const { data: updated, error } = await supabase
+        .from('listings')
+        .update({ status: 'suspended' })
+        .eq('id', id)
+        .select('name, name_mm')
+      if (error) throw error
+      const name = updated?.[0]?.name_mm || updated?.[0]?.name
+      const ok = await log({ action: 'suspend', table: 'listings', id, name, after: { status: 'suspended' } })
+      if (!ok) console.warn('Audit log failed for listing suspend')
+      showSuccess('ဆိုင်းငံ့ထားပြီးပါပြီ')
+      loadListings()
+      loadDashboardStats()
+    } catch (e) {
+      showError('ဆိုင်းငံ့ရာတွင် အမှားရှိသည်: ' + e.message)
+    }
   }
 
   async function handleDelete(id) {
     if (!(await confirmDialog('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။'))) return
     setDeleting(id)
     try {
-      await supabase.from('listing_reports').delete().eq('listing_id', id)
-      await supabase.from('edit_suggestions').delete().eq('listing_id', id)
-      await supabase.from('reviews').delete().eq('listing_id', id)
-      const { error } = await supabase.from('listings').delete().eq('id', id)
+      // Best-effort cleanup of linked rows — a failure here must not
+      // silently block the delete, but it must not be hidden either.
+      const cleanupErrors = []
+      const { error: repErr } = await supabase.from('reports').delete().eq('target_type', 'listing').eq('target_id', id)
+      if (repErr) cleanupErrors.push('reports: ' + repErr.message)
+      const { error: sugErr } = await supabase.from('edit_suggestions').delete().eq('listing_id', id)
+      if (sugErr) cleanupErrors.push('edit_suggestions: ' + sugErr.message)
+      const { error: revErr } = await supabase.from('reviews').delete().eq('listing_id', id)
+      if (revErr) cleanupErrors.push('reviews: ' + revErr.message)
+      const { data: deleted, error } = await supabase.from('listings').delete().eq('id', id).select('name, name_mm')
       if (error) throw error
-      showToast('🗑️ ဖျက်ပြီးပါပြီ')
+      const name = deleted?.[0]?.name_mm || deleted?.[0]?.name
+      const ok = await log({ action: 'delete', table: 'listings', id, name, before: { name } })
+      if (!ok) console.warn('Audit log failed for listing delete')
+      showSuccess(cleanupErrors.length > 0
+        ? '🗑️ ဖျက်ပြီးပါပြီ (ဆက်စပ်အချက်အလက် အချို့ ဖျက်မရပါ: ' + cleanupErrors.join('; ') + ')'
+        : '🗑️ ဖျက်ပြီးပါပြီ')
       loadListings()
       loadDashboardStats()
-    } catch (e) { showToast('ဖျက်ရာတွင် အမှားတစ်ခု ဖြစ်သွားသည်', 'error') }
+    } catch (e) { showError('ဖျက်ရာတွင် အမှားတစ်ခု ဖြစ်သွားသည်: ' + e.message) }
     setDeleting(null)
   }
 
@@ -252,16 +381,16 @@ export default function AdminPage() {
     const { error } = await supabase.from('listings').update({
       name, name_mm, description, description_mm, address, phone_1, city, township
     }).eq('id', id)
-    if (error) return showToast('သိမ်းရာတွင် အမှားဖြစ်သည်', 'error')
+    if (error) return showError('သိမ်းရာတွင် အမှားဖြစ်သည်: ' + error.message)
     
     setEditingId(null)
-    showToast('✓ ပြင်ဆင်မှု သိမ်းဆည်းပြီး')
+    showSuccess('✓ ပြင်ဆင်မှု သိမ်းဆည်းပြီး')
     loadListings()
   }
 
   async function handleSaveLink() {
     if (!linkForm.title || !linkForm.url) {
-      showToast('Title နှင့် URL ထည့်ရန်လိုအပ်ပါတယ်', 'error')
+      showError('Title နှင့် URL ထည့်ရန်လိုအပ်ပါတယ်')
       return
     }
 
@@ -272,19 +401,19 @@ export default function AdminPage() {
       if (editingLink) {
         const { error } = await supabase.from('quick_links').update(payload).eq('id', editingLink)
         if (error) throw error
-        showToast('✓ ပြင်ဆင်ပြီးပါပြီ')
+        showSuccess('✓ ပြင်ဆင်ပြီးပါပြီ')
       } else {
         payload.sort_order = quickLinks.length + 1
         const { error } = await supabase.from('quick_links').insert([payload])
         if (error) throw error
-        showToast('✓ အသစ်ထည့်ပြီးပါပြီ')
+        showSuccess('✓ အသစ်ထည့်ပြီးပါပြီ')
       }
       setEditingLink(null)
       setLinkForm({ title: '', title_mm: '', subtitle: '', icon: '🔗', url: '', css_classes: 'bg-white/5 border-white/10 text-white hover:bg-white/8', sort_order: 0, is_active: true })
       await loadQuickLinks()
     } catch (e) {
       console.error('Save link error:', e)
-      showToast(`Error: ${e.message}`, 'error')
+      showError(`Error: ${e.message}`)
     }
   }
 
@@ -293,17 +422,38 @@ export default function AdminPage() {
     try {
       const { error } = await supabase.from('quick_links').delete().eq('id', id)
       if (error) throw error
-      showToast('ဖျက်ပြီးပါပြီ')
+      showSuccess('ဖျက်ပြီးပါပြီ')
       await loadQuickLinks()
     } catch (e) {
       console.error('Delete link error:', e)
-      showToast(`Error: ${e.message}`, 'error')
+      showError(`Error: ${e.message}`)
     }
   }
 
   const filteredUsers = usersList.filter(u => 
     (u.full_name || '').toLowerCase().includes(userSearch.toLowerCase())
   )
+
+  // Render guard: the route guard in App.jsx is the first line of
+  // defence; this page never renders the panel to a non-admin/mod
+  // once the role is known (profile loaded).
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60dvh] px-8 text-center">
+        <p className="text-white/50 font-myanmar">စစ်ဆေးနေသည်...</p>
+      </div>
+    )
+  }
+
+  if (!isAuthorized) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60dvh] px-8 text-center gap-3">
+        <Lock size={32} className="text-white/30" />
+        <p className="text-white/50 font-myanmar">🔒 Admin / Moderator သာ ကြည့်နိုင်သည်</p>
+        <button onClick={() => navigate('/')} className="btn-primary text-xs px-4 py-2">Home ပြန်မည်</button>
+      </div>
+    )
+  }
 
   return (
     <div className="pb-8">
@@ -325,6 +475,12 @@ export default function AdminPage() {
           <button onClick={() => setTab('listings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/40'}`}>
             <List size={14} /> Listings
           </button>
+          <button onClick={() => setTab('claims')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'claims' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white/40'}`}>
+            <BadgeCheck size={14} /> Claims
+            {claims.length > 0 && tab !== 'claims' && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">{claims.length}</span>
+            )}
+          </button>
           <button onClick={() => setTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/40'}`}>
             <FolderTree size={14} /> Categories
           </button>
@@ -338,7 +494,7 @@ export default function AdminPage() {
         <div className="px-4 space-y-6 animate-fade-in">
           <div className="flex items-center justify-between">
             <h2 className="text-white font-bold font-display flex items-center gap-2">
-              <Activity size={18} className="text-brand-400" /> Platform Analytics
+              <Shield size={18} className="text-brand-400" /> Platform Analytics
             </h2>
             <button onClick={loadDashboardStats} disabled={statsLoading} className="text-brand-300 hover:text-brand-200 transition-colors">
               <RefreshCw size={16} className={statsLoading ? 'animate-spin' : ''} />
@@ -351,21 +507,21 @@ export default function AdminPage() {
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <StatCard title="Total Users" value={dashboardStats.totalUsers} icon={Users} color="text-blue-400" />
-                <StatCard title="Online Now" value={dashboardStats.onlineNow} icon={Activity} color="text-green-400" pulse />
-                <StatCard title="Active Today" value={dashboardStats.activeToday} icon={TrendingUp} color="text-brand-300" />
                 <StatCard title="New Today" value={dashboardStats.newToday} icon={UserCog} color="text-yellow-400" />
+                <StatCard title="New (7d)" value={dashboardStats.newLast7Days} icon={TrendingUp} color="text-amber-400" />
+                <StatCard title="Total Reviews" value={dashboardStats.totalReviews} icon={Star} color="text-gold-400" />
               </div>
               <div className="grid grid-cols-3 gap-2">
-                <StatCard title="New (7d)" value={dashboardStats.newLast7Days} icon={TrendingUp} color="text-amber-400" size="small" />
                 <StatCard title="Admins" value={dashboardStats.usersByRole.admin} icon={Users} color="text-purple-400" size="small" />
                 <StatCard title="Moderators" value={dashboardStats.usersByRole.moderator} icon={Users} color="text-indigo-400" size="small" />
+                <StatCard title="Members" value={dashboardStats.usersByRole.member} icon={Users} color="text-white/40" size="small" />
               </div>
               <div className="mt-4">
                 <h3 className="text-sm font-semibold text-white/70 mb-2">📋 Listings</h3>
                 <div className="grid grid-cols-3 gap-2">
                   <StatCard title="Approved" value={dashboardStats.listings.approved} icon={Check} color="text-green-400" size="small" />
                   <StatCard title="Pending" value={dashboardStats.listings.pending} icon={AlertCircle} color="text-yellow-400" size="small" />
-                  <StatCard title="Hidden" value={dashboardStats.listings.hidden} icon={EyeOff} color="text-red-400" size="small" />
+                  <StatCard title="Suspended" value={dashboardStats.listings.suspended} icon={EyeOff} color="text-red-400" size="small" />
                 </div>
               </div>
               <div className="mt-4">
@@ -375,9 +531,6 @@ export default function AdminPage() {
                   <StatCard title="Events" value={dashboardStats.posts.events} icon={Calendar} color="text-green-400" size="small" />
                   <StatCard title="Announcements" value={dashboardStats.posts.announcements} icon={Megaphone} color="text-amber-400" size="small" />
                 </div>
-              </div>
-              <div className="mt-4">
-                <StatCard title="Total Reviews" value={dashboardStats.totalReviews} icon={Star} color="text-gold-400" size="small" />
               </div>
             </>
           )}
@@ -403,26 +556,36 @@ export default function AdminPage() {
             ) : filteredUsers.length === 0 ? (
               <p className="text-white/30 text-center py-8 font-myanmar">User မတွေ့ပါ</p>
             ) : (
-              filteredUsers.map(user => (
-                <div key={user.id} className="bg-white/5 border border-white/8 rounded-2xl p-4 flex flex-col gap-3">
+              filteredUsers.map(u => (
+                <div key={u.id} className="bg-white/5 border border-white/8 rounded-2xl p-4 flex flex-col gap-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-brand-700 flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0">
-                      {user.avatar_url ? <img src={user.avatar_url} alt="" className="w-full h-full object-cover" /> : (user.full_name?.[0] || '?')}
+                      {u.avatar_url ? <img src={u.avatar_url} alt="" className="w-full h-full object-cover" /> : (u.full_name?.[0] || '?')}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{user.full_name || 'Anonymous'}</p>
-                      <p className="text-[10px] text-white/40 truncate">Joined: {new Date(user.created_at).toLocaleDateString()}</p>
+                      <p className="text-sm font-semibold text-white truncate">{u.full_name || 'Anonymous'}</p>
+                      <p className="text-[10px] text-white/40 truncate">Joined: {formatMyanmarDate(u.created_at, { year: true })}</p>
                     </div>
+                    {u.role === 'super_admin' && (
+                      <span className="text-[9px] font-bold px-2 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 flex-shrink-0">👑 Super Admin</span>
+                    )}
                   </div>
                   
                   <div className="flex items-center justify-between border-t border-white/5 pt-3">
                     <span className="text-xs text-white/50 font-myanmar">Role ပြောင်းရန်:</span>
                     <select 
-                      value={user.role === 'user' ? 'member' : (user.role || 'member')}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      className={`text-xs px-2 py-1.5 rounded-lg border outline-none font-bold ${
-                        user.role === 'admin' ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' :
-                        user.role === 'moderator' ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' :
+                      value={u.role === 'user' ? 'member' : (u.role || 'member')}
+                      onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                      disabled={!isSuperAdmin || u.role === 'super_admin'}
+                      title={
+                        !isSuperAdmin ? 'Role ပြောင်းရန် Super Admin သာ ခွင့်ရှိသည်'
+                        : u.role === 'super_admin' ? 'Super Admin role ကို ဒီနေရာက ပြောင်းလို့မရပါ'
+                        : ''
+                      }
+                      className={`text-xs px-2 py-1.5 rounded-lg border outline-none font-bold disabled:opacity-60 ${
+                        u.role === 'admin' ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' :
+                        u.role === 'moderator' ? 'bg-blue-500/20 border-blue-500/40 text-blue-300' :
+                        u.role === 'super_admin' ? 'bg-amber-500/20 border-amber-500/40 text-amber-300' :
                         'bg-white/5 border-white/10 text-white/60'
                       }`}
                       style={{ backgroundColor: '#1a0030' }}
@@ -430,12 +593,59 @@ export default function AdminPage() {
                       <option value="member">Member</option>
                       <option value="moderator">Moderator</option>
                       <option value="admin">Admin</option>
+                      <option value="super_admin">Super Admin</option>
                     </select>
                   </div>
                 </div>
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {tab === 'claims' && (
+        <div className="px-4 space-y-2 animate-fade-in">
+          {claimsLoading ? (
+            <p className="text-white/30 text-center py-8">Loading claims...</p>
+          ) : claims.length === 0 ? (
+            <p className="text-white/30 text-center py-8 font-myanmar">စစ်ဆေးဆဲ Claim မရှိပါ</p>
+          ) : (
+            claims.map(claim => (
+              <div key={claim.id} className="bg-white/5 border border-white/8 rounded-2xl p-4 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">{claim.listing?.name_mm || claim.listing?.name || '—'}</p>
+                    <p className="text-[11px] text-white/50 font-myanmar mt-0.5">
+                      Claim တင်သူ: {claim.claimant?.full_name || claim.claimant?.nickname || '—'}
+                      {claim.contact_phone ? ` • ${claim.contact_phone}` : ''}
+                    </p>
+                    {claim.note && <p className="text-xs text-white/40 font-myanmar mt-1">💬 {claim.note}</p>}
+                    <p className="text-[10px] text-white/30 mt-1">{formatMyanmarDate(claim.created_at, { year: true })}</p>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-amber-500/20 border-amber-500/30 text-amber-400 flex-shrink-0">PENDING</span>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => handleClaimDecision(claim, true)}
+                    disabled={claimBusy === claim.id}
+                    className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"
+                  >
+                    <Check size={12} /> {claimBusy === claim.id ? '...' : 'APPROVE (+30 pts)'}
+                  </button>
+                  <button
+                    onClick={() => handleClaimDecision(claim, false)}
+                    disabled={claimBusy === claim.id}
+                    className="flex-1 px-3 py-2 bg-white/8 border border-white/10 text-white/60 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"
+                  >
+                    <X size={12} /> REJECT
+                  </button>
+                  <button onClick={() => navigate(`/directory/${claim.listing_id}`)} className="px-3 py-2 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                    <Eye size={12} /> VIEW
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
 
@@ -544,7 +754,7 @@ export default function AdminPage() {
       {tab === 'listings' && (
         <div className="animate-fade-in">
           <div className="px-4 mb-4 flex gap-2 flex-wrap">
-            {[['all', 'All'], ['approved', 'Approved'], ['pending', 'Pending'], ['hidden', 'Hidden']].map(([val, label]) => (
+            {[['all', 'All'], ['approved', 'Approved'], ['pending', 'Pending'], ['suspended', 'Suspended']].map(([val, label]) => (
               <button key={val} onClick={() => setListingFilter(val)}
                 className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors ${
                   listingFilter === val
@@ -592,7 +802,7 @@ export default function AdminPage() {
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border flex-shrink-0 ${
                           item.status === 'approved' ? 'bg-green-500/20 border-green-500/30 text-green-400' :
-                          item.status === 'hidden'   ? 'bg-red-500/20   border-red-500/30   text-red-400' :
+                          item.status === 'suspended' ? 'bg-red-500/20   border-red-500/30   text-red-400' :
                                                        'bg-amber-500/20 border-amber-500/30 text-amber-400'
                         }`}>{item.status.toUpperCase()}</span>
                       </div>
@@ -613,8 +823,8 @@ export default function AdminPage() {
                           </button>
                         )}
                         {item.status === 'approved' && (
-                          <button onClick={() => handleHide(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
-                            <X size={12} /> HIDE
+                          <button onClick={() => handleSuspend(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                            <X size={12} /> SUSPEND
                           </button>
                         )}
                         <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
@@ -633,14 +843,6 @@ export default function AdminPage() {
               ))
             )}
           </div>
-        </div>
-      )}
-
-      {toast && (
-        <div className={`fixed bottom-28 left-4 right-4 z-[300] px-4 py-3 rounded-2xl text-center text-sm font-myanmar border shadow-xl ${
-          toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' : 'bg-green-500/90 border-green-400 text-white'
-        }`}>
-          {toast.msg}
         </div>
       )}
     </div>

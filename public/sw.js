@@ -1,6 +1,6 @@
-/* Cherry Directory — Service Worker v3 */
+/* Cherry Directory — Service Worker v4 */
 
-const CACHE_VERSION = 'v3'
+const CACHE_VERSION = 'v4'
 const CACHE_NAME = 'cherry-directory-' + CACHE_VERSION
 
 function offlineFallback() {
@@ -10,10 +10,6 @@ function offlineFallback() {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   })
 }
-
-self.addEventListener('install', () => {
-  self.skipWaiting()
-})
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(

@@ -34,11 +34,11 @@ export const useBookmarks = () => {
 /**
  * Check if a listing is bookmarked
  */
-export const useIsBookmarked = (listingId) => {
+export const useIsBookmarked = (listingId, targetType = 'listing') => {
   const { user } = useAuth();
 
   return useQuery({
-    queryKey: [BOOKMARKS_QUERY_KEY, user?.id, listingId],
+    queryKey: [BOOKMARKS_QUERY_KEY, user?.id, listingId, targetType],
     queryFn: async () => {
       if (!user || !listingId) return false;
 
@@ -46,7 +46,7 @@ export const useIsBookmarked = (listingId) => {
         .from('bookmarks')
         .select('id')
         .eq('user_id', user.id)
-        .eq('target_type', 'listing')
+        .eq('target_type', targetType)
         .eq('target_id', listingId)
         .maybeSingle();
 

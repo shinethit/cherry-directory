@@ -72,7 +72,7 @@ export function AboutPage() {
         </div>
         <h2 className="font-display font-bold text-xl text-white">Cherry Directory</h2>
         <p className="text-sm text-brand-300">{config.app_city || "တောင်ကြီးမြို့"}</p>
-        <p className="text-white/50 text-xs">Version 2.0 • Since 2026</p>
+        <p className="text-white/50 text-xs">Version 0.9.1 • Since 2026</p>
         <p className="text-white/30 text-xs italic">by Shine Thit</p>
       </div>
 
@@ -105,7 +105,7 @@ export function AboutPage() {
 export function PrivacyPage() {
   const { lang } = useLang()
   useSEO({ title: lang === 'mm' ? 'ကိုယ်ရေးလုံခြုံမှုမူဝါဒ' : 'Privacy Policy' })
-  const updated = 'March 2025'
+  const updated = 'နိုဝင်ဘာ 2026'
   return (
     <InfoLayout title="Privacy Policy" titleMm="ကိုယ်ရေးလုံခြုံမှုမူဝါဒ">
       <p className="text-xs text-white/30">Last updated: {updated}</p>
@@ -188,7 +188,7 @@ export function TermsPage() {
   useSEO({ title: lang === 'mm' ? 'ဝန်ဆောင်မှုစည်းမျဉ်း' : 'Terms of Service' })
   return (
     <InfoLayout title="Terms of Service" titleMm="ဝန်ဆောင်မှုစည်းမျဉ်း">
-      <p className="text-xs text-white/30">Last updated: March 2025</p>
+      <p className="text-xs text-white/30">Last updated: နိုဝင်ဘာ 2026</p>
 
       <Section titleMm="သဘောတူညီချက်">
         <p>Cherry Directory ကို သုံးစွဲသောအခါ ဤ Terms of Service ကို သဘောတူကြောင်း မှတ်ယူပါသည်။</p>

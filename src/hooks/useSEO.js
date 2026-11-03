@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://cherry-directory.vercel.app'
+const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://taunggyi-directory.vercel.app'
 const SITE_NAME = 'Cherry Directory — တောင်ကြီး'
 
 export function useSEO({ title, description, image, url, type = 'website' } = {}) {

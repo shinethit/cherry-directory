@@ -32,7 +32,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
 
   const stationFuelNames = station.fuel_type_names || []
   const stationFuels = allFuelTypes.filter(ft => stationFuelNames.includes(ft.name))
-  const anyAvail = stationFuels.some(ft => station.fuels[ft.name]?.status === 'available')
+  const anyAvail = stationFuels.some(ft => (station.fuels || {})[ft.name]?.status === 'available')
 
   return (
     <div className={`card-dark rounded-2xl overflow-hidden border ${anyAvail ? 'border-green-500/20' : 'border-white/6'}`}>
@@ -45,7 +45,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
           <p className="text-[10px] text-white/40 font-myanmar truncate">{station.address} • {station.township}</p>
           <div className="flex gap-1.5 mt-1.5 flex-wrap">
             {stationFuels.map(ft => {
-              const row = station.fuels[ft.name]
+              const row = (station.fuels || {})[ft.name]
               const st  = STATUS_CFG[row?.status || 'unknown']
               return (
                 <span key={ft.id} className="flex items-center gap-1 text-[9px] font-bold">
@@ -70,7 +70,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
               <p className="text-xs text-white/30 text-center py-2">ဆီအမျိုးအစား မသတ်မှတ်ရသေး</p>
             )}
             {stationFuels.map(ft => {
-              const row = station.fuels[ft.name]
+              const row = (station.fuels || {})[ft.name]
               const st  = STATUS_CFG[row?.status || 'unknown']
               return (
                 <div key={ft.id} className={`flex items-center gap-3 p-3 rounded-xl border ${st.bg}`}>
@@ -188,12 +188,13 @@ function FuelTypesTab({ onChanged }) {
   async function addFuelType() {
     if (!form.name.trim() || !form.name_mm.trim()) return
     setSaving(true)
-    await supabase.from('fuel_types').insert({
+    const { error } = await supabase.from('fuel_types').insert({
       name: form.name.trim(),
       name_mm: form.name_mm.trim(),
       icon: form.icon.trim() || '⛽',
       sort_order: list.length + 1,
     })
+    if (error) { showError(error.message); setSaving(false); return }
     setForm({ name: '', name_mm: '', icon: '⛽' })
     await load()
     onChanged?.()
@@ -202,12 +203,13 @@ function FuelTypesTab({ onChanged }) {
 
   async function saveEdit(id) {
     if (!editData.name.trim() || !editData.name_mm.trim()) return
-    await supabase.from('fuel_types').update({
+    const { error } = await supabase.from('fuel_types').update({
       name: editData.name.trim(),
       name_mm: editData.name_mm.trim(),
       icon: editData.icon.trim() || '⛽',
       sort_order: Number(editData.sort_order) || 0,
     }).eq('id', id)
+    if (error) { showError(error.message); return }
     setEditId(null)
     load()
     onChanged?.()
@@ -215,7 +217,8 @@ function FuelTypesTab({ onChanged }) {
 
   async function deleteFuelType(id) {
     if (!(await confirmDialog('ဆီအမျိုးအစားကို ဖျက်မည်လား? ဆိုင်များမှ ဆီပိတ်သွားနိုင်သည်။'))) return
-    await supabase.from('fuel_types').delete().eq('id', id)
+    const { error } = await supabase.from('fuel_types').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     load()
     onChanged?.()
   }
@@ -346,7 +349,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
   async function addStation() {
     if (!form.name.trim()) return
     setSaving(true)
-    await supabase.from('fuel_stations').insert({
+    const { error } = await supabase.from('fuel_stations').insert({
       name: form.name.trim(),
       name_mm: form.name_mm.trim() || form.name.trim(),
       township: form.township.trim() || null,
@@ -358,6 +361,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
       fuel_type_names: form.fuel_type_names,
       is_active: true,
     })
+    if (error) { showError(error.message); setSaving(false); return }
     setForm({ name: '', name_mm: '', township: '', address: '', phone: '', notes: '', operating_hours: '', fuel_type_names: [] })
     await load()
     onUpdated()   
@@ -366,7 +370,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
 
   async function saveEdit(id) {
     if (!editData.name.trim()) return
-    await supabase.from('fuel_stations').update({
+    const { error } = await supabase.from('fuel_stations').update({
       name: editData.name.trim(),
       name_mm: editData.name_mm.trim(),
       township: editData.township?.trim() || null,
@@ -374,8 +378,9 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
       phone: editData.phone?.trim() || null,
       notes: editData.notes?.trim() || null,
       operating_hours: editData.operating_hours?.trim() || null,
-      fuel_type_names: editData.fuel_type_names || [],  
+      fuel_type_names: editData.fuel_type_names || [],
     }).eq('id', id)
+    if (error) { showError(error.message); return }
     setEditId(null)
     load()
     onUpdated()
@@ -383,7 +388,8 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
 
   async function deleteStation(id) {
     if (!(await confirmDialog('ဆိုင်ကို ဖျက်မည်လား?'))) return
-    await supabase.from('fuel_stations').delete().eq('id', id)
+    const { error } = await supabase.from('fuel_stations').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     load()
     onUpdated()
   }
@@ -568,28 +574,36 @@ export default function FuelPage() {
   const [loading, setLoading]           = useState(true)
   const [showManage, setShowManage]     = useState(false)
   const [toast, setToast]               = useState(null)
+  const [loadError, setLoadError]       = useState(false)
 
   // Load initial data
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
       // Load fuel types
-      const { data: ftData } = await supabase.from('fuel_types').select('*').order('sort_order')
+      const { data: ftData, error: ftErr } = await supabase.from('fuel_types').select('*').order('sort_order')
+      if (ftErr) throw ftErr
       setAllFuelTypes(ftData || [])
 
       // Load stations with their current status view
-      const { data: stationsRaw } = await supabase
+      const { data: stationsRaw, error: stErr } = await supabase
         .from('fuel_stations')
         .select('*')
         .eq('is_active', true)
         .order('sort_order')
+      if (stErr) throw stErr
 
-      const { data: statusData } = await supabase.from('current_fuel_status').select('*')
+      const { data: statusData, error: statusErr } = await supabase.from('current_fuel_status').select('*')
+      if (statusErr) throw statusErr
 
       const statusMap = {}
       for (const row of (statusData || [])) {
         if (!statusMap[row.station_id]) statusMap[row.station_id] = {}
-        statusMap[row.station_id][row.fuel_id] = row
+        // BUG FIX: current_fuel_status keys rows by fuel type NAME
+        // (fuel_name); the card looks fuels up by ft.name. The old code
+        // keyed by fuel_id (uuid), so every status read as 'unknown'.
+        statusMap[row.station_id][row.fuel_name || row.fuel_id] = row
       }
 
       const merged = (stationsRaw || []).map(s => ({
@@ -609,7 +623,7 @@ export default function FuelPage() {
       }))
 
       setStations(merged)
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
 
@@ -695,6 +709,11 @@ export default function FuelPage() {
 
       {loading ? (
         <div className="px-4 py-8 text-center text-white/30 text-sm">ဖွင့်နေသည်...</div>
+      ) : loadError ? (
+        <div className="px-4 py-8 text-center space-y-3">
+          <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+          <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+        </div>
       ) : stations.length === 0 ? (
         <div className="px-4 py-8 text-center text-white/30 text-sm">ဆိုင် မရှိသေးပါ</div>
       ) : (

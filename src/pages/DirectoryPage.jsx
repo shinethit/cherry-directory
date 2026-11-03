@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
+import { escapePostgrestOr } from '../hooks/useListings'
 
 export default function DirectoryPage() {
   const navigate = useNavigate()
@@ -27,6 +28,11 @@ export default function DirectoryPage() {
   const [listingsLoading, setListingsLoading] = useState(false)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
+  const [listingsError, setListingsError] = useState(false)
+  const [categoryError, setCategoryError] = useState(false)
+  // Pagination is driven ONLY by the effect below (see loadListings).
+  const pageRef = useRef(0)
+  const lastFilterKeyRef = useRef('')
   const PAGE_SIZE = 20
   
   // Direct listings state
@@ -41,6 +47,16 @@ export default function DirectoryPage() {
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
   const [q, setQ] = useState(searchParams.get('q') || '')
   const debounceTimer = useRef(null)
+
+  // Persist search text in the URL (?q=) so Back keeps it.
+  useEffect(() => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (q) next.set('q', q)
+      else next.delete('q')
+      return next
+    }, { replace: true })
+  }, [q])
 
   // Debounce effect
   useEffect(() => {
@@ -72,23 +88,34 @@ export default function DirectoryPage() {
     'Ywangan': { mm: 'ရွာငံ', en: 'Ywangan' }
   }
 
+  // Descendant ids (ALL levels, not just children) of a category, from a
+  // flat id/parent_id list. The old version only included 1st-level children,
+  // so 3rd-level listings were missing from top-level counts.
+  function collectDescendantIds(allCats, rootId) {
+    const ids = [rootId]
+    let frontier = [rootId]
+    while (frontier.length) {
+      const next = (allCats || []).filter(c => frontier.includes(c.parent_id)).map(c => c.id)
+      ids.push(...next)
+      frontier = next
+    }
+    return ids
+  }
+
   // Get total listings count for a category (including all subcategories)
   async function getCategoryTotalCount(categoryId) {
     try {
-      const { data: subcats } = await supabase
+      const { data: allCats } = await supabase
         .from('categories')
-        .select('id')
-        .eq('parent_id', categoryId)
-      
-      const subcatIds = subcats?.map(s => s.id) || []
-      const allCatIds = [categoryId, ...subcatIds]
-      
+        .select('id, parent_id')
+        .eq('type', 'directory')
+        .eq('is_active', true)
+      const allCatIds = collectDescendantIds(allCats || [], categoryId)
       const { count } = await supabase
         .from('listings')
         .select('*', { count: 'exact', head: true })
         .in('category_id', allCatIds)
         .eq('status', 'approved')
-      
       return count || 0
     } catch (e) {
       console.warn('getCategoryTotalCount error:', e)
@@ -136,6 +163,7 @@ export default function DirectoryPage() {
           const parent = categories.find(c => c.id === target.parent_id)
           if (parent) setSelectedCategory(parent)
           setSelectedSubcategory(target)
+          pageRef.current = 0
           setPage(0)
         } else {
           // Top-level → check if it has children
@@ -155,6 +183,7 @@ export default function DirectoryPage() {
               name: target.name,
               is_direct: true,
             })
+            pageRef.current = 0
             setPage(0)
           }
           // If has children, subcategory picker will show
@@ -171,24 +200,39 @@ export default function DirectoryPage() {
 
   async function loadCategories() {
     setCategoryLoading(true)
+    setCategoryError(false)
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('categories')
         .select('*')
         .eq('type', 'directory')
         .eq('is_active', true)
         .is('parent_id', null)
         .order('sort_order')
-      
+      if (error) throw error
+      // One shared category-tree fetch, then one count query per top-level
+      // category (was two queries per category).
+      const { data: allCats } = await supabase
+        .from('categories')
+        .select('id, parent_id')
+        .eq('type', 'directory')
+        .eq('is_active', true)
       const categoriesWithCount = await Promise.all(
         (data || []).map(async (cat) => {
-          const totalCount = await getCategoryTotalCount(cat.id)
-          return { ...cat, listing_count: totalCount }
+          const ids = collectDescendantIds(allCats || [], cat.id)
+          const { count } = await supabase
+            .from('listings')
+            .select('*', { count: 'exact', head: true })
+            .in('category_id', ids)
+            .eq('status', 'approved')
+          return { ...cat, listing_count: count || 0 }
         })
       )
       setCategories(categoriesWithCount)
-    } catch (e) { 
-      console.warn('loadCategories error:', e) 
+    } catch (e) {
+      console.warn('loadCategories error:', e)
+      setCategoryError(true)
+      setCategories([])
     }
     setCategoryLoading(false)
   }
@@ -256,7 +300,10 @@ export default function DirectoryPage() {
     }
   }, [selectedCategory])
 
-  // Load listings when subcategory is selected or filters change
+  // Load listings when subcategory is selected or filters change.
+  // Pagination is driven ONLY by this effect: the "Load more" button only
+  // bumps pageRef/page. The old code also called loadListings(false) from the
+  // button with a stale `page` closure, so it re-fetched page 0 (reset).
   useEffect(() => {
     if (selectedSubcategory) {
       loadListings()
@@ -266,13 +313,22 @@ export default function DirectoryPage() {
     }
   }, [selectedSubcategory, city, verifiedOnly, q, page])
 
-  const loadListings = useCallback(async (reset = true) => {
+  const loadListings = useCallback(async () => {
     if (!selectedSubcategory) return
+    // A changed subcategory/city/verified/search is a fresh query (page 0);
+    // an unchanged filter with page > 0 is an append.
+    const filterKey = `${selectedSubcategory.id}|${city}|${verifiedOnly}|${q}`
+    const reset = filterKey !== lastFilterKeyRef.current || pageRef.current === 0
+    if (reset) {
+      lastFilterKeyRef.current = filterKey
+      pageRef.current = 0
+      setPage(0)
+    }
+    const currentPage = pageRef.current
     setListingsLoading(true)
-    const currentPage = reset ? 0 : page
-    if (reset) setPage(0)
-
+    setListingsError(false)
     try {
+      const esc = escapePostgrestOr(q.trim())
       let query = supabase
         .from('listings')
         .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
@@ -282,25 +338,32 @@ export default function DirectoryPage() {
         .order('name', { ascending: true })
         .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
 
-      if (q.trim()) query = query.or(`name.ilike.%${q}%,name_mm.ilike.%${q}%,description.ilike.%${q}%`)
+      if (q.trim()) query = query.or(`name.ilike.%${esc}%,name_mm.ilike.%${esc}%,description.ilike.%${esc}%,description_mm.ilike.%${esc}%`)
       if (city !== 'All') query = query.eq('city', city)
       if (verifiedOnly) query = query.eq('is_verified', true)
 
-      const { data, count } = await query
-      
+      const { data, count, error } = await query
+      if (error) throw error
+
       if (reset) setListings(data || [])
-      else setListings(prev => [...prev, ...(data || [])])
+      else setListings(prev => {
+        const seen = new Set(prev.map(l => l.id))
+        return [...prev, ...(data || []).filter(l => !seen.has(l.id))]
+      })
       setTotal(count || 0)
-    } catch (e) { 
-      console.warn('loadListings error:', e) 
+    } catch (e) {
+      console.warn('loadListings error:', e)
+      setListingsError(true)
+      if (reset) setListings([])
     }
     setListingsLoading(false)
-  }, [selectedSubcategory, city, verifiedOnly, q, page])
+  }, [selectedSubcategory, city, verifiedOnly, q])
 
   function handleCategorySelect(cat) {
     setSelectedCategory(cat)
     setSelectedSubcategory(null)
     setListings([])
+    pageRef.current = 0
     setPage(0)
     // Update URL
     setSearchParams(prev => {
@@ -312,6 +375,7 @@ export default function DirectoryPage() {
 
   function handleSubcategorySelect(sub) {
     setSelectedSubcategory(sub)
+    pageRef.current = 0
     setPage(0)
     // Update URL
     setSearchParams(prev => {
@@ -397,8 +461,13 @@ export default function DirectoryPage() {
         <div className="px-4 py-4 space-y-2 pb-24">
           {categoryLoading ? (
             [1,2,3,4,5,6].map(n => <Skeleton key={n} className="h-16 rounded-2xl" />)
+          ) : categoryError ? (
+            <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+              <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+              <button onClick={loadCategories} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            </div>
           ) : categories.length === 0 ? (
-            <EmptyState icon="📂" title="Category မရှိသေး" message="ပထမဆုံး Category ကို Admin မှ ထည့်ပါ" />
+            <EmptyState icon="📂" title="Category မရှိသေး" message="မရှိသေးပါ" />
           ) : (
             categories.map(cat => (
               <button
@@ -594,6 +663,12 @@ export default function DirectoryPage() {
 
       {/* Listings */}
       <div className="px-4 space-y-2 pb-36">
+        {listingsError && listings.length === 0 && (
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+            <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+            <button onClick={() => loadListings()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
+        )}
         {listingsLoading && listings.length === 0
           ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
           : listings.length === 0
@@ -603,7 +678,7 @@ export default function DirectoryPage() {
 
         {listings.length < total && !listingsLoading && (
           <button
-            onClick={() => { setPage(p => p + 1); loadListings(false) }}
+            onClick={() => { pageRef.current += 1; setPage(pageRef.current) }}
             className="w-full btn-ghost text-sm mt-2"
           >
             ထပ်တင်ရန် ({total - listings.length} ကျန်)

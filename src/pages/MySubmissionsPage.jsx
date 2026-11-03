@@ -8,6 +8,7 @@ import { useSEO } from '../hooks/useSEO'
 import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 const STATUS_META = {
   pending:   { label_mm: 'စစ်ဆေးဆဲ',   label_en: 'Pending',   icon: Clock,        cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
@@ -24,19 +25,26 @@ export default function MySubmissionsPage() {
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [tab, setTab] = useState('all')
 
   const load = useCallback(async () => {
     if (!user) { setLoading(false); return }
     setLoading(true)
+    setLoadError('')
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('listings')
         .select('id, name, name_mm, status, cover_url, logo_url, is_verified, is_featured, view_count, rating_avg, rating_count, category:categories(icon, name, name_mm), created_at, updated_at')
         .eq('submitted_by', user.id)
         .order('created_at', { ascending: false })
+      if (error) throw error
       setItems(data || [])
-    } catch (e) { console.warn(e) }
+    } catch (e) {
+      console.warn(e)
+      setLoadError(e?.message || 'တင်ထားသောများ ရယူမရပါ')
+      setItems([])
+    }
     setLoading(false)
   }, [user])
 
@@ -45,7 +53,12 @@ export default function MySubmissionsPage() {
   async function handleDelete(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this listing?'))) return
     const { error } = await supabase.from('listings').delete().eq('id', id)
-    if (!error) setItems(prev => prev.filter(i => i.id !== id))
+    if (error) {
+      console.error('Delete listing failed:', error)
+      showError(error.message || (lang === 'mm' ? 'ဖျက်မရပါ — ထပ်ကြိုးစားပါ' : 'Could not delete — please try again'))
+      return
+    }
+    setItems(prev => prev.filter(i => i.id !== id))
   }
 
   if (!isLoggedIn) {
@@ -127,6 +140,17 @@ export default function MySubmissionsPage() {
       <div className="px-4 space-y-2">
         {loading ? (
           [1, 2, 3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
+        ) : loadError ? (
+          <div className="flex flex-col items-center py-16 text-center px-8">
+            <span className="text-5xl mb-4">⚠️</span>
+            <p className="font-display font-semibold text-white/70">
+              {lang === 'mm' ? 'တင်ထားသောများ ရယူမရပါ' : 'Could not load your submissions'}
+            </p>
+            <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{loadError}</p>
+            <button onClick={load} className="btn-primary text-sm mt-4 px-5 py-2">
+              {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
+            </button>
+          </div>
         ) : items.length === 0 ? (
           <EmptyState
             icon="📝"
@@ -144,7 +168,7 @@ export default function MySubmissionsPage() {
             const meta = STATUS_META[item.status] || STATUS_META.pending
             const Icon = meta.icon
             const img = item.cover_url || item.logo_url
-            const displayName = lang === 'mm' ? (item.name_mm || item.name) : item.name
+            const displayName = lang === 'mm' ? (item.name_mm || item.name) : (item.name || item.name_mm)
             return (
               <div key={item.id} className="card-dark rounded-2xl overflow-hidden">
                 <div className="flex gap-3 p-3">

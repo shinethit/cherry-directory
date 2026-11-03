@@ -10,6 +10,7 @@ import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { BusinessHoursEditor } from '../components/BusinessHours'
+import { showError, showSuccess } from '../lib/toast'
 
 function Field({ label, children, required }) {
   return (
@@ -100,17 +101,29 @@ export default function EditListingPage() {
   async function handleLogoUpload(file) {
     if (photoCount() >= MAX_TOTAL) return
     setLogoUploading(true)
-    const url = await uploadImage(file, 'listings/logos')
-    set('logo_url', url)
-    setLogoUploading(false)
+    try {
+      const url = await uploadImage(file, 'listings/logos')
+      set('logo_url', url)
+    } catch (err) {
+      console.warn('Logo upload failed:', err)
+      showError('Logo တင်မရပါ — ထပ်ကြိုးစားပါ')
+    } finally {
+      setLogoUploading(false)
+    }
   }
 
   async function handleCoverUpload(file) {
     if (photoCount() >= MAX_TOTAL) return
     setCoverUploading(true)
-    const url = await uploadImage(file, 'listings/covers')
-    set('cover_url', url)
-    setCoverUploading(false)
+    try {
+      const url = await uploadImage(file, 'listings/covers')
+      set('cover_url', url)
+    } catch (err) {
+      console.warn('Cover upload failed:', err)
+      showError('Cover ပုံ တင်မရပါ — ထပ်ကြိုးစားပါ')
+    } finally {
+      setCoverUploading(false)
+    }
   }
 
   const [galleryUploading, setGalleryUploading] = useState(false)
@@ -118,9 +131,15 @@ export default function EditListingPage() {
   async function handleGalleryUpload(file) {
     if ((form?.gallery || []).length >= MAX_GALLERY || photoCount() >= MAX_TOTAL) return
     setGalleryUploading(true)
-    const url = await uploadImage(file, 'listings/gallery')
-    set('gallery', [...(form?.gallery || []), url])
-    setGalleryUploading(false)
+    try {
+      const url = await uploadImage(file, 'listings/gallery')
+      set('gallery', [...(form?.gallery || []), url])
+    } catch (err) {
+      console.warn('Gallery upload failed:', err)
+      showError('ပုံ တင်မရပါ — ထပ်ကြိုးစားပါ')
+    } finally {
+      setGalleryUploading(false)
+    }
   }
 
   function removeGalleryPhoto(idx) {
@@ -128,18 +147,27 @@ export default function EditListingPage() {
   }
 
   function getMyLocation() {
-    if (!navigator.geolocation) return
+    if (!navigator.geolocation) { showError('GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ'); return }
     setLocationLoading(true)
     navigator.geolocation.getCurrentPosition(pos => {
       set('latitude', pos.coords.latitude.toFixed(7))
       set('longitude', pos.coords.longitude.toFixed(7))
       setLocationLoading(false)
-    }, () => setLocationLoading(false))
+    }, () => {
+      setLocationLoading(false)
+      showError('GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ')
+    })
   }
 
   async function handleSave(e) {
-    e.preventDefault()
-    if (!canEdit || !form?.name) return
+    if (e) e.preventDefault()
+    if (!canEdit) { showError('ဤလုပ်ငန်းကို ပြင်ဆင်ခွင့် မရှိပါ'); return }
+    // Myanmar-only trap: a listing with only name_mm must be saveable.
+    // Require a name in EITHER language, never English alone.
+    if (!form?.name?.trim() && !form?.name_mm?.trim()) {
+      showError('လုပ်ငန်းအမည် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ')
+      return
+    }
     setSaving(true)
 
     const { gallery, ...formWithoutGallery } = form
@@ -151,19 +179,28 @@ export default function EditListingPage() {
       updated_at: new Date().toISOString(),
     }
 
-    await supabase.from('listings').update(updates).eq('id', id)
+    const { error } = await supabase.from('listings').update(updates).eq('id', id)
+    if (error) {
+      console.error('Save listing failed:', error)
+      showError(error.message || 'သိမ်းမရပါ — ထပ်ကြိုးစားပါ')
+      setSaving(false)
+      return
+    }
 
-    // Audit log with diff
-    await log({
-      action: 'update',
-      table: 'listings',
-      id,
-      name: form.name,
-      before: original,
-      after: { ...original, ...updates },
-    })
+    // Audit log with diff (best-effort — a log failure must not fake a save failure)
+    try {
+      await log({
+        action: 'update',
+        table: 'listings',
+        id,
+        name: form.name,
+        before: original,
+        after: { ...original, ...updates },
+      })
+    } catch (logErr) { console.warn('Audit log failed:', logErr) }
 
     setSaved(true)
+    showSuccess('သိမ်းပြီးပါပြီ')
     setSaving(false)
     setTimeout(() => setSaved(false), 2500)
     // Refresh original snapshot
@@ -198,7 +235,8 @@ export default function EditListingPage() {
           </div>
         </div>
         <button
-          onClick={handleSave}
+          type="button"
+          onClick={() => document.getElementById('edit-listing-form')?.requestSubmit()}
           disabled={saving}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-display font-semibold transition-all ${
             saved ? 'bg-green-500/20 border border-green-500/40 text-green-400' : 'btn-primary'
@@ -213,7 +251,7 @@ export default function EditListingPage() {
         </button>
       </div>
 
-      <form onSubmit={handleSave} className="px-4 space-y-5 pt-4">
+      <form id="edit-listing-form" onSubmit={handleSave} className="px-4 space-y-5 pt-4">
 
         {/* Photos — max 5 total (logo + cover + gallery max 3) */}
         <div className="space-y-3">
@@ -286,13 +324,14 @@ export default function EditListingPage() {
           </div>
         </div>
 
-        {/* Basic */}
-        <Field label="လုပ်ငန်းအမည် (English)" required>
-          <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="input-dark" required />
+        {/* Basic — name in EITHER language is enough (Myanmar-only listings must save) */}
+        <Field label="လုပ်ငန်းအမည် (English)">
+          <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className="input-dark" />
         </Field>
         <Field label="လုပ်ငန်းအမည် (မြန်မာ)">
           <input type="text" value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" />
         </Field>
+        <p className="text-[10px] text-white/30 font-myanmar -mt-2">အမည် တစ်ခု (မြန်မာ သို့မဟုတ် English) ရှိရမည်</p>
         <Field label="အမျိုးအစား">
           <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark">
             <option value="">— ရွေးချယ်ရန် —</option>
@@ -313,9 +352,18 @@ export default function EditListingPage() {
                   value={original?.status || 'pending'}
                   onChange={async e => {
                     const newStatus = e.target.value
-                    await supabase.from('listings').update({ status: newStatus }).eq('id', id)
-                    await log({ action: newStatus === 'approved' ? 'approve' : 'reject', table: 'listings', id, name: form.name, before: { status: original?.status }, after: { status: newStatus } })
+                    const prevStatus = original?.status
                     setOriginal(p => ({ ...p, status: newStatus }))
+                    const { error } = await supabase.from('listings').update({ status: newStatus }).eq('id', id)
+                    if (error) {
+                      console.error('Status update failed:', error)
+                      showError(error.message || 'Status ပြောင်းမရပါ')
+                      setOriginal(p => ({ ...p, status: prevStatus }))
+                      return
+                    }
+                    try {
+                      await log({ action: newStatus === 'approved' ? 'approve' : 'reject', table: 'listings', id, name: form.name, before: { status: prevStatus }, after: { status: newStatus } })
+                    } catch (logErr) { console.warn('Audit log failed:', logErr) }
                   }}
                   className="input-dark"
                 >
@@ -330,8 +378,14 @@ export default function EditListingPage() {
                   value={original?.is_featured ? 'yes' : 'no'}
                   onChange={async e => {
                     const val = e.target.value === 'yes'
-                    await supabase.from('listings').update({ is_featured: val }).eq('id', id)
+                    const prev = original?.is_featured
                     setOriginal(p => ({ ...p, is_featured: val }))
+                    const { error } = await supabase.from('listings').update({ is_featured: val }).eq('id', id)
+                    if (error) {
+                      console.error('Featured update failed:', error)
+                      showError(error.message || 'Featured ပြောင်းမရပါ')
+                      setOriginal(p => ({ ...p, is_featured: prev }))
+                    }
                   }}
                   className="input-dark"
                 >
@@ -414,6 +468,22 @@ export default function EditListingPage() {
             Audit Log →
           </button>
         </div>
+
+        {/* In-form submit — the header Save button calls form.requestSubmit() */}
+        <button
+          type="submit"
+          disabled={saving}
+          className={`w-full flex items-center justify-center gap-1.5 py-3 rounded-xl text-sm font-display font-semibold transition-all ${
+            saved ? 'bg-green-500/20 border border-green-500/40 text-green-400' : 'btn-primary'
+          }`}
+        >
+          {saving
+            ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+            : saved
+            ? <><span>✓</span> Saved</>
+            : <><Save size={14} /> Save</>
+          }
+        </button>
 
       </form>
     </div>

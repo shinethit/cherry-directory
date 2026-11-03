@@ -12,11 +12,11 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-function MapClickHandler({ setLatLng, onClose }) {
+function MapClickHandler({ setLatLng }) {
   useMapEvents({
     click(e) {
+      // Select only — do NOT close. The user confirms with the button below.
       setLatLng({ lat: e.latlng.lat, lng: e.latlng.lng });
-      onClose();
     },
   });
   return null;
@@ -41,7 +41,10 @@ export default function LocationPicker({ onSelect, onClose }) {
 
   const handleSelect = (latLng) => {
     setPosition(latLng);
-    onSelect(latLng);
+  };
+
+  const handleConfirm = () => {
+    if (position) onSelect(position);
   };
 
   return (
@@ -64,11 +67,34 @@ export default function LocationPicker({ onSelect, onClose }) {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             />
             {position && <Marker position={[position.lat, position.lng]} />}
-            <MapClickHandler setLatLng={handleSelect} onClose={onClose} />
+            <MapClickHandler setLatLng={handleSelect} />
           </MapContainer>
         </div>
-        <div className="p-4 text-center text-white/50 text-xs">
-          မြေပုံပေါ်ရှိ နေရာကို နှိပ်ပြီး ရွေးပါ။
+        <div className="p-4 space-y-3">
+          {position ? (
+            <p className="text-center text-xs text-emerald-400 font-mono">
+              {position.lat.toFixed(7)}, {position.lng.toFixed(7)}
+            </p>
+          ) : (
+            <p className="text-center text-white/50 text-xs">
+              မြေပုံပေါ်ရှိ နေရာကို နှိပ်ပြီး ရွေးပါ။
+            </p>
+          )}
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/70 text-sm font-display font-semibold hover:bg-white/10 transition-colors"
+            >
+              မလုပ်တော့ပါ
+            </button>
+            <button
+              onClick={handleConfirm}
+              disabled={!position}
+              className="flex-1 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-display font-semibold hover:bg-brand-500 transition-colors disabled:opacity-50"
+            >
+              အတည်ပြုမည်
+            </button>
+          </div>
         </div>
       </div>
     </div>

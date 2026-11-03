@@ -86,7 +86,7 @@ export const T = {
   phone2_label: { mm: 'ဖုန်း (၂)', en: 'Phone 2' },
   submit_btn: { mm: 'တင်သွင်းမည်', en: 'Submit Listing' },
   uploading: { mm: 'တင်သွင်းနေသည်...', en: 'Submitting...' },
-  submit_notice: { mm: 'Admin မှ စစ်ဆေးပြီးနောက် ထည့်သွင်းပေးမည်', en: 'Admin will review and publish your listing' },
+  submit_notice: { mm: 'Guest ဖြစ်ဖြစ် တင်နိုင်ပါသည် — Admin မှ စစ်ဆေးပြီးနောက် ထုတ်ဖော်မည်ဖြစ်ပါသည်', en: 'Guests can submit too — Admin will review and publish your listing' },
   submit_success_title: { mm: '✓ တင်သွင်းမှု အောင်မြင်ပြီ', en: 'Submission Successful!' },
   submit_success_desc: { mm: 'Admin မှ စစ်ဆေးပြီးနောက် ထုတ်ဖော်မည်ဖြစ်ပါသည်', en: 'Admin will review and publish your listing shortly' },
   go_directory: { mm: 'ပြန်ကြည့်မည်', en: 'Browse Directory' },

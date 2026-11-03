@@ -156,40 +156,41 @@ export const subscribeToNotifications = (userId, callback) => {
 
 /**
  * Send listing approval notification
+ * listingId is stored so the notification can open the listing on tap.
  */
-export const notifyListingApproved = async (userId, listingName) => {
+export const notifyListingApproved = async (userId, listingName, listingId = null) => {
   return createNotification(
     userId,
     NOTIFICATION_TYPES.LISTING_APPROVED,
     'စာရင်း အတည်ပြုခဲ့သည်',
     `"${listingName}" စာရင်းကို အတည်ပြုခဲ့သည်။`,
-    { listing_name: listingName }
+    { listing_id: listingId, listing_name: listingName }
   );
 };
 
 /**
  * Send listing rejection notification
  */
-export const notifyListingRejected = async (userId, listingName, reason = '') => {
+export const notifyListingRejected = async (userId, listingName, reason = '', listingId = null) => {
   return createNotification(
     userId,
     NOTIFICATION_TYPES.LISTING_REJECTED,
     'စာရင်း ငြင်းပယ်ခဲ့သည်',
     `"${listingName}" စာရင်းကို ငြင်းပယ်ခဲ့သည်။ ${reason ? `အကြောင်းအရာ: ${reason}` : ''}`,
-    { listing_name: listingName, reason }
+    { listing_id: listingId, listing_name: listingName, reason }
   );
 };
 
 /**
  * Send new review notification
  */
-export const notifyNewReview = async (userId, listingName, reviewerName, rating) => {
+export const notifyNewReview = async (userId, listingName, reviewerName, rating, listingId = null) => {
   return createNotification(
     userId,
     NOTIFICATION_TYPES.NEW_REVIEW,
     'အဆင့်သတ်မှတ်မှု အသစ်',
     `${reviewerName} က "${listingName}" အတွက် ${rating} ⭐ အဆင့်သတ်မှတ်ခဲ့သည်။`,
-    { listing_name: listingName, reviewer_name: reviewerName, rating }
+    { listing_id: listingId, listing_name: listingName, reviewer_name: reviewerName, rating }
   );
 };
 

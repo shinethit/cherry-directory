@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react'
 import { useLang } from '../contexts/LangContext'
+import { yangonToday } from '../lib/myanmarDate'
 
 const ONBOARDING_KEY = 'cherry_onboarding_done'
 
@@ -70,14 +71,27 @@ export default function OnboardingGuide() {
   useEffect(() => {
     // Check if onboarding already shown
     if (localStorage.getItem(ONBOARDING_KEY)) return
-    // Show after 1.5 sec (after splash)
-    const t = setTimeout(() => setShow(true), 1500)
-    return () => clearTimeout(t)
+    // Sequential first-launch flow: wait for the splash screen to be
+    // dismissed ('cherry:splash-done') before the 1.5s timer — or proceed
+    // at once if consent was already given today (no splash this launch).
+    let t
+    const start = () => { t = setTimeout(() => setShow(true), 1500) }
+    if (localStorage.getItem('cherry_consent_date') === yangonToday()) {
+      start()
+      return () => clearTimeout(t)
+    }
+    const onSplashDone = () => start()
+    window.addEventListener('cherry:splash-done', onSplashDone)
+    return () => {
+      window.removeEventListener('cherry:splash-done', onSplashDone)
+      clearTimeout(t)
+    }
   }, [])
 
   function finish() {
     localStorage.setItem(ONBOARDING_KEY, '1')
     setShow(false)
+    window.dispatchEvent(new Event('cherry:onboarding-done'))
   }
 
   function skip() {

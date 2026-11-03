@@ -9,8 +9,10 @@ import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
+import { localInputToMMT, mmtInputFromStored } from '../lib/myanmarDate'
+import { showError, showSuccess } from '../lib/toast'
 
-async function Field({ label, children, required }) {
+function Field({ label, children, required }) {
   return (
     <div>
       <label className="block text-xs text-white/50 mb-1.5">
@@ -31,7 +33,7 @@ const BLANK = {
 export default function EventFormPage() {
   const { id } = useParams()        // undefined = create, uuid = edit
   const navigate = useNavigate()
-  const { profile, isAdmin, isModerator, user } = useAuth()
+  const { profile, isAdmin, isModerator, user, isLoggedIn } = useAuth()
   const { lang } = useLang()
   const { log } = useAuditLog()
   useSEO({ title: id ? 'Edit Event' : 'Create Event' })
@@ -46,6 +48,9 @@ export default function EventFormPage() {
   const [canEdit, setCanEdit] = useState(false)
 
   useEffect(() => {
+    // Guests must not see the form at all (it used to render and report a
+    // false "✓ Saved" on submit).
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ Event ထည့်နိုင်မည်'); navigate('/login'); return }
     supabase.from('categories').select('*').eq('type', 'event').then(({ data }) => setCategories(data || []))
 
     if (isEdit) {
@@ -61,8 +66,8 @@ export default function EventFormPage() {
           title_mm:       data.title_mm || '',
           content:        data.content || '',
           content_mm:     data.content_mm || '',
-          event_start:    data.event_start ? data.event_start.slice(0, 16) : '',
-          event_end:      data.event_end   ? data.event_end.slice(0, 16)   : '',
+          event_start:    data.event_start ? mmtInputFromStored(data.event_start) : '',
+          event_end:      data.event_end   ? mmtInputFromStored(data.event_end)   : '',
           event_location: data.event_location || '',
           cover_url:      data.cover_url || '',
           status:         data.status || 'published',
@@ -73,15 +78,20 @@ export default function EventFormPage() {
     } else {
       setCanEdit(isAdmin || isModerator)
     }
-  }, [id, user])
+  }, [id, user, isLoggedIn, navigate])
 
   async function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
   async function handleCoverUpload(file) {
     setCoverUploading(true)
-    const url = await uploadImage(file, 'events/covers')
-    set('cover_url', url)
-    setCoverUploading(false)
+    try {
+      const url = await uploadImage(file, 'events/covers')
+      set('cover_url', url)
+    } catch (err) {
+      showError(err?.message || 'ပုံတင်ရာတွင် အမှားဖြစ်သွားသည်')
+    } finally {
+      setCoverUploading(false)
+    }
   }
 
   async function handleSave(e) {
@@ -89,31 +99,37 @@ export default function EventFormPage() {
     if (!form.title || !form.event_start) return
     setSaving(true)
 
+    // datetime-local is Myanmar wall time — never new Date(v).toISOString()
+    // (that shifts it 6.5h back to UTC).
     const payload = {
       ...form,
       type: 'event',
-      event_start: form.event_start ? new Date(form.event_start).toISOString() : null,
-      event_end:   form.event_end   ? new Date(form.event_end).toISOString()   : null,
+      event_start: form.event_start ? localInputToMMT(form.event_start) : null,
+      event_end:   form.event_end   ? localInputToMMT(form.event_end)   : null,
       author_id:   user?.id,
       updated_at:  new Date().toISOString(),
     }
 
     if (isEdit) {
-      await supabase.from('posts').update(payload).eq('id', id)
+      const { error } = await supabase.from('posts').update(payload).eq('id', id)
+      if (error) { showError(error.message); setSaving(false); return }
       await log({ action: 'update', table: 'posts', id, name: form.title, before: original, after: payload })
     } else {
-      const { data } = await supabase.from('posts').insert({ ...payload, created_at: new Date().toISOString() }).select().single()
+      const { data, error } = await supabase.from('posts').insert({ ...payload, created_at: new Date().toISOString() }).select().single()
+      if (error) { showError(error.message); setSaving(false); return }
       await log({ action: 'create', table: 'posts', id: data?.id, name: form.title, after: payload })
     }
 
     setSaved(true)
     setSaving(false)
+    showSuccess('✓ သိမ်းပြီးပါပြီ')
     setTimeout(() => navigate('/calendar'), 1000)
   }
 
   async function handleDelete() {
     if (!(await confirmDialog(`"${form.title}" ကို ဖျက်မည်လား?`))) return
-    await supabase.from('posts').delete().eq('id', id)
+    const { error } = await supabase.from('posts').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     await log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
     navigate('/calendar')
   }

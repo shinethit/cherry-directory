@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, Clock, ShieldCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
+import { showError } from '../lib/toast'
 
 export default function ClaimPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile, isLoggedIn } = useAuth()
+  const { profile, user, isLoggedIn } = useAuth()
   const { t } = useLang()
   useSEO({ title: 'Claim Business' })
 
@@ -19,6 +20,15 @@ export default function ClaimPage() {
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
 
+  // Profile loads async — sync the phone field when it arrives late,
+  // otherwise the field would keep the stale '' from mount.
+  useEffect(() => {
+    if (profile?.phone) setPhone(profile.phone)
+  }, [profile?.phone])
+
+  // NOTE: the claim uses user.id, never profile.id — a slow/failed profile
+  // fetch must not throw or leave the page stuck. Profile is only used to
+  // prefill the phone number above.
   if (!isLoggedIn) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70dvh] px-8 text-center">
@@ -33,30 +43,56 @@ export default function ClaimPage() {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!phone.trim()) { setError('ဖုန်းနံပါတ် ထည့်ပါ'); return }
+    if (!user) { setError('အကောင့်အချက်အလက် ရယူနေသည် — ပြန်ဝင်ပါ'); return }
     setSubmitting(true)
     setError('')
 
-    // Check for existing claim
-    const { data: existing } = await supabase
+    // Check for existing claim — fetch the latest one, not just any row.
+    const { data: existing, error: checkError } = await supabase
       .from('listing_claims')
       .select('id, status')
       .eq('listing_id', id)
-      .eq('user_id', profile.id)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
-    if (existing) {
-      setError(existing.status === 'pending' ? 'ဤလုပ်ငန်းအတွက် Claim တင်ပြီးဖြစ်သည်' : 'Claim ထပ်မံ မတင်နိုင်ပါ')
+    if (checkError) {
+      setError(checkError.message || 'Claim စစ်ဆေးမရပါ — ထပ်ကြိုးစားပါ')
       setSubmitting(false)
       return
     }
 
-    await supabase.from('listing_claims').insert({
+    if (existing) {
+      // Rejected claims CAN be re-submitted; pending/approved cannot.
+      if (existing.status === 'pending') {
+        setError('ဤလုပ်ငန်းအတွက် Claim တင်ပြီးဖြစ်သည်')
+        setSubmitting(false)
+        return
+      }
+      if (existing.status === 'approved') {
+        setError('ဤလုပ်ငန်းကို Claim အတည်ပြုပြီးဖြစ်သည်')
+        setSubmitting(false)
+        return
+      }
+      // status === 'rejected' → fall through and allow a fresh claim.
+    }
+
+    const { error: insertError } = await supabase.from('listing_claims').insert({
       listing_id: id,
-      user_id: profile.id,
+      user_id: user.id,
       contact_phone: phone,
       note: note,
       status: 'pending',
     })
+
+    if (insertError) {
+      console.error('Claim submit failed:', insertError)
+      setError(insertError.message || 'Claim တင်မရပါ — ထပ်ကြိုးစားပါ')
+      showError(insertError.message || 'Claim တင်မရပါ — ထပ်ကြိုးစားပါ')
+      setSubmitting(false)
+      return
+    }
 
     setDone(true)
     setSubmitting(false)

@@ -10,6 +10,7 @@ import SplashScreen from '../components/SplashScreen';
 import ShareButton from '../components/ShareButton';
 import { usePWA } from '../hooks/usePWA'
 import { subscribe as subscribeCache, inspectLocalStorage } from '../lib/cacheStatus';
+import { yangonToday, formatMyanmarDateTime } from '../lib/myanmarDate';
 
 // Helper: country code → full name
 
@@ -35,8 +36,8 @@ export default function HomePage() {
   // --- Splash consent: daily check ---
   const [consentGiven, setConsentGiven] = useState(() => {
     const lastShown = localStorage.getItem('cherry_consent_date');
-    const today = new Date().toISOString().split('T')[0];
-    return lastShown === today;
+    // Day boundary is 06:30 MMT today — the UTC date is wrong around midnight.
+    return lastShown === yangonToday();
   });
 
   // --- Data states ---
@@ -130,7 +131,8 @@ export default function HomePage() {
         supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
         supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
         supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
-        supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order')
+        supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'published')
       ]);
 
       setPosts(results[0]?.status === 'fulfilled' ? results[0].value.data || [] : []);
@@ -138,7 +140,13 @@ export default function HomePage() {
       const all = results[2]?.status === 'fulfilled' ? results[2].value.data || [] : [];
       setAllCategories(all);
       setHomeCategories(all.filter(c => !c.parent_id));
-      setStats({ listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0 });
+      // Surface failures instead of silently showing empty sections.
+      const failed = results.some(r => r.status === 'rejected' || r.value?.error)
+      setDataError(failed)
+      setStats({
+        listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0,
+        posts: results[6]?.status === 'fulfilled' ? results[6].value.count || 0 : 0,
+      });
       setUpcomingEvents(results[4]?.status === 'fulfilled' ? results[4].value.data || [] : []);
       setQuickLinks(results[5]?.status === 'fulfilled' ? results[5].value.data || [] : []);
     } catch (err) {
@@ -234,17 +242,15 @@ export default function HomePage() {
       }
     }
 
-    // Rentals — post_type: 'owner' | 'tenant'
-    const rentAvailable = await count('rentals', q => q.eq('post_type', 'owner'))
-    const rentSeekers   = await count('rentals', q => q.eq('post_type', 'tenant'))
-
-    // Tutoring — post_type: 'tutor' | 'student'
-    const tutorOffers   = await count('tutoring', q => q.eq('post_type', 'tutor'))
-    const tutorRequests = await count('tutoring', q => q.eq('post_type', 'student'))
-
-    // Jobs — post_type: 'employer' | 'jobseeker'
-    const jobOpenings   = await count('jobs', q => q.eq('post_type', 'employer'))
-    const jobSeekers    = await count('jobs', q => q.eq('post_type', 'jobseeker'))
+    // 6 counts in parallel (was 6 sequential awaits).
+    const [rentAvailable, rentSeekers, tutorOffers, tutorRequests, jobOpenings, jobSeekers] = await Promise.all([
+      count('rentals', q => q.eq('post_type', 'owner')),
+      count('rentals', q => q.eq('post_type', 'tenant')),
+      count('tutoring', q => q.eq('post_type', 'tutor')),
+      count('tutoring', q => q.eq('post_type', 'student')),
+      count('jobs', q => q.eq('post_type', 'employer')),
+      count('jobs', q => q.eq('post_type', 'jobseeker')),
+    ])
 
     setRentListingsCount(rentAvailable)
     setRentSeekersCount(rentSeekers)
@@ -296,7 +302,7 @@ export default function HomePage() {
   };
 
   const handleConsent = () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = yangonToday();
     localStorage.setItem('cherry_consent_date', today);
     setConsentGiven(true);
   };
@@ -347,6 +353,14 @@ export default function HomePage() {
           </button>
         </div>
       </div>
+
+      {/* Data error banner (dataError was set but never rendered) */}
+      {dataError && !loading && (
+        <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+          <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ</p>
+          <button onClick={loadData} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+        </div>
+      )}
 
       {/* Hero Section with Stats */}
       <div className="px-4">
@@ -410,7 +424,7 @@ export default function HomePage() {
                     </div>
                   </div>
                 </div>
-              ) : displayPhase === 'ready' ? (
+              ) : displayPhase === 'ready' && ((cacheStatusState?.succeeded || 0) > 0 || (cacheStorage.exists && cacheStorage.queryCount > 0)) ? (
                 <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
                   <svg width="14" height="12" viewBox="0 0 64 56" fill="none" style={{ display: 'block' }}>
                     <ellipse cx="32" cy="40" rx="18" ry="10" fill="#4ade80" />
@@ -422,11 +436,11 @@ export default function HomePage() {
                   </svg>
                   <span className="text-green-300 font-myanmar">
                     {lang === 'mm'
-                      ? `Offline ရနိုင် · ${cacheStatusState?.succeeded || cacheStorage.queryCount || 23} မျိုး`
-                      : `Offline ready · ${cacheStatusState?.succeeded || cacheStorage.queryCount || 23} items`}
+                      ? `Offline သိမ်းပြီး · ${cacheStatusState?.succeeded || cacheStorage.queryCount} မျိုး`
+                      : `Cached offline · ${cacheStatusState?.succeeded || cacheStorage.queryCount} items`}
                   </span>
                 </div>
-              ) : (
+              ) : displayPhase === 'ready' ? null : (
                 <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
                   <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
                   <span className="text-white/40 font-myanmar">
@@ -451,7 +465,7 @@ export default function HomePage() {
                 <p className="text-[8px] text-white/60 mt-0.5 leading-tight">လုပ်ငန်း</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
-                <p className="font-display font-bold text-sm text-white leading-none">{posts.length > 0 ? `${posts.length}+` : '0'}</p>
+                <p className="font-display font-bold text-sm text-white leading-none">{stats.posts.toLocaleString()}</p>
                 <p className="text-[8px] text-white/60 mt-0.5 leading-tight">သတင်း</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
@@ -598,7 +612,6 @@ export default function HomePage() {
       ) : homeCategories.length === 0 ? (
         <div className="px-4 py-8 text-center">
           <p className="text-white/30 text-sm font-myanmar">Category မရှိသေး</p>
-          <p className="text-white/20 text-xs mt-1 font-myanmar">Admin &gt; Categories မှ ထည့်နိုင်သည်</p>
         </div>
       ) : (
         <div>
@@ -869,7 +882,7 @@ export default function HomePage() {
                         {ev.title_mm || ev.title}
                       </p>
                       <p className="text-[10px] text-white/40 mt-0.5 truncate font-myanmar">
-                        {ev.event_location || new Date(ev.event_start).toLocaleTimeString('my-MM', { hour: '2-digit', minute: '2-digit' })}
+                        {ev.event_location || formatMyanmarDateTime(ev.event_start)}
                       </p>
                     </div>
                     <CalendarDays size={16} className="text-white/20 flex-shrink-0" />

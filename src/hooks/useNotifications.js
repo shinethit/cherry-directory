@@ -1,4 +1,5 @@
-import { useQuery, useMutation, useQueryClient, useEffect } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getUserNotifications,
@@ -8,6 +9,7 @@ import {
   subscribeToNotifications,
 } from '../lib/notificationService';
 import { handleSupabaseError } from '../lib/errorHandler';
+import { showError } from '../lib/toast';
 
 const NOTIFICATIONS_QUERY_KEY = 'notifications';
 
@@ -52,6 +54,9 @@ export const useMarkNotificationAsRead = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [NOTIFICATIONS_QUERY_KEY, user?.id] });
     },
+    onError: (err) => {
+      showError(err?.message || 'ဖတ်ပြီးအဖြစ် မှတ်မရပါ');
+    },
   });
 };
 
@@ -70,6 +75,9 @@ export const useMarkAllNotificationsAsRead = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [NOTIFICATIONS_QUERY_KEY, user?.id] });
     },
+    onError: (err) => {
+      showError(err?.message || 'အားလုံးဖတ်ပြီးအဖြစ် မှတ်မရပါ');
+    },
   });
 };
 
@@ -86,6 +94,9 @@ export const useDeleteNotification = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [NOTIFICATIONS_QUERY_KEY, user?.id] });
+    },
+    onError: (err) => {
+      showError(err?.message || 'ဖျက်မရပါ — ထပ်ကြိုးစားပါ');
     },
   });
 };

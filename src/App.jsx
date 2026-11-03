@@ -1,7 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect, useState, lazy, Suspense } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
-import { usePrefetchAll } from './hooks/usePrefetchAll'
 import { LangProvider } from './contexts/LangContext'
 import { AppConfigProvider } from './contexts/AppConfigContext'
 import { ThemeProvider } from './contexts/ThemeContext'
@@ -33,6 +32,7 @@ const JobBoardPage        = lazy(() => import('./pages/JobBoardPage'))
 const ChatPage            = lazy(() => import('./pages/ChatPage'))
 const ProfilePage         = lazy(() => import('./pages/ProfilePage'))
 const LoginPage           = lazy(() => import('./pages/LoginPage'))
+const ResetPasswordPage   = lazy(() => import('./pages/ResetPasswordPage'))
 const LeaderboardPage     = lazy(() => import('./pages/LeaderboardPage'))
 const PointsGuidePage     = lazy(() => import('./pages/PointsGuidePage'))
 const ClaimPage           = lazy(() => import('./pages/ClaimPage'))
@@ -50,6 +50,7 @@ const NewsEditPage        = lazy(() => import('./pages/NewsEditPage'))
 const RentPage            = lazy(() => import('./pages/RentPage'))
 const TutoringPage        = lazy(() => import('./pages/TutoringPage'))
 const AdminReportsPage    = lazy(() => import('./pages/AdminReportsPage'))
+const FuelPage            = lazy(() => import('./pages/FuelPage'))
 
 // ── Named exports — wrapped ──────────────────────────────────
 const AboutPage           = lazy(() => import('./pages/InfoPages').then(m => ({ default: m.AboutPage })))
@@ -82,9 +83,23 @@ function LoadingSpinner() {
   )
 }
 
+// Admin / moderator / super_admin only. Defence-in-depth: the admin pages
+// also render-guard themselves, but the route must not even mount for others.
+function RequireAdmin({ children }) {
+  const { loading, isAdmin, isModerator } = useAuth()
+  if (loading) return <LoadingSpinner />
+  if (!isAdmin && !isModerator) {
+    return (
+      <div className="flex items-center justify-center min-h-[60dvh] px-8 text-center">
+        <p className="text-white/50 font-myanmar">🔒 Admin / Moderator သာ ကြည့်နိုင်သည်</p>
+      </div>
+    )
+  }
+  return children
+}
+
 function AppRoutes() {
   const { loading } = useAuth()
-  usePrefetchAll()
   const [timeoutExceeded, setTimeoutExceeded] = useState(false)
 
   useEffect(() => {
@@ -135,6 +150,7 @@ function AppRoutes() {
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/emergency" element={<EmergencyPage />} />
           <Route path="/prices" element={<MarketPricePage />} />
+          <Route path="/fuel" element={<FuelPage />} />
           <Route path="/lost-found" element={<LostFoundPage />} />
           <Route path="/lost-found/:id" element={<LostFoundDetailPage />} />
           <Route path="/jobs" element={<JobBoardPage />} />
@@ -151,14 +167,15 @@ function AppRoutes() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/:id" element={<ProfilePage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           <Route path="/points" element={<PointsGuidePage />} />
           <Route path="/claim/:id" element={<ClaimPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/categories" element={<CategoryManagerPage />} />
-          <Route path="/admin/bulk-import" element={<BulkImportPage />} />
-          <Route path="/admin/settings" element={<AppSettingsPage />} />
-          <Route path="/admin/reports" element={<AdminReportsPage />} />
+          <Route path="/admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
+          <Route path="/admin/categories" element={<RequireAdmin><CategoryManagerPage /></RequireAdmin>} />
+          <Route path="/admin/bulk-import" element={<RequireAdmin><BulkImportPage /></RequireAdmin>} />
+          <Route path="/admin/settings" element={<RequireAdmin><AppSettingsPage /></RequireAdmin>} />
+          <Route path="/admin/reports" element={<RequireAdmin><AdminReportsPage /></RequireAdmin>} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />

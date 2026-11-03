@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import { confirmDialog } from '../lib/confirmDialog'
+import { showError, showSuccess } from '../lib/toast'
 
 const CATS = [
   { id: 'all',         mm: 'အားလုံး',          en: 'All',           icon: '📋' },
@@ -49,7 +50,7 @@ function NoticeCard({ notice, lang, isMod, onDelete }) {
           </button>
         )}
       </div>
-      <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (notice.title_mm || notice.title) : notice.title}</h3>
+      <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (notice.title_mm || notice.title) : (notice.title || notice.title_mm)}</h3>
       {(notice.content_mm || notice.content) && (
         <p className="text-xs text-white/60 font-myanmar leading-relaxed">{lang === 'mm' ? (notice.content_mm || notice.content) : notice.content}</p>
       )}
@@ -71,16 +72,29 @@ function PostForm({ onClose, onSuccess, lang }) {
   async function submit() {
     if (!form.title && !form.title_mm) return
     setSubmitting(true)
-    // Auto-approve if moderator, else pending
-    const status = isModerator ? 'approved' : 'pending'
-    await supabase.from('notices').insert({
-      ...form,
-      poster_id: user?.id || null,
-      poster_name: profile?.full_name || profile?.nickname || form.poster_name || 'Community',
-      status,
-    })
-    setSubmitting(false)
-    onSuccess()
+    try {
+      // Auto-approve if moderator, else pending
+      const status = isModerator ? 'approved' : 'pending'
+      const { error } = await supabase.from('notices').insert({
+        ...form,
+        // `title` is NOT NULL in the schema; fall back to the Myanmar title.
+        title: form.title || form.title_mm,
+        poster_id: user?.id || null,
+        poster_name: profile?.full_name || profile?.nickname || form.poster_name || 'Community',
+        status,
+      })
+      if (error) throw error
+      if (isModerator) {
+        showSuccess(lang === 'mm' ? 'ကြေညာချက် တင်ပြီးပါပြီ' : 'Notice posted')
+      } else {
+        showSuccess(lang === 'mm' ? 'စစ်ဆေးရန် စောင့်ဆိုင်းနေသည် — Admin/Mod အတည်ပြုပြီးမှ ဖော်ပြမည်' : 'Submitted — it will appear after an admin/moderator approves it')
+      }
+      onSuccess()
+    } catch (err) {
+      showError(err.message || (lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post notice'))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -133,10 +147,14 @@ export default function NoticeBoardPage() {
     try {
     let q = supabase.from('notices').select('*').eq('status', 'approved').order('is_pinned', { ascending: false }).order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(50)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
-    const { data } = await q
-    setNotices(data || [])
+    const { data, error } = await q
+    if (error) throw error
+    // Client-side expiry: expires_at defaults to +14d but nothing enforces it.
+    const now = Date.now()
+    setNotices((data || []).filter(n => !n.expires_at || new Date(n.expires_at).getTime() >= now))
     if (isModerator) {
-      const { count } = await supabase.from('notices').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+      const { count, error: countError } = await supabase.from('notices').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+      if (countError) throw countError
       setPendingCount(count || 0)
     }
     } catch (e) { console.warn(e) }
@@ -144,21 +162,31 @@ export default function NoticeBoardPage() {
   }
 
   async function loadPending() {
-    const { data } = await supabase.from('notices').select('*').eq('status', 'pending').order('posted_at', { ascending: false })
+    const { data, error } = await supabase.from('notices').select('*').eq('status', 'pending').order('posted_at', { ascending: false })
+    if (error) { showError(error.message); return }
     setPendingList(data || [])
   }
 
-  useEffect(() => { load() }, [catFilter])
+  useEffect(() => { load() }, [catFilter, isModerator])
   useEffect(() => { if (showPending) loadPending() }, [showPending])
 
   async function deleteNotice(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this notice?'))) return
-    await supabase.from('notices').delete().eq('id', id)
+    const { error } = await supabase.from('notices').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     load()
   }
 
   async function approveNotice(id) {
-    await supabase.from('notices').update({ status: 'approved' }).eq('id', id)
+    const { error } = await supabase.from('notices').update({ status: 'approved' }).eq('id', id)
+    if (error) { showError(error.message); return }
+    loadPending(); load()
+  }
+
+  async function rejectNotice(id) {
+    if (!(await confirmDialog(lang === 'mm' ? 'ဒီကြေညာချက်ကို ပယ်ချမည်လား?' : 'Reject this notice?'))) return
+    const { error } = await supabase.from('notices').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     loadPending(); load()
   }
 
@@ -216,7 +244,7 @@ export default function NoticeBoardPage() {
                 {n.content_mm && <p className="text-xs text-white/50 font-myanmar">{n.content_mm}</p>}
                 <div className="flex gap-2">
                   <button onClick={() => approveNotice(n.id)} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-green-500/15 border border-green-500/25 text-green-400 text-xs font-bold hover:bg-green-500/25">✓ Approve</button>
-                  <button onClick={() => { supabase.from('notices').delete().eq('id', n.id); loadPending() }} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-red-500/15 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/25">✕ Reject</button>
+                  <button onClick={() => rejectNotice(n.id)} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-red-500/15 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/25">✕ Reject</button>
                 </div>
               </div>
             ))}

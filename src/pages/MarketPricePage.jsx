@@ -6,6 +6,7 @@ import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 // ── Constants ─────────────────────────────────────────────────
 const CATEGORIES = [
@@ -244,7 +245,8 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
   async function addMarket() {
     if (!newName.trim()) return
     setSaving(true)
-    await supabase.from('markets').insert({ name: newName.trim(), city: '', sort_order: list.length + 1, is_active: true })
+    const { error } = await supabase.from('markets').insert({ name: newName.trim(), city: '', sort_order: list.length + 1, is_active: true })
+    if (error) { showError(error.message); setSaving(false); return }
     setNewName('')
     const { data } = await supabase.from('markets').select('*').order('sort_order')
     setList(data || [])
@@ -254,20 +256,23 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
 
   async function saveEdit(id) {
     if (!editName.trim()) return
-    await supabase.from('markets').update({ name: editName.trim() }).eq('id', id)
+    const { error } = await supabase.from('markets').update({ name: editName.trim() }).eq('id', id)
+    if (error) { showError(error.message); return }
     setList(l => l.map(m => m.id === id ? { ...m, name: editName.trim() } : m))
     setEditId(null)
     onUpdated()
   }
 
   async function toggleMarket(id, current) {
-    await supabase.from('markets').update({ is_active: !current }).eq('id', id)
+    const { error } = await supabase.from('markets').update({ is_active: !current }).eq('id', id)
+    if (error) { showError(error.message); return }
     setList(l => l.map(m => m.id === id ? { ...m, is_active: !current } : m))
     onUpdated()
   }
 
   async function deleteMarket(id) {
-    await supabase.from('markets').delete().eq('id', id)
+    const { error } = await supabase.from('markets').delete().eq('id', id)
+    if (error) { showError(error.message); return }
     setList(l => l.filter(m => m.id !== id))
     onUpdated()
   }
@@ -337,13 +342,14 @@ function AddItemModal({ onClose, onAdded, lang }) {
   async function submit() {
     if (!form.name) return
     setSubmitting(true)
-    await supabase.from('price_items').insert({
+    const { error } = await supabase.from('price_items').insert({
       name: form.name, name_en: form.name_en || null,
       category: form.category, unit: form.unit, unit_en: form.unit_en,
       icon: form.icon, is_custom: true, approved: true,
       added_by: user?.id || null, sort_order: 999,
     })
     setSubmitting(false)
+    if (error) { showError(error.message); return }
     onAdded()
     onClose()
   }
@@ -510,6 +516,9 @@ export default function MarketPricePage() {
   const [markets, setMarkets]       = useState([])
   const [fuelStations, setFuelStations] = useState([])
   const [showManageMarkets, setShowManageMarkets] = useState(false)
+  const [liveConnected, setLiveConnected] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [loadError, setLoadError] = useState(false)
   const channelRef = useRef(null)
 
   const showToast = (type, msg) => { setToast({ type, msg }); setTimeout(() => setToast(null), 3500) }
@@ -524,9 +533,18 @@ export default function MarketPricePage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('current_prices').select('*')
+    setLoadError(false)
+    const { data, error } = await supabase.from('current_prices').select('*')
+    if (error) { console.warn(error); setLoadError(true); setPrices([]); setLoading(false); return }
     setPrices(data || [])
-    setLast(new Date())
+    // "Updated … ago" comes from the data's own latest timestamp, never
+    // from page-load time.
+    const latest = (data || [])
+      .map(p => p.last_reported || p.updated_at)
+      .filter(Boolean)
+      .sort()
+      .pop()
+    setLast(latest ? new Date(latest) : null)
     setLoading(false)
     supabase.from('price_reports').select('*, item:price_items(name, name_en, icon, unit, unit_en), reporter:profiles(full_name, nickname)').order('reported_at', { ascending: false }).limit(8).then(({ data }) => setRecent(data || []))
   }, [])
@@ -536,9 +554,17 @@ export default function MarketPricePage() {
     channelRef.current = supabase.channel('prices-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'price_reports' }, load)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'price_items' }, load)
-      .subscribe()
-    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current) }
+      .subscribe((status) => setLiveConnected(status === 'SUBSCRIBED'))
+    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); setLiveConnected(false) }
   }, [load])
+
+  useEffect(() => {
+    const on = () => setIsOnline(true)
+    const off = () => setIsOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
 
   async function handleSubmitReport({ price, market, notes }) {
     if (!reportTarget) return
@@ -552,7 +578,9 @@ export default function MarketPricePage() {
     if (med && (price > med * 3 || price < med * 0.2)) {
       showToast('warn', lang === 'mm' ? 'ဈေးနှုန်း ကွဲလွဲမှု များလွန်းသည်' : 'Price seems unusual'); setReport(null); return
     }
-    await supabase.from('price_reports').insert({ item_id: reportTarget.id, price, market, notes: notes || null, reporter_id: user?.id || null })
+    const { error } = await supabase.from('price_reports').insert({ item_id: reportTarget.id, price, market, notes: notes || null, reporter_id: user?.id || null })
+    // Only set the 10-minute cooldown + success toast on a REAL success.
+    if (error) { showError(error.message); return }
     localStorage.setItem(key, String(Date.now()))
     setReport(null)
     showToast('ok', lang === 'mm' ? '✓ တင်ပြပြီး — ကျေးဇူးပါ' : '✓ Submitted — thank you!')
@@ -560,10 +588,11 @@ export default function MarketPricePage() {
 
   async function handleVerify(item) {
     if (!item.median_price) return
-    await supabase.from('verified_prices').insert({
+    const { error } = await supabase.from('verified_prices').insert({
       item_id: item.id, price: item.median_price,
       verified_by: user?.id, note: `Community median (${item.report_count} reports)`,
     })
+    if (error) { showError(error.message); return }
     showToast('ok', lang === 'mm' ? `✓ ${item.name} ဈေးနှုန်း Verify လုပ်ပြီး` : `✓ ${item.name} price verified`)
     load()
   }
@@ -571,7 +600,8 @@ export default function MarketPricePage() {
   const [editTarget, setEditTarget] = useState(null)
 
   async function handleEditItem(updates) {
-    await supabase.from('price_items').update(updates).eq('id', editTarget.id)
+    const { error } = await supabase.from('price_items').update(updates).eq('id', editTarget.id)
+    if (error) { showError(error.message); return }
     setEditTarget(null)
     showToast('ok', lang === 'mm' ? '✓ ပြင်ဆင်ပြီး' : '✓ Updated')
     load()
@@ -579,7 +609,8 @@ export default function MarketPricePage() {
 
   async function handleDeleteItem(item) {
     if (!(await confirmDialog(lang === 'mm' ? `"${item.name}" ကို ဖျက်မည်လား?` : `Delete "${item.name}"?`))) return
-    await supabase.from('price_items').update({ is_active: false }).eq('id', item.id)
+    const { error } = await supabase.from('price_items').update({ is_active: false }).eq('id', item.id)
+    if (error) { showError(error.message); return }
     showToast('ok', lang === 'mm' ? 'ဖျက်ပြီး' : 'Deleted')
     load()
   }
@@ -629,11 +660,20 @@ export default function MarketPricePage() {
           <p className="text-[9px] text-white/40">{lang === 'mm' ? 'Report (48h)' : 'Reports (48h)'}</p>
         </div>
         <div className="flex-1 card-dark rounded-2xl p-3 text-center">
-          <div className="flex items-center justify-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <p className="font-display font-bold text-sm text-green-400">Live</p>
-          </div>
-          <p className="text-[9px] text-white/25">Real-time</p>
+          {isOnline && liveConnected ? (
+            <>
+              <div className="flex items-center justify-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <p className="font-display font-bold text-sm text-green-400">Live</p>
+              </div>
+              <p className="text-[9px] text-white/25">Real-time</p>
+            </>
+          ) : (
+            <>
+              <p className="font-display font-bold text-sm text-white/70">{lastUpdate ? timeAgoShort(lastUpdate.toISOString(), lang) : '—'}</p>
+              <p className="text-[9px] text-white/25">{lang === 'mm' ? 'နောက်ဆုံးအပ်ဒိတ်' : 'Last updated'}</p>
+            </>
+          )}
         </div>
       </div>
 
@@ -658,6 +698,12 @@ export default function MarketPricePage() {
       {/* Grouped price list — Category → Sub-category */}
       <div className="px-4 space-y-4 mb-4">
         {loading ? [1,2,3,4,5].map(n => <div key={n} className="h-14 rounded-2xl shimmer" />) :
+          loadError ? (
+            <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+              <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+              <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            </div>
+          ) :
           displayed.map(group => (
             <div key={group.id}>
               {/* Category header */}
@@ -739,7 +785,7 @@ export default function MarketPricePage() {
                 <span className="text-white/30">{r.reporter?.nickname ? `@${r.reporter.nickname}` : 'Guest'}</span>
                 <span className="text-white/20">{timeAgoShort(r.reported_at, lang)}</span>
                 {isModerator && (
-                  <button onClick={async () => { await supabase.from('price_reports').delete().eq('id', r.id); load() }} className="w-5 h-5 flex items-center justify-center hover:text-red-400 transition-colors">
+                  <button onClick={async () => { const { error } = await supabase.from('price_reports').delete().eq('id', r.id); if (error) { showError(error.message); return } load() }} className="w-5 h-5 flex items-center justify-center hover:text-red-400 transition-colors">
                     <Trash2 size={10} />
                   </button>
                 )}

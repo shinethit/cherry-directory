@@ -13,6 +13,7 @@ import LocationPicker from '../components/LocationPicker'
 import { BusinessHoursEditor } from '../components/BusinessHours'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { validateListing, normalizePhone } from '../lib/validation'
 
 function Field({ label, children, required, optional }) {
   return (
@@ -98,17 +99,17 @@ export default function SubmitListingPage() {
 
   async function handleLogoUpload(file) {
     setLogoUploading(true)
-    try { setLogo(await uploadImage(file, 'listings/logos')) } catch (err) { console.warn('Logo upload failed:', err) }
+    try { setLogo(await uploadImage(file, 'listings/logos')) } catch (err) { console.warn('Logo upload failed:', err); showError(lang === 'mm' ? 'Logo တင်မရပါ — ပုံမပါဘဲ ဆက်တင်နိုင်ပါသည်' : 'Logo upload failed — you can continue without it') }
     setLogoUploading(false)
   }
   async function handleCoverUpload(file) {
     setCoverUploading(true)
-    try { setCoverImg(await uploadImage(file, 'listings/covers')) } catch (err) { console.warn('Cover upload failed:', err) }
+    try { setCoverImg(await uploadImage(file, 'listings/covers')) } catch (err) { console.warn('Cover upload failed:', err); showError(lang === 'mm' ? 'Cover ပုံ တင်မရပါ — ပုံမပါဘဲ ဆက်တင်နိုင်ပါသည်' : 'Cover upload failed — you can continue without it') }
     setCoverUploading(false)
   }
 
   function getMyLocation() {
-    if (!navigator.geolocation) return
+    if (!navigator.geolocation) { showError(lang === 'mm' ? 'GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ' : 'GPS is not available — please pick on the map'); return }
     setLocationLoading(true)
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -116,15 +117,24 @@ export default function SubmitListingPage() {
         setFormField('longitude', pos.coords.longitude.toFixed(7))
         setLocationLoading(false)
       },
-      () => setLocationLoading(false)
+      () => {
+        setLocationLoading(false)
+        showError(lang === 'mm' ? 'GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ' : 'Could not find GPS location — please pick on the map')
+      }
     )
   }
 
   async function handleQuickAddCat() {
+    // Categories insert RLS is admin/mod-only — non-admins would get a
+    // swallowed failure and the modal would close anyway. Gate the UI.
+    if (!isAdmin && !isModerator) {
+      showError(lang === 'mm' ? 'Category အသစ်ထည့်ရန် Admin/Moderator သာ ခွင့်ပြုသည်' : 'Only Admin/Moderator can add a category')
+      return
+    }
     if (!quickCat.name_mm.trim()) return
     setAddingCat(true)
     try {
-      const { data: newCat } = await supabase.from('categories').insert({
+      const { data: newCat, error } = await supabase.from('categories').insert({
         name: quickCat.name || quickCat.name_mm.trim(),
         name_mm: quickCat.name_mm.trim(),
         icon: quickCat.icon || '📦',
@@ -133,12 +143,17 @@ export default function SubmitListingPage() {
         sort_order: 999,
         is_active: true,
       }).select().single()
+      if (error) throw error
       const { data: cats } = await supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order')
       setCategories(cats || [])
       if (newCat) setFormField('category_id', newCat.id)
       setQuickCat({ name_mm: '', name: '', icon: '📦', parent_id: '' })
       setShowQuickCat(false)
-    } catch (e) { console.warn(e) }
+    } catch (e) {
+      console.warn(e)
+      showError(e?.message || (lang === 'mm' ? 'Category ထည့်မရပါ' : 'Could not add category'))
+      // Keep the modal open so the user can retry — do not close on failure.
+    }
     setAddingCat(false)
   }
 
@@ -160,9 +175,15 @@ export default function SubmitListingPage() {
   const handleMenuImageUpload = async (file) => {
     if (menuForm.images.length >= 5) { setMenuError(lang === 'mm' ? 'အများဆုံး ၅ ပုံသာ တင်နိုင်ပါသည်' : 'Maximum 5 images'); return }
     setMenuImageLoading(true)
-    const url = await uploadImage(file, 'menu')
-    setMenuForm(prev => ({ ...prev, images: [...prev.images, url] }))
-    setMenuImageLoading(false)
+    try {
+      const url = await uploadImage(file, 'menu')
+      setMenuForm(prev => ({ ...prev, images: [...prev.images, url] }))
+    } catch (err) {
+      console.warn('Menu image upload failed:', err)
+      setMenuError(lang === 'mm' ? 'ပုံ တင်မရပါ — ထပ်ကြိုးစားပါ' : 'Image upload failed — please try again')
+    } finally {
+      setMenuImageLoading(false)
+    }
   }
   const removeMenuImage = (index) => setMenuForm(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }))
   const saveMenuItem = () => {
@@ -182,34 +203,44 @@ export default function SubmitListingPage() {
     if (await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this item?')) setMenuItems(prev => prev.filter(i => i.id !== id))
   }
 
+  // Escape PostgREST .or() special characters so a name containing , ( ) %
+  // cannot break the query or act as a wildcard.
+  function escapePostgrestOr(value) {
+    return String(value).replace(/([,()%])/g, '\\$1')
+  }
+
   async function checkDuplicates() {
     const nameToCheck = form.name_mm || form.name;
     const phoneToCheck = form.phones[0] || null;
+    const phoneCanon = phoneToCheck ? normalizePhone(phoneToCheck) : null;
 
     if (!nameToCheck) return false;
 
     try {
       // Fetch potential matches based on name OR phone
       let query = supabase.from('listings').select('id, name, name_mm, phone_1, latitude, longitude');
-      
+
       let conditions = [];
-      if (nameToCheck) conditions.push(`name.ilike.%${nameToCheck}%`, `name_mm.ilike.%${nameToCheck}%`);
-      if (phoneToCheck) conditions.push(`phone_1.eq.${phoneToCheck}`);
-      
+      if (nameToCheck) conditions.push(`name.ilike.%${escapePostgrestOr(nameToCheck)}%`, `name_mm.ilike.%${escapePostgrestOr(nameToCheck)}%`);
+      if (phoneToCheck) conditions.push(`phone_1.eq.${escapePostgrestOr(phoneToCheck)}`);
+
       if (conditions.length > 0) {
         query = query.or(conditions.join(','));
       }
 
-      const { data } = await query.limit(10);
-      
+      const { data, error } = await query.limit(10);
+      if (error) throw error
+
       if (data && data.length > 0) {
         for (const match of data) {
           const matchName = (match.name_mm || match.name || '').trim().toLowerCase();
           const inputName = nameToCheck.trim().toLowerCase();
-          
+
           const nameMatches = matchName === inputName || matchName.includes(inputName) || inputName.includes(matchName);
-          const phoneMatches = phoneToCheck && match.phone_1 === phoneToCheck;
-          
+          // Compare canonical (digits-only, prefix-stripped) phones so
+          // ၀၉… / +95… / 09… spellings of the same number match.
+          const phoneMatches = phoneCanon && match.phone_1 && normalizePhone(match.phone_1) === phoneCanon;
+
           // Check distance if coords exist
           let distMatches = false;
           if (form.latitude && match.latitude) {
@@ -219,7 +250,8 @@ export default function SubmitListingPage() {
              if (latDiff < 0.001 && lonDiff < 0.001) distMatches = true;
           }
 
-          // If EVERYTHING matches (Name + Phone/Distance) -> Block
+          // Block only when name is similar AND (phone matches OR same place).
+          // A shared phone alone (e.g. a building's shared number) never blocks.
           if (nameMatches && (phoneMatches || distMatches)) {
             setDupError(match);
             return true;
@@ -228,6 +260,9 @@ export default function SubmitListingPage() {
       }
     } catch (e) {
       console.warn('Duplicate check failed:', e);
+      // A failed duplicate check must not block submission — the listing
+      // still goes to Admin review, where a human can catch duplicates.
+      showError(lang === 'mm' ? 'ထပ်နေမှု စစ်ဆေးမရပါ — Admin မှ စစ်ဆေးပေးမည်' : 'Duplicate check failed — Admin will review')
     }
     return false;
   }
@@ -235,10 +270,25 @@ export default function SubmitListingPage() {
   async function handleSubmit(e) {
     if (e) e.preventDefault()
     if ((!form.name && !form.name_mm) || !form.category_id) return
-    
+
+    // Pre-submit validation (honest Burmese errors; Myanmar-only names pass).
+    const validation = validateListing({
+      name: form.name,
+      name_mm: form.name_mm,
+      category_id: form.category_id,
+      phones: form.phones,
+      website: form.website,
+      latitude: form.latitude ? parseFloat(form.latitude) : null,
+      longitude: form.longitude ? parseFloat(form.longitude) : null,
+    })
+    if (!validation.isValid) {
+      showError(validation.errors.join(' '))
+      return
+    }
+
     const isDup = await checkDuplicates();
     if (isDup) return; // တူနေရင် တင်ခွင့်မပြု
-    
+
     setDupError(null);
     setSubmitting(true)
     try {
@@ -257,7 +307,8 @@ export default function SubmitListingPage() {
         images: [],
         menu_items: menuItems.length > 0 ? menuItems : null,
         submitted_by: submittedBy,
-        status: 'approved',
+        // Guest insert is allowed ONLY with status 'pending' (RLS) — never 'approved'.
+        status: 'pending',
         report_count: 0,
       })
       if (error) throw error
@@ -340,9 +391,30 @@ export default function SubmitListingPage() {
           <Info size={16} className="text-blue-400 flex-shrink-0 mt-0.5" />
           <p className="text-xs text-blue-300 font-myanmar">
             {lang === 'mm'
-              ? 'အကောင့်မဖွင့်ဘဲ လုပ်ငန်းတင်နိုင်ပါသည်။ အကောင့်ဖွင့်ပြီးတင်ပါက Points ရရှိမည်ဖြစ်သည်။'
-              : 'You can submit without an account. Registered users earn points.'}
+              ? 'အကောင့်မဖွင့်ဘဲ လုပ်ငန်းတင်နိုင်ပါသည်။ Admin မှ စစ်ဆေးပြီးနောက် ထုတ်ဖော်မည်ဖြစ်ပါသည်။ အကောင့်ဖွင့်ပြီးတင်ပါက Points ရရှိမည်ဖြစ်သည်။'
+              : 'You can submit without an account. Your listing appears only after Admin review. Registered users earn points.'}
           </p>
+        </div>
+      )}
+
+      {dupError && (
+        <div className="mx-4 mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-2">
+          <Info size={16} className="text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-xs text-red-300 font-myanmar font-semibold">
+              {lang === 'mm' ? 'ဤလုပ်ငန်း ရှိနှင့်ပြီးဖြစ်နိုင်သည်' : 'This listing may already exist'}
+            </p>
+            <p className="text-xs text-red-300/70 font-myanmar mt-0.5">
+              {dupError.name_mm || dupError.name}
+              {dupError.phone_1 ? ` • ${dupError.phone_1}` : ''}
+            </p>
+            <p className="text-[11px] text-white/40 font-myanmar mt-1">
+              {lang === 'mm' ? 'အချက်အလက် မှားနေရင် ပြင်ပြီး ထပ်တင်ပါ — တူတဲ့လုပ်ငန်း ရှိပြီးသားဆို ထပ်တင်စရာ မလိုပါ' : 'If the details are wrong, correct them and resubmit — no need to submit a duplicate.'}
+            </p>
+            <button type="button" onClick={() => setDupError(null)} className="text-[11px] text-red-300 underline mt-1">
+              {lang === 'mm' ? 'ပိတ်မည်' : 'Dismiss'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -441,7 +513,7 @@ export default function SubmitListingPage() {
               )}
             </select>
 
-            {isLoggedIn ? (
+            {(isAdmin || isModerator) ? (
               <button
                 type="button"
                 onClick={() => setShowQuickCat(true)}
@@ -451,14 +523,14 @@ export default function SubmitListingPage() {
                 <Plus size={16} />
               </button>
             ) : (
-              <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center text-white/30 cursor-not-allowed" title={lang === 'mm' ? 'Account ဖွင့်ပါ' : 'Sign up'}>
+              <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center text-white/30 cursor-not-allowed" title={lang === 'mm' ? 'Category အသစ်ထည့်ရန် Admin/Moderator သာ ခွင့်ပြုသည်' : 'Only Admin/Moderator can add a category'}>
                 <span className="text-[10px]">🔒</span>
               </div>
             )}
           </div>
-          {!isLoggedIn && (
+          {!(isAdmin || isModerator) && (
             <p className="text-[10px] text-amber-400 mt-1 font-myanmar">
-              {lang === 'mm' ? 'Category အသစ်ထည့်ချင်ပါက Account ဖွင့်ပါ' : 'Sign up to add new category'}
+              {lang === 'mm' ? 'Category အသစ်ထည့်ချင်ပါက Admin ကို ဆက်သွယ်ပါ' : 'Contact an Admin to add a new category'}
             </p>
           )}
         </Field>

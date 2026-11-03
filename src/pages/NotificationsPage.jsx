@@ -11,6 +11,8 @@ import {
   deleteNotification,
   subscribeToNotifications,
 } from '../lib/notificationService'
+import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 // Notification type → icon + color mapping
 const TYPE_CFG = {
@@ -43,16 +45,20 @@ export default function NotificationsPage() {
 
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [filter, setFilter] = useState('all') // 'all' | 'unread'
 
   const load = useCallback(async () => {
     if (!user) { setLoading(false); return }
     setLoading(true)
+    setLoadError('')
     try {
       const data = await getUserNotifications(user.id, 50)
       setNotifications(data || [])
     } catch (err) {
       console.warn('Load notifications error:', err)
+      setLoadError(err?.message || 'အသိပေးချက်များ ရယူမရပါ')
+      setNotifications([])
     }
     setLoading(false)
   }, [user])
@@ -70,19 +76,41 @@ export default function NotificationsPage() {
 
   async function handleMarkRead(notif) {
     if (notif.is_read) return
-    await markNotificationAsRead(notif.id)
+    // Optimistic, but revert on failure — never show "read" when the DB disagrees.
     setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n))
+    try {
+      await markNotificationAsRead(notif.id)
+    } catch (err) {
+      console.warn('Mark notification read failed:', err)
+      showError(err?.message || 'ဖတ်ပြီးအဖြစ် မှတ်မရပါ')
+      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: false } : n))
+    }
   }
 
   async function handleMarkAll() {
     if (!user) return
-    await markAllNotificationsAsRead(user.id)
+    const prev = notifications
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+    try {
+      await markAllNotificationsAsRead(user.id)
+    } catch (err) {
+      console.warn('Mark all read failed:', err)
+      showError(err?.message || 'အားလုံးဖတ်ပြီးအဖြစ် မှတ်မရပါ')
+      setNotifications(prev)
+    }
   }
 
   async function handleDelete(id) {
-    await deleteNotification(id)
+    if (!(await confirmDialog(lang === 'mm' ? 'ဤအသိပေးချက်ကို ဖျက်မည်လား?' : 'Delete this notification?'))) return
+    const prev = notifications
     setNotifications(prev => prev.filter(n => n.id !== id))
+    try {
+      await deleteNotification(id)
+    } catch (err) {
+      console.warn('Delete notification failed:', err)
+      showError(err?.message || 'ဖျက်မရပါ — ထပ်ကြိုးစားပါ')
+      setNotifications(prev)
+    }
   }
 
   function handleOpen(notif) {
@@ -186,6 +214,17 @@ export default function NotificationsPage() {
           [1,2,3].map(n => (
             <div key={n} className="h-20 rounded-2xl bg-white/4 animate-pulse" />
           ))
+        ) : loadError ? (
+          <div className="flex flex-col items-center py-16 text-center px-8">
+            <span className="text-5xl mb-4">⚠️</span>
+            <p className="font-display font-semibold text-white/70">
+              {lang === 'mm' ? 'အသိပေးချက်များ ရယူမရပါ' : 'Could not load notifications'}
+            </p>
+            <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{loadError}</p>
+            <button onClick={load} className="btn-primary text-sm mt-4 px-5 py-2">
+              {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
+            </button>
+          </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-center">
             <span className="text-5xl mb-4">🔔</span>
@@ -196,8 +235,8 @@ export default function NotificationsPage() {
             </p>
             <p className="text-xs text-white/25 mt-1 font-myanmar max-w-xs">
               {lang === 'mm'
-                ? 'Review ရေးတာ၊ Listing Approve ဖြစ်တာ စတဲ့အခါ ဤနေရာမှာ ပေါ်လာမည်'
-                : 'You will see notifications here when you get reviews, listing approvals, etc.'}
+                ? 'သင့်လုပ်ငန်း Approve ဖြစ်တာ၊ Review အသစ် ရတာတို့ ဤနေရာမှာ ပေါ်လာမည်'
+                : 'You will see notifications here when your listing is approved or you get a new review.'}
             </p>
           </div>
         ) : (

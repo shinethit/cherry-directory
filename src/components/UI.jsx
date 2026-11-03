@@ -1,10 +1,13 @@
 import { Star, MapPin, Bookmark, BookmarkCheck } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import VerifiedOwnerBadge from './VerifiedOwnerBadge'
+import { useIsBookmarked, useAddBookmark, useRemoveBookmark } from '../hooks/useBookmarksDB'
+import { showError } from '../lib/toast'
+import { formatMyanmarDate } from '../lib/myanmarDate'
 
 // ── Stars ────────────────────────────────────────────────────
 export function StarRating({ rating = 0, size = 14 }) {
@@ -26,14 +29,23 @@ export function Skeleton({ className = '' }) {
 export function ListingCard({ listing, compact = false }) {
   const navigate = useNavigate()
   const { isLoggedIn } = useAuth()
-  const [bookmarked, setBookmarked] = useState(false)
+  // Real bookmark state from the bookmarks table (the old local useState
+  // toggle was fake — it never persisted anything).
+  const { data: bookmarked = false } = useIsBookmarked(listing.id)
+  const addBookmark = useAddBookmark()
+  const removeBookmark = useRemoveBookmark()
 
   const logo = listing.logo_url ? getOptimizedUrl(listing.logo_url, { width: 120 }) : null
 
-  async function toggleBookmark(e) {
+  function toggleBookmark(e) {
     e.stopPropagation()
-    if (!isLoggedIn) { navigate('/login'); return }
-    setBookmarked(b => !b)
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ သိမ်းနိုင်မည်'); navigate('/login'); return }
+    const onError = (err) => showError(err?.message || 'သိမ်းရာတွင် အမှားဖြစ်သွားသည်')
+    if (bookmarked) {
+      removeBookmark.mutate({ targetId: listing.id, targetType: 'listing' }, { onError })
+    } else {
+      addBookmark.mutate({ targetId: listing.id, targetType: 'listing' }, { onError })
+    }
   }
 
   return (
@@ -91,6 +103,10 @@ export function ListingCard({ listing, compact = false }) {
 // ── Post Card ─────────────────────────────────────────────────
 export function PostCard({ post }) {
   const navigate = useNavigate()
+  const { isLoggedIn } = useAuth()
+  const { data: saved = false } = useIsBookmarked(post.id, 'post')
+  const addBookmark = useAddBookmark()
+  const removeBookmark = useRemoveBookmark()
   const cover = post.cover_url ? getOptimizedUrl(post.cover_url, { width: 400 }) : null
   const typeColor = post.type === 'event' ? 'bg-green-500/20 text-green-400' : post.type === 'announcement' ? 'bg-amber-500/20 text-amber-400' : 'bg-brand-700/60 text-brand-200'
   const typeLabel = post.type === 'event' ? '📅 Event' : post.type === 'announcement' ? '📢 ကြေညာချက်' : '📰 သတင်း'
@@ -111,7 +127,22 @@ export function PostCard({ post }) {
         {post.excerpt && <p className="text-[11px] text-white/50 mt-1.5 line-clamp-2 font-myanmar">{post.excerpt}</p>}
         <div className="flex items-center justify-between mt-3 text-white/30 text-[10px]">
           <span>{post.author?.full_name || 'Admin'}</span>
-          <span>{new Date(post.created_at).toLocaleDateString('my-MM')}</span>
+          <span>{formatMyanmarDate(post.created_at)}</span>
+          {isLoggedIn && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                const onError = (err) => showError(err?.message || 'သိမ်းရာတွင် အမှားဖြစ်သွားသည်')
+                if (saved) removeBookmark.mutate({ targetId: post.id, targetType: 'post' }, { onError })
+                else addBookmark.mutate({ targetId: post.id, targetType: 'post' }, { onError })
+              }}
+              className="flex items-center gap-1 text-brand-300 hover:text-brand-200"
+              aria-label="Save"
+            >
+              {saved ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}
+              {saved ? 'Saved' : 'Save'}
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -169,20 +200,48 @@ export function ImageUploader({ onUpload, loading, label = 'ပုံတင်�
 const EMOJIS = ['❤️', '😂', '😮', '😢', '👏', '🔥']
 
 export function ReactionBar({ targetType, targetId }) {
-  const { isLoggedIn } = useAuth()
+  const { isLoggedIn, user } = useAuth()
   const navigate = useNavigate()
   const [counts, setCounts] = useState({})
   const [myReactions, setMyReactions] = useState(new Set())
 
+  // Fetch real counts + my reactions on mount — counts were always blank
+  // because nothing ever loaded them.
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const { data, error } = await supabase
+        .from('reactions')
+        .select('emoji, user_id')
+        .eq('target_type', targetType)
+        .eq('target_id', targetId)
+      if (cancelled || error || !data) return
+      const c = {}
+      const mine = new Set()
+      data.forEach(r => {
+        c[r.emoji] = (c[r.emoji] || 0) + 1
+        if (user && r.user_id === user.id) mine.add(r.emoji)
+      })
+      setCounts(c)
+      setMyReactions(mine)
+    }
+    load()
+    return () => { cancelled = true }
+  }, [targetType, targetId, user?.id])
+
   async function react(emoji) {
-    if (!isLoggedIn) { navigate('/login'); return }
-    const { data: { user } } = await supabase.auth.getUser()
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ Reaction ပေးနိုင်မည်'); navigate('/login'); return }
+    const { data: { user: authUser } } = await supabase.auth.getUser()
+    const uid = authUser?.id || user?.id
+    if (!uid) { showError('အကောင့်ဝင်မှ Reaction ပေးနိုင်မည်'); navigate('/login'); return }
     if (myReactions.has(emoji)) {
-      await supabase.from('reactions').delete().match({ target_type: targetType, target_id: targetId, user_id: user.id, emoji })
+      const { error } = await supabase.from('reactions').delete().match({ target_type: targetType, target_id: targetId, user_id: uid, emoji })
+      if (error) { showError(error.message); return }
       setMyReactions(s => { const n = new Set(s); n.delete(emoji); return n })
       setCounts(c => ({ ...c, [emoji]: Math.max(0, (c[emoji] || 1) - 1) }))
     } else {
-      await supabase.from('reactions').insert({ target_type: targetType, target_id: targetId, user_id: user.id, emoji })
+      const { error } = await supabase.from('reactions').insert({ target_type: targetType, target_id: targetId, user_id: uid, emoji })
+      if (error) { showError(error.message); return }
       setMyReactions(s => new Set([...s, emoji]))
       setCounts(c => ({ ...c, [emoji]: (c[emoji] || 0) + 1 }))
     }
