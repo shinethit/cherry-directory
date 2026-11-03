@@ -39,7 +39,7 @@ export default function Header() {
   // has been dismissed (first-launch sequence: splash → onboarding → changelog).
   // The version is marked seen ONLY when the user dismisses the modal, never on a timer.
   useEffect(() => {
-    const CURRENT_VERSION = '0.9.1';
+    const CURRENT_VERSION = '0.9.2';
     const lastSeen = localStorage.getItem('cherry_last_seen_version');
     if (lastSeen === CURRENT_VERSION) return;
     let timer;
@@ -56,7 +56,7 @@ export default function Header() {
 
   function closeChangelog() {
     setShowChangelog(false);
-    localStorage.setItem('cherry_last_seen_version', '0.9.1');
+    localStorage.setItem('cherry_last_seen_version', '0.9.2');
   }
 
   function handleBack() {
@@ -273,7 +273,7 @@ export default function Header() {
             </div>
 
             <p className="text-[9px] text-white/20 text-center py-4">
-              {config.app_name} v0.9.1 • {config.app_city}
+              {config.app_name} v0.9.2 • {config.app_city}
             </p>
           </div>
         </div>
@@ -286,7 +286,7 @@ export default function Header() {
             <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#140020] z-10">
               <div>
                 <h3 className="font-display font-bold text-white text-base">Change Log</h3>
-                <p className="text-[10px] text-white/40 font-myanmar">Version 0.9.1</p>
+                <p className="text-[10px] text-white/40 font-myanmar">Version 0.9.2</p>
               </div>
               <button onClick={closeChangelog} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white">
                 <X size={16} />
@@ -294,13 +294,15 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
+                { v: '0.9.2', date: '2026-11-03', items: ['Version History ကို အစအဆုံး ပြန်ရေးခြင်း (ဖေဖော်ဝါရီ ၁၆ ကစ)', 'ရက်စွဲ မှားနေတာများ ပြင်ခြင်း', 'အထောက်အထား မရှိသော ပြောဆိုချက်များ ဖြုတ်ခြင်း'] },
                 { v: '0.9.1', date: '2026-11-03', items: ['လုံခြုံရေး ပြင်ဆင်ခြင်း — ကိုယ့်ဘာသာ Admin ဖြစ်လို့မရတော့ပါ', 'Toast အသိပေးချက်များ ပေါ်လာခြင်း', 'ဧည့်သည် လုပ်ငန်းတင်နိုင်ခြင်း (Admin စစ်ပြီးမှ ပေါ်မည်)', 'အလုပ်အကိုင် / ဘတ်စ်ကား / ခရီးစဉ် / Chat / အိမ်ငှား / ကျူရှင် / မှတ်တမ်း ပြင်ဆင်ခြင်း', 'Admin Panel အကာအကွယ် + Claim စစ်ဆေးခြင်း', 'Google ဖြင့် ဝင်ရောက်ခြင်း + စကားဝှက် ပြန်ယူခြင်း', 'ဆီဆိုင် စာမျက်နှာ ပြန်ဖွင့်ခြင်း', 'Directory "ထပ်တင်ရန်" ပြင်ဆင်ခြင်း'] },
-                { v: '0.9.0', date: '2026-10-20', items: ['OSM Bulk Import စနစ်', 'ဒေတာတူညီမှု တင်းကျပ်စွာ စစ်ဆေးခြင်း', 'iOS PWA Safe-area ပြင်ဆင်ခြင်း', 'History RLS 401 Error ပြင်ဆင်ခြင်း', 'Batch Insert 503 Timeout ပြင်ဆင်ခြင်း'] },
-                { v: '0.8.0', date: '2026-10-19', items: ['Saved Hub စုစည်းခြင်း', 'လုပ်ငန်းဖွင့်ချိန် ပြသခြင်း', 'ဆင်တူလုပ်ငန်းများ ပြသခြင်း', 'My Submissions & RSVPs', 'Report Spam စနစ်', 'အနီးအနား ရှာဖွေခြင်း (GPS)'] },
-                { v: '0.7.0', date: '2026-10-18', items: ['React.lazy ဖြင့် Bundle ခွဲခြင်း', 'Super Admin အခန်းကဏ္ဍ ပြင်ဆင်ခြင်း', 'Audit Log RLS ပြင်ဆင်ခြင်း'] },
-                { v: '0.6.0', date: '2026-10-15', items: ['Points နှင့် Tiers စနစ်', 'Leaderboard အဆင့်သတ်မှတ်ချက်', 'အလှူငွေနှင့် ခရီးသွားလမ်းညွှန်'] },
-                { v: '0.5.0', date: '2026-10-13', items: ['Community ဝန်ဆောင်မှုများ', 'ဈေးနှုန်းများ', 'ဆီဆိုင်အခြေအနေ'] },
-                { v: '0.1.0', date: '2026-10-01', items: ['ပရောဂျက် စတင်တည်ဆောက်ခြင်း', 'Auth စနစ်', 'PWA စနစ်'] }
+                { v: '0.9.0', date: '2026-10-20', items: ['Change Log popup + Version History', 'Myanmar ဘာသာပြန်ခြင်း', 'Version အသစ်တက်တိုင်း အလိုအလျောက် ပြခြင်း', 'စာလုံးအရွယ် ကြီးခြင်း'] },
+                { v: '0.8.0', date: '2026-10-20', items: ['OSM Bulk Import စနစ်', 'ဒေတာတူညီမှု တင်းကျပ်စွာ စစ်ဆေးခြင်း', 'Batch Insert 503 Timeout ပြင်ဆင်ခြင်း'] },
+                { v: '0.7.0', date: '2026-10-14', items: ['iOS PWA Safe-area ပြင်ဆင်ခြင်း', 'ConfirmModal + Toast စနစ်'] },
+                { v: '0.6.0', date: '2026-10-13', items: ['Offline support + Cache အခြေအနေ', 'Saved Hub စုစည်းခြင်း', 'လုပ်ငန်းဖွင့်ချိန် + ဆင်တူလုပ်ငန်းများ', 'Points နှင့် Tiers စနစ်', 'My Submissions & RSVPs', 'React.lazy ဖြင့် Bundle ခွဲခြင်း'] },
+                { v: '0.5.0', date: '2026-10-12', items: ['၆ လခွဲ ရပ်နားပြီးနောက် ပြန်စခြင်း', 'Search + Notifications စာမျက်နှာများ', 'Saved Places + Onboarding Guide', 'Sentry + Toast ထည့်ခြင်း'] },
+                { v: '2.0', date: '2026-03-22', items: ['React + Supabase အဖြစ် ပြန်ရေးခြင်း (Total Upgrade)', 'စာမျက်နှာ ၄၀ ကျော် (Fuel, Chat, Jobs, Rent, Tutoring…)', 'BottomNav + ErrorBoundary', 'Share + QR Code', 'Weather Alert + LocationPicker'] },
+                { v: '0.1.0', date: '2026-02-16', items: ['ပရောဂျက် စတင်ခြင်း (TGIBUS)', 'Google Sheets သုံး Cherry Directory', 'သတင်း/ပွဲ + အသိပညာ + လုပ်ငန်းရှာဖွေခြင်း', 'Chat + PWA စနစ်'] }
               ].map((rel, i) => (
                 <div key={i} className="space-y-2">
                   <div className="flex items-center gap-2">
