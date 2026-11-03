@@ -1,15 +1,21 @@
 /**
  * Event countdown — returns { label, cls, urgent }
  * Returns null for far-future or long-past events.
+ * Day boundaries are Myanmar (Asia/Rangoon) wall dates, not the device's
+ * local midnight — an event at 00:30 MMT is "today" even where the device
+ * clock still shows yesterday evening.
  */
+import { mmtDayNumber } from './myanmarDate'
+
 export function getCountdown(iso, lang = 'mm') {
   if (!iso) return null
-  const now = new Date()
   const target = new Date(iso)
   if (isNaN(target.getTime())) return null
 
-  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  const days = Math.round((startOfDay(target) - startOfDay(now)) / 86400000)
+  const targetDay = mmtDayNumber(iso)
+  const todayDay = mmtDayNumber(new Date())
+  if (targetDay === null || todayDay === null) return null
+  const days = targetDay - todayDay
 
   if (days < 0) {
     const abs = Math.abs(days)

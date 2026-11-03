@@ -13,6 +13,7 @@ import {
 } from '../lib/notificationService'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { formatMyanmarDate } from '../lib/myanmarDate'
 
 // Notification type → icon + color mapping
 const TYPE_CFG = {
@@ -34,7 +35,11 @@ function timeAgoShort(iso, lang) {
   if (h < 24) return `${h}${lang === 'mm' ? ' နာရီ' : 'h'}`
   const d = Math.floor(h / 24)
   if (d < 7) return `${d}${lang === 'mm' ? ' ရက်' : 'd'}`
-  return new Date(iso).toLocaleDateString(lang === 'mm' ? 'my-MM' : 'en-US', { month: 'short', day: 'numeric' })
+  // NEVER toLocaleDateString('my-MM', …) — missing on many phones, falls
+  // back to English (H-22). Hardcoded Myanmar month names instead.
+  return lang === 'mm'
+    ? formatMyanmarDate(iso)
+    : new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 export default function NotificationsPage() {

@@ -12,8 +12,8 @@ import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { showError, showSuccess } from '../lib/toast'
 import { confirmDialog } from '../lib/confirmDialog'
-import { useDeleteReview } from '../hooks/useReviews'
-import { toTelHref, toWaHref } from '../lib/phoneMask'
+import { useDeleteReview, useCreateReview } from '../hooks/useReviews'
+import { maskPhone, toTelHref, toWaHref } from '../lib/phoneMask'
 import { formatMyanmarDate } from '../lib/myanmarDate'
 import Lightbox from '../components/Lightbox'
 import ShareButton from '../components/ShareButton'
@@ -35,7 +35,9 @@ function ReviewRow({ r, listingId, onDeleted }) {
       showSuccess('Review ဖျက်ပြီးပါပြီ')
       onDeleted()
     } catch (err) {
-      showError(err?.message || 'Review ဖျက်မရပါ')
+      // No toast here: useDeleteReview already toasts via
+      // handleSupabaseError on every Supabase failure (I-M2).
+      console.warn('Delete review failed:', err)
     }
   }
 
@@ -69,17 +71,28 @@ export default function ListingDetailPage() {
   const navigate = useNavigate()
   const { isLoggedIn, profile, isAdmin, isModerator, user } = useAuth()
   const { t, lang } = useLang()
-  const { data: bookmarked = false } = useIsBookmarked(id)
+  const { data: bookmarked = false, isError: bookmarkCheckError } = useIsBookmarked(id)
   const addBookmark = useAddBookmark()
   const removeBookmark = useRemoveBookmark()
+  const bookmarkPending = addBookmark.isPending || removeBookmark.isPending
+  const createReview = useCreateReview(id)
 
   function toggleBookmark() {
     if (!isLoggedIn) { showError('အကောင့်ဝင်မှ သိမ်းနိုင်မည်'); navigate('/login'); return }
-    const onError = (err) => showError(err?.message || 'သိမ်းရာတွင် အမှားဖြစ်သွားသည်')
+    // No in-flight guard used to let two fast taps fire add-then-remove
+    // and land out of order; the icon also flipped only after the
+    // refetch round-trip. Optimistic updates now live in the hooks.
+    if (bookmarkPending) return
+    // If the bookmark check itself failed, `bookmarked` silently reads
+    // false and a tap can hit the unique constraint — disable instead.
+    if (bookmarkCheckError) { showError('သိမ်းထားမှု စစ်မရပါ — ထပ်ကြိုးစားပါ'); return }
+    // No per-call onError: the bookmark hooks already toast via
+    // handleSupabaseError on failure (I-M2) — a second toast here would
+    // show the same error twice.
     if (bookmarked) {
-      removeBookmark.mutate({ targetId: id, targetType: 'listing' }, { onError })
+      removeBookmark.mutate({ targetId: id, targetType: 'listing' })
     } else {
-      addBookmark.mutate({ targetId: id, targetType: 'listing' }, { onError })
+      addBookmark.mutate({ targetId: id, targetType: 'listing' })
     }
   }
   const [listing, setListing] = useState(null)
@@ -97,6 +110,10 @@ export default function ListingDetailPage() {
   const [notFound, setNotFound] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [hasMenu, setHasMenu] = useState(false)
+  const [reporting, setReporting] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [reportDetail, setReportDetail] = useState('')
+  const [reportSubmitting, setReportSubmitting] = useState(false)
 
   useSEO({
     title: listing ? (lang === 'mm' ? listing.name_mm || listing.name : listing.name) : 'Business',
@@ -118,13 +135,22 @@ export default function ListingDetailPage() {
         ])
         if (lErr && lErr.code !== 'PGRST116') { setLoadError(true); setLoading(false); return }
         if (!l) { setNotFound(true); setLoading(false); return }
-        if (rErr) console.warn(rErr)
+        if (rErr) { console.warn(rErr); showError('Review များ တင်မရပါ — ထပ်ကြိုးစားပါ') }
         setListing(l)
         setReviews(r || [])
         // "View Menu & Prices" only when the listing actually has menu items.
-        const { count: menuCount } = await supabase.from('menu_items').select('id', { count: 'exact', head: true }).eq('listing_id', id)
+        const { count: menuCount, error: menuErr } = await supabase.from('menu_items').select('id', { count: 'exact', head: true }).eq('listing_id', id)
+        if (menuErr) { console.warn(menuErr); showError('Menu ရှိမရှိ စစ်မရပါ') }
         setHasMenu((menuCount || 0) > 0)
-        supabase.from('listings').update({ view_count: (l?.view_count || 0) + 1 }).eq('id', id)
+        // View count: the direct UPDATE is owner-only under RLS, so it
+        // silently never worked for guests (and raced for everyone).
+        // The security-definer RPC increments atomically instead. If the
+        // migration has not run yet the RPC is missing — log and carry on;
+        // the page must never break over a view count.
+        try {
+          const { error: viewErr } = await supabase.rpc('increment_listing_views', { p_listing_id: id })
+          if (viewErr) console.warn('increment_listing_views failed:', viewErr)
+        } catch (viewEx) { console.warn('increment_listing_views failed:', viewEx) }
 
         if (profile) {
           const [{ data: claim }, { data: vote }] = await Promise.all([
@@ -159,16 +185,56 @@ export default function ListingDetailPage() {
 
   async function submitReview() {
     if (!isLoggedIn || myRating === 0) return
+    // useCreateReview runs validateReview (rating 1–5, comment ≤1000) and
+    // uses user.id — the old hand-rolled upsert skipped validation and
+    // dereferenced profile.id with only an isLoggedIn guard, so a null
+    // profile threw with no try/catch and left submitting=true until remount.
+    if (!user) { showError('အကောင့်ဝင်မှ Review ရေးနိုင်မည်'); return }
     setSubmitting(true)
-    const { error } = await supabase.from('reviews').upsert(
-      { listing_id: id, user_id: profile.id, rating: myRating, comment: myComment },
-      { onConflict: 'listing_id,user_id' }
-    )
-    if (error) { showError(error.message); setSubmitting(false); return }
-    const { data } = await supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(20)
-    setReviews(data || [])
-    // Clear only on success — a failed submit keeps the user's text.
-    setMyComment(''); setMyRating(0); setSubmitting(false)
+    try {
+      await createReview.mutateAsync({ rating: myRating, comment: myComment })
+      const { data, error: refetchErr } = await supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(20)
+      if (refetchErr) { console.warn(refetchErr); showError('Review တင်ပြီးပါပြီ — စာရင်း ပြန်တင်မရပါ') }
+      else setReviews(data || [])
+      // Clear only on success — a failed submit keeps the user's text.
+      setMyComment(''); setMyRating(0)
+    } catch (err) {
+      showError(err?.message || 'Review တင်မရပါ — ထပ်ကြိုးစားပါ')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function handleReport() {
+    if (!reportReason.trim()) return
+    setReportSubmitting(true)
+    try {
+      // Same shape as LostFoundDetailPage: the "Anyone can report"
+      // policy allows reporter_id null (guest) or auth.uid().
+      const { error } = await supabase.from('reports').insert({
+        target_type: 'listing',
+        target_id: id,
+        reporter_id: user?.id || null,
+        reason: reportReason.trim(),
+        note: reportDetail.trim() || null,
+        status: 'pending',
+      })
+      if (error) throw error
+      // No client-side report_count UPDATE: the on_report_created
+      // trigger (migration §21) increments it server-side. A client
+      // update here would double-count whenever RLS allowed it
+      // (owner/admin reporters). Just bump the local copy for display.
+      setListing(l => l ? { ...l, report_count: (l.report_count || 0) + 1 } : l)
+      setReporting(false)
+      setReportReason('')
+      setReportDetail('')
+      showSuccess('Report တင်ပြီးပါပြီ — Admin မှ စစ်ဆေးမည်')
+    } catch (err) {
+      console.warn('Report failed:', err)
+      showError('Report တင်မရပါ — ထပ်ကြိုးစားပါ')
+    } finally {
+      setReportSubmitting(false)
+    }
   }
 
   if (loading) return (
@@ -227,13 +293,49 @@ export default function ListingDetailPage() {
             </button>
           )}
           <button
+            onClick={() => setReporting(r => !r)}
+            className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors"
+            title="Report လုပ်မည်"
+          >
+            <Flag size={16} className="text-white/60" />
+          </button>
+          <button
             onClick={toggleBookmark}
-            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${bookmarked ? 'bg-gold-500/20 text-gold-400' : 'bg-white/8 text-white/50 hover:text-white'}`}
+            disabled={bookmarkPending}
+            className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 ${bookmarked ? 'bg-gold-500/20 text-gold-400' : 'bg-white/8 text-white/50 hover:text-white'}`}
           >
             {bookmarked ? <BookmarkCheck size={18} /> : <Bookmark size={18} />}
           </button>
         </div>
       </div>
+
+      {/* Report this listing — inserts into reports like LostFound does */}
+      {reporting && (
+        <div className="mx-4 mb-4 space-y-2 rounded-2xl bg-white/5 border border-white/10 p-3">
+          <p className="text-xs font-semibold text-white/70 font-myanmar">ဤလုပ်ငန်းကို Report လုပ်မည်</p>
+          <input
+            type="text"
+            value={reportReason}
+            onChange={e => setReportReason(e.target.value)}
+            placeholder="Report လုပ်ရသည့် အကြောင်းရင်း..."
+            className="input-dark text-sm font-myanmar w-full"
+          />
+          <textarea
+            value={reportDetail}
+            onChange={e => setReportDetail(e.target.value)}
+            placeholder="အသေးစိတ် (မဖြစ်မနေ မဟုတ်)"
+            className="input-dark text-sm font-myanmar w-full resize-none h-16"
+          />
+          <div className="flex gap-2">
+            <button onClick={handleReport} disabled={!reportReason.trim() || reportSubmitting} className="flex-1 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold disabled:opacity-40">
+              {reportSubmitting ? 'တင်နေသည်...' : 'Report တင်မည်'}
+            </button>
+            <button onClick={() => { setReporting(false); setReportReason(''); setReportDetail('') }} className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Images gallery with lightbox */}
       {cover && (
@@ -340,12 +442,12 @@ export default function ListingDetailPage() {
         <div className="grid grid-cols-2 gap-2">
           {listing.phone_1 && (
             <a href={toTelHref(listing.phone_1)} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
-              <Phone size={16} /> {listing.phone_1}
+              <Phone size={16} /> {maskPhone(listing.phone_1, isLoggedIn)}
             </a>
           )}
           {listing.phone_2 && (
             <a href={toTelHref(listing.phone_2)} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-white/5 border border-white/10 text-white/70 text-sm hover:bg-white/8 transition-colors">
-              <Phone size={16} /> {listing.phone_2}
+              <Phone size={16} /> {maskPhone(listing.phone_2, isLoggedIn)}
             </a>
           )}
           {listing.viber && (
@@ -428,6 +530,17 @@ export default function ListingDetailPage() {
                   <p className="text-xs text-white/40 font-myanmar mt-0.5">Admin စစ်ဆေးပြီးနောက် badge ပေါ်မည်</p>
                 </div>
               </div>
+            ) : claimStatus === 'rejected' ? (
+              <div className="p-4 bg-red-500/10 border border-red-500/25 rounded-2xl space-y-2">
+                <p className="text-sm font-display font-semibold text-red-400">Claim ပယ်ချခံရပါတယ် — ပြန်လျှောက်နိုင်ပါတယ်</p>
+                <p className="text-xs text-white/40 font-myanmar">အချက်အလက် ပြည့်စုံအောင် ပြင်ပြီး ပြန်လျှောက်ပါ</p>
+                <button
+                  onClick={() => navigate(`/claim/${id}`)}
+                  className="w-full py-2.5 rounded-xl bg-brand-600/40 border border-brand-400/40 text-brand-200 text-xs font-bold"
+                >
+                  ပြန်လျှောက်မည်
+                </button>
+              </div>
             ) : (
               <button
                 onClick={() => navigate(`/claim/${id}`)}
@@ -501,7 +614,9 @@ export default function ListingDetailPage() {
 
         {/* Reviews */}
         <div>
-          <p className="text-sm font-display font-bold text-white mb-3">{t('reviews_title')} ({reviews.length})</p>
+          {/* Reviews are fetched with .limit(20), so reviews.length caps at
+              20 — show the listing's own rating_count when present. */}
+          <p className="text-sm font-display font-bold text-white mb-3">{t('reviews_title')} ({listing.rating_count ?? reviews.length})</p>
 
           {isLoggedIn && (
             <div className="card-dark p-4 rounded-2xl mb-4 space-y-3">

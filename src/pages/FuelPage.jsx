@@ -84,7 +84,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
                   </div>
                   <div className="flex flex-col gap-1 flex-shrink-0">
                     {['available','limited','unavailable'].map(s => (
-                      <button key={s} onClick={() => onReport(station.id, ft.name, s)}
+                      <button key={s} onClick={() => onReport(station.id, ft.id, s)}
                         className={`text-[8px] font-bold px-2 py-1 rounded-lg border transition-colors ${
                           row?.status === s ? STATUS_CFG[s].bg + ' ' + STATUS_CFG[s].color : 'bg-white/5 border-white/10 text-white/30 hover:text-white/60'
                         }`}>
@@ -188,7 +188,12 @@ function FuelTypesTab({ onChanged }) {
   async function addFuelType() {
     if (!form.name.trim() || !form.name_mm.trim()) return
     setSaving(true)
+    // fuel_types.id is a text PK with no default — generate it as a slug
+    // from the name ('Petrol 92' → 'petrol92', matching the seeded ids).
+    // The old insert passed no id at all, so it always failed.
+    const slugId = form.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || `fuel${Date.now()}`
     const { error } = await supabase.from('fuel_types').insert({
+      id: slugId,
       name: form.name.trim(),
       name_mm: form.name_mm.trim(),
       icon: form.icon.trim() || '⛽',
@@ -629,7 +634,12 @@ export default function FuelPage() {
 
   useEffect(() => { load() }, [])
 
-  // Optimistic update for fuel status
+  // Optimistic update for fuel status.
+  // fuelType is the fuel_types.id ('petrol92') — fuel_reports.fuel_type
+  // is an FK to fuel_types(id), so passing the display name ('Petrol 92')
+  // failed every report. Local state, however, is keyed by fuel NAME
+  // (current_fuel_status.fuel_name), so resolve the name for the
+  // optimistic update below.
   async function handleReport(stationId, fuelType, status) {
     const { data: { user } } = await supabase.auth.getUser()
     // Insert report
@@ -644,12 +654,13 @@ export default function FuelPage() {
       return
     }
 
+    const fuelName = allFuelTypes.find(ft => ft.id === fuelType)?.name || fuelType
     // Update local state optimistically
     setStations(prevStations => prevStations.map(station => {
       if (station.id !== stationId) return station
       const updatedFuels = { ...station.fuels }
-      updatedFuels[fuelType] = {
-        ...updatedFuels[fuelType],
+      updatedFuels[fuelName] = {
+        ...updatedFuels[fuelName],
         status,
         reported_at: new Date().toISOString() // approximate
       }

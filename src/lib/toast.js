@@ -59,26 +59,3 @@ export const showWarning = (message) => {
     draggable: true,
   });
 };
-
-/**
- * Show loading notification
- * @param {string} message - Message to display
- * @returns {string} Toast ID for later update
- */
-export const showLoading = (message) => {
-  return toast.loading(message, {
-    position: 'top-right',
-  });
-};
-
-/**
- * Update loading notification
- * @param {string} toastId - Toast ID from showLoading
- * @param {object} options - Update options
- */
-export const updateToast = (toastId, options) => {
-  toast.update(toastId, {
-    ...options,
-    isLoading: false,
-  });
-};

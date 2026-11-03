@@ -1,6 +1,6 @@
-/* Cherry Directory — Service Worker v4 */
+/* Cherry Directory — Service Worker v5 */
 
-const CACHE_VERSION = 'v4'
+const CACHE_VERSION = 'v5'
 const CACHE_NAME = 'cherry-directory-' + CACHE_VERSION
 
 function offlineFallback() {
@@ -76,10 +76,13 @@ self.addEventListener('fetch', (event) => {
     url.hostname.includes('unpkg.com')
 
   if (isStatic) {
+    // Stale-while-revalidate (C-M1, v9.3): a cache hit used to be returned
+    // with no TTL, so old entries survived indefinitely while the cache
+    // version was unchanged. Now a hit is served immediately AND refreshed
+    // in the background, so the next load gets the fresh copy.
     event.respondWith(
       caches.match(request).then((cached) => {
-        if (cached) return cached
-        return fetch(request)
+        const fetchAndCache = fetch(request)
           .then((res) => {
             if (res && res.status === 200) {
               const copy = res.clone()
@@ -90,7 +93,12 @@ self.addEventListener('fetch', (event) => {
             }
             return res
           })
-          .catch(() => offlineFallback())
+          .catch(() => null)
+        if (cached) {
+          event.waitUntil(fetchAndCache)
+          return cached
+        }
+        return fetchAndCache.then((res) => res || offlineFallback())
       })
     )
     return

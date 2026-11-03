@@ -1,15 +1,26 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
+import { showError } from '../lib/toast';
 
 export default function SplashScreen({ onConsent }) {
   const [agreed, setAgreed] = useState(false);
 
   const handleAgree = () => {
+    if (agreed) return;
     setAgreed(true);
     setTimeout(() => {
-      onConsent();
-      // First-launch sequence: splash → onboarding → changelog.
-      window.dispatchEvent(new Event('cherry:splash-done'));
+      // H-1: onConsent persists to localStorage and can throw — a throw
+      // used to leave this button disabled forever on a splash with no
+      // dismiss path. Catch it, re-enable the button, and let the user retry.
+      try {
+        onConsent();
+        // First-launch sequence: splash → onboarding → changelog.
+        window.dispatchEvent(new Event('cherry:splash-done'));
+      } catch (err) {
+        console.warn('Splash consent failed:', err);
+        setAgreed(false);
+        showError('သိမ်းဆည်းမှု မအောင်မြင်ပါ — ထပ်ကြိုးစားပါ');
+      }
     }, 300);
   };
 
@@ -33,7 +44,7 @@ export default function SplashScreen({ onConsent }) {
             တိုက်ရိုက်တင်ပြသော ပလက်ဖောင်းဖြစ်ပါသည်။
           </p>
           <p className="text-xs text-white/40">
-            Version 0.9.2 • Since 2026 • by Shine Thit
+            Version 9.3 • Since 2026 • by Shine Thit
           </p>
         </div>
 

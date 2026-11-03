@@ -8,6 +8,7 @@ import { useSEO } from '../hooks/useSEO'
 import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { getCountdown } from '../lib/countdown'
+import { formatMyanmarDateTime } from '../lib/myanmarDate'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
 
@@ -27,11 +28,13 @@ export default function MyRsvpsPage() {
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [tab, setTab] = useState('upcoming')
 
   const load = useCallback(async () => {
     if (!user) { setLoading(false); return }
     setLoading(true)
+    setLoadError('')
     try {
       const { data, error } = await supabase
         .from('event_rsvps')
@@ -45,7 +48,7 @@ export default function MyRsvpsPage() {
         .map(r => (r.post ? { ...r.post, _rsvp: r.status } : null))
         .filter(p => p && p.type === 'event')
       setItems(list)
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(e.message || 'Error') }
     setLoading(false)
   }, [user])
 
@@ -81,10 +84,24 @@ export default function MyRsvpsPage() {
   }
 
   const now = new Date()
-  const upcoming = items.filter(i => new Date(i.event_end || i.event_start) >= now)
-    .sort((a, b) => new Date(a.event_start) - new Date(b.event_start))
-  const past = items.filter(i => new Date(i.event_end || i.event_start) < now)
-    .sort((a, b) => new Date(b.event_start) - new Date(a.event_start))
+  const nowMs = now.getTime()
+  // Event end/start as a timestamp, or null when the date is missing or
+  // invalid. new Date(null) is 1970 — a dateless event must NEVER sort
+  // as "past" (F-LOW-8): unknown dates count as upcoming.
+  function eventEndMs(ev) {
+    const t = new Date(ev.event_end || ev.event_start).getTime()
+    return Number.isNaN(t) ? null : t
+  }
+  const upcoming = items.filter(i => { const t = eventEndMs(i); return t === null || t >= nowMs })
+    .sort((a, b) => {
+      const ta = eventEndMs(a), tb = eventEndMs(b)
+      if (ta === null && tb === null) return 0
+      if (ta === null) return 1
+      if (tb === null) return -1
+      return ta - tb
+    })
+  const past = items.filter(i => { const t = eventEndMs(i); return t !== null && t < nowMs })
+    .sort((a, b) => eventEndMs(b) - eventEndMs(a))
 
   const list = tab === 'upcoming' ? upcoming : past
 
@@ -132,6 +149,17 @@ export default function MyRsvpsPage() {
       <div className="px-4 space-y-2">
         {loading ? (
           [1, 2, 3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
+        ) : loadError ? (
+          <div className="flex flex-col items-center py-16 text-center px-8">
+            <span className="text-5xl mb-4">⚠️</span>
+            <p className="font-display font-semibold text-white/70">
+              {lang === 'mm' ? 'RSVP များ ရယူမရပါ' : 'Could not load your RSVPs'}
+            </p>
+            <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{loadError}</p>
+            <button onClick={load} className="btn-primary text-sm mt-4 px-5 py-2">
+              {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
+            </button>
+          </div>
         ) : list.length === 0 ? (
           <EmptyState
             icon="🎟️"
@@ -144,7 +172,8 @@ export default function MyRsvpsPage() {
           list.map(ev => {
             const cover = ev.cover_url ? getOptimizedUrl(ev.cover_url, { width: 300 }) : null
             const cd = getCountdown(ev.event_start, lang)
-            const isPast = new Date(ev.event_end || ev.event_start) < now
+            // Unknown dates are upcoming, never past (F-LOW-8).
+            const isPast = eventEndMs(ev) !== null && eventEndMs(ev) < nowMs
             const isUnpublished = ev.status !== 'published'
             const rsvpMeta = RSVP_STATUS[ev._rsvp] || RSVP_STATUS.interested
             const RsvpIcon = rsvpMeta.icon
@@ -177,7 +206,9 @@ export default function MyRsvpsPage() {
                     {ev.event_start && (
                       <p className="text-[10px] text-white/40 mt-1 flex items-center gap-1">
                         <Clock size={9} />
-                        {new Date(ev.event_start).toLocaleString(lang === 'mm' ? 'my-MM' : 'en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {lang === 'mm'
+                          ? formatMyanmarDateTime(ev.event_start)
+                          : new Date(ev.event_start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
                     {ev.event_location && (

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Save, Eye, EyeOff } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, X, Save, Eye, EyeOff, Lock } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
+import { useAuditLog } from '../hooks/useAuditLog'
 import { showError, showSuccess } from '../lib/toast'
 import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့်ထားပါ
 import { confirmDialog } from '../lib/confirmDialog'
@@ -264,8 +266,10 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
 
 // ── Main Page ─────────────────────────────────────────────────
 export default function CategoryManagerPage() {
+  const navigate = useNavigate()
   const { lang }      = useLang()
-  const { isModerator, isLoggedIn } = useAuth()
+  const { isAdmin, isModerator, loading: authLoading } = useAuth()
+  const { log } = useAuditLog()
   useSEO({ title: 'Category Manager' })
 
   const [cats, setCats]   = useState([])
@@ -330,6 +334,23 @@ export default function CategoryManagerPage() {
       })
     }
     walk(cat.id)
+    // Pre-check BEFORE asking for confirmation or deleting anything:
+    // if any listing in the whole subtree exists, refuse with the
+    // count. Deleting deepest-first without this left a half-deleted
+    // tree on a mid-way failure, with no rollback.
+    const subtreeIds = [cat.id, ...descendants.map(d => d.id)]
+    const { count: listingCount, error: countErr } = await supabase
+      .from('listings')
+      .select('*', { count: 'exact', head: true })
+      .in('category_id', subtreeIds)
+    if (countErr) {
+      showError('လုပ်ငန်း အရေအတွက် စစ်ဆေးမရပါ: ' + countErr.message)
+      return
+    }
+    if ((listingCount || 0) > 0) {
+      showError(`ဒီ category (နှင့် sub-category) အောက်မှာ လုပ်ငန်း ${listingCount} ခု ရှိနေလို့ ဖျက်လို့မရပါ — လုပ်ငန်းများကို အရင် ရွှေ့ပါ`)
+      return
+    }
     const msg = descendants.length > 0
       ? (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်ရင် Sub-category ${descendants.length} ခုလည်း ဖျက်မည်။ ဆက်မည်လား?` : `Deleting "${cat.name}" will also delete ${descendants.length} sub-categories. Continue?`)
       : (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်မည်လား?` : `Delete "${cat.name}"?`)
@@ -342,6 +363,14 @@ export default function CategoryManagerPage() {
     }
     const { error } = await supabase.from('categories').delete().eq('id', cat.id)
     if (error) { await reportDeleteBlocked(cat, error); return }
+    // Audit log (fire-and-forget) — category delete previously had none.
+    log({
+      action: 'delete',
+      table: 'categories',
+      id: cat.id,
+      name: cat.name_mm || cat.name,
+      before: { name: cat.name_mm || cat.name, descendants: descendants.length },
+    }).then(ok => { if (!ok) console.warn('Audit log failed for category delete') })
     showSuccess(lang === 'mm' ? 'ဖျက်ပြီးပါပြီ' : 'Deleted')
     load()
   }
@@ -357,6 +386,27 @@ export default function CategoryManagerPage() {
 
   const totalActive  = cats.filter(c => c.is_active && c.type === typeFilter).length
   const totalHidden  = cats.filter(c => !c.is_active && c.type === typeFilter).length
+
+  // Auth guard: this page was protected only indirectly by the route
+  // guard and its embedding in AdminPage — one routing mistake would
+  // have exposed category delete to everyone.
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60dvh] px-8 text-center">
+        <p className="text-white/50 font-myanmar">စစ်ဆေးနေသည်...</p>
+      </div>
+    )
+  }
+
+  if (!isAdmin && !isModerator) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60dvh] px-8 text-center gap-3">
+        <Lock size={32} className="text-white/30" />
+        <p className="text-white/50 font-myanmar">🔒 Admin / Moderator သာ ကြည့်နိုင်သည်</p>
+        <button onClick={() => navigate('/')} className="btn-primary text-xs px-4 py-2">Home ပြန်မည်</button>
+      </div>
+    )
+  }
 
   return (
     <div className="pb-12">

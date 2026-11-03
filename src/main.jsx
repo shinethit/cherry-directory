@@ -28,22 +28,11 @@ initErrorTracking(import.meta.env.VITE_SENTRY_DSN)
 console.log('=== APP STARTING ===')
 console.log('Environment:', import.meta.env.MODE)
 
-
-// ── Register Service Worker (production only) ─────────────
-if ('serviceWorker' in navigator) {
-  const isDev = import.meta.env.MODE === 'development'
-  const enableInDev = localStorage.getItem('enable_sw_dev') === 'true'
-  if (!isDev || enableInDev) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').then(
-        (reg) => console.log('[SW] Registered:', reg.scope),
-        (err) => console.warn('[SW] Registration failed:', err.message)
-      )
-    })
-  } else {
-    console.log('[SW] Skipped (dev mode). Enable with: localStorage.enable_sw_dev=true')
-  }
-}
+// NOTE (C-L1): the service worker is registered exactly once, in
+// useServiceWorker.js (single registration point, with the dev-mode guard).
+// The duplicate registration that used to live here — including its
+// unguarded localStorage read before createRoot (H-2, blank white screen
+// on SecurityError) — was removed in v9.3.
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <QueryClientProvider client={queryClient}>
@@ -52,8 +41,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       {/* PWA install banner needs no contexts, so it lives here as a sibling. */}
       <PWAInstallBanner />
       <UpdatePrompt />
-      {/* ToastContainer must exist or showError/showSuccess toasts are invisible. */}
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
     </ErrorBoundary>
+    {/* ToastContainer lives OUTSIDE ErrorBoundary (I-LOW): toasts fired
+        after a crash used to be invisible because the boundary unmounted
+        everything inside it. */}
+    <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
   </QueryClientProvider>
 )

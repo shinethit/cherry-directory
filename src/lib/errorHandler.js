@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/react';
+import { showError } from './toast';
 /**
  * Initialize Sentry for error tracking.
  * No-op when no DSN is set — Sentry never initializes without
@@ -89,6 +90,10 @@ export const handleSupabaseError = (error, operation = 'Database Operation') => 
   }
 
   logError(error, operation, { code, message });
+
+  // Surface the failure to the user as well — callers that rely on this
+  // helper alone (no own toast) used to fail silently (I-M2).
+  showError(message);
 
   return { code, message, error };
 };

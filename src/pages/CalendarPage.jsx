@@ -9,12 +9,14 @@ import { useSEO } from '../hooks/useSEO'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { getCountdown } from '../lib/countdown'
 import { mmtParts, formatMyanmarDate } from '../lib/myanmarDate'
-import { showError } from '../lib/toast'
+import { showError, showSuccess } from '../lib/toast'
 import WeeklyView from '../components/WeeklyView'
 
 // Myanmar month names
 const MM_MONTHS = ['ဇန်နဝါရီ','ဖေဖော်ဝါရီ','မတ်','ဧပြီ','မေ','ဇွန်','ဇူလိုင်','သြဂုတ်','စက်တင်ဘာ','အောက်တိုဘာ','နိုဝင်ဘာ','ဒီဇင်ဘာ']
 const EN_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const EN_MONTHS_S = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const EN_WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
 const MM_DAYS   = ['တ','လ','အ','ဗ','က','သ','နွ']
 const EN_DAYS   = ['Su','Mo','Tu','We','Th','Fr','Sa']
 
@@ -36,15 +38,31 @@ function formatTime(iso, lang) {
 }
 
 function formatDateRange(start, end, lang) {
-  const s = new Date(start)
-  const e = end ? new Date(end) : null
+  // Compare Myanmar-time parts, never local-Date parts: a stored
+  // +06:30 datetime compared in device time could split one MMT day
+  // across two local days (and vice versa).
+  const sp = mmtParts(start)
+  const ep = end ? mmtParts(end) : null
+  if (!sp) return ''
+  const sameDay = !ep || (sp.y === ep.y && sp.m === ep.m && sp.d === ep.d)
   if (lang === 'mm') {
-    if (!e || isSameDay(s, e)) return formatMyanmarDate(start, { year: true })
+    if (sameDay) return formatMyanmarDate(start, { year: true })
     return `${formatMyanmarDate(start)} – ${formatMyanmarDate(end)}`
   }
-  const opts = { month: 'short', day: 'numeric' }
-  if (!e || isSameDay(s, e)) return s.toLocaleDateString('en-US', { ...opts, year: 'numeric' })
-  return `${s.toLocaleDateString('en-US', opts)} – ${e.toLocaleDateString('en-US', opts)}`
+  // English branch goes through mmtParts too: the old
+  // toLocaleDateString('en-US') on a stored +06:30 datetime could show
+  // a different date than the Myanmar branch on a non-MMT device.
+  if (sameDay) {
+    return `${EN_MONTHS_S[sp.m - 1]} ${sp.d}, ${sp.y}`
+  }
+  return `${EN_MONTHS_S[sp.m - 1]} ${sp.d} – ${EN_MONTHS_S[ep.m - 1]} ${ep.d}`
+}
+
+// English long date ("Wednesday, November 4") from Myanmar-time parts.
+function formatDateEnLong(iso) {
+  const p = mmtParts(iso)
+  if (!p) return ''
+  return `${EN_WEEKDAYS[p.weekday]}, ${EN_MONTHS[p.m - 1]} ${p.d}`
 }
 
 // ── RSVP Button ───────────────────────────────────────────────
@@ -81,6 +99,7 @@ function RsvpButton({ postId }) {
       if (error) { showError(error.message); setLoading(false); return }
       setCounts(c => ({ ...c, [newStatus]: Math.max(0, c[newStatus] - 1) }))
       setStatus(null)
+      showSuccess('RSVP ဖျက်ပြီးပါပြီ')
     } else {
       const { error } = await supabase.from('event_rsvps').upsert(
         { post_id: postId, user_id: user.id, status: newStatus },
@@ -90,6 +109,7 @@ function RsvpButton({ postId }) {
       if (status) setCounts(c => ({ ...c, [status]: Math.max(0, c[status] - 1) }))
       setCounts(c => ({ ...c, [newStatus]: c[newStatus] + 1 }))
       setStatus(newStatus)
+      showSuccess(newStatus === 'going' ? '✓ Going အဖြစ် မှတ်ပြီးပါပြီ' : '✓ Interested အဖြစ် မှတ်ပြီးပါပြီ')
     }
     setLoading(false)
   }
@@ -156,11 +176,13 @@ function EventCard({ event, compact = false }) {
               Ended
             </span>
           )}
-          {/* Edit button overlay */}
+          {/* Edit button overlay — dropped below the badge when the
+              event has ended, so it never overlaps the "Ended" badge
+              (both were absolute top-2 right-2). */}
           {canEdit && (
             <button
               onClick={e => { e.stopPropagation(); navigate(`/events/edit/${event.id}`) }}
-              className="absolute top-2 right-2 w-7 h-7 bg-black/50 rounded-lg flex items-center justify-center hover:bg-black/70 transition-colors"
+              className={`absolute ${isPast ? 'top-10' : 'top-2'} right-2 w-7 h-7 bg-black/50 rounded-lg flex items-center justify-center hover:bg-black/70 transition-colors`}
             >
               <Edit3 size={13} className="text-white" />
             </button>
@@ -169,17 +191,22 @@ function EventCard({ event, compact = false }) {
       )}
       <div className="p-4 space-y-2">
         <div className="flex items-start gap-2">
-          {/* Date chip */}
-          {event.event_start && (
-            <div className="flex-shrink-0 w-12 text-center bg-brand-600/30 border border-brand-400/25 rounded-xl py-1.5 px-1">
-              <p className="text-[9px] text-brand-300 font-display font-bold uppercase leading-none">
-                {lang === 'mm' ? MM_MONTHS[new Date(event.event_start).getMonth()] : new Date(event.event_start).toLocaleDateString('en-US', { month: 'short' })}
-              </p>
-              <p className="text-lg font-display font-bold text-white leading-tight">
-                {new Date(event.event_start).getDate()}
-              </p>
-            </div>
-          )}
+          {/* Date chip — Myanmar-time parts, so mm and en agree on
+              non-MMT devices (was: getMonth()/getDate() + en-US). */}
+          {event.event_start && (() => {
+            const chip = mmtParts(event.event_start)
+            if (!chip) return null
+            return (
+              <div className="flex-shrink-0 w-12 text-center bg-brand-600/30 border border-brand-400/25 rounded-xl py-1.5 px-1">
+                <p className="text-[9px] text-brand-300 font-display font-bold uppercase leading-none">
+                  {lang === 'mm' ? MM_MONTHS[chip.m - 1] : EN_MONTHS_S[chip.m - 1]}
+                </p>
+                <p className="text-lg font-display font-bold text-white leading-tight">
+                  {chip.d}
+                </p>
+              </div>
+            )
+          })()}
           <div className="flex-1 min-w-0">
             <div className="flex items-start gap-1">
               <h3 className="font-display font-semibold text-sm text-white line-clamp-2 leading-snug flex-1">
@@ -256,11 +283,14 @@ export default function CalendarPage() {
     i < firstDay ? null : new Date(viewYear, viewMonth, i - firstDay + 1)
   )
 
-  // Load events for current month (±1 day buffer for timezone)
+  // Load events for current month, widened to cover the displayed week
+  // ±1 month: WeeklyView shows the week of `selected`, which can
+  // straddle a month boundary, and the old month-only range showed
+  // "Event မရှိ" for adjacent-month days.
   const loadEvents = useCallback(async () => {
     setLoading(true)
-    const from = new Date(viewYear, viewMonth, 1).toISOString()
-    const to   = new Date(viewYear, viewMonth + 1, 1).toISOString()
+    const from = new Date(viewYear, viewMonth - 1, 1).toISOString()
+    const to   = new Date(viewYear, viewMonth + 2, 1).toISOString()
 
     // Overlap query: an event belongs to this month if it starts before the
     // month ends AND (starts in the month OR ends in/after it) — the old
@@ -499,7 +529,7 @@ export default function CalendarPage() {
             <p className="font-display font-bold text-sm text-white">
               {lang === 'mm'
                 ? formatMyanmarDate(selected.toISOString(), { weekday: true, year: true })
-                : selected.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                : formatDateEnLong(selected.toISOString())}
             </p>
             {selectedEvents.length === 0 && (
               <p className="text-xs text-white/30 mt-0.5 font-myanmar">

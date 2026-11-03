@@ -11,6 +11,7 @@ import { ImageUploader } from '../components/UI'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { BusinessHoursEditor } from '../components/BusinessHours'
 import { showError, showSuccess } from '../lib/toast'
+import { validateListing } from '../lib/validation'
 
 function Field({ label, children, required }) {
   return (
@@ -26,7 +27,7 @@ function Field({ label, children, required }) {
 export default function EditListingPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile, isAdmin, isModerator } = useAuth()
+  const { profile, isAdmin, isModerator, loading: authLoading } = useAuth()
   const { lang } = useLang()
   const { log } = useAuditLog()
   const config = useAppConfig()
@@ -41,16 +42,32 @@ export default function EditListingPage() {
   const [locationLoading, setLocationLoading] = useState(false)
   const [saved, setSaved] = useState(false)
   const [canEdit, setCanEdit] = useState(false)
+  const [loadError, setLoadError] = useState(false)
+  const [notFound, setNotFound] = useState(false)
+  const [adminFieldSaving, setAdminFieldSaving] = useState(false)
 
-  useEffect(() => {
-    async function load() {
-
+  async function load() {
+    setLoadError(false)
+    setNotFound(false)
     try {
-        const [{ data: listing }, { data: cats }] = await Promise.all([
+      // A hung query used to spin the spinner forever with no retry.
+      let timeoutId = null
+      const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('load timed out')), 12000)
+      })
+      const [{ data: listing, error: listingErr }, { data: cats }] = await Promise.race([
+        Promise.all([
           supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('id', id).single(),
           supabase.from('categories').select('*').eq('type', 'directory').order('sort_order'),
-        ])
-        if (!listing) { navigate('/directory'); return }
+        ]),
+        timeout,
+      ])
+      if (timeoutId) clearTimeout(timeoutId)
+      // .single() reports "no rows" as error PGRST116 — that is
+      // not-found, not a load failure (error screen + retry is wrong).
+      if (listingErr?.code === 'PGRST116') { setNotFound(true); return }
+      if (listingErr) throw listingErr
+      if (!listing) { setNotFound(true); return }
 
         const allowed = isAdmin || isModerator || listing.owner_id === profile?.id || listing.submitted_by === profile?.id
         setCanEdit(allowed)
@@ -82,11 +99,16 @@ export default function EditListingPage() {
           gallery: listing.images || [],   // load existing gallery images
           hours: listing.hours || null,
         })
-    
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true) }
   }
+
+  useEffect(() => {
+    // Don't decide canEdit until the auth/profile load settles: profile
+    // is null on the first run, so canEdit was false and the owner saw a
+    // flash of the "no permission" screen before the profile arrived.
+    if (authLoading) return
     load()
-  }, [id, profile])
+  }, [id, profile, authLoading])
 
   function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
@@ -156,7 +178,7 @@ export default function EditListingPage() {
     }, () => {
       setLocationLoading(false)
       showError('GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ')
-    })
+    }, { timeout: 10000, maximumAge: 60000 })
   }
 
   async function handleSave(e) {
@@ -168,14 +190,37 @@ export default function EditListingPage() {
       showError('လုပ်ငန်းအမည် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ')
       return
     }
+    // parseFloat('abc') is NaN, and NaN JSON-serializes to null — the old
+    // code silently erased the pin with no warning. Reject non-numeric
+    // coordinates, then run the shared listing validation.
+    const lat = form.latitude ? parseFloat(form.latitude) : null
+    const lng = form.longitude ? parseFloat(form.longitude) : null
+    if ((form.latitude && Number.isNaN(lat)) || (form.longitude && Number.isNaN(lng))) {
+      showError('Latitude/Longitude သည် ဂဏန်း ဖြစ်ရမည်')
+      return
+    }
+    const validation = validateListing({
+      name: form.name,
+      name_mm: form.name_mm,
+      category_id: form.category_id,
+      phone_1: form.phone_1,
+      phone_2: form.phone_2,
+      website: form.website,
+      latitude: lat,
+      longitude: lng,
+    })
+    if (!validation.isValid) {
+      showError(validation.errors.join(' '))
+      return
+    }
     setSaving(true)
 
     const { gallery, ...formWithoutGallery } = form
     const updates = {
       ...formWithoutGallery,
       images: gallery || [],                             // save gallery as images[]
-      latitude: form.latitude ? parseFloat(form.latitude) : null,
-      longitude: form.longitude ? parseFloat(form.longitude) : null,
+      latitude: lat,
+      longitude: lng,
       updated_at: new Date().toISOString(),
     }
 
@@ -207,7 +252,23 @@ export default function EditListingPage() {
     setOriginal(prev => ({ ...prev, ...updates }))
   }
 
-  if (!form) return (
+  if (loadError) return (
+    <div className="flex flex-col items-center justify-center min-h-[60dvh] px-8 text-center space-y-3">
+      <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+      <button onClick={() => load()} className="btn-primary text-sm px-5 py-2.5">ပြန်ကြိုးစားမည်</button>
+      <button onClick={() => navigate('/directory')} className="btn-ghost text-sm">ပြန်သွားမည်</button>
+    </div>
+  )
+
+  if (notFound) return (
+    <div className="flex flex-col items-center justify-center min-h-[60dvh] px-8 text-center space-y-3">
+      <p className="text-5xl">😶</p>
+      <p className="text-white/60 font-myanmar">ဤလုပ်ငန်း မရှိတော့ပါ</p>
+      <button onClick={() => navigate('/directory')} className="btn-primary text-sm px-5 py-2.5">Directory သို့</button>
+    </div>
+  )
+
+  if (!form || authLoading) return (
     <div className="flex items-center justify-center min-h-[60dvh]">
       <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
     </div>
@@ -350,7 +411,10 @@ export default function EditListingPage() {
               <Field label="Status">
                 <select
                   value={original?.status || 'pending'}
+                  disabled={adminFieldSaving}
                   onChange={async e => {
+                    if (adminFieldSaving) return
+                    setAdminFieldSaving(true)
                     const newStatus = e.target.value
                     const prevStatus = original?.status
                     setOriginal(p => ({ ...p, status: newStatus }))
@@ -359,11 +423,13 @@ export default function EditListingPage() {
                       console.error('Status update failed:', error)
                       showError(error.message || 'Status ပြောင်းမရပါ')
                       setOriginal(p => ({ ...p, status: prevStatus }))
+                      setAdminFieldSaving(false)
                       return
                     }
                     try {
                       await log({ action: newStatus === 'approved' ? 'approve' : 'reject', table: 'listings', id, name: form.name, before: { status: prevStatus }, after: { status: newStatus } })
                     } catch (logErr) { console.warn('Audit log failed:', logErr) }
+                    setAdminFieldSaving(false)
                   }}
                   className="input-dark"
                 >
@@ -376,7 +442,10 @@ export default function EditListingPage() {
               <Field label="Featured">
                 <select
                   value={original?.is_featured ? 'yes' : 'no'}
+                  disabled={adminFieldSaving}
                   onChange={async e => {
+                    if (adminFieldSaving) return
+                    setAdminFieldSaving(true)
                     const val = e.target.value === 'yes'
                     const prev = original?.is_featured
                     setOriginal(p => ({ ...p, is_featured: val }))
@@ -386,6 +455,7 @@ export default function EditListingPage() {
                       showError(error.message || 'Featured ပြောင်းမရပါ')
                       setOriginal(p => ({ ...p, is_featured: prev }))
                     }
+                    setAdminFieldSaving(false)
                   }}
                   className="input-dark"
                 >

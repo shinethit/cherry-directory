@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Eye, EyeOff, Crown, Shield, User, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -18,7 +18,8 @@ const AUTH_ERROR_MM = [
 export function translateAuthError(err) {
   const msg = err?.message || ''
   const hit = AUTH_ERROR_MM.find(([re]) => re.test(msg))
-  return hit ? hit[1] : (msg || 'Error ဖြစ်ပွားသည်')
+  // Unknown errors surface a friendly Myanmar message, never raw English.
+  return hit ? hit[1] : 'အမှားတစ်ခု ဖြစ်ပွားသည် — ထပ်ကြိုးစားပါ'
 }
 
 const ROLE_INFO = {
@@ -29,6 +30,7 @@ const ROLE_INFO = {
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { signIn, signUp, signInWithOAuth } = useAuth()
   const [mode, setMode] = useState('login') // 'login' | 'signup'
   const [email, setEmail] = useState('')
@@ -39,11 +41,11 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  // Go back if there is somewhere to go back to; on a direct visit to
-  // /login the history stack is too short, so fall back to '/'.
+  // Return to the page that sent the user here (location.state.from),
+  // or home. Never navigate(-1): window.history.length counts external
+  // sites too, so "back" could leave the app entirely (F-MED-3).
   function goBackOrHome() {
-    if (window.history.length > 1) navigate(-1)
-    else navigate('/')
+    navigate(location.state?.from ?? '/', { replace: true })
   }
 
   async function handleGoogleSignIn() {

@@ -1,27 +1,57 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { showError } from '../lib/toast'
 
 const AuthContext = createContext(null)
+
+// Only these profile columns may ever be written from the client.
+// role / points / totals are server-owned: even if a caller passes them,
+// they are dropped here before the Supabase call (C-14 — a signed-in user
+// must not be able to escalate their own role or forge points).
+const SAFE_PROFILE_KEYS = ['full_name', 'nickname', 'bio', 'avatar_url']
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Profile loading is separate from auth loading: the session can be
+  // known while the profile row is still in flight. Admin gates must wait
+  // for profileLoading === false before judging role (H-3).
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileError, setProfileError] = useState('')
   const initialized = useRef(false)
+  const profileInFlight = useRef(0)
 
   async function fetchProfile(userId) {
+    profileInFlight.current += 1
+    setProfileLoading(true)
+    setProfileError('')
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single()
-      
-      if (!error && data) {
-        setProfile(data)
-      }
+
+      if (error) throw error
+      if (!data) throw new Error('Profile row not found')
+      setProfile(data)
+      setProfileError('')
+      return true
     } catch (err) {
+      // A missing/failed profile row is NOT silent: without it the user
+      // loses role/points/name, and an admin can be permanently locked
+      // out. Surface it so the UI can offer Retry (H-3 / I-M1).
       console.warn('fetchProfile failed:', err)
+      setProfileError(err?.message || 'Profile ရယူမရပါ')
+      showError(err?.message || 'Profile ရယူမရပါ — ထပ်ကြိုးစားပါ')
+      return false
+    } finally {
+      profileInFlight.current -= 1
+      if (profileInFlight.current <= 0) {
+        profileInFlight.current = 0
+        setProfileLoading(false)
+      }
     }
   }
 
@@ -33,6 +63,9 @@ export function AuthProvider({ children }) {
     let timeoutId = null
 
     const setLoadingFalse = () => {
+      // Clear the safety-net timer on the success path too — otherwise
+      // the "Loading timeout" warning fires even after a clean load (F-LOW-3).
+      if (timeoutId) clearTimeout(timeoutId)
       if (isMounted) {
         setLoading(false)
       }
@@ -47,19 +80,18 @@ export function AuthProvider({ children }) {
     const loadSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession()
-        
+
         if (error) {
           console.warn('[Auth] getSession error:', error)
           setLoadingFalse()
           return
         }
-        
+
         if (session?.user) {
           setUser(session.user)
-          // Fetch profile in background, don't wait for it to complete
-          fetchProfile(session.user.id).finally(() => {
-            // Profile fetched, no need to set loading again
-          })
+          // Wait for the profile: admin gates judge role from it, so the
+          // spinner must stay up until it resolves or fails (H-3).
+          await fetchProfile(session.user.id)
         }
         setLoadingFalse()
       } catch (err) {
@@ -72,13 +104,15 @@ export function AuthProvider({ children }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!isMounted) return
-      
+
       if (session?.user) {
         setUser(session.user)
-        fetchProfile(session.user.id).catch(() => {})
+        await fetchProfile(session.user.id)
       } else {
         setUser(null)
         setProfile(null)
+        setProfileError('')
+        setProfileLoading(false)
       }
       setLoadingFalse()
     })
@@ -130,21 +164,39 @@ export function AuthProvider({ children }) {
     if (error) console.error('Sign out error:', error)
     setUser(null)
     setProfile(null)
+    setProfileError('')
+    setProfileLoading(false)
   }
 
   async function updateProfile(updates) {
     if (!user) throw new Error('Not logged in')
-    const { error } = await supabase.from('profiles').update(updates).eq('id', user.id)
+    // Allowlist first: drop role/points/any other key a caller may have
+    // passed, before the Supabase call (C-14).
+    const safe = {}
+    for (const key of SAFE_PROFILE_KEYS) {
+      if (key in (updates || {})) safe[key] = updates[key]
+    }
+    if (Object.keys(safe).length === 0) {
+      throw new Error('Nothing to update')
+    }
+    // .select().single() proves a row was actually updated: a 0-row
+    // update (e.g. RLS / missing row) must throw, not report success
+    // while optimistically showing the new values (F-MED-2).
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(safe)
+      .eq('id', user.id)
+      .select()
+      .single()
     if (error) throw error
-    setProfile(prev => ({ ...prev, ...updates }))
-    // background refresh
-    supabase.from('profiles').select('*').eq('id', user.id).single()
-      .then(({ data }) => { if (data) setProfile(data) })
-      .catch(() => {})
+    if (!data) throw new Error('Profile update failed — no row updated')
+    setProfile(data)
+    return data
   }
 
   async function refreshProfile() {
-    if (user) await fetchProfile(user.id)
+    if (user) return fetchProfile(user.id)
+    return false
   }
 
   const isSuperAdmin = profile?.role === 'super_admin'
@@ -153,11 +205,13 @@ export function AuthProvider({ children }) {
   const isLoggedIn = !!user
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      profile, 
-      loading, 
-      isSuperAdmin, 
+    <AuthContext.Provider value={{
+      user,
+      profile,
+      loading,
+      profileLoading,
+      profileError,
+      isSuperAdmin,
       isAdmin, 
       isModerator, 
       isLoggedIn, 

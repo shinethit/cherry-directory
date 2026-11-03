@@ -83,6 +83,7 @@ export default function MySubmissionsPage() {
     pending: items.filter(i => i.status === 'pending').length,
     approved: items.filter(i => i.status === 'approved').length,
     rejected: items.filter(i => i.status === 'rejected').length,
+    suspended: items.filter(i => i.status === 'suspended').length,
   }
 
   const filtered = tab === 'all' ? items : items.filter(i => i.status === tab)
@@ -92,6 +93,9 @@ export default function MySubmissionsPage() {
     { id: 'pending',  label_mm: 'စစ်ဆေးဆဲ',   label_en: 'Pending',  n: counts.pending },
     { id: 'approved', label_mm: 'အတည်ပြုပြီး', label_en: 'Approved', n: counts.approved },
     { id: 'rejected', label_mm: 'ငြင်းပယ်',   label_en: 'Rejected', n: counts.rejected },
+    // 'suspended' exists in STATUS_META but had no tab — suspended
+    // listings were unreachable from any filter (F-LOW-6).
+    { id: 'suspended', label_mm: 'ရပ်ဆိုင်းထား', label_en: 'Suspended', n: counts.suspended },
   ]
 
   return (

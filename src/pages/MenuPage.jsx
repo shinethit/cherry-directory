@@ -8,6 +8,7 @@ import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
+import { showError } from '../lib/toast'
 
 function PriceDisplay({ price, priceMax }) {
   if (!price) return <span className="text-white/30 text-xs">—</span>
@@ -76,9 +77,15 @@ function ItemForm({ listingId, categoryId, item, categories, onSave, onCancel })
 
   async function handleImg(file) {
     setImgLoading(true)
-    const url = await uploadImage(file, 'listings/menu')
-    set('image_url', url)
-    setImgLoading(false)
+    try {
+      const url = await uploadImage(file, 'listings/menu')
+      set('image_url', url)
+    } catch (e) {
+      console.warn('Menu image upload failed:', e)
+      showError('ပုံတင်မရပါ — ထပ်ကြိုးစားပါ')
+    } finally {
+      setImgLoading(false)
+    }
   }
 
   return (
@@ -184,25 +191,33 @@ export default function MenuPage() {
   }, [id, profile])
 
   async function loadMenu() {
-    const [{ data: cats }, { data: its }] = await Promise.all([
+    const [{ data: cats, error: catErr }, { data: its, error: itemErr }] = await Promise.all([
       supabase.from('menu_categories').select('*').eq('listing_id', id).order('sort_order'),
       supabase.from('menu_items').select('*').eq('listing_id', id).order('sort_order'),
     ])
+    if (catErr || itemErr) { showError('Menu တင်ရာတွင် အမှားဖြစ်သွားသည်'); return }
     setMenuCategories(cats || [])
     setItems(its || [])
   }
 
   async function addCategory() {
     if (!newCatName.trim()) return
-    const { data } = await supabase.from('menu_categories').insert({ listing_id: id, name: newCatName.trim(), name_mm: newCatMm.trim() || null, sort_order: menuCategories.length }).select().single()
+    const { data, error } = await supabase.from('menu_categories').insert({ listing_id: id, name: newCatName.trim(), name_mm: newCatMm.trim() || null, sort_order: menuCategories.length }).select().single()
+    if (error || !data) { showError(error?.message || 'Category ထည့်မရပါ'); return }
     setMenuCategories(prev => [...prev, data])
     setNewCatName(''); setNewCatMm(''); setAddingCat(false)
   }
 
   async function deleteCategory(catId) {
     if (!(await confirmDialog('Category ဖျက်မည်။ ထိုCategory ထဲရှိ items များ Uncategorized ဖြစ်သွားမည်?'))) return
-    await supabase.from('menu_categories').delete().eq('id', catId)
+    // Items must be unlinked FIRST, or they keep the deleted category_id
+    // and vanish from the menu entirely (H-17).
+    const { error: unlinkErr } = await supabase.from('menu_items').update({ category_id: null }).eq('category_id', catId)
+    if (unlinkErr) { showError(unlinkErr.message || 'Category ဖျက်မရပါ'); return }
+    const { error } = await supabase.from('menu_categories').delete().eq('id', catId)
+    if (error) { showError(error.message || 'Category ဖျက်မရပါ'); return }
     setMenuCategories(prev => prev.filter(c => c.id !== catId))
+    setItems(prev => prev.map(i => i.category_id === catId ? { ...i, category_id: null } : i))
   }
 
   async function saveItem(form) {
@@ -216,11 +231,13 @@ export default function MenuPage() {
     }
 
     if (editItem && editItem !== 'new') {
-      const { data } = await supabase.from('menu_items').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editItem.id).select().single()
+      const { data, error } = await supabase.from('menu_items').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editItem.id).select().single()
+      if (error || !data) { showError(error?.message || 'Item ပြင်မရပါ'); return }
       setItems(prev => prev.map(i => i.id === data.id ? data : i))
       await log({ action: 'update', table: 'menu_items', id: editItem.id, name: form.name, before: editItem, after: data })
     } else {
-      const { data } = await supabase.from('menu_items').insert({ ...payload, sort_order: items.length }).select().single()
+      const { data, error } = await supabase.from('menu_items').insert({ ...payload, sort_order: items.length }).select().single()
+      if (error || !data) { showError(error?.message || 'Item ထည့်မရပါ'); return }
       setItems(prev => [...prev, data])
       await log({ action: 'create', table: 'menu_items', id: data.id, name: form.name, after: data })
     }
@@ -230,7 +247,8 @@ export default function MenuPage() {
   async function deleteItem(itemId) {
     if (!(await confirmDialog('Item ဖျက်မည်လား?'))) return
     const item = items.find(i => i.id === itemId)
-    await supabase.from('menu_items').delete().eq('id', itemId)
+    const { error } = await supabase.from('menu_items').delete().eq('id', itemId)
+    if (error) { showError(error.message || 'Item ဖျက်မရပါ'); return }
     setItems(prev => prev.filter(i => i.id !== itemId))
     await log({ action: 'delete', table: 'menu_items', id: itemId, name: item?.name, before: item })
   }

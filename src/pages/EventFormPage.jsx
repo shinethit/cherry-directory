@@ -33,7 +33,7 @@ const BLANK = {
 export default function EventFormPage() {
   const { id } = useParams()        // undefined = create, uuid = edit
   const navigate = useNavigate()
-  const { profile, isAdmin, isModerator, user, isLoggedIn } = useAuth()
+  const { profile, isAdmin, isModerator, user, isLoggedIn, loading: authLoading } = useAuth()
   const { lang } = useLang()
   const { log } = useAuditLog()
   useSEO({ title: id ? 'Edit Event' : 'Create Event' })
@@ -48,6 +48,9 @@ export default function EventFormPage() {
   const [canEdit, setCanEdit] = useState(false)
 
   useEffect(() => {
+    // Wait for the role to load — redirecting before it is known would
+    // bounce a legitimate admin/mod to /calendar.
+    if (authLoading) return
     // Guests must not see the form at all (it used to render and report a
     // false "✓ Saved" on submit).
     if (!isLoggedIn) { showError('အကောင့်ဝင်မှ Event ထည့်နိုင်မည်'); navigate('/login'); return }
@@ -76,9 +79,14 @@ export default function EventFormPage() {
         })
       })
     } else {
-      setCanEdit(isAdmin || isModerator)
+      // Create: admin/mod only — mirror NewsEditPage: a non-admin/mod
+      // is redirected away instead of seeing the full form and failing
+      // at RLS on Save.
+      const allowed = isAdmin || isModerator
+      setCanEdit(allowed)
+      if (!allowed) { showError('Event ထည့်ရန် Admin / Moderator သာ ခွင့်ရှိသည်'); navigate('/calendar'); return }
     }
-  }, [id, user, isLoggedIn, navigate])
+  }, [id, user, isAdmin, isModerator, isLoggedIn, authLoading, navigate])
 
   async function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
@@ -113,11 +121,14 @@ export default function EventFormPage() {
     if (isEdit) {
       const { error } = await supabase.from('posts').update(payload).eq('id', id)
       if (error) { showError(error.message); setSaving(false); return }
-      await log({ action: 'update', table: 'posts', id, name: form.title, before: original, after: payload })
+      // Audit log is fire-and-forget — it must never delay the toast.
+      log({ action: 'update', table: 'posts', id, name: form.title, before: original, after: payload })
+        .then(ok => { if (!ok) console.warn('Audit log failed for event update') })
     } else {
       const { data, error } = await supabase.from('posts').insert({ ...payload, created_at: new Date().toISOString() }).select().single()
       if (error) { showError(error.message); setSaving(false); return }
-      await log({ action: 'create', table: 'posts', id: data?.id, name: form.title, after: payload })
+      log({ action: 'create', table: 'posts', id: data?.id, name: form.title, after: payload })
+        .then(ok => { if (!ok) console.warn('Audit log failed for event create') })
     }
 
     setSaved(true)
@@ -130,11 +141,12 @@ export default function EventFormPage() {
     if (!(await confirmDialog(`"${form.title}" ကို ဖျက်မည်လား?`))) return
     const { error } = await supabase.from('posts').delete().eq('id', id)
     if (error) { showError(error.message); return }
-    await log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
+    log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
+      .then(ok => { if (!ok) console.warn('Audit log failed for event delete') })
     navigate('/calendar')
   }
 
-  if (isEdit && !canEdit) return null  // redirect handled in useEffect
+  if (!canEdit) return null  // redirect handled in useEffect
 
   return (
     <div className="pb-10">

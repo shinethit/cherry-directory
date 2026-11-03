@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Phone, MapPin, CheckCircle, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -10,6 +10,7 @@ import { uploadImage } from '../lib/cloudinary'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { showError } from '../lib/toast'
+import { escapePostgrestOr } from '../hooks/useListings'
 
 const CATS = [
   { id: 'all',    mm: 'အားလုံး',   en: 'All',     icon: '🔍' },
@@ -251,8 +252,10 @@ export default function LostFoundPage() {
   const [loading, setLoading] = useState(true)
   const [typeFilter, setTypeFilter] = useState('all')
   const [catFilter, setCatFilter]   = useState('all')
+  const [statusFilter, setStatusFilter] = useState('active')
   const [showForm, setShowForm]     = useState(false)
   const [search, setSearch]         = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage]             = useState(0)
   const [hasMore, setHasMore]       = useState(false)
   const PAGE_SIZE = 20
@@ -261,9 +264,17 @@ export default function LostFoundPage() {
     setLoading(true)
     try {
       const limit = (page + 1) * PAGE_SIZE
-      let q = supabase.from('lost_found').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('reported_at', { ascending: false }).range(0, limit - 1)
+      let q = supabase.from('lost_found').select('*').order('is_urgent', { ascending: false }).order('reported_at', { ascending: false }).range(0, limit - 1)
+      if (statusFilter !== 'all') q = q.eq('status', statusFilter)
       if (typeFilter !== 'all') q = q.eq('type', typeFilter)
       if (catFilter !== 'all')  q = q.eq('category', catFilter)
+      // Server-side search (was: client-side over the loaded 20 rows,
+      // so anything past page 1 was unsearchable).
+      const term = debouncedSearch.trim()
+      if (term) {
+        const esc = escapePostgrestOr(term)
+        q = q.or(['title', 'title_mm', 'description', 'description_mm', 'location', 'location_mm'].map(f => `${f}.ilike.%${esc}%`).join(','))
+      }
       const { data, error } = await q
       if (error) throw error
       // Client-side expiry: expires_at defaults to +30d but nothing flips
@@ -275,12 +286,24 @@ export default function LostFoundPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [typeFilter, catFilter, page])
+  useEffect(() => { load() }, [typeFilter, catFilter, statusFilter, page, debouncedSearch])
 
-  // Realtime
+  // Debounce the search box — each keystroke is a server query now.
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(0) }, 400)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Realtime — subscribe to UPDATE/DELETE too, not just INSERT, or a
+  // resolve/delete on the detail page never refreshes this list.
+  // loadRef avoids the stale-closure trap (load reads current filters).
+  const loadRef = useRef(load)
+  loadRef.current = load
   useEffect(() => {
     const ch = supabase.channel('lost-found-live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lost_found' }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lost_found' }, () => loadRef.current())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lost_found' }, () => loadRef.current())
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'lost_found' }, () => loadRef.current())
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [])
@@ -331,6 +354,24 @@ export default function LostFoundPage() {
           </select>
           <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
+        <div className="relative flex-1">
+          <select
+            value={statusFilter}
+            onChange={e => { setStatusFilter(e.target.value); setPage(0) }}
+            className="select-dark"
+          >
+            {[
+              { id: 'active',   mm: 'ဖော်ပြဆဲ',     en: 'Active' },
+              { id: 'resolved', mm: 'ဖြေရှင်းပြီး',  en: 'Resolved' },
+              { id: 'all',      mm: 'အားလုံး',       en: 'All' },
+            ].map(s => (
+              <option key={s.id} value={s.id} style={{ backgroundColor: '#1a0030', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}>
+                {lang === 'mm' ? s.mm : s.en}
+              </option>
+            ))}
+          </select>
+          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
       </div>
 
       {/* Search */}
@@ -347,23 +388,19 @@ export default function LostFoundPage() {
       <div className="px-4 space-y-2 pb-24">
         {loading
           ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />)
-          : (() => {
-            const term = search.trim().toLowerCase()
-            const visible = term
-              ? posts.filter(p => [p.title, p.title_mm, p.description, p.description_mm, p.location, p.location_mm].filter(Boolean).join(' ').toLowerCase().includes(term))
-              : posts
-            if (visible.length === 0) return <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">🔍</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Post မရှိသေး' : 'No posts yet'}</p></div>
-            return (
-              <>
-                {visible.map(p => <PostCard key={p.id} post={p} lang={lang} />)}
-                {hasMore && !term && (
-                  <button onClick={() => setPage(p => p + 1)} className="w-full py-3 rounded-2xl bg-white/6 border border-white/10 text-sm text-white/70 hover:bg-white/10">
-                    {lang === 'mm' ? 'နောက်ထပ် ပြမည်' : 'Load more'}
-                  </button>
-                )}
-              </>
-            )
-          })()
+          : posts.length === 0 ? (
+            <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">🔍</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Post မရှိသေး' : 'No posts yet'}</p></div>
+          ) : (
+            <>
+              {posts.map(p => <PostCard key={p.id} post={p} lang={lang} />)}
+              {hasMore && (
+                <button onClick={() => setPage(p => p + 1)} className="w-full py-3 rounded-2xl bg-white/6 border border-white/10 text-sm text-white/70 hover:bg-white/10">
+                  {lang === 'mm' ? 'နောက်ထပ် ပြမည်' : 'Load more'}
+                </button>
+              )}
+            </>
+          )
+        }
         }
       </div>
 

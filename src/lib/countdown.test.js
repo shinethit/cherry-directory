@@ -61,4 +61,25 @@ describe('getCountdown', () => {
     expect(getCountdown(isoDaysFromNow(10), 'en').label).toBe('10d left')
     expect(getCountdown(isoDaysFromNow(-1), 'en').label).toBe('Yesterday')
   })
+
+  it('day boundaries are Myanmar wall dates, not device-local midnight', () => {
+    // "Today" in Myanmar (Asia/Rangoon), as a wall-clock date string.
+    const todayMm = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Rangoon' }).format(new Date())
+    const [y, m, d] = todayMm.split('-').map(Number)
+    const mmDate = (dayOffset, time) => {
+      const dt = new Date(Date.UTC(y, m - 1, d + dayOffset))
+      const yy = dt.getUTCFullYear()
+      const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+      const dd = String(dt.getUTCDate()).padStart(2, '0')
+      return `${yy}-${mm}-${dd}T${time}+06:30`
+    }
+    // 00:30 MMT today is still "today" even though it is yesterday
+    // evening in UTC / device-local time.
+    expect(getCountdown(mmDate(0, '00:30:00'), 'mm').label).toBe('ယနေ့')
+    expect(getCountdown(mmDate(0, '23:30:00'), 'mm').label).toBe('ယနေ့')
+    // 00:30 MMT tomorrow is "tomorrow", not "today".
+    expect(getCountdown(mmDate(1, '00:30:00'), 'mm').label).toBe('မနက်ဖန်')
+    // 23:30 MMT yesterday is "yesterday".
+    expect(getCountdown(mmDate(-1, '23:30:00'), 'mm').label).toBe('မနေ့က')
+  })
 })

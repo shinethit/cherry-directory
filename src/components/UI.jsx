@@ -37,14 +37,19 @@ export function ListingCard({ listing, compact = false }) {
 
   const logo = listing.logo_url ? getOptimizedUrl(listing.logo_url, { width: 120 }) : null
 
+  const bookmarkPending = addBookmark.isPending || removeBookmark.isPending
+
   function toggleBookmark(e) {
     e.stopPropagation()
     if (!isLoggedIn) { showError('အကောင့်ဝင်မှ သိမ်းနိုင်မည်'); navigate('/login'); return }
-    const onError = (err) => showError(err?.message || 'သိမ်းရာတွင် အမှားဖြစ်သွားသည်')
+    if (bookmarkPending) return
+    // No per-call onError: the bookmark hooks already toast via
+    // handleSupabaseError on failure (I-M2) — a second toast here would
+    // show the same error twice.
     if (bookmarked) {
-      removeBookmark.mutate({ targetId: listing.id, targetType: 'listing' }, { onError })
+      removeBookmark.mutate({ targetId: listing.id, targetType: 'listing' })
     } else {
-      addBookmark.mutate({ targetId: listing.id, targetType: 'listing' }, { onError })
+      addBookmark.mutate({ targetId: listing.id, targetType: 'listing' })
     }
   }
 
@@ -71,7 +76,7 @@ export function ListingCard({ listing, compact = false }) {
               <p className="text-[10px] text-white/40 truncate">{listing.name}</p>
             )}
           </div>
-          <button onClick={toggleBookmark} className="text-white/30 hover:text-gold-400 transition-colors flex-shrink-0 mt-0.5">
+          <button onClick={toggleBookmark} disabled={bookmarkPending} className="text-white/30 hover:text-gold-400 transition-colors flex-shrink-0 mt-0.5 disabled:opacity-50">
             {bookmarked ? <BookmarkCheck size={16} className="text-gold-400" /> : <Bookmark size={16} />}
           </button>
         </div>
@@ -132,11 +137,14 @@ export function PostCard({ post }) {
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                const onError = (err) => showError(err?.message || 'သိမ်းရာတွင် အမှားဖြစ်သွားသည်')
-                if (saved) removeBookmark.mutate({ targetId: post.id, targetType: 'post' }, { onError })
-                else addBookmark.mutate({ targetId: post.id, targetType: 'post' }, { onError })
+                if (addBookmark.isPending || removeBookmark.isPending) return
+                // No per-call onError: the bookmark hooks already toast
+                // via handleSupabaseError on failure (I-M2).
+                if (saved) removeBookmark.mutate({ targetId: post.id, targetType: 'post' })
+                else addBookmark.mutate({ targetId: post.id, targetType: 'post' })
               }}
-              className="flex items-center gap-1 text-brand-300 hover:text-brand-200"
+              disabled={addBookmark.isPending || removeBookmark.isPending}
+              className="flex items-center gap-1 text-brand-300 hover:text-brand-200 disabled:opacity-50"
               aria-label="Save"
             >
               {saved ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}

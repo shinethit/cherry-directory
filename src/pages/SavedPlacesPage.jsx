@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Plus, Trash2, ExternalLink, Edit2, X, Home, Briefcase, Utensils, ShoppingBag, Heart, GraduationCap, Plane, Star } from 'lucide-react'
+// NOTE: this file no longer has a page component — the /saved-places route
+// redirects to /saved?tab=places (App.jsx), and SavedPage renders the
+// places tab with the shared PlaceCard / PlaceForm below (F-LOW-5).
+import { useState } from 'react'
+import { MapPin, Trash2, ExternalLink, Edit2, X, Home, Briefcase, Utensils, ShoppingBag, Heart, GraduationCap, Plane, Star } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
-import { useLang } from '../contexts/LangContext'
-import { useSEO } from '../hooks/useSEO'
 import LocationPicker from '../components/LocationPicker'
-import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
 
 export const CATEGORIES = [
@@ -20,184 +18,15 @@ export const CATEGORIES = [
   { id: 'other',    icon: Star,         mm: 'အခြား',      en: 'Other',    color: 'text-white/60 bg-white/8' },
 ]
 
-export default function SavedPlacesPage() {
-  const navigate = useNavigate()
-  const { user, isLoggedIn } = useAuth()
-  const { lang } = useLang()
-  useSEO({ title: lang === 'mm' ? 'သိမ်းထားသောနေရာများ' : 'Saved Places' })
-
-  const [places, setPlaces] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing] = useState(null)
-  const [filter, setFilter] = useState('all')
-
-  async function load() {
-    if (!user) { setLoading(false); return }
-    setLoading(true)
-    try {
-      const { data } = await supabase
-        .from('saved_places')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-      setPlaces(data || [])
-    } catch (e) { console.warn(e) }
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [user])
-
-  async function handleDelete(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
-    const prev = places
-    setPlaces(prev => prev.filter(p => p.id !== id))
-    const { error } = await supabase.from('saved_places').delete().eq('id', id)
-    if (error) {
-      console.error('Delete place failed:', error)
-      showError(error.message || (lang === 'mm' ? 'ဖျက်မရပါ — ထပ်ကြိုးစားပါ' : 'Could not delete — please try again'))
-      setPlaces(prev)
-    }
-  }
-
-  function openGoogleMaps(lat, lng) {
-    window.open(`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`, '_blank')
-  }
-
-  if (!isLoggedIn) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[70dvh] px-8 text-center">
-        <MapPin size={48} className="text-brand-400 mb-4" />
-        <h2 className="font-display font-bold text-xl text-white mb-2">
-          {lang === 'mm' ? 'Login လိုအပ်သည်' : 'Login Required'}
-        </h2>
-        <p className="text-white/50 font-myanmar mb-6">
-          {lang === 'mm' ? 'နေရာ သိမ်းရန် Login ဝင်ပါ' : 'Please sign in to save places'}
-        </p>
-        <button onClick={() => navigate('/login')} className="btn-primary">
-          {lang === 'mm' ? 'Login ဝင်ရောက်မည်' : 'Sign In'}
-        </button>
-      </div>
-    )
-  }
-
-  const filtered = filter === 'all' ? places : places.filter(p => p.category === filter)
-
-  return (
-    <div className="pb-8 min-h-[80dvh]">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"
-          >
-            <ArrowLeft size={18} className="text-white" />
-          </button>
-          <div>
-            <h1 className="font-display font-bold text-xl text-white">
-              📍 {lang === 'mm' ? 'သိမ်းထားသောနေရာများ' : 'Saved Places'}
-            </h1>
-            <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
-              {lang === 'mm' ? `${places.length} ခု သိမ်းထားသည်` : `${places.length} places saved`}
-            </p>
-          </div>
-        </div>
-        <button
-          onClick={() => { setEditing(null); setShowForm(true) }}
-          className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"
-        >
-          <Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}
-        </button>
-      </div>
-
-      {/* Filter */}
-      {places.length > 0 && (
-        <div className="px-4 mb-3 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
-          <button
-            onClick={() => setFilter('all')}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-              filter === 'all'
-                ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
-                : 'bg-white/5 text-white/50 border border-white/10'
-            }`}
-          >
-            {lang === 'mm' ? 'အားလုံး' : 'All'} ({places.length})
-          </button>
-          {CATEGORIES.map(cat => {
-            const count = places.filter(p => p.category === cat.id).length
-            if (count === 0) return null
-            return (
-              <button
-                key={cat.id}
-                onClick={() => setFilter(cat.id)}
-                className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                  filter === cat.id
-                    ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
-                    : 'bg-white/5 text-white/50 border border-white/10'
-                }`}
-              >
-                {lang === 'mm' ? cat.mm : cat.en} ({count})
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* List */}
-      <div className="px-4 space-y-2">
-        {loading ? (
-          [1, 2, 3].map(n => (
-            <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />
-          ))
-        ) : places.length === 0 ? (
-          <div className="flex flex-col items-center py-16 text-center">
-            <span className="text-5xl mb-4">📍</span>
-            <p className="font-display font-semibold text-white/40">
-              {lang === 'mm' ? 'သိမ်းထားတာ မရှိသေး' : 'No saved places yet'}
-            </p>
-            <p className="text-xs text-white/25 mt-1 font-myanmar max-w-xs">
-              {lang === 'mm'
-                ? 'သွားချင်တဲ့ နေရာ၊ မှတ်ထားချင်တဲ့ နေရာတွေကို သိမ်းထားပါ'
-                : 'Save locations you want to remember'}
-            </p>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center py-16 text-center">
-            <p className="text-white/40 font-myanmar">
-              {lang === 'mm' ? 'ဤ Category တွင် မရှိပါ' : 'No places in this category'}
-            </p>
-          </div>
-        ) : (
-          filtered.map(place => (
-            <PlaceCard
-              key={place.id}
-              place={place}
-              lang={lang}
-              onDelete={() => handleDelete(place.id)}
-              onEdit={() => { setEditing(place); setShowForm(true) }}
-              onOpenMap={() => openGoogleMaps(place.latitude, place.longitude)}
-            />
-          ))
-        )}
-      </div>
-
-      {showForm && (
-        <PlaceForm
-          lang={lang}
-          initial={editing}
-          userId={user.id}
-          onClose={() => { setShowForm(false); setEditing(null) }}
-          onSaved={() => { setShowForm(false); setEditing(null); load() }}
-        />
-      )}
-    </div>
-  )
-}
-
 export function PlaceCard({ place, lang, onDelete, onEdit, onOpenMap }) {
   const cat = CATEGORIES.find(c => c.id === place.category) || CATEGORIES[7]
   const Icon = cat.icon
+  // Missing coordinates used to render "NaN, NaN" (parseFloat(null)) —
+  // hide the coords line entirely when either coordinate is missing
+  // or not a number (F-LOW-7).
+  const lat = Number(place.latitude)
+  const lng = Number(place.longitude)
+  const hasCoords = Number.isFinite(lat) && Number.isFinite(lng)
 
   return (
     <div className="card-dark rounded-2xl p-4 flex items-start gap-3">
@@ -219,9 +48,11 @@ export function PlaceCard({ place, lang, onDelete, onEdit, onOpenMap }) {
             💬 {place.note}
           </p>
         )}
-        <p className="text-[9px] text-white/25 mt-1 font-mono">
-          {parseFloat(place.latitude).toFixed(4)}, {parseFloat(place.longitude).toFixed(4)}
-        </p>
+        {hasCoords && (
+          <p className="text-[9px] text-white/25 mt-1 font-mono">
+            {lat.toFixed(4)}, {lng.toFixed(4)}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1 flex-shrink-0">

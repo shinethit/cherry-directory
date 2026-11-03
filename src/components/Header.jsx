@@ -4,7 +4,8 @@ import { ArrowLeft, Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmar
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
-import { useUnreadNotificationCount } from '../hooks/useNotifications'
+import { useUnreadNotificationCount, useNotificationSubscription } from '../hooks/useNotifications'
+import { safeGet, safeSet } from '../lib/safeStorage'
 // Main navigation pages — no back button needed
 const MAIN_NAV_PATHS = ['/', '/directory', '/community', '/calendar', '/profile']
 
@@ -15,6 +16,10 @@ export default function Header() {
   const { lang, toggleLang } = useLang()
   const config = useAppConfig()
   const unreadCount = useUnreadNotificationCount()
+  // G-M11: the realtime subscription was dead code (exported, never called)
+  // so the badge only refreshed on the 60 s React Query staleTime. Calling
+  // it here keeps the badge live.
+  useNotificationSubscription()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
   const [scrolled, setScrolled] = useState(false)
@@ -38,25 +43,32 @@ export default function Header() {
   // Auto-show Change Log on new version — only AFTER the onboarding guide
   // has been dismissed (first-launch sequence: splash → onboarding → changelog).
   // The version is marked seen ONLY when the user dismisses the modal, never on a timer.
+  // (A-F7: retry-every-launch until seen is deliberate — no change.)
   useEffect(() => {
-    const CURRENT_VERSION = '0.9.2';
-    const lastSeen = localStorage.getItem('cherry_last_seen_version');
+    const CURRENT_VERSION = '9.3';
+    const lastSeen = safeGet('cherry_last_seen_version');
     if (lastSeen === CURRENT_VERSION) return;
     let timer;
+    let fallback;
     const show = () => { timer = setTimeout(() => setShowChangelog(true), 1500); };
-    if (localStorage.getItem('cherry_onboarding_done')) {
+    if (safeGet('cherry_onboarding_done')) {
       show();
     } else {
       const onDone = () => show();
       window.addEventListener('cherry:onboarding-done', onDone);
-      return () => { window.removeEventListener('cherry:onboarding-done', onDone); clearTimeout(timer); };
+      // A-F5 fallback: if the onboarding-done event never arrives (e.g.
+      // deep link first launch), re-check stored state once after 10 s.
+      fallback = setTimeout(() => {
+        if (safeGet('cherry_onboarding_done')) show();
+      }, 10000);
+      return () => { window.removeEventListener('cherry:onboarding-done', onDone); clearTimeout(timer); clearTimeout(fallback); };
     }
     return () => clearTimeout(timer);
   }, []);
 
   function closeChangelog() {
     setShowChangelog(false);
-    localStorage.setItem('cherry_last_seen_version', '0.9.2');
+    safeSet('cherry_last_seen_version', '9.3');
   }
 
   function handleBack() {
@@ -89,6 +101,7 @@ export default function Header() {
     { path: '/admin/categories', label: 'Categories', icon: Settings },
     { path: '/admin/bulk-import', label: 'Bulk Import', icon: Settings },
     { path: '/admin/settings', label: 'App Settings', icon: Settings },
+    { path: '/admin/reports', label: 'Reports', icon: Settings },
   ]
 
   return (
@@ -273,7 +286,7 @@ export default function Header() {
             </div>
 
             <p className="text-[9px] text-white/20 text-center py-4">
-              {config.app_name} v0.9.2 • {config.app_city}
+              {config.app_name} v9.3 • {config.app_city}
             </p>
           </div>
         </div>
@@ -286,7 +299,7 @@ export default function Header() {
             <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#140020] z-10">
               <div>
                 <h3 className="font-display font-bold text-white text-base">Change Log</h3>
-                <p className="text-[10px] text-white/40 font-myanmar">Version 0.9.2</p>
+                <p className="text-[10px] text-white/40 font-myanmar">Version 9.3</p>
               </div>
               <button onClick={closeChangelog} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white">
                 <X size={16} />
@@ -294,15 +307,16 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
-                { v: '0.9.2', date: '2026-11-03', items: ['Version History ကို အစအဆုံး ပြန်ရေးခြင်း (ဖေဖော်ဝါရီ ၁၆ ကစ)', 'ရက်စွဲ မှားနေတာများ ပြင်ခြင်း', 'အထောက်အထား မရှိသော ပြောဆိုချက်များ ဖြုတ်ခြင်း'] },
-                { v: '0.9.1', date: '2026-11-03', items: ['လုံခြုံရေး ပြင်ဆင်ခြင်း — ကိုယ့်ဘာသာ Admin ဖြစ်လို့မရတော့ပါ', 'Toast အသိပေးချက်များ ပေါ်လာခြင်း', 'ဧည့်သည် လုပ်ငန်းတင်နိုင်ခြင်း (Admin စစ်ပြီးမှ ပေါ်မည်)', 'အလုပ်အကိုင် / ဘတ်စ်ကား / ခရီးစဉ် / Chat / အိမ်ငှား / ကျူရှင် / မှတ်တမ်း ပြင်ဆင်ခြင်း', 'Admin Panel အကာအကွယ် + Claim စစ်ဆေးခြင်း', 'Google ဖြင့် ဝင်ရောက်ခြင်း + စကားဝှက် ပြန်ယူခြင်း', 'ဆီဆိုင် စာမျက်နှာ ပြန်ဖွင့်ခြင်း', 'Directory "ထပ်တင်ရန်" ပြင်ဆင်ခြင်း'] },
-                { v: '0.9.0', date: '2026-10-20', items: ['Change Log popup + Version History', 'Myanmar ဘာသာပြန်ခြင်း', 'Version အသစ်တက်တိုင်း အလိုအလျောက် ပြခြင်း', 'စာလုံးအရွယ် ကြီးခြင်း'] },
-                { v: '0.8.0', date: '2026-10-20', items: ['OSM Bulk Import စနစ်', 'ဒေတာတူညီမှု တင်းကျပ်စွာ စစ်ဆေးခြင်း', 'Batch Insert 503 Timeout ပြင်ဆင်ခြင်း'] },
-                { v: '0.7.0', date: '2026-10-14', items: ['iOS PWA Safe-area ပြင်ဆင်ခြင်း', 'ConfirmModal + Toast စနစ်'] },
-                { v: '0.6.0', date: '2026-10-13', items: ['Offline support + Cache အခြေအနေ', 'Saved Hub စုစည်းခြင်း', 'လုပ်ငန်းဖွင့်ချိန် + ဆင်တူလုပ်ငန်းများ', 'Points နှင့် Tiers စနစ်', 'My Submissions & RSVPs', 'React.lazy ဖြင့် Bundle ခွဲခြင်း'] },
-                { v: '0.5.0', date: '2026-10-12', items: ['၆ လခွဲ ရပ်နားပြီးနောက် ပြန်စခြင်း', 'Search + Notifications စာမျက်နှာများ', 'Saved Places + Onboarding Guide', 'Sentry + Toast ထည့်ခြင်း'] },
+                { v: '9.3', date: '2026-11-03', items: ['"ပြင်ဆင်နေသည်..." ရပ်နေသော ပြဿနာ ပြင်ဆင်ခြင်း', 'Home/Directory ဒေတာ တင်တာ timeout + retry', 'Points အတု ပြင်ဆင်ခြင်း + Chat အမှတ် RPC', 'Report/Claim/Jobs/Fuel ပြင်ဆင်မှုများ', 'Version နံပါတ် ၂ လုံးတွဲ (9.3) သို့ ပြောင်းခြင်း'] },
+                { v: '9.2', date: '2026-11-03', items: ['Version History ကို အစအဆုံး ပြန်ရေးခြင်း (ဖေဖော်ဝါရီ ၁၆ ကစ)', 'ရက်စွဲ မှားနေတာများ ပြင်ခြင်း', 'အထောက်အထား မရှိသော ပြောဆိုချက်များ ဖြုတ်ခြင်း'] },
+                { v: '9.1', date: '2026-11-03', items: ['လုံခြုံရေး ပြင်ဆင်ခြင်း — ကိုယ့်ဘာသာ Admin ဖြစ်လို့မရတော့ပါ', 'Toast အသိပေးချက်များ ပေါ်လာခြင်း', 'ဧည့်သည် လုပ်ငန်းတင်နိုင်ခြင်း (Admin စစ်ပြီးမှ ပေါ်မည်)', 'အလုပ်အကိုင် / ဘတ်စ်ကား / ခရီးစဉ် / Chat / အိမ်ငှား / ကျူရှင် / မှတ်တမ်း ပြင်ဆင်ခြင်း', 'Admin Panel အကာအကွယ် + Claim စစ်ဆေးခြင်း', 'Google ဖြင့် ဝင်ရောက်ခြင်း + စကားဝှက် ပြန်ယူခြင်း', 'ဆီဆိုင် စာမျက်နှာ ပြန်ဖွင့်ခြင်း', 'Directory "ထပ်တင်ရန်" ပြင်ဆင်ခြင်း'] },
+                { v: '9.0', date: '2026-10-20', items: ['Change Log popup + Version History', 'Myanmar ဘာသာပြန်ခြင်း', 'Version အသစ်တက်တိုင်း အလိုအလျောက် ပြခြင်း', 'စာလုံးအရွယ် ကြီးခြင်း'] },
+                { v: '8.0', date: '2026-10-20', items: ['OSM Bulk Import စနစ်', 'ဒေတာတူညီမှု တင်းကျပ်စွာ စစ်ဆေးခြင်း', 'Batch Insert 503 Timeout ပြင်ဆင်ခြင်း'] },
+                { v: '7.0', date: '2026-10-14', items: ['iOS PWA Safe-area ပြင်ဆင်ခြင်း', 'ConfirmModal + Toast စနစ်'] },
+                { v: '6.0', date: '2026-10-13', items: ['Offline support + Cache အခြေအနေ', 'Saved Hub စုစည်းခြင်း', 'လုပ်ငန်းဖွင့်ချိန် + ဆင်တူလုပ်ငန်းများ', 'Points နှင့် Tiers စနစ်', 'My Submissions & RSVPs', 'React.lazy ဖြင့် Bundle ခွဲခြင်း'] },
+                { v: '5.0', date: '2026-10-12', items: ['၆ လခွဲ ရပ်နားပြီးနောက် ပြန်စခြင်း', 'Search + Notifications စာမျက်နှာများ', 'Saved Places + Onboarding Guide', 'Sentry + Toast ထည့်ခြင်း'] },
                 { v: '2.0', date: '2026-03-22', items: ['React + Supabase အဖြစ် ပြန်ရေးခြင်း (Total Upgrade)', 'စာမျက်နှာ ၄၀ ကျော် (Fuel, Chat, Jobs, Rent, Tutoring…)', 'BottomNav + ErrorBoundary', 'Share + QR Code', 'Weather Alert + LocationPicker'] },
-                { v: '0.1.0', date: '2026-02-16', items: ['ပရောဂျက် စတင်ခြင်း (TGIBUS)', 'Google Sheets သုံး Cherry Directory', 'သတင်း/ပွဲ + အသိပညာ + လုပ်ငန်းရှာဖွေခြင်း', 'Chat + PWA စနစ်'] }
+                { v: '1.0', date: '2026-02-16', items: ['ပရောဂျက် စတင်ခြင်း (TGIBUS)', 'Google Sheets သုံး Cherry Directory', 'သတင်း/ပွဲ + အသိပညာ + လုပ်ငန်းရှာဖွေခြင်း', 'Chat + PWA စနစ်'] }
               ].map((rel, i) => (
                 <div key={i} className="space-y-2">
                   <div className="flex items-center gap-2">

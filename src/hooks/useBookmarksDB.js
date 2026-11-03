@@ -5,31 +5,8 @@ import { handleSupabaseError } from '../lib/errorHandler';
 
 const BOOKMARKS_QUERY_KEY = 'bookmarks';
 
-/**
- * Fetch user's bookmarks
- */
-export const useBookmarks = () => {
-  const { user } = useAuth();
-
-  return useQuery({
-    queryKey: [BOOKMARKS_QUERY_KEY, user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-
-      const { data, error } = await supabase
-        .from('bookmarks')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (error) {
-        throw error;
-      }
-
-      return data;
-    },
-    enabled: !!user,
-  });
-};
+// NOTE: useBookmarks (list all) was deleted in v9.3 — zero consumers;
+// pages read bookmark state via useIsBookmarked only.
 
 /**
  * Check if a listing is bookmarked
@@ -62,6 +39,10 @@ export const useIsBookmarked = (listingId, targetType = 'listing') => {
 
 /**
  * Add bookmark
+ * Upsert on the unique(user_id, target_type, target_id) constraint, so a
+ * double-tap that reads bookmarked=false twice cannot hit the constraint
+ * with a raw error toast. Optimistic: the icon flips immediately and rolls
+ * back on error.
  */
 export const useAddBookmark = () => {
   const { user } = useAuth();
@@ -75,13 +56,16 @@ export const useAddBookmark = () => {
 
       const { data, error } = await supabase
         .from('bookmarks')
-        .insert([
-          {
-            user_id: user.id,
-            target_type: targetType,
-            target_id: targetId,
-          },
-        ])
+        .upsert(
+          [
+            {
+              user_id: user.id,
+              target_type: targetType,
+              target_id: targetId,
+            },
+          ],
+          { onConflict: 'user_id,target_type,target_id' }
+        )
         .select()
         .single();
 
@@ -92,6 +76,16 @@ export const useAddBookmark = () => {
 
       return data;
     },
+    onMutate: async ({ targetId, targetType = 'listing' }) => {
+      const key = [BOOKMARKS_QUERY_KEY, user?.id, targetId, targetType];
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData(key);
+      queryClient.setQueryData(key, true);
+      return { key, previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context) queryClient.setQueryData(context.key, context.previous);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [BOOKMARKS_QUERY_KEY] });
     },
@@ -99,7 +93,7 @@ export const useAddBookmark = () => {
 };
 
 /**
- * Remove bookmark
+ * Remove bookmark — optimistic (icon flips immediately, rolls back on error).
  */
 export const useRemoveBookmark = () => {
   const { user } = useAuth();
@@ -122,6 +116,16 @@ export const useRemoveBookmark = () => {
         handleSupabaseError(error, 'Remove Bookmark');
         throw error;
       }
+    },
+    onMutate: async ({ targetId, targetType = 'listing' }) => {
+      const key = [BOOKMARKS_QUERY_KEY, user?.id, targetId, targetType];
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData(key);
+      queryClient.setQueryData(key, false);
+      return { key, previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context) queryClient.setQueryData(context.key, context.previous);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [BOOKMARKS_QUERY_KEY] });

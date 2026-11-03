@@ -4,7 +4,7 @@ import { subscribe, inspectLocalStorage, clearCache } from '../lib/cacheStatus'
 import { useLang } from '../contexts/LangContext'
 import { useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from '../lib/confirmDialog'
-import { showError } from '../lib/toast'
+import { showSuccess } from '../lib/toast'
 
 export default function OfflineCachePanel() {
   const { lang } = useLang()
@@ -16,9 +16,11 @@ export default function OfflineCachePanel() {
   useEffect(() => {
     const unsub = subscribe(setStatus)
     setStorage(inspectLocalStorage())
-    // Refresh storage every 3 sec
-    const id = setInterval(() => setStorage(inspectLocalStorage()), 3000)
-    return () => { unsub(); clearInterval(id) }
+    // Refresh on cache notifications + when the tab becomes visible again —
+    // no 3 s polling (C-M2).
+    const onVisible = () => { if (!document.hidden) setStorage(inspectLocalStorage()) }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { unsub(); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
 
   function formatTime(iso, l) {
@@ -33,20 +35,15 @@ export default function OfflineCachePanel() {
     return d.toLocaleString()
   }
 
-  async function handleRefresh() {
-    queryClient.invalidateQueries()
-    // Trigger a re-prefetch by clearing processed flag — but hook uses ref
-    // Simplest: reload page which re-runs prefetch
-    window.location.reload()
-  }
-
   async function handleClear() {
     if (!(await confirmDialog(lang === 'mm' ? 'Cache ဖျက်မှာ သေချာလား? Offline မရတော့ဘူး။' : 'Clear offline cache? You will lose offline access.'))) return
     clearCache()
     setStorage(inspectLocalStorage())
     // Also clear in-memory query cache
     queryClient.clear()
-    showError(lang === 'mm' ? 'Cache ဖျက်ပြီးပါပြီ။ Page ကို Reload ပါ။' : 'Cache cleared. Please reload.')
+    // F-MED-10: clearing the cache succeeded — this is a success toast,
+    // not an error toast.
+    showSuccess(lang === 'mm' ? 'Cache ဖျက်ပြီးပါပြီ။ Page ကို Reload ပါ။' : 'Cache cleared. Please reload.')
   }
 
   const running = status?.running
@@ -149,28 +146,23 @@ export default function OfflineCachePanel() {
             <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3">
               <p className="text-xs text-amber-400 font-myanmar">
                 ⚠️ {lang === 'mm'
-                  ? 'Data မသိမ်းရသေးပါ။ Online ရှိစဉ် App ကို ဖွင့်ထားပါ — Auto သိမ်းပါမည်။'
-                  : 'Nothing cached yet. Keep the app open while online — it will auto-save.'}
+                  ? 'Data မသိမ်းရသေးပါ။'
+                  : 'Nothing cached yet.'}
               </p>
             </div>
           )}
 
-          {/* Actions */}
+          {/* Actions — v9.3 (C-M2): the "Re-save" button was removed. It only
+              reloaded the page on the claim that a prefetch would re-run —
+              no prefetch exists, so the button pretended to save nothing. */}
           <div className="flex gap-2 pt-1">
-            <button
-              onClick={handleRefresh}
-              disabled={running}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600/30 border border-brand-400/40 text-brand-200 text-xs font-bold hover:bg-brand-600/40 disabled:opacity-50 transition-colors"
-            >
-              <RefreshCw size={12} className={running ? 'animate-spin' : ''} />
-              {running ? (lang === 'mm' ? 'သိမ်းနေသည်' : 'Saving...') : (lang === 'mm' ? 'ပြန်သိမ်း' : 'Re-save')}
-            </button>
             {cached && (
               <button
                 onClick={handleClear}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/25 transition-colors"
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-bold hover:bg-red-500/25 transition-colors"
               >
                 <Trash2 size={12} />
+                {lang === 'mm' ? 'Cache ဖျက်မည်' : 'Clear cache'}
               </button>
             )}
           </div>

@@ -57,7 +57,7 @@ function PctBadge({ pct, label, lang }) {
 // Gas station names for fuel category reports
 const FUEL_STATIONS = [] // loaded from fuel_stations table
 
-function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations = [] }) {
+function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations = [], outlier = null, onConfirmOutlier, onCancelOutlier }) {
   const isFuel = item.category === 'fuel'
   const locations = isFuel ? fuelStations : markets
 
@@ -72,6 +72,12 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
     if (!p || p < 100 || p > 10_000_000) { setError(lang === 'mm' ? 'ဈေးနှုန်း မမှန်ကန်' : 'Invalid price'); return }
     setSubmitting(true)
     await onSubmit({ price: p, market, notes })
+    setSubmitting(false)
+  }
+
+  async function submitAnyway() {
+    setSubmitting(true)
+    await onConfirmOutlier()
     setSubmitting(false)
   }
 
@@ -139,6 +145,30 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
         </div>
 
         {error && <p className="text-xs text-red-400">{error}</p>}
+
+        {/* Outlier warning — the typed data is NOT discarded and the
+            modal does NOT close: a genuine spike can be submitted
+            anyway with the confirm below. */}
+        {outlier && (
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-2">
+            <p className="text-sm font-bold text-amber-300 font-myanmar">
+              ⚠️ {lang === 'mm' ? 'ဈေးနှုန်း ကွဲလွဲမှု များလွန်းသည်' : 'Price seems unusual'}
+            </p>
+            <p className="text-xs text-white/60 font-myanmar leading-relaxed">
+              {lang === 'mm'
+                ? `လက်ရှိ Median: ${fmt(outlier.median)} • သင် ထည့်သည့်ဈေး: ${fmt(outlier.price)} — တကယ်ဈေးတက်နေတာ / ဈေးကျနေတာဆိုရင် ဒီအတိုင်း တင်ပြနိုင်ပါသည်။`
+                : `Current median: ${fmt(outlier.median)} • Your price: ${fmt(outlier.price)} — if this is a genuine spike, you can submit it anyway.`}
+            </p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={submitAnyway} disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-xs font-bold disabled:opacity-50">
+                {submitting ? '...' : (lang === 'mm' ? 'ဒီအတိုင်း တင်ပြမည်' : 'Submit anyway')}
+              </button>
+              <button onClick={onCancelOutlier} disabled={submitting} className="flex-1 py-2.5 rounded-xl bg-white/8 border border-white/10 text-white/60 text-xs font-bold disabled:opacity-50">
+                {lang === 'mm' ? 'ဈေးနှုန်း ပြင်မည်' : 'Edit price'}
+              </button>
+            </div>
+          </div>
+        )}
         </div>
         <div className="px-5 py-3 border-t border-white/8">
           <button onClick={submit} disabled={!price || submitting} className="btn-primary w-full">
@@ -509,6 +539,9 @@ export default function MarketPricePage() {
   const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLast]       = useState(null)
   const [reportTarget, setReport]   = useState(null)
+  // Pending outlier confirmation — the modal stays open with the typed
+  // data intact until the user confirms or edits the price.
+  const [outlier, setOutlier]       = useState(null)
   const [showAddItem, setShowAdd]   = useState(false)
   const [toast, setToast]           = useState(null)
   const [recentReports, setRecent]  = useState([])
@@ -566,23 +599,28 @@ export default function MarketPricePage() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
 
-  async function handleSubmitReport({ price, market, notes }) {
+  async function handleSubmitReport({ price, market, notes, force = false }) {
     if (!reportTarget) return
     const key  = `pr_${reportTarget.id}`
     const last = localStorage.getItem(key)
     if (last && Date.now() - parseInt(last) < REPORT_COOLDOWN) {
-      showToast('warn', lang === 'mm' ? '၁၀ မိနစ်တစ်ကြိမ်သာ တင်ပြနိုင်' : 'Wait 10 min before re-reporting'); setReport(null); return
+      showToast('warn', lang === 'mm' ? '၁၀ မိနစ်တစ်ကြိမ်သာ တင်ပြနိုင်' : 'Wait 10 min before re-reporting'); setReport(null); setOutlier(null); return
     }
-    // Outlier check
+    // Outlier check — do NOT discard the input or close the modal: keep
+    // it open with a "submit anyway?" confirm. A genuine spike could
+    // otherwise never be reported.
     const med = reportTarget.median_price
-    if (med && (price > med * 3 || price < med * 0.2)) {
-      showToast('warn', lang === 'mm' ? 'ဈေးနှုန်း ကွဲလွဲမှု များလွန်းသည်' : 'Price seems unusual'); setReport(null); return
+    if (med && !force && (price > med * 3 || price < med * 0.2)) {
+      showToast('warn', lang === 'mm' ? 'ဈေးနှုန်း ကွဲလွဲမှု များလွန်းသည်' : 'Price seems unusual')
+      setOutlier({ price, market, notes, median: med })
+      return
     }
     const { error } = await supabase.from('price_reports').insert({ item_id: reportTarget.id, price, market, notes: notes || null, reporter_id: user?.id || null })
     // Only set the 10-minute cooldown + success toast on a REAL success.
     if (error) { showError(error.message); return }
     localStorage.setItem(key, String(Date.now()))
     setReport(null)
+    setOutlier(null)
     showToast('ok', lang === 'mm' ? '✓ တင်ပြပြီး — ကျေးဇူးပါ' : '✓ Submitted — thank you!')
   }
 
@@ -804,7 +842,7 @@ export default function MarketPricePage() {
         </p>
       </div>
 
-      {reportTarget && <ReportModal item={reportTarget} lang={lang} markets={markets} fuelStations={fuelStations} onClose={() => setReport(null)} onSubmit={handleSubmitReport} />}
+      {reportTarget && <ReportModal item={reportTarget} lang={lang} markets={markets} fuelStations={fuelStations} outlier={outlier} onConfirmOutlier={() => outlier && handleSubmitReport({ ...outlier, force: true })} onCancelOutlier={() => setOutlier(null)} onClose={() => { setReport(null); setOutlier(null) }} onSubmit={handleSubmitReport} />}
       {showAddItem && <AddItemModal lang={lang} onClose={() => setShowAdd(false)} onAdded={load} />}
       {showManageMarkets && (
         <ManageMarketsModal

@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { useSEO } from '../hooks/useSEO'
 import { showError, showSuccess } from '../lib/toast'
 import { formatMyanmarDate } from '../lib/myanmarDate'
+import { confirmDialog } from '../lib/confirmDialog'
 
 const STATUS_META = {
   pending:   { mm: 'စစ်ဆေးဆဲ',  en: 'Pending',   cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30',  icon: Clock },
@@ -31,20 +32,27 @@ export default function AdminReportsPage() {
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
   const [tab, setTab] = useState('pending')
+  const [actionBusy, setActionBusy] = useState(null)
+  // "Show more" paging — the old .limit(100) silently hid everything
+  // past the first 100 reports.
+  const [limit, setLimit] = useState(100)
 
   // Guard BEFORE fetching: non-admins never trigger the query.
   const load = useCallback(async () => {
     if (authLoading) return
     if (!isAdmin && !isModerator) { setLoading(false); return }
     setLoading(true)
+    setLoadError('')
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('reports')
         .select('*, reporter:profiles!reporter_id(full_name, nickname)')
         .eq('status', tab)
         .order('created_at', { ascending: false })
-        .limit(100)
+        .limit(limit)
+      if (error) throw error
 
       const listingIds = (data || []).filter(r => r.target_type === 'listing').map(r => r.target_id)
       let listingMap = {}
@@ -57,36 +65,48 @@ export default function AdminReportsPage() {
       }
 
       setItems((data || []).map(r => ({ ...r, _target: listingMap[r.target_id] || null })))
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(e?.message || 'Report များ ရယူမရပါ') }
     setLoading(false)
-  }, [tab, authLoading, isAdmin, isModerator])
+  }, [tab, limit, authLoading, isAdmin, isModerator])
 
   useEffect(() => { load() }, [load])
 
   // Close the loop: reviewing a listing report also suspends the
   // reported listing (it stays suspended until an admin re-approves
   // it). Always records who reviewed it and when.
+  // Order matters: suspend FIRST, then mark reviewed. The old order
+  // marked the report reviewed first, so a suspend failure left the
+  // report in the Reviewed tab (where Resolve/Dismiss don't render)
+  // while the listing stayed live, with no retry.
   async function updateStatus(report, status) {
-    const { error } = await supabase
-      .from('reports')
-      .update({ status, reviewed_at: new Date().toISOString(), reviewed_by: user?.id || null })
-      .eq('id', report.id)
-    if (error) {
-      showError('Report အပ်ဒိတ်လုပ်ရာတွင် အမှားရှိသည်: ' + error.message)
-      return
-    }
-    if (status === 'reviewed' && report.target_type === 'listing' && report.target_id) {
-      const { error: susErr } = await supabase
-        .from('listings')
-        .update({ status: 'suspended' })
-        .eq('id', report.target_id)
-      if (susErr) {
-        showError('Report ဖြေရှင်းပြီးပေမယ့် လုပ်ငန်း ဆိုင်းငံ့မရပါ: ' + susErr.message)
+    if (status === 'reviewed') {
+      if (!(await confirmDialog(lang === 'mm' ? 'ဤ Report ကို ဖြေရှင်းပြီး သတ်မှတ်မည်လား? ဆက်စပ် လုပ်ငန်းကို ဆိုင်းငံ့ထားမည်။' : 'Mark this report as resolved? The reported listing will be suspended.'))) return
+    } else if (!(await confirmDialog(lang === 'mm' ? 'ဤ Report ကို ပယ်ချမည်လား?' : 'Dismiss this report?'))) return
+    setActionBusy(report.id)
+    try {
+      if (status === 'reviewed' && report.target_type === 'listing' && report.target_id) {
+        const { error: susErr } = await supabase
+          .from('listings')
+          .update({ status: 'suspended' })
+          .eq('id', report.target_id)
+        if (susErr) {
+          showError('လုပ်ငန်း ဆိုင်းငံ့မရပါ — Report ကို မဖြေရှင်းရသေးပါ: ' + susErr.message)
+          return
+        }
+      }
+      const { error } = await supabase
+        .from('reports')
+        .update({ status, reviewed_at: new Date().toISOString(), reviewed_by: user?.id || null })
+        .eq('id', report.id)
+      if (error) {
+        showError('Report အပ်ဒိတ်လုပ်ရာတွင် အမှားရှိသည်: ' + error.message)
         return
       }
+      showSuccess(status === 'reviewed' ? '✓ ဖြေရှင်းပြီးပါပြီ' : 'Report ပယ်ချပြီးပါပြီ')
+      setItems(prev => prev.filter(r => r.id !== report.id))
+    } finally {
+      setActionBusy(null)
     }
-    showSuccess(status === 'reviewed' ? '✓ ဖြေရှင်းပြီးပါပြီ' : 'Report ပယ်ချပြီးပါပြီ')
-    setItems(prev => prev.filter(r => r.id !== report.id))
   }
 
   // While the role is still loading, wait — do not flash the lock
@@ -135,7 +155,7 @@ export default function AdminReportsPage() {
         {TABS.map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => { setTab(t.id); setLimit(100) }}
             className={
               'px-4 py-2 rounded-full text-xs font-semibold transition-colors ' +
               (tab === t.id
@@ -151,6 +171,12 @@ export default function AdminReportsPage() {
       <div className="px-4 space-y-2">
         {loading ? (
           [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
+        ) : loadError ? (
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+            <p className="text-sm text-red-400 font-myanmar">Report များ ရယူရာတွင် အမှားဖြစ်သွားသည်</p>
+            <p className="text-[10px] text-white/30">{loadError}</p>
+            <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
         ) : items.length === 0 ? (
           <div className="text-center py-16">
             <span className="text-5xl mb-3 block">✓</span>
@@ -164,7 +190,9 @@ export default function AdminReportsPage() {
             const Icon = meta.icon
             const targetName = r._target
               ? (lang === 'mm' ? (r._target.name_mm || r._target.name) : r._target.name)
-              : r.target_id.slice(0, 8) + '…'
+              // target_id is nullable — a null target used to crash the
+              // whole page at .slice(). Show '—' instead.
+              : (r.target_id ? r.target_id.slice(0, 8) + '…' : '—')
             return (
               <div key={r.id} className="card-dark rounded-2xl p-4 space-y-2">
                 <div className="flex items-start justify-between gap-2">
@@ -206,15 +234,17 @@ export default function AdminReportsPage() {
                     <>
                       <button
                         onClick={() => updateStatus(r, 'reviewed')}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-green-400 bg-green-500/10 rounded-xl hover:bg-green-500/20 transition-colors"
+                        disabled={actionBusy === r.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-green-400 bg-green-500/10 rounded-xl hover:bg-green-500/20 transition-colors disabled:opacity-50"
                       >
-                        <CheckCircle size={11} /> {lang === 'mm' ? 'ဖြေရှင်း' : 'Resolve'}
+                        <CheckCircle size={11} /> {actionBusy === r.id ? '...' : (lang === 'mm' ? 'ဖြေရှင်း' : 'Resolve')}
                       </button>
                       <button
                         onClick={() => updateStatus(r, 'dismissed')}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-white/40 bg-white/8 rounded-xl hover:bg-white/12 transition-colors"
+                        disabled={actionBusy === r.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-white/40 bg-white/8 rounded-xl hover:bg-white/12 transition-colors disabled:opacity-50"
                       >
-                        <XCircle size={11} /> {lang === 'mm' ? 'ပယ်ချ' : 'Dismiss'}
+                        <XCircle size={11} /> {actionBusy === r.id ? '...' : (lang === 'mm' ? 'ပယ်ချ' : 'Dismiss')}
                       </button>
                     </>
                   )}
@@ -222,6 +252,11 @@ export default function AdminReportsPage() {
               </div>
             )
           })
+        )}
+        {!loading && !loadError && items.length > 0 && items.length >= limit && (
+          <button onClick={() => setLimit(l => l + 100)} className="w-full py-3 rounded-2xl bg-white/6 border border-white/10 text-sm text-white/70 hover:bg-white/10">
+            {lang === 'mm' ? 'နောက်ထပ် ပြမည်' : 'Show more'}
+          </button>
         )}
       </div>
     </div>

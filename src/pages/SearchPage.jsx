@@ -36,7 +36,7 @@ const SEARCH_SOURCES = [
     select: 'id, title, title_mm, company_mm',
     searchFields: ['title', 'title_mm', 'company_mm'],
     routePrefix: '/jobs',
-    statusFilter: { column: 'status', value: 'available' },
+    statusFilter: { column: 'status', value: 'active' },
   },
   {
     id: 'rental',

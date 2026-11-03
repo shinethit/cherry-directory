@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cat, Search, CalendarDays, Users, Wifi, WifiOff, RefreshCw, Home, User, Briefcase, GraduationCap, Droplets, Wind, BookMarked, ChevronRight } from 'lucide-react';
+import { Search, CalendarDays, RefreshCw, Home, User, Briefcase, GraduationCap, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { PostCard, ListingCard, SectionHeader, Skeleton } from '../components/UI';
+import { PostCard, ListingCard, SectionHeader } from '../components/UI';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,7 +10,17 @@ import SplashScreen from '../components/SplashScreen';
 import ShareButton from '../components/ShareButton';
 import { usePWA } from '../hooks/usePWA'
 import { subscribe as subscribeCache, inspectLocalStorage } from '../lib/cacheStatus';
-import { yangonToday, formatMyanmarDateTime } from '../lib/myanmarDate';
+import { yangonToday, formatMyanmarDateTime, mmtParts, MY_MONTHS } from '../lib/myanmarDate';
+import { safeGet, safeSet } from '../lib/safeStorage';
+import { withTimeout, TimeoutError } from '../lib/withTimeout';
+import { showError, showWarning } from '../lib/toast';
+
+// How long the main Home queries may run before the page gives up and
+// shows a retry instead of skeletons forever (C-2).
+const LOAD_TIMEOUT_MS = 15000;
+// Hard fallback: the hero "preparing" line must never persist — force the
+// ready state this long after mount even if loadData is still stuck (C-1).
+const HERO_FORCE_READY_MS = 5000;
 
 // Helper: country code → full name
 
@@ -30,12 +40,11 @@ export default function HomePage() {
   const { installable, installApp } = usePWA()
 
   // Offline cache status
-  const [cacheStatusState, setCacheStatusState] = useState(null)
   const [cacheStorage, setCacheStorage] = useState({ exists: false, queryCount: 0 })
   
-  // --- Splash consent: daily check ---
+  // --- Splash consent: daily check (safe storage — never throws, H-2) ---
   const [consentGiven, setConsentGiven] = useState(() => {
-    const lastShown = localStorage.getItem('cherry_consent_date');
+    const lastShown = safeGet('cherry_consent_date');
     // Day boundary is 06:30 MMT today — the UTC date is wrong around midnight.
     return lastShown === yangonToday();
   });
@@ -51,22 +60,18 @@ export default function HomePage() {
   const [stats, setStats] = useState({ listings: 0, posts: 0 });
   const [quickLinks, setQuickLinks] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Per-section errors: one failed query no longer marks the whole page as
+  // errored (B-M1). dataError is set only when a core query fails or the
+  // load times out; sectionErrors records which sections failed.
   const [dataError, setDataError] = useState(false);
+  const [sectionErrors, setSectionErrors] = useState({});
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [recentFavorites, setRecentFavorites] = useState([]);
 
-  const [visitorCount, setVisitorCount] = useState(null);
-  const [countryStats, setCountryStats] = useState([]);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
 
-  // --- Power status (sorted by last_reported) ---
-  const [powerAreas, setPowerAreas] = useState([]);
-  const [powerLoading, setPowerLoading] = useState(true);
-  const powerChannelRef = useRef(null);
-
-  // --- Weather alerts (latest 4) ---
-  const [weatherAlerts, setWeatherAlerts] = useState([]);
-  const [weatherLoading, setWeatherLoading] = useState(true);
-  const weatherChannelRef = useRef(null);
+  // NOTE (H-5): the power/weather realtime channels and fetches were
+  // removed in v9.3 — the data they fed was never rendered anywhere.
 
   // --- Community stats (rent, tutoring, jobs) – silent fail if tables missing ---
   const [rentListingsCount, setRentListingsCount] = useState(0);
@@ -77,33 +82,26 @@ export default function HomePage() {
   const [jobSeekersCount, setJobSeekersCount] = useState(0);
   const [communityStatsLoading, setCommunityStatsLoading] = useState(true);
 
-  // --- Track display phase: idle → saving → done → ready ---
-  const [displayPhase, setDisplayPhase] = useState('idle')
-
+  // --- Hero line (C-1): driven by real state, never a display-phase
+  // machine. While loadData is running show "preparing"; once it settles
+  // (or after a 5 s hard fallback) show the cached-offline line if there
+  // is cached data, otherwise nothing. The label can never persist.
+  const [heroForceReady, setHeroForceReady] = useState(false)
   useEffect(() => {
-    if (!cacheStatusState) return
+    const t = setTimeout(() => setHeroForceReady(true), HERO_FORCE_READY_MS)
+    return () => clearTimeout(t)
+  }, [])
+  const heroReady = !loading || heroForceReady
 
-    // Prefetch just started
-    if (cacheStatusState.running) {
-      setDisplayPhase('saving')
-      return
-    }
-
-    // Prefetch just finished
-    if (cacheStatusState.lastRunAt) {
-      setDisplayPhase('done')
-      const t = setTimeout(() => setDisplayPhase('ready'), 2000)
-      return () => clearTimeout(t)
-    }
-  }, [cacheStatusState?.running, cacheStatusState?.lastRunAt])
-
-  // --- Offline cache status subscription ---
+  // --- Offline cache status: refresh on cache notifications + when the
+  // tab becomes visible again — no 3 s polling (C-M2) ---
   useEffect(() => {
-    const unsub = subscribeCache(setCacheStatusState)
     const refresh = () => setCacheStorage(inspectLocalStorage())
+    const unsub = subscribeCache(() => refresh())
     refresh()
-    const id = setInterval(refresh, 3000)
-    return () => { unsub(); clearInterval(id) }
+    const onVisible = () => { if (!document.hidden) refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { unsub(); document.removeEventListener('visibilitychange', onVisible) }
   }, [])
 
   // --- Online/Offline listener ---
@@ -121,11 +119,24 @@ export default function HomePage() {
 
 
   // --- Main data loading (listings, posts, categories, quick links) ---
+  // 15 s timeout (C-2): a hung query can no longer freeze Home as
+  // skeletons forever — on timeout the banner + retry appear. Offline
+  // (B-M3): skip Supabase entirely, clear loading, show the offline notice.
+  // Only core sections (posts / featured / categories) set dataError (B-M1).
   const loadData = useCallback(async () => {
+    // Offline: don't fire 7 queries that can only fail.
+    if (!navigator.onLine) {
+      setLoading(false);
+      setDataError(false);
+      setLoadTimedOut(false);
+      return;
+    }
     setLoading(true);
     setDataError(false);
+    setLoadTimedOut(false);
+    setSectionErrors({});
     try {
-      const results = await Promise.allSettled([
+      const results = await withTimeout(Promise.allSettled([
         supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
         supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
         supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
@@ -133,16 +144,22 @@ export default function HomePage() {
         supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
         supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order'),
         supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'published')
-      ]);
+      ]), LOAD_TIMEOUT_MS, 'Home data');
 
+      const sectionNames = ['posts', 'featured', 'categories', 'listingsCount', 'events', 'quickLinks', 'postsCount'];
+      const failed = {};
+      results.forEach((r, i) => {
+        if (r.status === 'rejected' || r.value?.error) failed[sectionNames[i]] = true;
+      });
+      setSectionErrors(failed);
+      // Only core sections fail the whole page; the rest render empty.
+      const coreFailed = ['posts', 'featured', 'categories'].some(k => failed[k]);
+      setDataError(coreFailed);
       setPosts(results[0]?.status === 'fulfilled' ? results[0].value.data || [] : []);
       setFeatured(results[1]?.status === 'fulfilled' ? results[1].value.data || [] : []);
       const all = results[2]?.status === 'fulfilled' ? results[2].value.data || [] : [];
       setAllCategories(all);
       setHomeCategories(all.filter(c => !c.parent_id));
-      // Surface failures instead of silently showing empty sections.
-      const failed = results.some(r => r.status === 'rejected' || r.value?.error)
-      setDataError(failed)
       setStats({
         listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0,
         posts: results[6]?.status === 'fulfilled' ? results[6].value.count || 0 : 0,
@@ -152,6 +169,12 @@ export default function HomePage() {
     } catch (err) {
       console.error('Data load error:', err);
       setDataError(true);
+      if (err instanceof TimeoutError) {
+        setLoadTimedOut(true);
+        showWarning('Data တင်တာ ကြာနေသည် — ပြန်ကြိုးစားပါ');
+      } else {
+        showError('Data တင်ရာတွင် အမှားဖြစ်သွားသည်');
+      }
     } finally {
       setLoading(false);
     }
@@ -163,109 +186,61 @@ export default function HomePage() {
     }
   }, [consentGiven, loadData]);
 
-  // --- Power status (sorted by last_reported descending) ---
-  const loadPowerStatus = useCallback(async () => {
-    setPowerLoading(true);
-    try {
-      const { data } = await supabase
-        .from('current_power_status')
-        .select('*')
-        .order('last_reported', { ascending: false, nullsLast: true });
-      setPowerAreas(data || []);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setPowerLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (consentGiven) {
-      loadPowerStatus();
-      powerChannelRef.current = supabase
-        .channel('power-live')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'power_cut_reports' }, loadPowerStatus)
-        .subscribe();
-      return () => {
-        if (powerChannelRef.current) supabase.removeChannel(powerChannelRef.current);
-      };
-    }
-  }, [consentGiven, loadPowerStatus]);
-
-  // --- Weather alerts (latest 4, order by severity then posted_at) ---
-  const loadWeatherAlerts = useCallback(async () => {
-    setWeatherLoading(true);
-    try {
-      const { data } = await supabase
-        .from('weather_alerts')
-        .select('*')
-        .eq('status', 'active')
-        .order('severity', { ascending: false }) // danger first
-        .order('posted_at', { ascending: false })
-        .limit(4);
-      setWeatherAlerts(data || []);
-    } catch (e) {
-      console.warn(e);
-    } finally {
-      setWeatherLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (consentGiven) {
-      loadWeatherAlerts();
-      weatherChannelRef.current = supabase
-        .channel('weather-live')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'weather_alerts' }, loadWeatherAlerts)
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'weather_alerts' }, loadWeatherAlerts)
-        .subscribe();
-      return () => {
-        if (weatherChannelRef.current) supabase.removeChannel(weatherChannelRef.current);
-      };
-    }
-  }, [consentGiven, loadWeatherAlerts]);
-
   // --- Community stats (silent fail) ---
+  // Same 15 s timeout as the main load (H-4): the loading flag is cleared
+  // in finally, so the six cells can never show '...' forever.
   const loadCommunityStats = useCallback(async () => {
     setCommunityStatsLoading(true);
-
-    // Helper: run a count query silently
-    async function count(table, filterFn) {
-      try {
-        let q = supabase.from(table).select('*', { count: 'exact', head: true });
-        if (filterFn) q = filterFn(q);
-        const { count: c, error } = await q;
-        if (error) return 0;
-        return c || 0;
-      } catch {
-        return 0;
+    try {
+      // Helper: run a count query silently
+      async function count(table, filterFn) {
+        try {
+          let q = supabase.from(table).select('*', { count: 'exact', head: true });
+          if (filterFn) q = filterFn(q);
+          const { count: c, error } = await q;
+          if (error) return 0;
+          return c || 0;
+        } catch {
+          return 0;
+        }
       }
+
+      // 6 counts in parallel (was 6 sequential awaits).
+      const [rentAvailable, rentSeekers, tutorOffers, tutorRequests, jobOpenings, jobSeekers] = await withTimeout(Promise.all([
+        count('rentals', q => q.eq('post_type', 'owner')),
+        count('rentals', q => q.eq('post_type', 'tenant')),
+        count('tutoring', q => q.eq('post_type', 'tutor')),
+        count('tutoring', q => q.eq('post_type', 'student')),
+        count('jobs', q => q.eq('post_type', 'employer')),
+        count('jobs', q => q.eq('post_type', 'jobseeker')),
+      ]), LOAD_TIMEOUT_MS, 'Community stats')
+
+      setRentListingsCount(rentAvailable)
+      setRentSeekersCount(rentSeekers)
+      setTutorOffersCount(tutorOffers)
+      setTutorRequestsCount(tutorRequests)
+      setJobOpeningsCount(jobOpenings)
+      setJobSeekersCount(jobSeekers)
+    } catch (e) {
+      // Timeout or other failure: keep the previous (or zero) counts.
+      console.warn('Community stats load failed:', e)
+    } finally {
+      setCommunityStatsLoading(false)
     }
-
-    // 6 counts in parallel (was 6 sequential awaits).
-    const [rentAvailable, rentSeekers, tutorOffers, tutorRequests, jobOpenings, jobSeekers] = await Promise.all([
-      count('rentals', q => q.eq('post_type', 'owner')),
-      count('rentals', q => q.eq('post_type', 'tenant')),
-      count('tutoring', q => q.eq('post_type', 'tutor')),
-      count('tutoring', q => q.eq('post_type', 'student')),
-      count('jobs', q => q.eq('post_type', 'employer')),
-      count('jobs', q => q.eq('post_type', 'jobseeker')),
-    ])
-
-    setRentListingsCount(rentAvailable)
-    setRentSeekersCount(rentSeekers)
-    setTutorOffersCount(tutorOffers)
-    setTutorRequestsCount(tutorRequests)
-    setJobOpeningsCount(jobOpenings)
-    setJobSeekersCount(jobSeekers)
-
-    setCommunityStatsLoading(false)
   }, [])
 
+  // Lazy-load after first paint (B-H3): the main 7 queries go first, the
+  // 6 community counts follow once the browser is idle.
   useEffect(() => {
-    if (consentGiven) {
-      loadCommunityStats();
+    if (!consentGiven) return
+    if (!navigator.onLine) { setCommunityStatsLoading(false); return }
+    let timer
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(() => loadCommunityStats(), { timeout: 2000 })
+      return () => window.cancelIdleCallback(id)
     }
+    timer = setTimeout(() => loadCommunityStats(), 500)
+    return () => clearTimeout(timer)
   }, [consentGiven, loadCommunityStats]);
 
   const loadFavorites = useCallback(async () => {
@@ -287,7 +262,11 @@ export default function HomePage() {
         .eq('status', 'approved');
       const map = Object.fromEntries((data || []).map(l => [l.id, l]));
       setRecentFavorites(ids.map(id => map[id]).filter(Boolean).slice(0, 4));
-    } catch (e) { console.warn('favorites load:', e); }
+    } catch (e) {
+      console.warn('favorites load:', e);
+      // Don't leave stale favourites on screen after a failed load (B-M4).
+      setRecentFavorites([]);
+    }
   }, [isLoggedIn, user]);
 
   useEffect(() => {
@@ -296,14 +275,17 @@ export default function HomePage() {
 
   const handleRefresh = () => {
     loadData();
-    loadPowerStatus();
-    loadWeatherAlerts();
     loadCommunityStats();
+    loadFavorites();
   };
 
   const handleConsent = () => {
+    // Guarded persist (H-1): a storage failure must never block entry —
+    // consent is recorded in memory regardless, and the failure is toasted.
     const today = yangonToday();
-    localStorage.setItem('cherry_consent_date', today);
+    if (!safeSet('cherry_consent_date', today)) {
+      showError('သိမ်းဆည်းမှု မအောင်မြင်ပါ — နောက်အကြိမ် ပြန်မေးပါမည်');
+    }
     setConsentGiven(true);
   };
 
@@ -319,15 +301,6 @@ export default function HomePage() {
 
   const cityName = config?.app_city || 'တောင်ကြီးမြို့';
   const appName = config?.app_name || 'Cherry Directory';
-
-  // Helper for severity color
-  const getSeverityColor = (severity) => {
-    switch (severity) {
-      case 'danger': return 'text-red-400 bg-red-500/10 border-red-500/20';
-      case 'warning': return 'text-amber-400 bg-amber-500/10 border-amber-500/20';
-      default: return 'text-blue-400 bg-blue-500/10 border-blue-500/20';
-    }
-  };
 
   return (
     <div className="space-y-3 py-3 pb-24">
@@ -354,10 +327,19 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Data error banner (dataError was set but never rendered) */}
+      {/* Offline notice (B-M3): shown instead of a silent empty page when
+          there is no connection — Supabase calls are skipped, retry reloads. */}
+      {!isOnline && !loading && (
+        <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-amber-500/30">
+          <p className="text-sm text-amber-400 font-myanmar">အင်တာနက် မရှိပါ — Offline ဖြစ်နေသည်</p>
+          <button onClick={loadData} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+        </div>
+      )}
+
+      {/* Data error banner — shown when a core query fails or the load times out */}
       {dataError && !loading && (
         <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
-          <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ</p>
+          <p className="text-sm text-red-400 font-myanmar">{loadTimedOut ? 'Data တင်တာ အချိန်ကုန်သွားသည် (15 စက္ကန့်) — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ' : 'Data တင်ရာတွင် အမှားဖြစ်သွားသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ'}</p>
           <button onClick={loadData} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
         </div>
       )}
@@ -374,57 +356,18 @@ export default function HomePage() {
               <h2 className="font-display font-bold text-lg text-white leading-tight mb-1.5">
                 Cherry Directory 🍒
               </h2>
-              {/* Offline cache status — animated */}
-              {(displayPhase === 'saving' || displayPhase === 'done') ? (
-                <div className="mb-2">
-                  <div className="flex items-center justify-between mb-1 text-[10px]">
-                    <span className="text-blue-300 font-myanmar flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                      {displayPhase === 'saving'
-                        ? (lang === 'mm' ? 'Data သိမ်းနေသည်' : 'Saving data')
-                        : (lang === 'mm' ? 'သိမ်းပြီးပါပြီ' : 'Save complete')}
-                    </span>
-                    <span className="text-blue-200 font-mono font-bold">
-                      {cacheStatusState?.succeeded + cacheStatusState?.failed || 0}/{cacheStatusState?.totalTasks || 0}
-                      <span className="text-blue-400 ml-1">
-                        ({Math.round(((cacheStatusState?.succeeded + cacheStatusState?.failed || 0) / Math.max(1, cacheStatusState?.totalTasks || 1)) * 100)}%)
-                      </span>
-                    </span>
-                  </div>
-                  <div className="relative h-3 rounded-full bg-white/10" style={{ overflow: 'visible' }}>
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-500 ease-out"
-                      style={{ width: `${((cacheStatusState?.succeeded + cacheStatusState?.failed || 0) / Math.max(1, cacheStatusState?.totalTasks || 1)) * 100}%` }}
-                    />
-                    <div
-                      className="absolute cat-runner"
-                      style={{
-                        top: '-8px',
-                        left: `${Math.max(4, Math.min(94, ((cacheStatusState?.succeeded + cacheStatusState?.failed || 0) / Math.max(1, cacheStatusState?.totalTasks || 1)) * 100))}%`,
-                        transform: 'translateX(-50%)',
-                        transition: 'left 0.6s ease-out',
-                      }}
-                    >
-                      <svg width="28" height="24" viewBox="0 0 64 56" fill="none" style={{ display: 'block', filter: 'drop-shadow(0 0 4px rgba(147,197,253,0.9))' }}>
-                        <path d="M4 38 Q 12 30 18 34" stroke="#93c5fd" strokeWidth="3" strokeLinecap="round" fill="none" />
-                        <ellipse cx="32" cy="40" rx="18" ry="10" fill="#93c5fd" />
-                        <rect x="20" y="48" width="4" height="6" rx="2" fill="#60a5fa" />
-                        <rect x="42" y="48" width="4" height="6" rx="2" fill="#60a5fa" />
-                        <circle cx="46" cy="26" r="11" fill="#93c5fd" />
-                        <polygon points="40,18 42,10 46,16" fill="#93c5fd" />
-                        <polygon points="50,16 53,10 55,18" fill="#93c5fd" />
-                        <polygon points="42,17 43,13 45,17" fill="#bfdbfe" />
-                        <polygon points="51,16 52,13 54,17" fill="#bfdbfe" />
-                        <circle cx="43" cy="25" r="1.5" fill="#1e40af" />
-                        <circle cx="50" cy="25" r="1.5" fill="#1e40af" />
-                        <circle cx="46.5" cy="29" r="1" fill="#1e3a8a" />
-                        <rect x="38" y="46" width="4" height="8" rx="2" fill="#60a5fa" />
-                        <rect x="46" y="46" width="4" height="8" rx="2" fill="#60a5fa" />
-                      </svg>
-                    </div>
-                  </div>
+              {/* Offline cache status — driven by real state (C-1): while the
+                  main load is running show "preparing"; once it settles (or
+                  the 5 s hard fallback fires) show the cached line if any
+                  data is cached, otherwise nothing. Never stuck. */}
+              {!heroReady ? (
+                <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" />
+                  <span className="text-white/40 font-myanmar">
+                    {lang === 'mm' ? 'ပြင်ဆင်နေသည်...' : 'Preparing...'}
+                  </span>
                 </div>
-              ) : displayPhase === 'ready' && ((cacheStatusState?.succeeded || 0) > 0 || (cacheStorage.exists && cacheStorage.queryCount > 0)) ? (
+              ) : (cacheStorage.exists && cacheStorage.queryCount > 0) ? (
                 <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
                   <svg width="14" height="12" viewBox="0 0 64 56" fill="none" style={{ display: 'block' }}>
                     <ellipse cx="32" cy="40" rx="18" ry="10" fill="#4ade80" />
@@ -436,18 +379,11 @@ export default function HomePage() {
                   </svg>
                   <span className="text-green-300 font-myanmar">
                     {lang === 'mm'
-                      ? `Offline သိမ်းပြီး · ${cacheStatusState?.succeeded || cacheStorage.queryCount} မျိုး`
-                      : `Cached offline · ${cacheStatusState?.succeeded || cacheStorage.queryCount} items`}
+                      ? `Offline သိမ်းပြီး · ${cacheStorage.queryCount} မျိုး`
+                      : `Cached offline · ${cacheStorage.queryCount} items`}
                   </span>
                 </div>
-              ) : displayPhase === 'ready' ? null : (
-                <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white/30" />
-                  <span className="text-white/40 font-myanmar">
-                    {lang === 'mm' ? 'ပြင်ဆင်နေသည်...' : 'Preparing...'}
-                  </span>
-                </div>
-              )}
+              ) : null}
 
               
                 <p className="text-white/60 text-[10px] font-myanmar mb-2.5 leading-relaxed">
@@ -863,7 +799,12 @@ export default function HomePage() {
           <div className="px-4 space-y-2">
             {loading
               ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-16" />)
-              : upcomingEvents.map(ev => (
+              : upcomingEvents.map(ev => {
+                // MMT helpers (H-23): device-timezone getMonth()/getDate()
+                // showed the wrong day around midnight; mmtParts uses
+                // Myanmar wall time instead.
+                const evParts = mmtParts(ev.event_start)
+                return (
                   <div
                     key={ev.id}
                     onClick={() => navigate(`/news/${ev.id}`)}
@@ -871,10 +812,10 @@ export default function HomePage() {
                   >
                     <div className="flex-shrink-0 w-11 text-center bg-brand-600/30 border border-brand-400/25 rounded-xl py-1.5">
                       <p className="text-[8px] text-brand-300 font-display font-bold uppercase leading-none">
-                        {new Date(ev.event_start).toLocaleDateString('en-US', { month: 'short' })}
+                        {evParts ? MY_MONTHS[evParts.m - 1] : ''}
                       </p>
                       <p className="text-base font-display font-bold text-white leading-tight">
-                        {new Date(ev.event_start).getDate()}
+                        {evParts ? evParts.d : ''}
                       </p>
                     </div>
                     <div className="flex-1 min-w-0">
@@ -887,7 +828,8 @@ export default function HomePage() {
                     </div>
                     <CalendarDays size={16} className="text-white/20 flex-shrink-0" />
                   </div>
-                ))}
+                )
+              })}
           </div>
         </div>
       )}

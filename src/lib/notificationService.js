@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { handleSupabaseError } from './errorHandler';
 
 /**
  * Notification types
@@ -12,38 +11,6 @@ export const NOTIFICATION_TYPES = {
   FUEL_STATUS_UPDATE: 'fuel_status_update',
   NEW_MESSAGE: 'new_message',
   SYSTEM_ALERT: 'system_alert',
-};
-
-/**
- * Create notification
- */
-export const createNotification = async (userId, type, title, message, data = {}) => {
-  try {
-    const { data: notification, error } = await supabase
-      .from('notifications')
-      .insert([
-        {
-          user_id: userId,
-          type,
-          title,
-          message,
-          data,
-          is_read: false,
-        },
-      ])
-      .select()
-      .single();
-
-    if (error) {
-      handleSupabaseError(error, 'Create Notification');
-      throw error;
-    }
-
-    return notification;
-  } catch (error) {
-    console.error('Failed to create notification:', error);
-    throw error;
-  }
 };
 
 /**
@@ -154,55 +121,6 @@ export const subscribeToNotifications = (userId, callback) => {
   return subscription;
 };
 
-/**
- * Send listing approval notification
- * listingId is stored so the notification can open the listing on tap.
- */
-export const notifyListingApproved = async (userId, listingName, listingId = null) => {
-  return createNotification(
-    userId,
-    NOTIFICATION_TYPES.LISTING_APPROVED,
-    'စာရင်း အတည်ပြုခဲ့သည်',
-    `"${listingName}" စာရင်းကို အတည်ပြုခဲ့သည်။`,
-    { listing_id: listingId, listing_name: listingName }
-  );
-};
 
-/**
- * Send listing rejection notification
- */
-export const notifyListingRejected = async (userId, listingName, reason = '', listingId = null) => {
-  return createNotification(
-    userId,
-    NOTIFICATION_TYPES.LISTING_REJECTED,
-    'စာရင်း ငြင်းပယ်ခဲ့သည်',
-    `"${listingName}" စာရင်းကို ငြင်းပယ်ခဲ့သည်။ ${reason ? `အကြောင်းအရာ: ${reason}` : ''}`,
-    { listing_id: listingId, listing_name: listingName, reason }
-  );
-};
 
-/**
- * Send new review notification
- */
-export const notifyNewReview = async (userId, listingName, reviewerName, rating, listingId = null) => {
-  return createNotification(
-    userId,
-    NOTIFICATION_TYPES.NEW_REVIEW,
-    'အဆင့်သတ်မှတ်မှု အသစ်',
-    `${reviewerName} က "${listingName}" အတွက် ${rating} ⭐ အဆင့်သတ်မှတ်ခဲ့သည်။`,
-    { listing_id: listingId, listing_name: listingName, reviewer_name: reviewerName, rating }
-  );
-};
 
-/**
- * Send fuel status update notification
- */
-export const notifyFuelStatusUpdate = async (userId, stationName, fuelType, status) => {
-  return createNotification(
-    userId,
-    NOTIFICATION_TYPES.FUEL_STATUS_UPDATE,
-    'ဆီ အခြေအနေ အဆင့်မြှင့်တင်မှု',
-    `${stationName} တွင် ${fuelType} ဆီ အခြေအနေ: ${status}`,
-    { station_name: stationName, fuel_type: fuelType, status }
-  );
-};

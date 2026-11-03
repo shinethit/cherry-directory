@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, X, Pin, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
-import { PostCard, Skeleton, EmptyState, ImageUploader } from '../components/UI'
-import { uploadImage } from '../lib/cloudinary'
+import { PostCard, Skeleton, EmptyState } from '../components/UI'
 import { useSEO } from '../hooks/useSEO'
 import Lightbox from 'yet-another-react-lightbox'
 import 'yet-another-react-lightbox/styles.css'
@@ -14,7 +13,6 @@ import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
-import { localInputToMMT } from '../lib/myanmarDate'
 
 const TYPES = [
   { value: '',             label: 'အားလုံး',        labelEn: 'All'           },
@@ -22,247 +20,6 @@ const TYPES = [
   { value: 'event',        label: '📅 Event',        labelEn: '📅 Event'      },
   { value: 'announcement', label: '📢 ကြေညာချက်',  labelEn: '📢 Announcement'},
 ]
-
-// PostForm
-function PostForm({ onClose, onSuccess, lang }) {
-  const { user } = useAuth()
-  const [form, setForm] = useState({
-    title: '', title_mm: '', content: '', content_mm: '',
-    type: 'announcement', is_pinned: false,
-    event_start: '', event_location: '',
-  })
-  const [coverUrl, setCoverUrl] = useState('')
-  const [images, setImages] = useState([])
-  const [coverLoading, setCoverLoading] = useState(false)
-  const [galleryLoading, setGalleryLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-
-  async function handleCover(file) {
-    setCoverLoading(true)
-    try {
-      const url = await uploadImage(file, 'news/covers')
-      setCoverUrl(url)
-    } catch (err) {
-      setError(err?.message || 'ပုံတင်ရာတွင် အမှားဖြစ်သွားသည်')
-    } finally {
-      setCoverLoading(false)
-    }
-  }
-
-  async function handleGalleryUpload(file) {
-    if (images.length >= 5) {
-      setError(lang === 'mm' ? 'အများဆုံး ၅ ပုံသာ တင်နိုင်ပါသည်' : 'Maximum 5 images allowed')
-      return
-    }
-    setGalleryLoading(true)
-    try {
-      const url = await uploadImage(file, 'news/gallery')
-      setImages(prev => [...prev, url])
-    } catch (err) {
-      setError(err?.message || 'ပုံတင်ရာတွင် အမှားဖြစ်သွားသည်')
-    } finally {
-      setGalleryLoading(false)
-    }
-  }
-
-  function removeGalleryImage(index) {
-    setImages(prev => prev.filter((_, i) => i !== index))
-  }
-
-  async function submit() {
-    if (!form.title_mm && !form.title) {
-      setError(lang === 'mm' ? 'ခေါင်းစဉ် ထည့်ပါ' : 'Title is required')
-      return
-    }
-    setSaving(true)
-    const payload = {
-      title:       form.title || form.title_mm,
-      title_mm:    form.title_mm || null,
-      content:     form.content || null,
-      content_mm:  form.content_mm || null,
-      type:        form.type,
-      status:      'published',
-      is_pinned:   form.is_pinned,
-      cover_url:   coverUrl || null,
-      images:      images,
-      event_start: form.event_start ? localInputToMMT(form.event_start) : null,
-      event_location: form.event_location || null,
-      author_id:   user?.id,
-    }
-    const { error: err } = await supabase.from('posts').insert(payload)
-    setSaving(false)
-    if (err) { setError(err.message); return }
-    onSuccess()
-  }
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto pt-safe">
-      <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0 z-10">
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
-            <X size={18} className="text-white" />
-          </button>
-          <div>
-            <h2 className="font-display font-bold text-base text-white">
-              {lang === 'mm' ? 'Post တင်မည်' : 'Create Post'}
-            </h2>
-            <p className="text-[10px] text-white/40">Admin / Moderator</p>
-          </div>
-        </div>
-        <button
-          onClick={submit}
-          disabled={saving || (!form.title_mm && !form.title)}
-          className="btn-primary text-xs px-4 py-2 disabled:opacity-50"
-        >
-          {saving ? '...' : lang === 'mm' ? 'ထုတ်ဝေမည်' : 'Publish'}
-        </button>
-      </div>
-
-      <div className="px-4 py-4 space-y-4 pb-24">
-        {/* Type selector */}
-        <div>
-          <label className="block text-xs text-white/50 mb-2">အမျိုးအစား</label>
-          <div className="flex gap-2 flex-wrap">
-            {TYPES.filter(t => t.value).map(t => (
-              <button
-                key={t.value}
-                onClick={() => set('type', t.value)}
-                className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-colors ${
-                  form.type === t.value
-                    ? 'bg-brand-600/60 border-brand-400/50 text-brand-200'
-                    : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
-                }`}
-              >
-                {lang === 'mm' ? t.label : t.labelEn}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Cover image */}
-        <div>
-          <label className="block text-xs text-white/50 mb-2">Cover ပုံ (optional)</label>
-          {coverUrl ? (
-            <div className="relative h-36">
-              <img src={coverUrl} alt="" className="w-full h-full object-cover rounded-2xl" />
-              <button
-                onClick={() => setCoverUrl('')}
-                className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-lg flex items-center justify-center text-white hover:bg-red-500/70 transition-colors"
-              >
-                <X size={14} />
-              </button>
-            </div>
-          ) : (
-            <ImageUploader onUpload={handleCover} loading={coverLoading} label="Cover တင်ရန်" />
-          )}
-        </div>
-
-        {/* Gallery images */}
-        <div>
-          <label className="block text-xs text-white/50 mb-2">ဓာတ်ပုံများ (optional, max 5)</label>
-          <div className="grid grid-cols-3 gap-2">
-            {images.map((url, i) => (
-              <div key={i} className="relative aspect-square">
-                <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
-                <button
-                  onClick={() => removeGalleryImage(i)}
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-[10px]"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            {images.length < 5 && (
-              <ImageUploader onUpload={handleGalleryUpload} loading={galleryLoading} label="+ ပုံထပ်ထည့်" />
-            )}
-          </div>
-          <p className="text-[9px] text-white/25 mt-1.5">အများဆုံး ၅ ပုံ</p>
-        </div>
-
-        {/* Title */}
-        <div>
-          <label className="block text-xs text-white/50 mb-1.5">
-            ခေါင်းစဉ် (မြန်မာ) <span className="text-brand-400">*</span>
-          </label>
-          <input autoFocus
-            value={form.title_mm}
-            onChange={e => set('title_mm', e.target.value)}
-            className="input-dark font-myanmar"
-            placeholder="ဥပမာ: မှတ်တမ်း..."
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs text-white/50 mb-1.5">Title (English) — optional</label>
-          <input
-            value={form.title}
-            onChange={e => set('title', e.target.value)}
-            className="input-dark"
-            placeholder="Optional English title"
-          />
-        </div>
-
-        {/* Content */}
-        <div>
-          <label className="block text-xs text-white/50 mb-1.5">အကြောင်းအရာ (မြန်မာ)</label>
-          <textarea
-            value={form.content_mm}
-            onChange={e => set('content_mm', e.target.value)}
-            className="input-dark font-myanmar resize-none h-32"
-            placeholder="Post အကြောင်းအရာ..."
-          />
-        </div>
-
-        {/* Event fields */}
-        {form.type === 'event' && (
-          <div className="space-y-3 border-t border-white/8 pt-3">
-            <p className="text-[10px] text-white/40 uppercase tracking-wider font-display">Event Details</p>
-            <div>
-              <label className="block text-xs text-white/50 mb-1.5">ရက်စွဲ / အချိန်</label>
-              <input
-                type="datetime-local"
-                value={form.event_start}
-                onChange={e => set('event_start', e.target.value)}
-                className="input-dark"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-white/50 mb-1.5">တည်နေရာ</label>
-              <input
-                value={form.event_location}
-                onChange={e => set('event_location', e.target.value)}
-                className="input-dark font-myanmar"
-                placeholder="ကျင်းပမည့် နေရာ..."
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Pin toggle */}
-        <button
-          onClick={() => set('is_pinned', !form.is_pinned)}
-          className={`flex items-center gap-2 px-4 py-3 rounded-xl border w-full text-sm transition-colors ${
-            form.is_pinned
-              ? 'bg-gold-500/15 border-gold-500/30 text-gold-400'
-              : 'bg-white/5 border-white/10 text-white/50'
-          }`}
-        >
-          <Pin size={15} />
-          {lang === 'mm' ? 'အထက်တင် (Pinned)' : 'Pin to top'}
-        </button>
-
-        {error && (
-          <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 font-myanmar">
-            {error}
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
 
 export default function NewsPage() {
   const navigate = useNavigate()
@@ -278,7 +35,6 @@ export default function NewsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   // Calendar "See all" links here as /news?type=event.
   const [type, setType]     = useState(searchParams.get('type') || '')
-  const [showForm, setShowForm] = useState(false)
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -359,15 +115,6 @@ export default function NewsPage() {
             <Plus size={14} /> {lang === 'mm' ? 'သတင်းထည့်' : 'Add News'}
           </button>
         )}
-        {canEdit && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-1.5 btn-primary text-xs px-3 py-2 mt-1"   // ← added mt-1
-          >
-            <Plus size={14} />
-            {lang === 'mm' ? 'Post တင်မည်' : 'New Post'}
-          </button>
-        )}
       </div>
 
       <div className="px-4 mb-3">
@@ -437,7 +184,7 @@ export default function NewsPage() {
             title={lang === 'mm' ? 'Post မရှိသေးပါ' : 'No posts yet'}
             message={
               canEdit
-                ? (lang === 'mm' ? '"Post တင်မည်" ကို နှိပ်ပြီး ပထမဆုံး Post ရေးပါ' : 'Click "New Post" to write the first post')
+                ? (lang === 'mm' ? '"သတင်းထည့်" ကို နှိပ်ပြီး ပထမဆုံး သတင်း ရေးပါ' : 'Click "Add News" to write the first post')
                 : (lang === 'mm' ? 'မကြာမီ Post တွေ တွေ့ရမည်' : 'Posts will appear here soon')
             }
           />
@@ -478,14 +225,6 @@ export default function NewsPage() {
           ))
         )}
       </div>
-
-      {showForm && (
-        <PostForm
-          lang={lang}
-          onClose={() => setShowForm(false)}
-          onSuccess={() => { setShowForm(false); load() }}
-        />
-      )}
 
       <Lightbox
         open={lightboxOpen}

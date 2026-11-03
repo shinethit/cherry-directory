@@ -8,6 +8,7 @@
 # SQL migration files
 supabase-*.sql
 !supabase-migration-v0.9.1.sql
+!supabase-migration-9.3.sql
 # Test files
 public/test.html
 # Environment

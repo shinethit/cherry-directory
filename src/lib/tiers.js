@@ -1,3 +1,5 @@
+import { Star, Building2, Trophy, CalendarCheck, MessageCircle, ShieldCheck } from 'lucide-react'
+
 export const TIERS = [
   { id: 'bronze',   min: 0,    max: 99,       emoji: '🥉', mm: 'ကြေး',        en: 'Bronze',   color: 'text-amber-600',  bg: 'bg-amber-700/20',   border: 'border-amber-700/40',  gradient: 'from-amber-700 to-amber-600' },
   { id: 'silver',   min: 100,  max: 299,      emoji: '🥈', mm: 'ငွေ',          en: 'Silver',   color: 'text-gray-300',   bg: 'bg-gray-400/20',    border: 'border-gray-400/40',   gradient: 'from-gray-400 to-gray-300' },
@@ -29,3 +31,16 @@ export function getTierProgress(points = 0) {
   const pointsToNext = Math.max(0, next.min - points)
   return { percent, current, next, pointsToNext }
 }
+
+// Single source of truth for "how to earn points" — shared by the
+// Leaderboard "How to earn" box and the Points Guide page (F-MED-7).
+// The Leaderboard used to list 5 rows and omit Claim +30; both lists
+// now render this same array, so they can never drift apart again.
+export const POINT_ACTIONS = [
+  { icon: Star,          points: 5,  mm: 'Review ရေးသည်',                 en: 'Write a review' },
+  { icon: Building2,     points: 10, mm: 'လုပ်ငန်း Submit',                 en: 'Submit a listing' },
+  { icon: Trophy,        points: 20, mm: 'လုပ်ငန်း Approved',               en: 'Listing approved' },
+  { icon: CalendarCheck, points: 2,  mm: 'Event RSVP',                     en: 'RSVP to event' },
+  { icon: MessageCircle, points: 1,  mm: 'Chat မက်ဆေ့ (max 10/day)',       en: 'Chat message (max 10/day)' },
+  { icon: ShieldCheck,   points: 30, mm: 'Claim Approved',                 en: 'Claim approved' },
+]

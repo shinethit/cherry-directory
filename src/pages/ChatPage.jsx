@@ -2,11 +2,32 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Reply, X, Trash2, Plus, Pencil, Settings } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { useLang } from '../contexts/LangContext'
 import { usePoints } from '../hooks/usePoints'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { formatMMTTime } from '../lib/myanmarDate'
 
-function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap }) {
+// Guest names that impersonate staff or the app itself are blocked.
+const RESERVED_GUEST_NAME = /admin|moderator|staff|cherry/i
+export function isReservedGuestName(name) {
+  return RESERVED_GUEST_NAME.test(name || '')
+}
+
+function newGuestId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  return `g-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function loadGuestMsgIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('guestMsgIds') || '[]'))
+  } catch {
+    return new Set()
+  }
+}
+
+function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap, lang }) {
   const quoted = msg.reply_to ? replyMap?.[msg.reply_to] : null
   return (
     <div className={`flex gap-2 mb-3 ${isMe ? 'flex-row-reverse' : ''}`}>
@@ -35,7 +56,7 @@ function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap }) {
         </div>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-[9px] text-white/25">
-            {new Date(msg.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            {formatMMTTime(msg.created_at, lang)}
           </span>
           <button onClick={() => onReply(msg)} className="text-[9px] text-white/30 hover:text-brand-300 transition-colors flex items-center gap-0.5">
             <Reply size={10} /> Reply
@@ -53,6 +74,7 @@ function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap }) {
 
 export default function ChatPage() {
   const { user, profile, isLoggedIn, isAdmin, isModerator } = useAuth()
+  const { lang } = useLang()
   const { award } = usePoints()
   const [rooms, setRooms] = useState([])
   const [activeRoom, setActiveRoom] = useState(null)
@@ -62,8 +84,35 @@ export default function ChatPage() {
   const [replyTo, setReplyTo] = useState(null)
   const [showNamePrompt, setShowNamePrompt] = useState(false)
   const [replyMap, setReplyMap] = useState({})
+  const [sending, setSending] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+
+  // Guest identity (G-L2): chat_messages has no guest_id column, so a
+  // guest's own messages are scoped by the ids THIS device sent (kept in
+  // localStorage, so they survive reloads) — not by the display name,
+  // which any other guest can reuse. Messages sent before this guest id
+  // existed fall back to the name match so a returning guest's history
+  // does not suddenly render as someone else's. A guest_id column
+  // (Track 5 SQL) would make this fully robust.
+  const guestIdCreatedAt = useRef(Number(localStorage.getItem('guestIdCreatedAt') || 0))
+  const myGuestMsgIds = useRef(loadGuestMsgIds())
+
+  function rememberGuestMessage(id) {
+    if (!id) return
+    myGuestMsgIds.current.add(id)
+    try {
+      localStorage.setItem('guestMsgIds', JSON.stringify([...myGuestMsgIds.current].slice(-200)))
+    } catch { /* storage full / private mode — scoping just degrades to name match */ }
+  }
+
+  function isMyGuestMessage(msg) {
+    if (msg.guest_name !== guestName) return false
+    if (myGuestMsgIds.current.has(msg.id)) return true
+    // Legacy fallback: sent before this device had a guest id.
+    if (guestIdCreatedAt.current && new Date(msg.created_at).getTime() < guestIdCreatedAt.current) return true
+    return false
+  }
 
   // Room management state
   const [showRoomManager, setShowRoomManager] = useState(false)
@@ -202,14 +251,16 @@ export default function ChatPage() {
     if (!activeRoom) return
     const content = input.trim()
     if (!content) return
+    // In-flight guard: a double-tap used to double-post (G-M6).
+    if (sending) return
 
     if (!isLoggedIn && !guestName) {
       setShowNamePrompt(true)
       return
     }
 
-    // Guests must not impersonate staff: block names containing "admin".
-    if (!isLoggedIn && /admin/i.test(guestName)) {
+    // Guests must not impersonate staff or the app itself.
+    if (!isLoggedIn && isReservedGuestName(guestName)) {
       showError('ဒီနာမည် သုံးလို့မရပါ — တခြားနာမည် ရွေးပါ')
       setShowNamePrompt(true)
       return
@@ -223,19 +274,26 @@ export default function ChatPage() {
       reply_to: replyTo?.id || null,
     }
 
+    setSending(true)
     try {
-      const { error } = await supabase.from('chat_messages').insert(messageToSend)
+      // .select('id') records the sent message's id so the guest's own
+      // messages can be scoped to this device (G-L2).
+      const { data: inserted, error } = await supabase.from('chat_messages').insert(messageToSend).select('id').single()
       if (error) throw error
+      if (!isLoggedIn) rememberGuestMessage(inserted?.id)
       // Clear the input ONLY after a successful insert — clearing first
       // loses the typed message forever when offline.
       setInput('')
       setReplyTo(null)
       // Logged-in users earn +1 chat point per message (max 10/day — the
-      // cap is enforced inside award(); a points failure never blocks chat).
+      // cap is enforced server-side by award_chat_point(); a points
+      // failure never blocks chat).
       if (isLoggedIn) award({ action: 'chat_message' })
     } catch (err) {
       console.error('Send error:', err)
       showError('မက်ဆေ့ ပို့ရာတွင် အမှားရှိသည်: ' + err.message)
+    } finally {
+      setSending(false)
     }
   }
 
@@ -255,13 +313,25 @@ export default function ChatPage() {
   const saveGuestName = () => {
     const name = guestName.trim()
     if (!name) return
-    // Guests must not impersonate staff.
-    if (/admin/i.test(name)) {
+    // Guests must not impersonate staff or the app itself.
+    if (isReservedGuestName(name)) {
       showError('ဒီနာမည် သုံးလို့မရပါ — တခြားနာမည် ရွေးပါ')
       return
     }
     localStorage.setItem('guestName', name)
+    // First time this device picks a guest name, mint its stable guest id
+    // (G-L2) — messages from before this moment keep the legacy
+    // name-match fallback (see isMyGuestMessage).
+    if (!localStorage.getItem('guestId')) {
+      localStorage.setItem('guestId', newGuestId())
+      const now = Date.now()
+      localStorage.setItem('guestIdCreatedAt', String(now))
+      guestIdCreatedAt.current = now
+    }
     setShowNamePrompt(false)
+    // The name prompt was opened because the user tried to send — send
+    // the pending input now instead of dropping it (G-M6).
+    if (input.trim()) sendMessage()
   }
 
   const canDelete = (msg) => {
@@ -478,11 +548,12 @@ export default function ChatPage() {
           <ChatBubble
             key={msg.id}
             msg={msg}
-            isMe={isLoggedIn ? msg.user_id === user?.id : msg.guest_name === guestName}
+            isMe={isLoggedIn ? msg.user_id === user?.id : isMyGuestMessage(msg)}
             onReply={setReplyTo}
             onDelete={deleteMessage}
             canDelete={canDelete(msg)}
             replyMap={replyMap}
+            lang={lang}
           />
         ))}
         <div ref={bottomRef} />
@@ -527,7 +598,7 @@ export default function ChatPage() {
           />
           <button
             onClick={sendMessage}
-            disabled={!input.trim()}
+            disabled={!input.trim() || sending}
             className="w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-xl bg-brand-600 disabled:opacity-40 hover:bg-brand-500 transition-colors"
           >
             <Send size={16} className="text-white" />

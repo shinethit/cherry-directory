@@ -4,12 +4,14 @@ import { ArrowLeft, Save, Plus, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
+import { useAuditLog } from '../hooks/useAuditLog'
 import { showError, showSuccess } from '../lib/toast'
 import { invalidateAppConfig } from '../contexts/AppConfigContext'
 
 export default function AppSettingsPage() {
   const navigate = useNavigate()
   const { isAdmin, loading: authLoading } = useAuth()
+  const { log } = useAuditLog()
   useSEO({ title: 'App Settings' })
 
   const [cities, setCities]   = useState([])
@@ -32,30 +34,49 @@ export default function AppSettingsPage() {
           if (key === 'cities')   setCities(Array.isArray(v) ? v : [])
           if (key === 'app_name') setAppName(v)
           if (key === 'app_city') setAppCity(v)
-        } catch { /* skip */ }
+        } catch {
+          // Was a silent skip — an unparseable row now says so instead
+          // of leaving a setting mysteriously empty.
+          console.warn('Unparseable app_config row, skipped:', key)
+          showError(`Settings '${key}' ဖတ်မရပါ — တန်ဖိုး မမှန်ကန်ပါ`)
+        }
       })
     })
   }, [isAdmin])
 
   async function save() {
+    if (!appName.trim()) {
+      showError('App Name အလွတ် သိမ်းလို့မရပါ — နာမည် ထည့်ပါ')
+      return
+    }
     setSaving(true)
-    try {
+    // Sequential upserts with per-key error reporting: the old
+    // Promise.all() could half-save (two keys changed, one failed)
+    // behind a single generic "Error" toast.
+    const keys = [
+      { key: 'app_name', value: JSON.stringify(appName), label: 'App Name' },
+      { key: 'app_city', value: JSON.stringify(appCity), label: 'City Name (Myanmar)' },
+      { key: 'cities',   value: JSON.stringify(cities),  label: 'Cities List' },
+    ]
+    const failedKeys = []
+    for (const entry of keys) {
       // supabase upsert() returns { error } — it never throws, so
       // each result must be checked or a failed save looks saved.
-      const results = await Promise.all([
-        supabase.from('app_config').upsert({ key: 'app_name', value: JSON.stringify(appName), label: 'App Name' }),
-        supabase.from('app_config').upsert({ key: 'app_city', value: JSON.stringify(appCity), label: 'City Name (Myanmar)' }),
-        supabase.from('app_config').upsert({ key: 'cities',   value: JSON.stringify(cities),  label: 'Cities List' }),
-      ])
-      const failed = results.find(r => r.error)
-      if (failed) throw failed.error
-      // invalidateAppConfig() now actually re-fetches in the provider,
-      // so the app shows the new values without a reload.
-      invalidateAppConfig()
-      showSuccess('✓ သိမ်းပြီး')
-    } catch (err) {
-      showError('✗ Error: ' + err.message)
+      const { error } = await supabase.from('app_config').upsert(entry)
+      if (error) failedKeys.push(entry.key + ': ' + error.message)
     }
+    if (failedKeys.length > 0) {
+      showError('✗ သိမ်းမရသော Settings: ' + failedKeys.join('; '))
+      setSaving(false)
+      return
+    }
+    // invalidateAppConfig() now actually re-fetches in the provider,
+    // so the app shows the new values without a reload.
+    invalidateAppConfig()
+    // Audit log (fire-and-forget) — save previously had no audit entry.
+    log({ action: 'update', table: 'app_config', name: 'App Settings', after: { app_name: appName, app_city: appCity, cities } })
+      .then(ok => { if (!ok) console.warn('Audit log failed for app settings save') })
+    showSuccess('✓ သိမ်းပြီး')
     setSaving(false)
   }
 
@@ -81,8 +102,9 @@ export default function AppSettingsPage() {
   }
 
   if (!isAdmin) return (
-    <div className="flex items-center justify-center min-h-[60dvh]">
+    <div className="flex flex-col items-center justify-center min-h-[60dvh] px-8 text-center gap-3">
       <p className="text-white/40 font-myanmar">Admin သာ ဝင်ခွင့်ရှိသည်</p>
+      <button onClick={() => navigate('/')} className="btn-primary text-xs px-4 py-2">Home ပြန်မည်</button>
     </div>
   )
 

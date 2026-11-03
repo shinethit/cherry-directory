@@ -5,13 +5,25 @@ import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
-import { Plus, Trash2, ArrowLeft, Droplets, Eye, Phone, MapPin, Calendar, Clock, Edit2, Copy, Check, Share2, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, ArrowLeft, Clock, Edit2, Copy, Check } from 'lucide-react'
 import { ImageUploader } from '../components/UI'
 import { uploadImage } from '../lib/cloudinary'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
-import { yangonToday } from '../lib/myanmarDate'
+import { yangonToday, mmtParts, formatMyanmarDate } from '../lib/myanmarDate'
 import ShareButton from '../components/ShareButton'
+
+// Short date in Myanmar time ("Jan 5, 2026" / "ဇန်နဝါရီ 5 ရက်၊ 2026") —
+// never new Date(iso).toLocaleDateString(), which shifts on non-MMT
+// devices for stored +06:30 datetimes.
+const EN_MONTHS_S = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function fmtDateShort(iso, lang) {
+  const p = mmtParts(iso)
+  if (!p) return ''
+  return lang === 'mm'
+    ? formatMyanmarDate(iso, { year: true })
+    : `${EN_MONTHS_S[p.m - 1]} ${p.d}, ${p.y}`
+}
 
 // ─────────────────────────────────────────────────────────────
 // WEATHER ALERT PAGE (unchanged, same as before)
@@ -89,6 +101,7 @@ export function DonationPage() {
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [catFilter, setCat] = useState('all')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ title_mm: '', description_mm: '', category: 'community', target_amount: '', deadline: '', contact_name: '', contact_phone: '', kbz_pay: '', wave_pay: '', bank_name: '', bank_account: '', bank_holder: '', images: [], is_urgent: false })
@@ -109,12 +122,14 @@ export function DonationPage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
       let q = supabase.from('donations').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
       if (catFilter !== 'all') q = q.eq('category', catFilter)
-      const { data } = await q
+      const { data, error } = await q
+      if (error) throw error
       setItems(data || [])
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
 
@@ -129,7 +144,14 @@ export function DonationPage() {
   }, [catFilter])
 
   async function submit() {
-    if (!form.title_mm || !isLoggedIn) return
+    if (!isLoggedIn) { showError(lang === 'mm' ? 'Campaign တင်ရန် Login ဝင်ပါ' : 'Login to post a campaign'); return }
+    if (!form.title_mm) { showError(lang === 'mm' ? 'ခေါင်းစဉ် ထည့်ပါ' : 'Title is required'); return }
+    // A campaign with no way to donate through is useless — require at
+    // least one contact/payment method.
+    if (!form.contact_phone && !form.kbz_pay && !form.wave_pay && !form.bank_account) {
+      showError(lang === 'mm' ? 'ဖုန်း (သို့) KBZPay / WavePay / ဘဏ်အကောင့် တစ်ခုခု ထည့်ပါ — လှူမည့်သူ ဆက်သွယ်နိုင်ရန်' : 'Add a phone, KBZPay, WavePay or bank account so donors can reach you')
+      return
+    }
     setSubmitting(true)
     try {
       const { error } = await supabase.from('donations').insert({
@@ -193,6 +215,7 @@ export function DonationPage() {
 
       <div className="px-4 space-y-3 pb-24">
         {loading ? [1,2].map(n => <div key={n} className="h-36 rounded-2xl shimmer" />) :
+         loadError ? <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30"><p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p><button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button></div> :
          items.length === 0 ? <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">❤️</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Campaign မရှိသေး' : 'No campaigns yet'}</p></div> :
          items.map(d => {
            const cat = DON_CATS.find(c => c.id === d.category)
@@ -207,17 +230,20 @@ export function DonationPage() {
                    <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (d.title_mm || d.title) : (d.title || d.title_mm)}</h3>
                    {d.description_mm && <p className="text-xs text-white/50 mt-1 font-myanmar line-clamp-2">{d.description_mm}</p>}
                  </div>
-                 {(isModerator || d.organizer_id === user?.id) && (
+                 {/* Only moderators can delete: the only delete policy is
+                     "Admin deletes donations" (admin/mod) — an organizer
+                     shown the button would always be refused by RLS. */}
+                 {isModerator && (
                    <button onClick={() => deleteDonation(d.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 text-red-400 flex-shrink-0"><Trash2 size={12} /></button>
                  )}
                </div>
 
-               {/* Goal + collected amounts only — nothing ever writes
-                   collected_amount, so a progress bar could never move. */}
-               {(d.target_amount || d.collected_amount > 0) && (
+               {/* Goal amount only — nothing ever writes
+                   collected_amount, so it is not rendered (no donation
+                   flow in this version). */}
+               {d.target_amount && (
                  <div className="flex items-center gap-3 text-xs flex-wrap">
-                   {d.target_amount && <span className="text-white/50">{lang === 'mm' ? 'ပန်းတိုင်' : 'Goal'}: <span className="text-white font-bold font-mono">{Number(d.target_amount).toLocaleString()} Ks</span></span>}
-                   {d.collected_amount > 0 && <span className="text-green-400">{lang === 'mm' ? 'ရရှိပြီး' : 'Collected'}: <span className="font-bold font-mono">{Number(d.collected_amount).toLocaleString()} Ks</span></span>}
+                   <span className="text-white/50">{lang === 'mm' ? 'ပန်းတိုင်' : 'Goal'}: <span className="text-white font-bold font-mono">{Number(d.target_amount).toLocaleString()} Ks</span></span>
                  </div>
                )}
 
@@ -414,7 +440,7 @@ function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
 
       <div className="flex items-center gap-3 flex-wrap text-[10px] text-white/40">
         {service.location_mm && <span className="font-myanmar">📍 {service.location_mm}</span>}
-        {service.start_date && <span>📅 {new Date(service.start_date).toLocaleDateString()}{service.end_date && service.end_date !== service.start_date ? ` – ${new Date(service.end_date).toLocaleDateString()}` : ''}</span>}
+        {service.start_date && <span>📅 {fmtDateShort(service.start_date, lang)}{service.end_date && service.end_date !== service.start_date ? ` – ${fmtDateShort(service.end_date, lang)}` : ''}</span>}
         {service.start_time && <span>🕐 {service.start_time}{service.end_time ? `–${service.end_time}` : ''}</span>}
       </div>
 
@@ -493,14 +519,15 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
       end_time: form.end_time || null,
       images,
       poster_id: user?.id || null,
-      posted_at: new Date().toISOString(),
     }
 
+    // posted_at is set ONLY on insert — sending it on every edit
+    // silently re-dated the service and re-sorted it to the top.
     let error
     if (editTarget) {
       error = (await supabase.from('health_services').update(payload).eq('id', editTarget.id)).error
     } else {
-      error = (await supabase.from('health_services').insert(payload)).error
+      error = (await supabase.from('health_services').insert({ ...payload, posted_at: new Date().toISOString() })).error
     }
 
     if (error) {
@@ -592,18 +619,21 @@ export function HealthServicePage() {
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [typeFilter, setType] = useState('all')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
       let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
       if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-      const { data } = await q
+      const { data, error } = await q
+      if (error) throw error
       setItems(data || [])
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
 
@@ -664,6 +694,12 @@ export function HealthServicePage() {
 
       <div className="px-4 space-y-2">
         {loading ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />) :
+         loadError ? (
+           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+           </div>
+         ) :
          items.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">🏥</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ဝန်ဆောင်မှု မရှိသေး' : 'No services posted'}</p></div>
          ) :
@@ -718,6 +754,7 @@ export function BusSchedulePage() {
   const [routes, setRoutes] = useState([])
   const [departures, setDepartures] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [routeFilter, setRouteFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState(() => yangonToday())
   const [showForm, setShowForm] = useState(false)
@@ -733,6 +770,7 @@ export function BusSchedulePage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
       let q = supabase.from('bus_departures')
         .select('*, bus_routes(from_city, to_city, operator, type, normal_fare)')
@@ -742,7 +780,7 @@ export function BusSchedulePage() {
       const { data, error } = await q
       if (error) throw error
       setDepartures(data || [])
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
 
@@ -816,6 +854,12 @@ export function BusSchedulePage() {
       </div>
       <div className="px-4 space-y-2">
         {loading ? [1,2,3].map(n => <div key={n} className="h-20 rounded-2xl shimmer" />) :
+         loadError ? (
+           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+           </div>
+         ) :
          departures.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center">
              <span className="text-4xl mb-3">🚌</span>
@@ -925,6 +969,7 @@ export function ToursPage() {
 
   const [tours, setTours] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [typeFilter, setType] = useState('all')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({
@@ -960,6 +1005,7 @@ export function ToursPage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
       // tour_packages has no created_at; order by name. Public rows are
       // is_active = true (RLS "Packages public").
@@ -978,6 +1024,7 @@ export function ToursPage() {
       setTours(data || [])
     } catch (e) {
       console.warn('Load tours error:', e)
+      setLoadError(true)
     }
     setLoading(false)
   }
@@ -1011,6 +1058,12 @@ export function ToursPage() {
 
   async function submit() {
     if (!form.name_mm) return
+    // duration_days is explicit, never a silent default: the old
+    // `parseInt(...) : 1` quietly filed every undated tour as 1 day.
+    if (!form.duration_days || parseInt(form.duration_days) < 1) {
+      showError(lang === 'mm' ? 'ကြာချိန် (ရက်) ထည့်ပါ' : 'Enter the duration in days')
+      return
+    }
     setSubmitting(true)
     try {
       const { error } = await supabase.from('tour_packages').insert({
@@ -1018,7 +1071,7 @@ export function ToursPage() {
         name_mm: form.name_mm,
         description: form.description_mm || null,
         description_mm: form.description_mm || null,
-        duration_days: form.duration_days ? parseInt(form.duration_days) : 1,
+        duration_days: parseInt(form.duration_days),
         type: form.type,
         start_location: form.start_location || null,
         end_location: form.end_location || null,
@@ -1054,7 +1107,9 @@ export function ToursPage() {
           <h1 className="font-display font-bold text-xl text-white">🏔️ Tour Guide / Trekking</h1>
           <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} Trekking / Boat Trip ခရီးစဉ်များ` : 'Local trekking & boat tour packages'}</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
+        {/* Add is admin/mod only: tour_packages has a select-only policy,
+            so an insert from anyone else would always fail at RLS. */}
+        {isModerator && <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>}
       </div>
       <div className="px-4 mb-4">
         <div className="relative">
@@ -1066,6 +1121,12 @@ export function ToursPage() {
       </div>
       <div className="px-4 space-y-3 pb-24">
         {loading ? [1,2,3].map(n => <div key={n} className="h-28 rounded-2xl shimmer" />) :
+         loadError ? (
+           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+           </div>
+         ) :
          tours.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center">
              <span className="text-4xl mb-3">🏔️</span>
@@ -1140,7 +1201,7 @@ export function ToursPage() {
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Tour Package ထည့်မည်' : 'Add Tour Package'}</h2>
-            <button onClick={submit} disabled={!form.name_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
+            <button onClick={submit} disabled={!form.name_mm || !form.duration_days || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'သိမ်းမည်' : 'Save'}</button>
           </div>
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
             <div>

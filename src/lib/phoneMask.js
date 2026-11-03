@@ -2,13 +2,20 @@
 // Guests see a masked number; logged-in users see the full number and get
 // working tel:/WhatsApp links. Never render a guest's full phone as a link.
 
-const digitsOnly = (phone) => String(phone || '').replace(/\D/g, '')
+import { toLatinDigits } from './validation'
+
+// Myanmar digits ၀-၉ are stripped by \D, so convert to Latin first —
+// otherwise toTelHref('၀၉…') returns '' and the Call/WhatsApp link is dead.
+const digitsOnly = (phone) => toLatinDigits(phone).replace(/\D/g, '')
 
 // Myanmar numbers: "09..." → international form without the leading 0.
+// Any other leading 0 (e.g. a Taunggyi landline 081-…) also drops the 0
+// and gains the 95 country code — otherwise tel:+081… / wa.me/081… is invalid.
 export function toIntlDigits(phone) {
   const d = digitsOnly(phone)
   if (d.startsWith('959')) return d
   if (d.startsWith('09')) return `95${d.slice(1)}`
+  if (d.startsWith('0')) return `95${d.slice(1)}`
   return d
 }
 

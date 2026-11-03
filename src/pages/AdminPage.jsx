@@ -65,6 +65,12 @@ export default function AdminPage() {
   const [claims, setClaims] = useState([])
   const [claimsLoading, setClaimsLoading] = useState(false)
   const [claimBusy, setClaimBusy] = useState(null)
+  // Pending-claim count for the tab badge — loaded on mount, not only
+  // when the claims tab opens (H-M1: the badge could never appear).
+  const [pendingClaims, setPendingClaims] = useState(0)
+  // Per-listing busy id for Approve/Suspend (H-L5).
+  const [listingBusy, setListingBusy] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
 
   async function loadListings() {
     setLoading(true)
@@ -84,14 +90,17 @@ export default function AdminPage() {
       setData(rows || [])
 
       if (rows) {
+        // One query for all report counts (was N+1 sequential
+        // per-listing count queries) — tally client-side.
+        const { data: repRows } = await supabase
+          .from('listing_reports')
+          .select('listing_id')
+          .in('listing_id', rows.map(r => r.id))
         const reportCounts = {}
-        for (const listing of rows) {
-          const { count } = await supabase
-            .from('listing_reports')
-            .select('*', { count: 'exact', head: true })
-            .eq('listing_id', listing.id)
-          reportCounts[listing.id] = count || 0
-        }
+        rows.forEach(r => { reportCounts[r.id] = 0 })
+        ;(repRows || []).forEach(rr => {
+          if (rr.listing_id in reportCounts) reportCounts[rr.listing_id]++
+        })
         setReports(reportCounts)
       }
     } catch (e) {
@@ -106,23 +115,28 @@ export default function AdminPage() {
     try {
       // Myanmar day boundary — never UTC midnight.
       const todayStr = yangonToday() + 'T00:00:00+06:30'
-      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      // sevenDaysAgo from the SAME Yangon day boundary (today minus 7
+      // days at Yangon midnight), not "now minus 7d" in UTC — the old
+      // toISOString() version was up to ~6.5h off.
+      const [yy, mm, dd] = yangonToday().split('-').map(Number)
+      const seven = new Date(Date.UTC(yy, mm - 1, dd - 7))
+      const sevenDaysAgo = seven.toISOString().slice(0, 10) + 'T00:00:00+06:30'
 
       const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
       const { count: newToday } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr)
       const { count: newLast7Days } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo)
 
-      const { data: roleCounts } = await supabase
-        .from('profiles')
-        .select('role', { count: 'exact', head: false })
-        .not('role', 'is', null)
-      const usersByRole = { admin: 0, moderator: 0, member: 0 }
-      if (roleCounts) {
-        roleCounts.forEach(p => {
-          if (p.role === 'admin') usersByRole.admin++
-          else if (p.role === 'moderator') usersByRole.moderator++
-          else usersByRole.member++
-        })
+      // Server-side counts per role (was: download every profile row
+      // and count client-side — wrong past 1,000 users). "member" is
+      // every non-null role that is neither admin nor moderator, which
+      // is exactly what the old client-side tally computed.
+      const { count: adminCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin')
+      const { count: moderatorCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'moderator')
+      const { count: nonNullRoleCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).not('role', 'is', null)
+      const usersByRole = {
+        admin: adminCount || 0,
+        moderator: moderatorCount || 0,
+        member: Math.max(0, (nonNullRoleCount || 0) - (adminCount || 0) - (moderatorCount || 0)),
       }
 
       const { count: approvedListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved')
@@ -186,28 +200,75 @@ export default function AdminPage() {
     setClaimsLoading(false)
   }
 
+  async function loadPendingClaimCount() {
+    const { count } = await supabase
+      .from('listing_claims')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending')
+    setPendingClaims(count || 0)
+  }
+
   async function handleClaimDecision(claim, approve) {
     const verb = approve ? 'အတည်ပြု' : 'ပယ်ချ'
     if (!(await confirmDialog(`"${claim.listing?.name_mm || claim.listing?.name || 'လုပ်ငန်း'}" ၏ Claim ကို ${verb}မည်လား?${approve ? ' (Claimant ကို +30 points ရပြီး လုပ်ငန်းပိုင်ရှင် ဖြစ်သွားမည်)' : ''}`))) return
     setClaimBusy(claim.id)
     try {
-      const { error } = await supabase
+      if (approve) {
+        // Guard: never approve a claim on a listing that already has an
+        // owner — the trigger would silently transfer ownership.
+        const { data: listing, error: listingErr } = await supabase
+          .from('listings')
+          .select('owner_id')
+          .eq('id', claim.listing_id)
+          .maybeSingle()
+        if (listingErr) throw listingErr
+        if (listing?.owner_id) {
+          showError('ဤလုပ်ငန်းတွင် ပိုင်ရှင် ရှိနေပြီးဖြစ်သည် — Claim အတည်ပြု၍ မရပါ')
+          setClaimBusy(null)
+          return
+        }
+      }
+      // Guard: only a still-pending claim can be decided. Two admins
+      // deciding at once must not both see "+30 points".
+      const { data: decided, error } = await supabase
         .from('listing_claims')
         .update({ status: approve ? 'approved' : 'rejected', reviewed_by: user?.id || null })
         .eq('id', claim.id)
+        .eq('status', 'pending')
+        .select('id')
       if (error) throw error
+      if (!decided || decided.length === 0) {
+        showError('ဤ Claim ကို အခြား Admin မှ ဆုံးဖြတ်ပြီးဖြစ်သည်')
+        loadClaims()
+        loadPendingClaimCount()
+        setClaimBusy(null)
+        return
+      }
+      if (approve) {
+        // The claim-approval trigger sets is_verified + owner_id; it
+        // (Track 5) also sets verify_type='owner'. Mirror that here so
+        // the listing does not keep a stale verify_type='cherry' from
+        // an earlier admin approval (which would keep showing the
+        // "🍒 Cherry Directory Verified" badge above the owner card).
+        const { error: vtErr } = await supabase
+          .from('listings')
+          .update({ verify_type: 'owner' })
+          .eq('id', claim.listing_id)
+        if (vtErr) console.warn('verify_type owner update failed:', vtErr.message)
+      }
       // The DB trigger handle_claim_approved() verifies ownership
       // (is_verified + owner_id); handle_claim_points() awards +30.
-      const ok = await log({
+      // Audit log is fire-and-forget — it must never delay the toast.
+      log({
         action: approve ? 'approve' : 'reject',
         table: 'listing_claims',
         id: claim.id,
         name: claim.listing?.name_mm || claim.listing?.name,
         after: { status: approve ? 'approved' : 'rejected' },
-      })
-      if (!ok) console.warn('Audit log failed for claim decision')
+      }).then(ok => { if (!ok) console.warn('Audit log failed for claim decision') })
       showSuccess(approve ? '✓ Claim အတည်ပြုပြီးပါပြီ (+30 points)' : 'Claim ပယ်ချပြီးပါပြီ')
       loadClaims()
+      loadPendingClaimCount()
       loadDashboardStats()
     } catch (e) {
       showError('Claim ' + verb + 'ရာတွင် အမှားရှိသည်: ' + e.message)
@@ -258,15 +319,15 @@ export default function AdminPage() {
         .select()
       if (error) throw error
       if (updated && updated.length > 0) {
-        const ok = await log({
+        // Audit log is fire-and-forget — it must never delay the toast.
+        log({
           action: 'update_role',
           table: 'profiles',
           id: userId,
           name: target?.full_name || target?.nickname,
           before: { role: oldRole },
           after: { role: newRole },
-        })
-        if (!ok) console.warn('Audit log failed for role change')
+        }).then(ok => { if (!ok) console.warn('Audit log failed for role change') })
         showSuccess(`✓ Role ကို ${newRole} သို့ ပြောင်းလဲပြီးပါပြီ`)
         loadUsers()
         loadDashboardStats()
@@ -295,6 +356,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (authLoading || !isAuthorized) return
+    loadPendingClaimCount()
     if (tab === 'listings') loadListings()
     if (tab === 'dashboard') loadDashboardStats()
     if (tab === 'quicklinks') loadQuickLinks()
@@ -303,6 +365,7 @@ export default function AdminPage() {
   }, [tab, listingFilter, authLoading, isAuthorized])
 
   async function handleApprove(id) {
+    setListingBusy(id)
     try {
       const { data: updated, error } = await supabase
         .from('listings')
@@ -315,17 +378,20 @@ export default function AdminPage() {
         .select('name, name_mm')
       if (error) throw error
       const name = updated?.[0]?.name_mm || updated?.[0]?.name
-      const ok = await log({ action: 'approve', table: 'listings', id, name, after: { status: 'approved' } })
-      if (!ok) console.warn('Audit log failed for listing approve')
+      // Audit log is fire-and-forget — it must never delay the toast.
+      log({ action: 'approve', table: 'listings', id, name, after: { status: 'approved' } })
+        .then(ok => { if (!ok) console.warn('Audit log failed for listing approve') })
       showSuccess('✓ အတည်ပြုပြီးပါပြီ (Cherry Verified) 🍒')
       loadListings()
       loadDashboardStats()
     } catch (e) {
       showError('အတည်ပြုရာတွင် အမှားရှိသည်: ' + e.message)
     }
+    setListingBusy(null)
   }
 
   async function handleSuspend(id) {
+    setListingBusy(id)
     try {
       const { data: updated, error } = await supabase
         .from('listings')
@@ -334,20 +400,28 @@ export default function AdminPage() {
         .select('name, name_mm')
       if (error) throw error
       const name = updated?.[0]?.name_mm || updated?.[0]?.name
-      const ok = await log({ action: 'suspend', table: 'listings', id, name, after: { status: 'suspended' } })
-      if (!ok) console.warn('Audit log failed for listing suspend')
+      // Audit log is fire-and-forget — it must never delay the toast.
+      log({ action: 'suspend', table: 'listings', id, name, after: { status: 'suspended' } })
+        .then(ok => { if (!ok) console.warn('Audit log failed for listing suspend') })
       showSuccess('ဆိုင်းငံ့ထားပြီးပါပြီ')
       loadListings()
       loadDashboardStats()
     } catch (e) {
       showError('ဆိုင်းငံ့ရာတွင် အမှားရှိသည်: ' + e.message)
     }
+    setListingBusy(null)
   }
 
   async function handleDelete(id) {
     if (!(await confirmDialog('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။'))) return
     setDeleting(id)
     try {
+      // Delete the listing FIRST, then clean up linked rows: the old
+      // order deleted reviews/reports/suggestions first, so a failure
+      // on the final listing delete left them already gone.
+      const { data: deleted, error } = await supabase.from('listings').delete().eq('id', id).select('name, name_mm')
+      if (error) throw error
+      const name = deleted?.[0]?.name_mm || deleted?.[0]?.name
       // Best-effort cleanup of linked rows — a failure here must not
       // silently block the delete, but it must not be hidden either.
       const cleanupErrors = []
@@ -357,11 +431,9 @@ export default function AdminPage() {
       if (sugErr) cleanupErrors.push('edit_suggestions: ' + sugErr.message)
       const { error: revErr } = await supabase.from('reviews').delete().eq('listing_id', id)
       if (revErr) cleanupErrors.push('reviews: ' + revErr.message)
-      const { data: deleted, error } = await supabase.from('listings').delete().eq('id', id).select('name, name_mm')
-      if (error) throw error
-      const name = deleted?.[0]?.name_mm || deleted?.[0]?.name
-      const ok = await log({ action: 'delete', table: 'listings', id, name, before: { name } })
-      if (!ok) console.warn('Audit log failed for listing delete')
+      // Audit log is fire-and-forget — it must never delay the toast.
+      log({ action: 'delete', table: 'listings', id, name, before: { name } })
+        .then(ok => { if (!ok) console.warn('Audit log failed for listing delete') })
       showSuccess(cleanupErrors.length > 0
         ? '🗑️ ဖျက်ပြီးပါပြီ (ဆက်စပ်အချက်အလက် အချို့ ဖျက်မရပါ: ' + cleanupErrors.join('; ') + ')'
         : '🗑️ ဖျက်ပြီးပါပြီ')
@@ -378,12 +450,17 @@ export default function AdminPage() {
 
   async function handleSaveEdit(id) {
     const { name, name_mm, description, description_mm, address, phone_1, city, township } = editForm
+    setEditSaving(true)
     const { error } = await supabase.from('listings').update({
       name, name_mm, description, description_mm, address, phone_1, city, township
     }).eq('id', id)
-    if (error) return showError('သိမ်းရာတွင် အမှားဖြစ်သည်: ' + error.message)
-    
+    if (error) { setEditSaving(false); return showError('သိမ်းရာတွင် အမှားဖြစ်သည်: ' + error.message) }
+
+    // Audit log (fire-and-forget) — edit previously had no audit entry.
+    log({ action: 'update', table: 'listings', id, name: name_mm || name, before: { name }, after: { name, name_mm, description, description_mm, address, phone_1, city, township } })
+      .then(ok => { if (!ok) console.warn('Audit log failed for listing edit') })
     setEditingId(null)
+    setEditSaving(false)
     showSuccess('✓ ပြင်ဆင်မှု သိမ်းဆည်းပြီး')
     loadListings()
   }
@@ -477,8 +554,8 @@ export default function AdminPage() {
           </button>
           <button onClick={() => setTab('claims')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'claims' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white/40'}`}>
             <BadgeCheck size={14} /> Claims
-            {claims.length > 0 && tab !== 'claims' && (
-              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">{claims.length}</span>
+            {pendingClaims > 0 && tab !== 'claims' && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">{pendingClaims}</span>
             )}
           </button>
           <button onClick={() => setTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/40'}`}>
@@ -787,8 +864,8 @@ export default function AdminPage() {
                       <input value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Address" />
                       <input value={editForm.phone_1 || ''} onChange={e => setEditForm({...editForm, phone_1: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Phone" />
                       <div className="flex gap-2">
-                        <button onClick={() => handleSaveEdit(item.id)} className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5"><Save size={14} /> SAVE</button>
-                        <button onClick={() => setEditingId(null)} className="flex-1 px-3 py-2 bg-white/8 text-white/40 rounded-lg text-xs font-bold">CANCEL</button>
+                        <button onClick={() => handleSaveEdit(item.id)} disabled={editSaving} className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><Save size={14} /> {editSaving ? '...' : 'SAVE'}</button>
+                        <button onClick={() => setEditingId(null)} disabled={editSaving} className="flex-1 px-3 py-2 bg-white/8 text-white/40 rounded-lg text-xs font-bold disabled:opacity-50">CANCEL</button>
                       </div>
                     </div>
                   ) : (
@@ -818,13 +895,13 @@ export default function AdminPage() {
 
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
                         {item.status !== 'approved' && (
-                          <button onClick={() => handleApprove(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1">
-                            <Check size={12} /> APPROVE 🍒
+                          <button onClick={() => handleApprove(item.id)} disabled={listingBusy === item.id} className="flex-1 min-w-[70px] px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                            <Check size={12} /> {listingBusy === item.id ? '...' : 'APPROVE 🍒'}
                           </button>
                         )}
                         {item.status === 'approved' && (
-                          <button onClick={() => handleSuspend(item.id)} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
-                            <X size={12} /> SUSPEND
+                          <button onClick={() => handleSuspend(item.id)} disabled={listingBusy === item.id} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                            <X size={12} /> {listingBusy === item.id ? '...' : 'SUSPEND'}
                           </button>
                         )}
                         <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">

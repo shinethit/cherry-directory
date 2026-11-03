@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trophy, Star, Building2, MessageCircle, CalendarCheck, Medal } from 'lucide-react'
+import { Trophy, Star, Building2, Medal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 import { isOnline, timeAgo } from '../hooks/usePresence'
 import TierBadge from '../components/TierBadge'
-import { getTierProgress } from '../lib/tiers'
+import { getTierProgress, POINT_ACTIONS } from '../lib/tiers'
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -177,12 +177,15 @@ export default function LeaderboardPage() {
   const [users, setUsers]   = useState([])
   const [myRank, setMyRank] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [retryKey, setRetryKey] = useState(0)
   const pillRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
     async function load() {
       setLoading(true)
+      setLoadError('')
       try {
       const periodCfg = PERIODS.find(p => p.id === period)
       const orderCol  = tab === 'points' ? 'period_points' : tab === 'reviews' ? 'period_reviews' : 'period_listings'
@@ -197,6 +200,8 @@ export default function LeaderboardPage() {
           .gt(allOrderCol, 0)
           .order(allOrderCol, { ascending: false })
           .limit(100)
+        // F-MED-8: the query error used to be ignored entirely.
+        if (res.error) throw res.error
         data = (res.data || []).map(u => ({
           ...u,
           // Alias for unified rendering
@@ -212,6 +217,9 @@ export default function LeaderboardPage() {
           .gt(orderCol, 0)
           .order(orderCol, { ascending: false })
           .limit(100)
+        // F-MED-8: same — a failed view query must surface, not render
+        // an empty board as if nobody had any activity.
+        if (res.error) throw res.error
         data = res.data || []
       }
 
@@ -230,12 +238,18 @@ export default function LeaderboardPage() {
           setMyRank(idx >= 0 ? idx + 1 : null)
         }
       }
-      } catch (e) { console.warn(e) }
-      setLoading(false)
+      } catch (e) {
+        console.warn(e)
+        if (!cancelled) {
+          setLoadError(e?.message || 'Leaderboard ရယူမရပါ')
+          setUsers([])
+        }
+      }
+      if (!cancelled) setLoading(false)
     }
     load()
     return () => { cancelled = true }
-  }, [tab, period, me])
+  }, [tab, period, me, retryKey])
 
   const currentPeriod = PERIODS.find(p => p.id === period)
 
@@ -323,6 +337,22 @@ export default function LeaderboardPage() {
       <div className="px-4 space-y-2">
         {loading
           ? [1,2,3,4,5,6].map(n => <div key={n} className="h-16 rounded-2xl shimmer" />)
+          : loadError
+          ? (
+            <div className="flex flex-col items-center py-14 text-center px-6">
+              <Medal size={44} className="text-white/15 mb-3" />
+              <p className="font-display font-semibold text-white/40">
+                {lang === 'mm' ? 'Leaderboard ရယူမရပါ' : 'Could not load leaderboard'}
+              </p>
+              <p className="text-xs text-white/25 mt-1 font-myanmar">{loadError}</p>
+              <button
+                onClick={() => setRetryKey(k => k + 1)}
+                className="mt-4 px-4 py-2 rounded-xl bg-brand-600/30 border border-brand-400/40 text-brand-200 text-xs font-bold hover:bg-brand-600/40 transition-colors"
+              >
+                {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
+              </button>
+            </div>
+          )
           : users.length === 0
           ? (
             <div className="flex flex-col items-center py-14 text-center px-6">
@@ -355,19 +385,15 @@ export default function LeaderboardPage() {
           {lang === 'mm' ? 'Points ဘယ်လိုရမလဲ' : 'How to earn points'}
         </p>
         <div className="space-y-2.5">
-          {[
-            { icon: Star,          pts: '+5',  mm: 'Review ရေးသည်',    en: 'Write a review'     },
-            { icon: Building2,     pts: '+10', mm: "လုပ်ငန်း Submit",      en: 'Submit a listing'   },
-            { icon: Trophy,        pts: '+20', mm: "လုပ်ငန်း Approved",    en: 'Listing approved'   },
-            { icon: CalendarCheck, pts: '+2',  mm: 'Event RSVP',        en: 'RSVP to event'      },
-            { icon: MessageCircle, pts: '+1',  mm: 'Chat message',      en: 'Chat (max 10/day)'  },
-          ].map(({ icon: Icon, pts, mm, en }) => (
-            <div key={pts + mm} className="flex items-center gap-3">
+          {/* Shared with PointsGuidePage — same POINT_ACTIONS constant,
+              so Claim +30 can never be omitted here again (F-MED-7). */}
+          {POINT_ACTIONS.map(({ icon: Icon, points, mm, en }) => (
+            <div key={points + mm} className="flex items-center gap-3">
               <div className="w-7 h-7 rounded-lg bg-brand-700/40 flex items-center justify-center flex-shrink-0">
                 <Icon size={13} className="text-brand-300" />
               </div>
               <p className="text-xs text-white/60 flex-1 font-myanmar">{lang === 'mm' ? mm : en}</p>
-              <span className="text-xs font-bold text-green-400 font-mono">{pts}</span>
+              <span className="text-xs font-bold text-green-400 font-mono">+{points}</span>
             </div>
           ))}
         </div>

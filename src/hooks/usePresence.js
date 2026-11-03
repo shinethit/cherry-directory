@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { formatMyanmarDate } from '../lib/myanmarDate'
 
 const PING_INTERVAL = 60_000   // 1 min
 const ONLINE_THRESHOLD = 3 * 60_000  // 3 min = considered online
@@ -89,7 +90,12 @@ export function timeAgo(iso, lang = 'mm') {
   if (hrs < 24) return lang === 'mm' ? `${hrs} နာရီက` : `${hrs}h ago`
   const days = Math.floor(hrs / 24)
   if (days < 7) return lang === 'mm' ? `${days} ရက်က` : `${days}d ago`
-  return new Date(iso).toLocaleDateString(lang === 'mm' ? 'my-MM' : 'en-US', { month: 'short', day: 'numeric' })
+  // NEVER toLocaleDateString('my-MM', …) — the locale is missing on many
+  // phones and silently falls back to English (H-22). Hardcoded Myanmar
+  // month names via formatMyanmarDate instead.
+  return lang === 'mm'
+    ? formatMyanmarDate(iso)
+    : new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 export function isOnline(lastSeen) {

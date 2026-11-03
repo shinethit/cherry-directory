@@ -1,16 +1,30 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { showInfo } from '../lib/toast'
+import {
+  setInstallPrompt,
+  clearInstallPrompt,
+  getInstallPrompt,
+  useInstallPrompt,
+} from '../lib/installPromptStore'
 
 export function usePWA() {
   const [swReady, setSwReady] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(false)
+  // installable is derived from the SHARED prompt store (H-21): the
+  // beforeinstallprompt event is one-shot, so usePWA and PWAInstallBanner
+  // must not keep separate copies — one consuming it left the other with
+  // a dead button.
+  const sharedPrompt = useInstallPrompt()
   const [installable, setInstallable] = useState(false)
-  const [deferredPrompt, setDeferredPrompt] = useState(null)
 
   useEffect(() => {
-    // NOTE: the service worker is registered once, in main.jsx. Do NOT
-    // register it here again — the duplicate registration served no purpose.
+    setInstallable(!!sharedPrompt)
+  }, [sharedPrompt])
+
+  useEffect(() => {
+    // NOTE: the service worker is registered once, in useServiceWorker.js.
+    // Do NOT register it here again.
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then(reg => {
         setSwReady(true)
@@ -19,8 +33,8 @@ export function usePWA() {
       }).catch(() => {})
     }
 
-    // PWA install prompt
-    const handler = e => { e.preventDefault(); setInstallable(true); setDeferredPrompt(e) }
+    // PWA install prompt — stored in the shared store, not locally.
+    const handler = e => { e.preventDefault(); setInstallPrompt(e) }
     window.addEventListener('beforeinstallprompt', handler)
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
@@ -45,11 +59,21 @@ export function usePWA() {
   }
 
   async function installApp() {
-    if (!deferredPrompt) return
-    deferredPrompt.prompt()
-    const { outcome } = await deferredPrompt.userChoice
-    if (outcome === 'accepted') setInstallable(false)
-    setDeferredPrompt(null)
+    // H-21: any resolved outcome (accepted OR dismissed) consumes the
+    // one-shot prompt — clear it and hide the button, so a dismissed
+    // prompt never leaves a dead Install button until reload.
+    const prompt = getInstallPrompt()
+    if (!prompt) { setInstallable(false); return }
+    try {
+      await prompt.prompt()
+      const { outcome } = await prompt.userChoice
+      void outcome // accepted or dismissed — either way the prompt is spent
+    } catch (err) {
+      console.warn('Install failed:', err)
+    } finally {
+      clearInstallPrompt()
+      setInstallable(false)
+    }
   }
 
   return { swReady, pushEnabled, installable, enablePush, disablePush, installApp }

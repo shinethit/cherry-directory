@@ -2,7 +2,8 @@ import { useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
-// Point values
+// Point values (reference — the server is the source of truth for what an
+// action is worth; the client never chooses a point value anymore).
 export const POINTS = {
   write_review:     5,
   submit_listing:   10,
@@ -15,43 +16,42 @@ export const POINTS = {
 export function usePoints() {
   const { user } = useAuth()
 
-  // Returns true when the points were recorded, false when the user was
-  // not logged in, the action is unknown, the daily cap was hit, or the
-  // insert failed. Callers (e.g. Chat after a successful send) use the
-  // return value to decide whether to show anything — award() itself never
-  // toasts, so a points failure never blocks the action that earned it.
-  const award = useCallback(async ({ action, refTable, refId, note }) => {
+  // Awards +1 for a chat message via the server-side award_chat_point()
+  // RPC, which enforces the 10/day cap and the point value. The client
+  // NEVER inserts into user_points directly anymore (C-3): the old code
+  // inserted { user_id, action, points } from the browser, so any
+  // signed-in user could forge unlimited points from the console.
+  //
+  // Returns true when the point was recorded, false when the user was not
+  // logged in, the action is unknown, the daily cap was hit, the RPC is
+  // missing (migration not applied yet), or the call failed. Callers (e.g.
+  // Chat after a successful send) use the return value to decide whether
+  // to show anything — award() itself never toasts, so a points failure
+  // never blocks the action that earned it.
+  //
+  // Award-path inventory (verified 2026-11-03 — the ONLY client caller of
+  // award() is ChatPage, with action 'chat_message'):
+  //   - chat_message  → this RPC (server-side cap + value)
+  //   - write_review  → SECURITY DEFINER trigger handle_review_created()
+  //                      in supabase-schema-final.sql (server-side)
+  //   - submit_listing / listing_approved → SECURITY DEFINER trigger
+  //                      handle_listing_submitted() in final.sql
+  //   - rsvp_going    → SECURITY DEFINER trigger handle_rsvp_created()
+  //                      in supabase-migration-v0.9.1.sql (server-side,
+  //                      live only if that migration was applied — C-14)
+  //   - claim_approved → SECURITY DEFINER trigger handle_claim_points()
+  //                      in the v0.9.1 migration (same caveat)
+  // Any other action passed here returns false — there is no client
+  // insert fallback.
+  const award = useCallback(async ({ action, refTable, refId, note } = {}) => {
     if (!user) return false
-    const pts = POINTS[action]
-    if (!pts) return false
+    if (action !== 'chat_message') return false
 
-    // For chat: max 10 points/day to prevent spam
-    if (action === 'chat_message') {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const { count, error: countError } = await supabase
-        .from('user_points')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('action', 'chat_message')
-        .gte('created_at', today.toISOString())
-      if (countError) {
-        console.warn('Chat points cap check failed:', countError)
-        return false
-      }
-      if ((count || 0) >= 10) return false  // cap reached
-    }
-
-    const { error } = await supabase.from('user_points').insert({
-      user_id: user.id,
-      action,
-      points: pts,
-      ref_table: refTable || null,
-      ref_id: refId || null,
-      note: note || null,
-    })
+    const { error } = await supabase.rpc('award_chat_point')
     if (error) {
-      console.warn('Award points failed:', error)
+      // Missing RPC (migration not applied yet), cap hit, or any other
+      // failure: warn and report false — never crash the chat send.
+      console.warn('Award chat point failed:', error)
       return false
     }
     return true

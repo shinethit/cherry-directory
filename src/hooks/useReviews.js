@@ -6,57 +6,13 @@ import { validateReview } from '../lib/validation';
 
 const REVIEWS_QUERY_KEY = 'reviews';
 
-/**
- * Fetch reviews for a listing
- */
-export const useReviews = (listingId) => {
-  return useQuery({
-    queryKey: [REVIEWS_QUERY_KEY, listingId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('reviews')
-        .select('*, profiles(username, avatar_url)')
-        .eq('listing_id', listingId)
-        .eq('is_approved', true)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      return data;
-    },
-    enabled: !!listingId,
-  });
-};
-
-/**
- * Fetch user's review for a listing
- */
-export const useUserReview = (listingId) => {
-  const { user } = useAuth();
-
-  return useQuery({
-    queryKey: [REVIEWS_QUERY_KEY, listingId, user?.id],
-    queryFn: async () => {
-      if (!user) return null;
-
-      const { data, error } = await supabase
-        .from('reviews')
-        .select('*')
-        .eq('listing_id', listingId)
-        .eq('user_id', user.id)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
-
-      return data || null;
-    },
-    enabled: !!user && !!listingId,
-  });
-};
+// NOTE (v9.3): useReviews / useUserReview were deleted — zero consumers;
+// ListingDetailPage fetches reviews directly into local state.
+// Kept: useCreateReview (used by ListingDetailPage), useDeleteReview,
+// and the admin hooks below — verified correct as written; they only
+// work once Track 5 adds the admin SELECT/UPDATE/DELETE policies on
+// reviews (under current RLS the pending queue reads empty and
+// approve/reject fail — see E-20).
 
 /**
  * Create or update review

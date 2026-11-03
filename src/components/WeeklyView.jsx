@@ -1,5 +1,11 @@
 import { mmtParts, MY_MONTHS, MY_WEEKDAYS } from '../lib/myanmarDate'
 
+// Hardcoded English names — the grid is built from local Dates, and
+// toLocaleDateString('en-US') is dropped for consistency with the
+// Myanmar branch (same pattern as CalendarPage).
+const EN_WEEKDAYS_S = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const EN_MONTHS_S = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 function formatTime(iso, lang) {
   const p = mmtParts(iso)
   if (!p) return ''
@@ -63,10 +69,10 @@ export default function WeeklyView({ events = [], selected, setSelected, lang = 
                 <span className={'text-sm font-display font-bold ' + (
                   isSel ? 'text-white' : isToday ? 'text-gold-400' : 'text-white/70'
                 )}>
-                  {lang === 'mm' ? MY_WEEKDAYS[day.getDay()] : day.toLocaleDateString('en-US', { weekday: 'short' })}
+                  {lang === 'mm' ? MY_WEEKDAYS[day.getDay()] : EN_WEEKDAYS_S[day.getDay()]}
                 </span>
                 <span className="text-xs text-white/50">
-                  {day.getDate()} {lang === 'mm' ? MY_MONTHS[day.getMonth()] : day.toLocaleDateString('en-US', { month: 'short' })}
+                  {day.getDate()} {lang === 'mm' ? MY_MONTHS[day.getMonth()] : EN_MONTHS_S[day.getMonth()]}
                 </span>
                 {isToday && (
                   <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400">Today</span>

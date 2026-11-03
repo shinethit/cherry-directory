@@ -1,17 +1,25 @@
 import { useState, useEffect } from 'react'
 import { X, Download } from 'lucide-react'
+import { safeGet, safeSet } from '../lib/safeStorage'
+import {
+  setInstallPrompt,
+  clearInstallPrompt,
+  useInstallPrompt,
+} from '../lib/installPromptStore'
 
 const DISMISSED_KEY = 'cherry_install_dismissed'
 
 export default function PWAInstallBanner() {
   const [show, setShow]         = useState(false)
-  const [prompt, setPrompt]     = useState(null)
+  // Prompt comes from the SHARED store (H-21) — same one usePWA reads —
+  // so a dismiss in one place hides the button everywhere.
+  const prompt = useInstallPrompt()
   const [installing, setInstalling] = useState(false)
   const [isIOS, setIsIOS]       = useState(false)
   const [isIOSGuide, setIsIOSGuide] = useState(false)
 
   useEffect(() => {
-    if (localStorage.getItem(DISMISSED_KEY)) return
+    if (safeGet(DISMISSED_KEY)) return
     if (window.matchMedia('(display-mode: standalone)').matches) return
     if (window.navigator.standalone === true) return
 
@@ -24,7 +32,7 @@ export default function PWAInstallBanner() {
 
     const handler = (e) => {
       e.preventDefault()
-      setPrompt(e)
+      setInstallPrompt(e)
       setTimeout(() => setShow(true), 2000)
     }
     window.addEventListener('beforeinstallprompt', handler)
@@ -33,7 +41,8 @@ export default function PWAInstallBanner() {
 
   function dismiss() {
     setShow(false)
-    localStorage.setItem(DISMISSED_KEY, '1')
+    safeSet(DISMISSED_KEY, '1')
+    clearInstallPrompt()
   }
 
   async function install() {
@@ -43,9 +52,21 @@ export default function PWAInstallBanner() {
     try {
       await prompt.prompt()
       const { outcome } = await prompt.userChoice
-      if (outcome === 'accepted') { setShow(false); localStorage.setItem(DISMISSED_KEY, '1') }
-    } catch (err) { console.warn('Install failed:', err) }
-    setInstalling(false)
+      if (outcome === 'accepted') {
+        dismiss()
+      } else {
+        // H-21: dismissed consumes the one-shot prompt — clear it and
+        // hide the banner, otherwise a second tap re-prompts a dead event
+        // and the banner stays forever.
+        dismiss()
+      }
+    } catch (err) {
+      console.warn('Install failed:', err)
+      // A failed prompt is spent too — don't leave a dead Install button.
+      dismiss()
+    } finally {
+      setInstalling(false)
+    }
   }
 
   if (!show) return null

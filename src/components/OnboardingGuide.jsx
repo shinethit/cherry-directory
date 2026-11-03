@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react'
 import { useLang } from '../contexts/LangContext'
 import { yangonToday } from '../lib/myanmarDate'
+import { safeGet, safeSet } from '../lib/safeStorage'
 
 const ONBOARDING_KEY = 'cherry_onboarding_done'
 
@@ -68,28 +69,45 @@ export default function OnboardingGuide() {
   const [show, setShow] = useState(false)
   const [step, setStep] = useState(0)
 
+  const startedRef = useRef(false)
+
   useEffect(() => {
-    // Check if onboarding already shown
-    if (localStorage.getItem(ONBOARDING_KEY)) return
+    // Check if onboarding already shown (safe storage — never throws, H-2)
+    if (safeGet(ONBOARDING_KEY)) return
     // Sequential first-launch flow: wait for the splash screen to be
     // dismissed ('cherry:splash-done') before the 1.5s timer — or proceed
     // at once if consent was already given today (no splash this launch).
     let t
-    const start = () => { t = setTimeout(() => setShow(true), 1500) }
-    if (localStorage.getItem('cherry_consent_date') === yangonToday()) {
+    let fallback
+    const start = () => {
+      if (startedRef.current) return
+      startedRef.current = true
+      if (fallback) clearTimeout(fallback)
+      t = setTimeout(() => setShow(true), 1500)
+    }
+    if (safeGet('cherry_consent_date') === yangonToday()) {
       start()
       return () => clearTimeout(t)
     }
     const onSplashDone = () => start()
     window.addEventListener('cherry:splash-done', onSplashDone)
+    // A-F5 fallback: the chain is event-only, so a deep link that never
+    // mounts the splash would wait forever. One-shot 8 s fallback timer
+    // starts the guide anyway (it checks consent state again at that point
+    // via the stored date — if consent still isn't given, the splash is
+    // showing instead and this guide stays hidden behind it).
+    fallback = setTimeout(() => {
+      if (safeGet('cherry_consent_date') === yangonToday()) start()
+    }, 8000)
     return () => {
       window.removeEventListener('cherry:splash-done', onSplashDone)
       clearTimeout(t)
+      clearTimeout(fallback)
     }
   }, [])
 
   function finish() {
-    localStorage.setItem(ONBOARDING_KEY, '1')
+    safeSet(ONBOARDING_KEY, '1')
     setShow(false)
     window.dispatchEvent(new Event('cherry:onboarding-done'))
   }

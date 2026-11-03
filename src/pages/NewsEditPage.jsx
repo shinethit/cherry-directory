@@ -102,7 +102,10 @@ export default function NewsEditPage() {
 
     const payload = {
       ...form,
-      type: 'news',
+      // Preserve the original type on edit: hardcoding 'news' here used
+      // to silently convert an event opened at /news/edit/<event-id>
+      // into news (it then vanished from the Calendar).
+      type: isEdit ? (form.type || 'news') : 'news',
       author_id: isEdit ? original?.author_id || user?.id : user?.id,
       updated_at: new Date().toISOString(),
     }
@@ -110,14 +113,17 @@ export default function NewsEditPage() {
     if (isEdit) {
       const { error } = await supabase.from('posts').update(payload).eq('id', id)
       if (error) { showError(error.message); setSaving(false); return }
-      await log({ action: 'update', table: 'posts', id, name: form.title || form.title_mm, before: original, after: payload })
+      // Audit log is fire-and-forget — it must never delay the toast.
+      log({ action: 'update', table: 'posts', id, name: form.title || form.title_mm, before: original, after: payload })
+        .then(ok => { if (!ok) console.warn('Audit log failed for news update') })
     } else {
       const { data, error } = await supabase.from('posts').insert({
         ...payload,
         created_at: new Date().toISOString(),
       }).select().single()
       if (error) { showError(error.message); setSaving(false); return }
-      await log({ action: 'create', table: 'posts', id: data?.id, name: form.title || form.title_mm, after: payload })
+      log({ action: 'create', table: 'posts', id: data?.id, name: form.title || form.title_mm, after: payload })
+        .then(ok => { if (!ok) console.warn('Audit log failed for news create') })
     }
 
     setSaved(true)
@@ -130,7 +136,8 @@ export default function NewsEditPage() {
     if (!(await confirmDialog((lang === 'mm' ? 'ဤသတင်းကို ဖျက်မည်လား?' : 'Delete this post?')))) return
     const { error } = await supabase.from('posts').delete().eq('id', id)
     if (error) { showError(error.message); return }
-    await log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
+    log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
+      .then(ok => { if (!ok) console.warn('Audit log failed for news delete') })
     navigate('/news')
   }
 

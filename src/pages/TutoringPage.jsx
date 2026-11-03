@@ -405,6 +405,7 @@ export default function TutoringPage() {
   const [searchParams] = useSearchParams()
   const [posts, setPosts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [subjectFilter, setSubjectFilter] = useState('all')
   const [gradeFilter, setGradeFilter] = useState('all')
   const [postTypeFilter, setPostTypeFilter] = useState(() => normalizePostType(searchParams.get('type')))
@@ -412,11 +413,16 @@ export default function TutoringPage() {
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [statusTarget, setStatusTarget] = useState(null)
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const PAGE_SIZE = 50
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
-      let q = supabase.from('tutoring').select('*').order('is_urgent', { ascending: false }).order('created_at', { ascending: false })
+      const limit = (page + 1) * PAGE_SIZE
+      let q = supabase.from('tutoring').select('*').order('is_urgent', { ascending: false }).order('created_at', { ascending: false }).range(0, limit - 1)
       if (subjectFilter !== 'all') q = q.eq('subject', subjectFilter)
       if (gradeFilter !== 'all') q = q.eq('grade_level', gradeFilter)
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
@@ -427,7 +433,8 @@ export default function TutoringPage() {
       // expires_at column ever exists (guarded so it is a no-op otherwise).
       const now = Date.now()
       setPosts((data || []).filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now))
-    } catch (e) { console.warn(e) }
+      setHasMore((data || []).length === limit)
+    } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
 
@@ -440,7 +447,7 @@ export default function TutoringPage() {
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tutoring' }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [subjectFilter, gradeFilter, postTypeFilter, statusFilter])
+  }, [subjectFilter, gradeFilter, postTypeFilter, statusFilter, page])
 
   async function deletePost(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
@@ -463,24 +470,24 @@ export default function TutoringPage() {
       <div className="px-4 space-y-2 mb-4">
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
-            <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} className="select-dark text-xs">
+            <select value={subjectFilter} onChange={e => { setSubjectFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
               {SUBJECTS.map(s => <option key={s.id} value={s.id}>{s.icon} {lang === 'mm' ? s.mm : s.en}</option>)}
             </select>
           </div>
           <div className="relative">
-            <select value={gradeFilter} onChange={e => setGradeFilter(e.target.value)} className="select-dark text-xs">
+            <select value={gradeFilter} onChange={e => { setGradeFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
               {GRADE_LEVELS.map(g => <option key={g.id} value={g.id}>{g.icon} {lang === 'mm' ? g.mm : g.en}</option>)}
             </select>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
-            <select value={postTypeFilter} onChange={e => setPostTypeFilter(e.target.value)} className="select-dark text-xs">
+            <select value={postTypeFilter} onChange={e => { setPostTypeFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
               {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>)}
             </select>
           </div>
           <div className="relative">
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="select-dark text-xs">
+            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
               <option value="all">📋 {lang === 'mm' ? 'အားလုံး' : 'All Status'}</option>
               {Object.entries(STATUSES).map(([key, val]) => (
                 <option key={key} value={key}>{val.icon} {lang === 'mm' ? val.mm : val.en}</option>
@@ -492,6 +499,12 @@ export default function TutoringPage() {
 
       <div className="px-4 space-y-2 pb-24">
         {loading ? [1,2,3].map(n => <div key={n} className="h-36 rounded-2xl shimmer" />) :
+         loadError ? (
+           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+           </div>
+         ) :
          posts.length === 0 ? (
            <div className="flex flex-col items-center py-14 text-center">
              <span className="text-4xl mb-3">📚</span>
@@ -511,6 +524,11 @@ export default function TutoringPage() {
              onStatusChange={(post) => setStatusTarget(post)}
            />
          ))}
+        {hasMore && !loading && !loadError && (
+          <button onClick={() => setPage(p => p + 1)} className="w-full py-3 rounded-2xl bg-white/6 border border-white/10 text-sm text-white/70 hover:bg-white/10">
+            {lang === 'mm' ? 'နောက်ထပ် ပြမည်' : 'Load more'}
+          </button>
+        )}
       </div>
 
       {showForm && (

@@ -33,6 +33,10 @@ export default function DirectoryPage() {
   // Pagination is driven ONLY by the effect below (see loadListings).
   const pageRef = useRef(0)
   const lastFilterKeyRef = useRef('')
+  // Monotonic id: a late response from an old filter/page is ignored so it
+  // can never mix listings across filters/pages.
+  const requestIdRef = useRef(0)
+  const LOAD_TIMEOUT_MS = 12000
   const PAGE_SIZE = 20
   
   // Direct listings state
@@ -100,27 +104,6 @@ export default function DirectoryPage() {
       frontier = next
     }
     return ids
-  }
-
-  // Get total listings count for a category (including all subcategories)
-  async function getCategoryTotalCount(categoryId) {
-    try {
-      const { data: allCats } = await supabase
-        .from('categories')
-        .select('id, parent_id')
-        .eq('type', 'directory')
-        .eq('is_active', true)
-      const allCatIds = collectDescendantIds(allCats || [], categoryId)
-      const { count } = await supabase
-        .from('listings')
-        .select('*', { count: 'exact', head: true })
-        .in('category_id', allCatIds)
-        .eq('status', 'approved')
-      return count || 0
-    } catch (e) {
-      console.warn('getCategoryTotalCount error:', e)
-      return 0
-    }
   }
 
   // ── Auto-select from ?cat= (single-pass, no loops) ──
@@ -250,13 +233,21 @@ export default function DirectoryPage() {
         .eq('is_active', true)
         .eq('parent_id', categoryId)
         .order('sort_order')
-      
+
+      // Counts include 3rd-level listings: count the subcategory AND all
+      // of its descendants, not just listings filed directly under it.
+      const { data: allCats } = await supabase
+        .from('categories')
+        .select('id, parent_id')
+        .eq('type', 'directory')
+        .eq('is_active', true)
       const subcatsWithCount = await Promise.all(
         (data || []).map(async (sub) => {
+          const ids = collectDescendantIds(allCats || [], sub.id)
           const { count } = await supabase
             .from('listings')
             .select('*', { count: 'exact', head: true })
-            .eq('category_id', sub.id)
+            .in('category_id', ids)
             .eq('status', 'approved')
           return { ...sub, listing_count: count || 0 }
         })
@@ -322,11 +313,15 @@ export default function DirectoryPage() {
     if (reset) {
       lastFilterKeyRef.current = filterKey
       pageRef.current = 0
-      setPage(0)
+      // NOTE: do NOT call setPage(0) here. It re-triggers this effect and
+      // runs the same page-0 query twice when page > 0. pageRef is the
+      // fetch truth; `page` state only triggers the effect from Load more.
     }
     const currentPage = pageRef.current
+    const myId = ++requestIdRef.current
     setListingsLoading(true)
     setListingsError(false)
+    let timeoutId = null
     try {
       const esc = escapePostgrestOr(q.trim())
       let query = supabase
@@ -342,8 +337,16 @@ export default function DirectoryPage() {
       if (city !== 'All') query = query.eq('city', city)
       if (verifiedOnly) query = query.eq('is_verified', true)
 
-      const { data, count, error } = await query
+      // A hung query used to spin the skeletons forever with no retry.
+      // Race it against a timeout so the error banner + retry appear.
+      const timeout = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('loadListings timed out')), LOAD_TIMEOUT_MS)
+      })
+      const { data, count, error } = await Promise.race([query, timeout])
+      if (timeoutId) clearTimeout(timeoutId)
       if (error) throw error
+      // Superseded by a newer filter/page request — drop it silently.
+      if (myId !== requestIdRef.current) return
 
       if (reset) setListings(data || [])
       else setListings(prev => {
@@ -352,11 +355,15 @@ export default function DirectoryPage() {
       })
       setTotal(count || 0)
     } catch (e) {
+      if (timeoutId) clearTimeout(timeoutId)
+      // A late failure from a superseded request must not clobber the
+      // current request's state.
+      if (myId !== requestIdRef.current) return
       console.warn('loadListings error:', e)
       setListingsError(true)
       if (reset) setListings([])
     }
-    setListingsLoading(false)
+    if (myId === requestIdRef.current) setListingsLoading(false)
   }, [selectedSubcategory, city, verifiedOnly, q])
 
   function handleCategorySelect(cat) {
@@ -663,9 +670,9 @@ export default function DirectoryPage() {
 
       {/* Listings */}
       <div className="px-4 space-y-2 pb-36">
-        {listingsError && listings.length === 0 && (
+        {listingsError && (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
-            <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+            <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်{listings.length > 0 ? ' — အဟောင်းများကို ပြထားသည်' : ''}</p>
             <button onClick={() => loadListings()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
           </div>
         )}

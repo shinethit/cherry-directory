@@ -30,9 +30,12 @@ export class ErrorBoundary extends Component {
             <h2 className="text-white font-display font-bold text-xl mb-3">
               Something went wrong
             </h2>
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-4 text-left overflow-auto max-h-40">
-              <p className="text-red-400 text-xs font-mono break-all">
-                {this.state.error?.message || 'Unknown error'}
+            {/* I-LOW: never render the raw error text — it can leak paths,
+                query fragments or other internals. Generic message only;
+                the real error is in the console + Sentry. */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-4 text-left">
+              <p className="text-white/60 text-xs font-myanmar">
+                အမှားတစ်ခု ဖြစ်သွားပါသည်။ စာမျက်နှာကို ပြန်ဖွင့်ကြည့်ပါ။ ပြဿနာ ဆက်ဖြစ်နေပါက Admin ကို ဆက်သွယ်ပါ။
               </p>
             </div>
             <div className="flex gap-2">

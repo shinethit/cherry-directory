@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { showError, showSuccess } from '../lib/toast'
+import { parseCSV } from '../lib/csv'
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024 // 2MB
 
@@ -27,24 +28,6 @@ const COLUMNS = [
   { key: 'latitude',     label: 'latitude',      required: false, example: '20.7856' },
   { key: 'longitude',    label: 'longitude',     required: false, example: '97.0364' },
 ]
-
-function parseCSV(text) {
-  const lines = text.trim().split('\n').map(l => l.replace(/\r/g, ''))
-  if (lines.length < 2) return { headers: [], rows: [] }
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
-  const rows = lines.slice(1).map(line => {
-    const values = []
-    let inQuote = false, cur = ''
-    for (const ch of line) {
-      if (ch === '"') { inQuote = !inQuote }
-      else if (ch === ',' && !inQuote) { values.push(cur.trim()); cur = '' }
-      else { cur += ch }
-    }
-    values.push(cur.trim())
-    return Object.fromEntries(headers.map((h, i) => [h, values[i] || '']))
-  })
-  return { headers, rows }
-}
 
 function generateTemplate() {
   const header = COLUMNS.map(c => c.key).join(',')
@@ -73,10 +56,12 @@ export default function BulkImportPage() {
   useSEO({ title: 'Bulk Import' })
 
   const fileRef = useRef(null)
+  const cancelRef = useRef(false)
   const [preview, setPreview] = useState(null)
   const [fileName, setFileName] = useState('')
   const [results, setResults] = useState(null)
   const [importing, setImporting] = useState(false)
+  const [cancelled, setCancelled] = useState(false)
   const [progress, setProgress] = useState(0)
   const [categories, setCategories] = useState([])
 
@@ -100,10 +85,36 @@ export default function BulkImportPage() {
     }
     setFileName(file.name)
     setResults(null)
+    setCancelled(false)
+    cancelRef.current = false
     const reader = new FileReader()
     reader.onload = ev => {
       const parsed = parseCSV(ev.target.result)
+      // Validate headers BEFORE parsing rows into a preview: a file
+      // without the required columns used to preview (and import) as
+      // all-errors.
+      const missing = ['name', 'category'].filter(h => !parsed.headers.includes(h))
+      if (missing.length > 0) {
+        showError('CSV header မှားနေသည် — လိုအပ်သည်: ' + missing.join(', '))
+        e.target.value = ''
+        setFileName('')
+        setPreview(null)
+        return
+      }
+      if (!parsed.rows.length) {
+        showError('CSV တွင် data row မရှိပါ')
+        e.target.value = ''
+        setFileName('')
+        setPreview(null)
+        return
+      }
       setPreview(parsed)
+    }
+    reader.onerror = () => {
+      showError('ဖိုင် ဖတ်မရပါ — ဖိုင်ကို ပြန်ရွေးပါ')
+      e.target.value = ''
+      setFileName('')
+      setPreview(null)
     }
     reader.readAsText(file, 'UTF-8')
   }
@@ -114,6 +125,9 @@ export default function BulkImportPage() {
       showError('Login ဝင်ပြီးမှ Import လုပ်နိုင်သည်')
       return
     }
+    // Fresh run — a previous cancel must not abort this one.
+    cancelRef.current = false
+    setCancelled(false)
     setImporting(true)
     setProgress(0)
 
@@ -145,11 +159,22 @@ export default function BulkImportPage() {
     }
 
     // Dedupe set: existing listings (name + normalized phone) plus
-    // rows already accepted from this file.
+    // rows already accepted from this file. Paginated in pages of
+    // 1,000 — PostgREST's default page size is 1,000, so a single
+    // select() silently covered only the first 1,000 rows and
+    // duplicates of older listings sailed through as new rows.
     const seenKeys = new Set()
     try {
-      const { data: existing } = await supabase.from('listings').select('name, phone_1')
-      ;(existing || []).forEach(l => seenKeys.add(dedupeKey(l.name, l.phone_1)))
+      const PAGE = 1000
+      for (let from = 0; ; from += PAGE) {
+        const { data: existing, error: dedupeErr } = await supabase
+          .from('listings')
+          .select('name, phone_1')
+          .range(from, from + PAGE - 1)
+        if (dedupeErr) throw dedupeErr
+        ;(existing || []).forEach(l => seenKeys.add(dedupeKey(l.name, l.phone_1)))
+        if ((existing || []).length < PAGE) break
+      }
     } catch (e) {
       console.warn('Dedupe lookup failed — file-only dedupe:', e)
     }
@@ -158,6 +183,10 @@ export default function BulkImportPage() {
     const totalRows = preview.rows.length;
     
     for (let i = 0; i < totalRows; i += BATCH_SIZE) {
+      // Cancel is checked between batches — closing the tab mid-run
+      // still leaves a 'processing' row (unavoidable client-side), but
+      // cancelling in-app now marks the row instead of abandoning it.
+      if (cancelRef.current) break
       const chunk = preview.rows.slice(i, i + BATCH_SIZE);
       const inserts = [];
 
@@ -237,23 +266,54 @@ export default function BulkImportPage() {
       await new Promise(r => setTimeout(r, 500));
     }
 
-    const { error: updateErr } = await supabase.from('bulk_imports').update({
+    // A 90%-failed import is NOT 'done'. bulk_imports has no
+    // row_skipped column and no meta/notes field — the only free-form
+    // column is errors (jsonb), so the skipped count and batchId are
+    // stored there as a summary entry (nothing reads bulk_imports rows
+    // in the app today).
+    // NOTE: 'partial'/'cancelled' are not in the current DB check
+    // constraint (status in ('processing','done','failed')) — Track 5
+    // must widen it; until then the update below falls back to 'done'
+    // so the row never stays 'processing' forever.
+    const wasCancelled = cancelRef.current
+    const finalStatus = wasCancelled ? 'cancelled'
+      : failed === totalRows ? 'failed'
+      : (failed > 0 || skipped.length > 0) && success > 0 ? 'partial'
+      : 'done'
+    const summaryEntry = {
+      row: 0,
+      field: 'summary',
+      message: `batch ${batchId} • skipped ${skipped.length} duplicate row(s)${wasCancelled ? ' • cancelled by user' : ''}`,
+    }
+    const updatePayload = {
       row_success: success, row_failed: failed,
-      errors, status: failed === totalRows ? 'failed' : 'done',
-    }).eq('id', importRec.id)
+      errors: [...errors, summaryEntry],
+      status: finalStatus,
+    }
+    let { error: updateErr } = await supabase.from('bulk_imports').update(updatePayload).eq('id', importRec.id)
+    if (updateErr && (finalStatus === 'partial' || finalStatus === 'cancelled')) {
+      console.warn(`bulk_imports status '${finalStatus}' rejected (check constraint needs widening) — falling back to 'done':`, updateErr.message)
+      const retry = await supabase.from('bulk_imports').update({ ...updatePayload, status: 'done' }).eq('id', importRec.id)
+      updateErr = retry.error
+    }
     if (updateErr) console.warn('Failed to update bulk_imports record:', updateErr)
 
-    const logged = await log({
+    // Audit log is fire-and-forget — it must never delay the result.
+    log({
       action: 'bulk_import',
       table: 'listings',
       name: fileName,
-      meta: { batch_id: batchId, total: totalRows, success, failed, skipped: skipped.length },
-    })
-    if (!logged) console.warn('Audit log failed for bulk import')
+      meta: { batch_id: batchId, total: totalRows, success, failed, skipped: skipped.length, cancelled: wasCancelled },
+    }).then(ok => { if (!ok) console.warn('Audit log failed for bulk import') })
 
-    setResults({ success, failed, errors, skipped, total: totalRows })
+    setResults({ success, failed, errors, skipped, total: totalRows, cancelled: wasCancelled })
     setImporting(false)
-    if (success > 0) showSuccess(`✓ ${success} ခု Import ပြီးပါပြီ (Admin အတည်ပြုရန် စောင့်ဆိုင်းနေသည်)`)
+    if (wasCancelled) showError(`Import ရပ်လိုက်ပြီးပါပြီ — ${success} ခု ထည့်ပြီးသည်`)
+    else if (success > 0) showSuccess(`✓ ${success} ခု Import ပြီးပါပြီ (Admin အတည်ပြုရန် စောင့်ဆိုင်းနေသည်)`)
+  }
+
+  function handleCancelImport() {
+    cancelRef.current = true
   }
 
   // Admin/mod-only: guests (profile === null) used to crash at
@@ -335,7 +395,7 @@ export default function BulkImportPage() {
             <button onClick={handleImport} disabled={importing} className="btn-primary w-full text-sm flex items-center justify-center gap-2 relative overflow-hidden">
               {importing ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> 
+                  <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   Import လုပ်နေသည်... {progress}%
                   <div className="absolute bottom-0 left-0 h-1 bg-white/30 transition-all" style={{ width: progress + '%' }} />
                 </>
@@ -343,12 +403,20 @@ export default function BulkImportPage() {
                 <><Upload size={15} /> {preview.rows.length} လုပ်ငန်း Import လုပ်မည်</>
               )}
             </button>
+            {importing && (
+              <button onClick={handleCancelImport} className="btn-ghost w-full text-sm">
+                Import ရပ်မည် (ထည့်ပြီးသားများ ကျန်မည်)
+              </button>
+            )}
           </div>
         )}
 
         {results && (
           <div className="card-dark rounded-2xl p-4 space-y-4">
-            <p className="text-sm font-display font-bold text-white">Import ပြီးပါပြီ</p>
+            <p className="text-sm font-display font-bold text-white">
+              {results.cancelled ? 'Import ရပ်လိုက်ပြီးပါပြီ' : 'Import ပြီးပါပြီ'}
+              {results.failed > 0 && results.success > 0 && !results.cancelled ? ' (အချို့ မအောင်မြင်)' : ''}
+            </p>
             <div className="grid grid-cols-4 gap-2">
               <div className="bg-white/5 rounded-xl p-3 text-center">
                 <p className="font-display font-bold text-xl text-white">{results.total}</p>
@@ -394,7 +462,7 @@ export default function BulkImportPage() {
 
             <div className="flex gap-2">
               <button onClick={() => navigate('/directory')} className="btn-primary flex-1 text-sm">Directory ကြည့်မည်</button>
-              <button onClick={() => { setPreview(null); setResults(null); setFileName(''); setProgress(0) }} className="btn-ghost flex-1 text-sm">ထပ် Import လုပ်မည်</button>
+              <button onClick={() => { setPreview(null); setResults(null); setFileName(''); setProgress(0); setCancelled(false); cancelRef.current = false }} className="btn-ghost flex-1 text-sm">ထပ် Import လုပ်မည်</button>
             </div>
           </div>
         )}

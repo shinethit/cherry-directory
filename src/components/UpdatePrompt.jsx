@@ -1,10 +1,12 @@
 import { useServiceWorker } from '../hooks/useServiceWorker'
 
 // Shows a real update prompt when the service worker reports a new version
-// waiting (useServiceWorker detects it via onupdatefound). Tapping reloads
-// through SKIP_WAITING — the SW never activates on its own.
+// waiting (useServiceWorker detects it via onupdatefound, an already-waiting
+// worker, or periodic reg.update() polling). Tapping reloads through
+// SKIP_WAITING — the SW never activates on its own. While the update is in
+// flight the button is disabled with an "updating…" label (H-6).
 export default function UpdatePrompt() {
-  const { updateAvailable, applyUpdate } = useServiceWorker()
+  const { updateAvailable, updating, applyUpdate } = useServiceWorker()
 
   if (!updateAvailable) return null
 
@@ -18,9 +20,10 @@ export default function UpdatePrompt() {
         </div>
         <button
           onClick={applyUpdate}
-          className="flex-shrink-0 px-3 py-2 bg-brand-600 rounded-xl text-white text-xs font-display font-semibold"
+          disabled={updating}
+          className="flex-shrink-0 px-3 py-2 bg-brand-600 rounded-xl text-white text-xs font-display font-semibold disabled:opacity-50"
         >
-          ပြန်ဖွင့်မည်
+          {updating ? 'အပ်ဒိတ်လုပ်နေသည်…' : 'ပြန်ဖွင့်မည်'}
         </button>
       </div>
     </div>

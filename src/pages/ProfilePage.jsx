@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { Sparkles, MapPin, LogOut, Edit3, Crown, Shield, User, BookMarked, Star, Building2, Bell, BellOff, Download, Trophy, Clock, ChevronRight, Calendar } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { usePWA } from '../hooks/usePWA'
 import { useSEO } from '../hooks/useSEO'
-import { usePoints } from '../hooks/usePoints'
 import { timeAgo } from '../hooks/usePresence'
 import { uploadImage } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
@@ -23,11 +22,48 @@ const ROLE_CONFIG = {
 
 export default function ProfilePage() {
   const navigate  = useNavigate()
-  const { profile, isAdmin, isModerator, signOut, updateProfile, user } = useAuth()
+  const { id: profileId } = useParams()
+  const { profile, isAdmin, isModerator, signOut, updateProfile, user, isLoggedIn } = useAuth()
   const { lang }  = useLang()
   const config = useAppConfig()
   const { installable, installApp, pushEnabled, enablePush, disablePush } = usePWA()
   useSEO({ title: 'Profile' })
+
+  // /profile/:id (C-4): when :id is someone else's id, this page is their
+  // public profile — read-only. Owner-only controls (Edit / Sign Out /
+  // Settings / Offline panel) are hidden for other users' profiles.
+  const isOther = !!profileId && profileId !== user?.id
+  const [otherProfile, setOtherProfile] = useState(null)
+  const [otherLoading, setOtherLoading] = useState(isOther)
+  const [otherError, setOtherError] = useState('')
+
+  useEffect(() => {
+    if (!isOther) return
+    let cancelled = false
+    async function loadOther() {
+      setOtherLoading(true)
+      setOtherError('')
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, full_name, nickname, bio, avatar_url, points, role, last_seen')
+          .eq('id', profileId)
+          .single()
+        if (error) throw error
+        if (!cancelled) setOtherProfile(data)
+      } catch (err) {
+        console.warn('Other profile load failed:', err)
+        if (!cancelled) setOtherError(err?.message || 'Profile မတွေ့ပါ')
+      } finally {
+        if (!cancelled) setOtherLoading(false)
+      }
+    }
+    loadOther()
+    return () => { cancelled = true }
+  }, [isOther, profileId])
+
+  // The profile on display: someone else's (read-only) or the signed-in user's.
+  const viewed = isOther ? otherProfile : profile
 
   const [editing, setEditing]     = useState(false)
   const [name, setName]           = useState(profile?.full_name || '')
@@ -37,6 +73,7 @@ export default function ProfilePage() {
   const [saving, setSaving]       = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
   const [myStats, setMyStats]     = useState({ listings: 0, reviews: 0, bookmarks: 0, rsvps: 0 })
+  const [statsError, setStatsError] = useState('')
   const [nickError, setNickError] = useState('')
 
   // Profile loads async — the mount-time useState initializers above run
@@ -50,23 +87,37 @@ export default function ProfilePage() {
     setBio(profile.bio || '')
   }, [profile, editing])
 
-  useEffect(() => {
+  // Stats are the signed-in user's own counts (never another user's).
+  // allSettled: one failing count must not zero out the other three
+  // (F-MED-5). A failure shows a retry affordance instead of silent 0s.
+  async function loadStats() {
     if (!user) return
-    async function load() {
-      try {
-        const [{ count: l }, { count: r }, { count: b }, { count: rv }] = await Promise.all([
-          supabase.from('listings').select('*', { count: 'exact', head: true }).eq('submitted_by', user.id),
-          supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-          supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-        ])
-        setMyStats({ listings: l || 0, reviews: r || 0, bookmarks: b || 0, rsvps: rv || 0 })
-      } catch (err) {
-        console.warn('Profile stats load failed:', err)
-      }
+    setStatsError('')
+    const results = await Promise.allSettled([
+      supabase.from('listings').select('*', { count: 'exact', head: true }).eq('submitted_by', user.id),
+      supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+      supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+      supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+    ])
+    const countOf = (r) => (r.status === 'fulfilled' ? (r.value?.count || 0) : 0)
+    setMyStats({
+      listings: countOf(results[0]),
+      reviews: countOf(results[1]),
+      bookmarks: countOf(results[2]),
+      rsvps: countOf(results[3]),
+    })
+    const failed = results.find(r => r.status === 'rejected')
+    if (failed) {
+      console.warn('Profile stats load partially failed:', failed.reason)
+      setStatsError(failed.reason?.message || 'Stats အချို့ ရယူမရပါ')
     }
-    load()
-  }, [user])
+  }
+
+  useEffect(() => {
+    if (!user || isOther) return
+    loadStats()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isOther])
 
   async function handleAvatarChange(e) {
     const file = e.target.files?.[0]
@@ -115,10 +166,52 @@ export default function ProfilePage() {
     setPushLoading(false)
   }
 
-  const role = ROLE_CONFIG[profile?.role || 'member']
+  const role = ROLE_CONFIG[viewed?.role || 'member']
   const RoleIcon = role.icon
-  const displayName = profile?.nickname ? `@${profile.nickname}` : profile?.full_name || 'User'
+  const displayName = viewed?.nickname ? `@${viewed.nickname}` : viewed?.full_name || 'User'
 
+  // Guests need to sign in to see their own profile (F-MED-4) — the same
+  // "Login Required" gate the sibling pages use. Another user's public
+  // profile stays viewable without login.
+  if (!isLoggedIn && !isOther) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70dvh] px-8 text-center">
+        <User size={48} className="text-brand-400 mb-4" />
+        <h2 className="font-display font-bold text-xl text-white mb-2">
+          {lang === 'mm' ? 'Login လိုအပ်သည်' : 'Login Required'}
+        </h2>
+        <p className="text-white/50 font-myanmar mb-6">
+          {lang === 'mm' ? 'Profile ကြည့်ရန် Login ဝင်ပါ' : 'Sign in to see your profile'}
+        </p>
+        <button onClick={() => navigate('/login')} className="btn-primary">
+          {lang === 'mm' ? 'Login ဝင်ရောက်မည်' : 'Sign In'}
+        </button>
+      </div>
+    )
+  }
+
+  if (isOther && otherLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60dvh]">
+        <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (isOther && (otherError || !otherProfile)) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70dvh] px-8 text-center">
+        <User size={48} className="text-white/20 mb-4" />
+        <h2 className="font-display font-bold text-xl text-white mb-2">
+          {lang === 'mm' ? 'Profile မတွေ့ပါ' : 'Profile not found'}
+        </h2>
+        <p className="text-white/50 font-myanmar mb-6">{otherError}</p>
+        <button onClick={() => navigate('/leaderboard')} className="btn-primary">
+          {lang === 'mm' ? 'Leaderboard သို့ ပြန်မည်' : 'Back to Leaderboard'}
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="py-4 px-4 space-y-4">
@@ -126,21 +219,30 @@ export default function ProfilePage() {
       {/* ── Profile card ── */}
       <div className="card-dark p-6 rounded-3xl text-center space-y-3">
         <div className="relative inline-block">
+          {isOther ? (
+            <div className="w-20 h-20 rounded-3xl bg-brand-700 border-2 border-brand-400/30 flex items-center justify-center overflow-hidden mx-auto">
+              {viewed?.avatar_url
+                ? <img src={viewed.avatar_url} alt="" className="w-full h-full object-cover" />
+                : <span className="text-3xl font-bold text-white">{viewed?.full_name?.[0] || '?'}</span>
+              }
+            </div>
+          ) : (
           <label className="cursor-pointer">
             <div className="w-20 h-20 rounded-3xl bg-brand-700 border-2 border-brand-400/30 flex items-center justify-center overflow-hidden mx-auto">
-              {profile?.avatar_url
-                ? <img src={profile.avatar_url} alt="" className="w-full h-full object-cover" />
-                : <span className="text-3xl font-bold text-white">{profile?.full_name?.[0] || '?'}</span>
+              {viewed?.avatar_url
+                ? <img src={viewed.avatar_url} alt="" className="w-full h-full object-cover" />
+                : <span className="text-3xl font-bold text-white">{viewed?.full_name?.[0] || '?'}</span>
               }
             </div>
             <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
           </label>
+          )}
           {uploading && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-3xl">
               <div className="w-5 h-5 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
             </div>
           )}
-          <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-brand-600 rounded-full flex items-center justify-center border-2 border-[#0d0015] text-[10px]">✏️</div>
+          {!isOther && <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-brand-600 rounded-full flex items-center justify-center border-2 border-[#0d0015] text-[10px]">✏️</div>}
         </div>
 
         {editing ? (
@@ -183,55 +285,74 @@ export default function ProfilePage() {
         ) : (
           <>
             <div>
-              <h2 className="font-display font-bold text-xl text-white">{profile?.full_name || 'User'}</h2>
-              {profile?.nickname && (
-                <p className="text-sm text-brand-300 font-mono mt-0.5">@{profile.nickname}</p>
+              <h2 className="font-display font-bold text-xl text-white">{viewed?.full_name || 'User'}</h2>
+              {viewed?.nickname && (
+                <p className="text-sm text-brand-300 font-mono mt-0.5">@{viewed.nickname}</p>
               )}
-              {profile?.bio && <p className="text-xs text-white/50 mt-1 font-myanmar">{profile.bio}</p>}
+              {viewed?.bio && <p className="text-xs text-white/50 mt-1 font-myanmar">{viewed.bio}</p>}
             </div>
             <div className="flex items-center justify-center gap-2 flex-wrap">
               <span className={`badge border ${role.bg} ${role.color}`}>
                 <RoleIcon size={11} /> {role.label}
               </span>
-              {(profile?.points || 0) > 0 && (
-                <>
-                  <span className="badge bg-gold-500/15 text-gold-400 border border-gold-500/25">
-                    <Trophy size={10} /> {(profile.points || 0).toLocaleString()} pts
-                  </span>
-                  <TierBadge points={profile.points || 0} size="sm" lang={lang} />
-                </>
-              )}
+              {/* Tier badge always renders — even at 0 points (tier 0 /
+                  Bronze), a user must see their tier (F-LOW-2). */}
+              <span className="badge bg-gold-500/15 text-gold-400 border border-gold-500/25">
+                <Trophy size={10} /> {(viewed?.points || 0).toLocaleString()} pts
+              </span>
+              <TierBadge points={viewed?.points || 0} size="sm" lang={lang} />
             </div>
-            {profile?.last_seen && (
+            {viewed?.last_seen && (
               <p className="text-[10px] text-white/25">
                 <Clock size={9} className="inline mr-1" />
-                {timeAgo(profile.last_seen, lang)}
+                {timeAgo(viewed.last_seen, lang)}
               </p>
             )}
-            <button onClick={() => setEditing(true)} className="btn-ghost text-sm flex items-center gap-2 mx-auto">
-              <Edit3 size={14} /> {lang === 'mm' ? 'Profile ပြင်မယ်' : 'Edit Profile'}
-            </button>
+            {!isOther && (
+              <button onClick={() => setEditing(true)} className="btn-ghost text-sm flex items-center gap-2 mx-auto">
+                <Edit3 size={14} /> {lang === 'mm' ? 'Profile ပြင်မယ်' : 'Edit Profile'}
+              </button>
+            )}
           </>
         )}
       </div>
 
-      {/* ── Stats grid ── */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* ── Stats grid (own profile only) ── */}
+      {!isOther && (
+      <div className="grid grid-cols-4 gap-2">
         {[
           { icon: Building2,    label: lang === 'mm' ? 'လုပ်ငန်း' : 'Listings',  value: myStats.listings,  action: () => navigate('/my-submissions') },
-          { icon: Star,         label: 'Reviews',                               value: myStats.reviews   },
+          { icon: Star,         label: 'Reviews',                               value: myStats.reviews },
           { icon: BookMarked,   label: lang === 'mm' ? 'Saved' : 'Saved',      value: myStats.bookmarks, action: () => navigate('/bookmarks') },
+          { icon: Calendar,     label: lang === 'mm' ? 'RSVP' : 'RSVPs',       value: myStats.rsvps,    action: () => navigate('/my-rsvps') },
         ].map(({ icon: Icon, label, value, action, highlight }) => (
-          <button key={label} onClick={action} disabled={!action} className={`card-dark p-3 rounded-2xl text-center ${action ? 'hover:bg-white/8 transition-colors' : ''}`}>
-            <Icon size={15} className={`mx-auto mb-1 ${highlight ? 'text-gold-400' : 'text-brand-300'}`} />
-            <p className={`font-display font-bold text-base ${highlight ? 'text-gold-400' : 'text-white'}`}>{(value || 0).toLocaleString()}</p>
-            <p className="text-[8px] text-white/40">{label}</p>
-          </button>
+          action ? (
+            <button key={label} onClick={action} className="card-dark p-3 rounded-2xl text-center hover:bg-white/8 transition-colors">
+              <Icon size={15} className={`mx-auto mb-1 ${highlight ? 'text-gold-400' : 'text-brand-300'}`} />
+              <p className={`font-display font-bold text-base ${highlight ? 'text-gold-400' : 'text-white'}`}>{(value || 0).toLocaleString()}</p>
+              <p className="text-[8px] text-white/40">{label}</p>
+            </button>
+          ) : (
+            // Reviews has no dedicated page — render as text, never as a
+            // disabled button with no destination (F-MED-5).
+            <div key={label} className="card-dark p-3 rounded-2xl text-center">
+              <Icon size={15} className="mx-auto mb-1 text-brand-300" />
+              <p className="font-display font-bold text-base text-white">{(value || 0).toLocaleString()}</p>
+              <p className="text-[8px] text-white/40">{label}</p>
+            </div>
+          )
         ))}
       </div>
+      )}
+      {!isOther && statsError && (
+        <button onClick={loadStats} className="w-full text-center text-[11px] text-amber-400 font-myanmar hover:text-amber-300 transition-colors">
+          ⚠️ {statsError} — {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
+        </button>
+      )}
 
 
-      {/* ── Settings ── */}
+      {/* ── Settings (own profile only) ── */}
+      {!isOther && (
       <div className="space-y-2">
         <p className="text-[10px] text-white/30 font-display font-semibold uppercase tracking-wider px-1">
           {lang === 'mm' ? 'Settings' : 'Settings'}
@@ -260,8 +381,10 @@ export default function ProfilePage() {
           </button>
         )}
       </div>
+      )}
 
-      {/* ── Quick links ── */}
+      {/* ── Quick links (own profile only) ── */}
+      {!isOther && (
       <div className="space-y-2">
         <p className="text-[10px] text-white/30 font-display font-semibold uppercase tracking-wider px-1">
           {lang === 'mm' ? 'အမြန်လင့်' : 'Quick Links'}
@@ -293,14 +416,17 @@ export default function ProfilePage() {
           </p>
         </button>
       </div>
+      )}
 
-      {/* ── Offline Cache ── */}
+      {/* ── Offline Cache (own profile only) ── */}
+      {!isOther && (
       <div className="space-y-2">
         <p className="text-[10px] text-white/30 font-display font-semibold uppercase tracking-wider px-1">
           {lang === 'mm' ? 'အော့ဖ်လိုင်း' : 'Offline'}
         </p>
         <OfflineCachePanel />
       </div>
+      )}
 
       {/* ── App info footer ── */}
       <div className="px-4 pt-2">

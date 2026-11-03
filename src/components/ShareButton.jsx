@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Share2, Copy, Check, X } from 'lucide-react'
+import { showError } from '../lib/toast'
 
 export default function ShareButton({ url, title = 'Share this', description = '', customUrl = '', variant = 'default' }) {
   const [showQR, setShowQR] = useState(false)
@@ -26,16 +27,26 @@ export default function ShareButton({ url, title = 'Share this', description = '
         })
       } catch (err) { console.log('Share cancelled', err) }
     } else {
-      await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      try {
+        await navigator.clipboard.writeText(shareUrl)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch (err) {
+        console.warn('Copy link failed:', err)
+        showError('Link ကူးမရပါ — လိပ်စာဘားမှ ကိုယ်တိုင် ကူးယူပါ')
+      }
     }
   }
 
   const copyLink = async () => {
-    await navigator.clipboard.writeText(shareUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.warn('Copy link failed:', err)
+      showError('Link ကူးမရပါ — လိပ်စာဘားမှ ကိုယ်တိုင် ကူးယူပါ')
+    }
   }
 
   return (

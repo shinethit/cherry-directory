@@ -17,7 +17,11 @@ export default function SavedPage() {
   const { lang } = useLang()
   useSEO({ title: lang === 'mm' ? 'သိမ်းထားသောများ' : 'Saved Items' })
 
-  const tab = params.get('tab') || 'businesses'
+  const rawTab = params.get('tab') || 'businesses'
+  // Unknown ?tab= values match no branch and rendered a blank page —
+  // fall back to 'businesses' (F-MED-6).
+  const VALID_TABS = ['businesses', 'news', 'places']
+  const tab = VALID_TABS.includes(rawTab) ? rawTab : 'businesses'
 
   // Bookmarks
   const [listings, setListings] = useState([])
@@ -28,6 +32,7 @@ export default function SavedPage() {
   // Places
   const [places, setPlaces] = useState([])
   const [loadingPlaces, setLoadingPlaces] = useState(true)
+  const [placesError, setPlacesError] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
   const [placeFilter, setPlaceFilter] = useState('all')
@@ -74,14 +79,22 @@ export default function SavedPage() {
   const loadPlaces = useCallback(async () => {
     if (!user) { setLoadingPlaces(false); return }
     setLoadingPlaces(true)
+    setPlacesError('')
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('saved_places')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
+      if (error) throw error
       setPlaces(data || [])
-    } catch (e) { console.warn(e) }
+    } catch (e) {
+      // A places failure used to be silent (error ignored entirely) —
+      // surface it with a Retry, mirroring bookmarks (F-MED-6).
+      console.warn('Places load error:', e)
+      setPlacesError(e?.message || 'နေရာများ ရယူမရပါ')
+      setPlaces([])
+    }
     setLoadingPlaces(false)
   }, [user])
 
@@ -258,7 +271,18 @@ export default function SavedPage() {
         )}
 
         {tab === 'places' && (
-          loadingPlaces ? (
+          placesError ? (
+            <div className="flex flex-col items-center py-12 text-center px-8">
+              <span className="text-4xl mb-3">⚠️</span>
+              <p className="font-display font-semibold text-white/70">
+                {lang === 'mm' ? 'နေရာများ ရယူမရပါ' : 'Could not load saved places'}
+              </p>
+              <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{placesError}</p>
+              <button onClick={loadPlaces} className="btn-primary text-sm mt-4 px-5 py-2">
+                {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
+              </button>
+            </div>
+          ) : loadingPlaces ? (
             [1, 2, 3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
           ) : places.length === 0 ? (
             <div className="flex flex-col items-center py-16 text-center">

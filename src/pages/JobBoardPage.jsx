@@ -6,8 +6,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
-import { uploadImage } from '../lib/cloudinary'
-import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
 import { maskPhone, toTelHref } from '../lib/phoneMask'
@@ -380,6 +378,7 @@ export default function JobBoardPage() {
   const [searchParams] = useSearchParams()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [catFilter, setCatFilter] = useState('all')
   const [postTypeFilter, setPostTypeFilter] = useState(() => normalizePostType(searchParams.get('type')))
   const [statusFilter, setStatusFilter] = useState('all')
@@ -392,6 +391,7 @@ export default function JobBoardPage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
       const limit = (page + 1) * PAGE_SIZE
       let q = supabase
@@ -412,7 +412,7 @@ export default function JobBoardPage() {
       const visible = (data || []).filter(j => !j.expires_at || new Date(j.expires_at).getTime() >= now)
       setJobs(visible)
       setHasMore((data || []).length === limit)
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
 
@@ -476,6 +476,12 @@ export default function JobBoardPage() {
 
       <div className="px-4 space-y-2">
         {loading ? [1,2,3].map(n => <div key={n} className="h-28 rounded-2xl shimmer" />) :
+         loadError ? (
+           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
+             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+           </div>
+         ) :
          jobs.length === 0 ? (
            <div className="flex flex-col items-center py-14 text-center">
              <span className="text-4xl mb-3">💼</span>

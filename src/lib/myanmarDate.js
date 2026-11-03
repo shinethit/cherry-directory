@@ -14,6 +14,14 @@ export const MY_WEEKDAYS = [
   'တနင်္ဂနွေ', 'တနင်္လာ', 'အင်္ဂါ', 'ဗုဒ္ဓဟူး', 'ကြာသပတေး', 'သောကြာ', 'စနေ',
 ]
 
+// Digits 0-9 → Myanmar digits ၀-၉. All user-facing Myanmar dates/times
+// must use these (the file's promise); 'YYYY-MM-DD' machine strings stay Latin.
+export const MY_DIGITS = ['၀', '၁', '၂', '၃', '၄', '၅', '၆', '၇', '၈', '၉']
+
+export function toMyanmarDigits(value) {
+  return String(value).replace(/[0-9]/g, (d) => MY_DIGITS[Number(d)])
+}
+
 // Today's date in Myanmar (Asia/Rangoon), as 'YYYY-MM-DD'.
 // Use this for day boundaries (consent gate, "New Today") — never the UTC date.
 export function yangonToday() {
@@ -51,9 +59,9 @@ export function mmtParts(iso) {
 export function formatMyanmarDate(iso, { weekday = false, year = false } = {}) {
   const p = mmtParts(iso)
   if (!p) return ''
-  const core = `${MY_MONTHS[p.m - 1]} ${p.d} ရက်`
+  const core = `${MY_MONTHS[p.m - 1]} ${toMyanmarDigits(p.d)} ရက်`
   const withWd = weekday ? `${MY_WEEKDAYS[p.weekday]}၊ ${core}` : core
-  return year ? `${withWd}၊ ${p.y}` : withWd
+  return year ? `${withWd}၊ ${toMyanmarDigits(p.y)}` : withWd
 }
 
 // "ဇန်နဝါရီ 5 ရက်၊ ည 7:00" — 12-hour clock with မြန်မာ daypart.
@@ -63,7 +71,32 @@ export function formatMyanmarDateTime(iso, { weekday = false } = {}) {
   const hour12 = p.hh % 12 === 0 ? 12 : p.hh % 12
   const part = p.hh < 12 ? 'မနက်' : p.hh < 17 ? 'နေ့လယ်' : 'ည'
   const mm = String(p.mm).padStart(2, '0')
-  return `${formatMyanmarDate(iso, { weekday })}၊ ${part} ${hour12}:${mm}`
+  return `${formatMyanmarDate(iso, { weekday })}၊ ${part} ${toMyanmarDigits(hour12)}:${toMyanmarDigits(mm)}`
+}
+
+// Time only, in Myanmar time: "ည ၇:၀၀" (mm) / "7:00 PM" (en).
+// Use for chat bubbles and other time-only displays — never
+// toLocaleTimeString('en-US'/'my-MM'), which uses device-local time.
+export function formatMMTTime(iso, lang = 'mm') {
+  const p = mmtParts(iso)
+  if (!p) return ''
+  const hour12 = p.hh % 12 === 0 ? 12 : p.hh % 12
+  const mm = String(p.mm).padStart(2, '0')
+  if (lang === 'mm') {
+    const part = p.hh < 12 ? 'မနက်' : p.hh < 17 ? 'နေ့လယ်' : 'ည'
+    return `${part} ${toMyanmarDigits(hour12)}:${toMyanmarDigits(mm)}`
+  }
+  const suffix = p.hh < 12 ? 'AM' : 'PM'
+  return `${hour12}:${mm} ${suffix}`
+}
+
+// MMT calendar-day number (days since epoch, Asia/Rangoon wall date).
+// Use for day boundaries (countdowns, "today" checks) — never the
+// device-local startOfDay, which is a different day near midnight.
+export function mmtDayNumber(value) {
+  const p = mmtParts(value instanceof Date ? value.toISOString() : value)
+  if (!p) return null
+  return Math.floor(Date.UTC(p.y, p.m - 1, p.d) / 86400000)
 }
 
 // datetime-local value ("2026-11-05T19:00", a Myanmar wall time the user typed)
@@ -93,10 +126,10 @@ export function timeAgoMm(iso) {
   if (diff < 0) return 'ခုလေးတင်'
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return 'ခုလေးတင်'
-  if (mins < 60) return `${mins} မိနစ်က`
+  if (mins < 60) return `${toMyanmarDigits(mins)} မိနစ်က`
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours} နာရီက`
+  if (hours < 24) return `${toMyanmarDigits(hours)} နာရီက`
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days} ရက်က`
+  if (days < 7) return `${toMyanmarDigits(days)} ရက်က`
   return formatMyanmarDate(iso)
 }

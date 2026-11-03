@@ -13,7 +13,7 @@ import LocationPicker from '../components/LocationPicker'
 import { BusinessHoursEditor } from '../components/BusinessHours'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
-import { validateListing, normalizePhone } from '../lib/validation'
+import { validateListing, normalizePhone, toLatinDigits } from '../lib/validation'
 
 function Field({ label, children, required, optional }) {
   return (
@@ -120,7 +120,9 @@ export default function SubmitListingPage() {
       () => {
         setLocationLoading(false)
         showError(lang === 'mm' ? 'GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ' : 'Could not find GPS location — please pick on the map')
-      }
+      },
+      // Without a timeout getCurrentPosition can spin forever.
+      { timeout: 10000, maximumAge: 60000 }
     )
   }
 
@@ -204,31 +206,46 @@ export default function SubmitListingPage() {
   }
 
   // Escape PostgREST .or() special characters so a name containing , ( ) %
-  // cannot break the query or act as a wildcard.
+  // cannot break the query or act as a wildcard. _ and \ must be escaped
+  // too: _ is a LIKE wildcard and an unescaped \ breaks the escape itself.
   function escapePostgrestOr(value) {
-    return String(value).replace(/([,()%])/g, '\\$1')
+    const BS = String.fromCharCode(92)
+    return String(value ?? '')
+      .replaceAll(BS, BS + BS)
+      .replaceAll('%', BS + '%')
+      .replaceAll('_', BS + '_')
+      .replaceAll(',', BS + ',')
+      .replaceAll('(', BS + '(')
+      .replaceAll(')', BS + ')')
   }
 
   async function checkDuplicates() {
     const nameToCheck = form.name_mm || form.name;
-    const phoneToCheck = form.phones[0] || null;
-    const phoneCanon = phoneToCheck ? normalizePhone(phoneToCheck) : null;
+    // All entered phones, canonicalised (Myanmar digits → Latin,
+    // +95/0 prefix stripped) for comparison against every stored field.
+    const phoneCanons = form.phones
+      .map(p => (p ? normalizePhone(p) : null))
+      .filter(Boolean);
 
     if (!nameToCheck) return false;
 
     try {
-      // Fetch potential matches based on name OR phone
-      let query = supabase.from('listings').select('id, name, name_mm, phone_1, latitude, longitude');
+      // Fetch potential matches based on name OR any phone. The old check
+      // only compared phone_1 and capped candidates at 10, so a duplicate
+      // filed under phone_2–phone_5 (or past the cap) slipped through.
+      let query = supabase.from('listings').select('id, name, name_mm, phone_1, phone_2, phone_3, phone_4, phone_5, latitude, longitude');
 
       let conditions = [];
       if (nameToCheck) conditions.push(`name.ilike.%${escapePostgrestOr(nameToCheck)}%`, `name_mm.ilike.%${escapePostgrestOr(nameToCheck)}%`);
-      if (phoneToCheck) conditions.push(`phone_1.eq.${escapePostgrestOr(phoneToCheck)}`);
+      for (const rawPhone of form.phones.filter(Boolean)) {
+        for (let i = 1; i <= 5; i++) conditions.push(`phone_${i}.eq.${escapePostgrestOr(rawPhone)}`);
+      }
 
       if (conditions.length > 0) {
         query = query.or(conditions.join(','));
       }
 
-      const { data, error } = await query.limit(10);
+      const { data, error } = await query.limit(50);
       if (error) throw error
 
       if (data && data.length > 0) {
@@ -238,8 +255,12 @@ export default function SubmitListingPage() {
 
           const nameMatches = matchName === inputName || matchName.includes(inputName) || inputName.includes(matchName);
           // Compare canonical (digits-only, prefix-stripped) phones so
-          // ၀၉… / +95… / 09… spellings of the same number match.
-          const phoneMatches = phoneCanon && match.phone_1 && normalizePhone(match.phone_1) === phoneCanon;
+          // ၀၉… / +95… / 09… spellings of the same number match, across
+          // all five stored phone fields.
+          const matchCanons = [match.phone_1, match.phone_2, match.phone_3, match.phone_4, match.phone_5]
+            .map(p => (p ? normalizePhone(p) : null))
+            .filter(Boolean);
+          const phoneMatches = phoneCanons.some(pc => matchCanons.includes(pc));
 
           // Check distance if coords exist
           let distMatches = false;
@@ -269,7 +290,15 @@ export default function SubmitListingPage() {
 
   async function handleSubmit(e) {
     if (e) e.preventDefault()
-    if ((!form.name && !form.name_mm) || !form.category_id) return
+    if ((!form.name && !form.name_mm) || !form.category_id) {
+      // Was a silent return — the user saw nothing and the form just sat there.
+      showError(
+        !form.name && !form.name_mm
+          ? (lang === 'mm' ? 'လုပ်ငန်းအမည် (မြန်မာ သို့မဟုတ် English) ထည့်ပါ' : 'Please enter the business name')
+          : (lang === 'mm' ? 'အမျိုးအစား ရွေးပါ' : 'Please choose a category')
+      )
+      return
+    }
 
     // Pre-submit validation (honest Burmese errors; Myanmar-only names pass).
     const validation = validateListing({
@@ -292,14 +321,27 @@ export default function SubmitListingPage() {
     setDupError(null);
     setSubmitting(true)
     try {
+      // Normalize phones to Latin digits before saving, so stored numbers
+      // are always Latin — Myanmar-digit input (၀၉…) used to be stored
+      // verbatim and then broke tel:/WhatsApp links downstream.
       const phoneColumns = {}
-      form.phones.forEach((phone, idx) => { if (phone) phoneColumns['phone_' + (idx + 1)] = phone })
+      form.phones.forEach((phone, idx) => { if (phone) phoneColumns['phone_' + (idx + 1)] = toLatinDigits(phone) })
       const { phones, ...restData } = form
       const submittedBy = isLoggedIn && profile ? profile.id : null
 
+      // Client-generated id: the insert must not .select() the row back
+      // (guest SELECT on a pending listing is not guaranteed), but the
+      // menu_items rows below need the new listing id.
+      const newListingId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0')}`
+
       const { error } = await supabase.from('listings').insert({
+        id: newListingId,
         ...restData,
         ...phoneColumns,
+        viber: form.viber ? toLatinDigits(form.viber) : form.viber,
+        whatsapp: form.whatsapp ? toLatinDigits(form.whatsapp) : form.whatsapp,
         latitude: form.latitude ? parseFloat(form.latitude) : null,
         longitude: form.longitude ? parseFloat(form.longitude) : null,
         logo_url: logo,
@@ -312,10 +354,29 @@ export default function SubmitListingPage() {
         report_count: 0,
       })
       if (error) throw error
+      // Menu items were only written to the listings.menu_items JSONB,
+      // which nothing reads — ListingDetailPage and MenuPage read the
+      // menu_items table. Insert them there too (JSONB stays as backup).
+      if (menuItems.length > 0) {
+        const { error: menuErr } = await supabase.from('menu_items').insert(
+          menuItems.map((item, idx) => ({
+            listing_id: newListingId,
+            name: item.name,
+            description: item.description || null,
+            price: item.price ? parseFloat(item.price) : null,
+            image_url: item.images?.[0] || null,
+            sort_order: idx,
+          }))
+        )
+        if (menuErr) {
+          console.warn('Menu items insert failed (listing itself was saved):', menuErr)
+          showError(lang === 'mm' ? 'လုပ်ငန်းတင်ပြီးပါပြီ — မီနူးတချို့ တင်မရပါ' : 'Listing saved — some menu items failed to save')
+        }
+      }
       setDone(true)
     } catch (err) {
       console.error('Submit listing failed:', err)
-      showError(err.message)
+      showError(lang === 'mm' ? 'တင်မရပါ — အင်တာနက် စစ်ပြီး ထပ်ကြိုးစားပါ' : 'Could not submit — please check your connection and try again')
     } finally {
       setSubmitting(false)
     }
@@ -332,7 +393,10 @@ export default function SubmitListingPage() {
     </div>
   )
 
-  const canSubmit = !submitting && (form.name_mm || form.name) && form.category_id
+  // An in-flight logo/cover upload used to be ignored: the listing was
+  // inserted with logo_url null and the finishing upload set state on the
+  // success screen — the image was lost.
+  const canSubmit = !submitting && !logoUploading && !coverUploading && (form.name_mm || form.name) && form.category_id
 
   // Business type — clearer labels
   const BUSINESS_TYPES = [

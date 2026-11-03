@@ -1,18 +1,9 @@
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Star, Building2, Trophy, CalendarCheck, MessageCircle, ShieldCheck, Sparkles, Target } from 'lucide-react'
+import { ArrowLeft, Trophy, Sparkles, Target } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
-import { TIERS, getTier, getNextTier, getTierProgress } from '../lib/tiers'
-
-const ACTIONS = [
-  { icon: Star,          points: 5,  mm: 'Review ရေးသည်',       en: 'Write a review' },
-  { icon: Building2,     points: 10, mm: 'လုပ်ငန်း Submit',       en: 'Submit a listing' },
-  { icon: Trophy,        points: 20, mm: 'လုပ်ငန်း Approved',     en: 'Listing approved' },
-  { icon: CalendarCheck, points: 2,  mm: 'Event RSVP',           en: 'RSVP to event' },
-  { icon: MessageCircle, points: 1,  mm: 'Chat မက်ဆေ့ (max 10/day)', en: 'Chat message (max 10/day)' },
-  { icon: ShieldCheck,   points: 30, mm: 'Claim Approved',       en: 'Claim approved' },
-]
+import { TIERS, getTier, getNextTier, getTierProgress, POINT_ACTIONS } from '../lib/tiers'
 
 export default function PointsGuidePage() {
   const navigate = useNavigate()
@@ -80,7 +71,7 @@ export default function PointsGuidePage() {
           {lang === 'mm' ? 'Points ရယူနည်း' : 'How to Earn'}
         </h2>
         <div className="space-y-2">
-          {ACTIONS.map(({ icon: Icon, points, mm, en }, i) => (
+          {POINT_ACTIONS.map(({ icon: Icon, points, mm, en }, i) => (
             <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/4 border border-white/8">
               <div className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center flex-shrink-0">
                 <Icon size={15} className="text-brand-300" />

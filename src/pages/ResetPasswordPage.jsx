@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import { showSuccess, showError } from '../lib/toast'
 import { translateAuthError } from './LoginPage'
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate()
+  const { resetPasswordForEmail } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -17,11 +19,27 @@ export default function ResetPasswordPage() {
   // (#access_token=...&type=recovery) after the user clicks the email link.
   const [isRecovery, setIsRecovery] = useState(false)
 
+  // Recovery detection (H-24): do NOT rely on window.location.hash.
+  // supabase.js sets detectSessionInUrl: true, so the client may parse
+  // and consume the #access_token=...&type=recovery hash before this
+  // component mounts, leaving isRecovery false and the user stuck on the
+  // "send link" form. Instead derive recovery mode from the auth event
+  // the client fires when it processes a recovery session, plus a
+  // getSession() check (a session exists by the time a recovery link
+  // lands here). The hash read stays only as a belt-and-braces fallback
+  // for clients that have not consumed it yet.
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.slice(1))
     if (hash.get('type') === 'recovery' || hash.get('access_token')) {
       setIsRecovery(true)
     }
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session) setIsRecovery(true)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') setIsRecovery(true)
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   async function handleSendLink(e) {
@@ -29,16 +47,20 @@ export default function ResetPasswordPage() {
     setError('')
     setLoading(true)
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      })
-      if (error) throw error
+      // Single redirectTo source: AuthContext.resetPasswordForEmail (F-LOW-1).
+      await resetPasswordForEmail(email)
       setSent(true)
       showSuccess('စကားဝှက် ပြန်လည်သတ်မှတ်ရန် လင့်ခ် ပို့ပြီးပါပြီ — အီးမေးလ်ကို စစ်ဆေးပါ')
     } catch (err) {
       setError(translateAuthError(err))
     }
     setLoading(false)
+  }
+
+  function handleUseDifferentEmail() {
+    setSent(false)
+    setEmail('')
+    setError('')
   }
 
   async function handleSetPassword(e) {
@@ -116,11 +138,28 @@ export default function ResetPasswordPage() {
             </button>
           </form>
         ) : sent ? (
-          <div className="bg-green-500/15 border border-green-500/30 rounded-xl px-4 py-4 text-center">
-            <p className="text-sm text-green-300 font-myanmar">
-              လင့်ခ် ပို့ပြီးပါပြီ — <span className="font-semibold">{email}</span> ကို စစ်ဆေးပြီး လင့်ခ်ကို နှိပ်ပါ
-            </p>
-            <p className="text-xs text-white/40 font-myanmar mt-2">မေးလ် မရောက်ပါက Spam folder ကို စစ်ကြည့်ပါ</p>
+          <div className="space-y-3">
+            <div className="bg-green-500/15 border border-green-500/30 rounded-xl px-4 py-4 text-center">
+              <p className="text-sm text-green-300 font-myanmar">
+                လင့်ခ် ပို့ပြီးပါပြီ — <span className="font-semibold">{email}</span> ကို စစ်ဆေးပြီး လင့်ခ်ကို နှိပ်ပါ
+              </p>
+              <p className="text-xs text-white/40 font-myanmar mt-2">မေးလ် မရောက်ပါက Spam folder ကို စစ်ကြည့်ပါ</p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSendLink}
+              disabled={loading}
+              className="btn-ghost w-full text-sm"
+            >
+              {loading ? 'ပို့နေသည်...' : 'လင့်ခ် ထပ်ပို့မည်'}
+            </button>
+            <button
+              type="button"
+              onClick={handleUseDifferentEmail}
+              className="w-full text-center text-brand-300 text-xs font-myanmar hover:text-brand-200 transition-colors"
+            >
+              တခြား အီးမေးလ် သုံးမည်
+            </button>
           </div>
         ) : (
           <form onSubmit={handleSendLink} className="space-y-3">

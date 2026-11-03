@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
-import { showError } from '../lib/toast'
+import { showError, showSuccess } from '../lib/toast'
 
 export default function ClaimPage() {
   const { id } = useParams()
@@ -19,12 +19,31 @@ export default function ClaimPage() {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
+  // The user's latest claim for this listing (if any), loaded on mount so
+  // a rejected claim can show a "rejected — you may re-apply" state
+  // instead of a bare form (H-M10).
+  const [existingClaim, setExistingClaim] = useState(null)
+  const [showReapply, setShowReapply] = useState(false)
 
   // Profile loads async — sync the phone field when it arrives late,
   // otherwise the field would keep the stale '' from mount.
   useEffect(() => {
     if (profile?.phone) setPhone(profile.phone)
   }, [profile?.phone])
+
+  useEffect(() => {
+    if (!user) return
+    supabase
+      .from('listing_claims')
+      .select('id, status')
+      .eq('listing_id', id)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setExistingClaim(data) })
+      .catch(() => {})
+  }, [id, user?.id])
 
   // NOTE: the claim uses user.id, never profile.id — a slow/failed profile
   // fetch must not throw or leave the page stuck. Profile is only used to
@@ -75,7 +94,36 @@ export default function ClaimPage() {
         setSubmitting(false)
         return
       }
-      // status === 'rejected' → fall through and allow a fresh claim.
+      // status === 'rejected' → re-open the SAME row as pending instead
+      // of INSERTing a second row: listing_claims has a blanket
+      // unique(listing_id, user_id), so a fresh INSERT would fail with
+      // a duplicate-key error. (NOTE: listing_claims has no reviewed_at
+      // column — only reviewed_by is cleared. A claimant UPDATE policy
+      // is also required on the DB side; if the update is refused by
+      // RLS the friendly error below is shown.)
+      const now = new Date().toISOString()
+      const { error: updateError } = await supabase
+        .from('listing_claims')
+        .update({
+          status: 'pending',
+          reviewed_by: null,
+          contact_phone: phone,
+          note: note || null,
+          created_at: now,
+          updated_at: now,
+        })
+        .eq('id', existing.id)
+      if (updateError) {
+        console.error('Claim re-submit failed:', updateError)
+        setError('Claim ထပ်တင်မရပါ — ထပ်ကြိုးစားပါ')
+        showError(updateError.message || 'Claim ထပ်တင်မရပါ — ထပ်ကြိုးစားပါ')
+        setSubmitting(false)
+        return
+      }
+      showSuccess('✓ Claim ထပ်တင်ပြီးပါပြီ — Admin စစ်ဆေးပေးမည်')
+      setDone(true)
+      setSubmitting(false)
+      return
     }
 
     const { error: insertError } = await supabase.from('listing_claims').insert({
@@ -104,6 +152,41 @@ export default function ClaimPage() {
       <h2 className="font-display font-bold text-2xl text-white mb-2">{t('claim_sent')}</h2>
       <p className="text-white/50 font-myanmar mb-6">{t('claim_note')}</p>
       <button onClick={() => navigate(`/directory/${id}`)} className="btn-primary">ပြန်သွားမည်</button>
+    </div>
+  )
+
+  // Rejected earlier — show the outcome and let the user re-apply
+  // instead of a bare form (the Claim button just reappearing was how
+  // users walked straight into the duplicate-key error).
+  if (existingClaim?.status === 'rejected' && !showReapply && !done) return (
+    <div className="pb-8">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+          <ArrowLeft size={18} className="text-white" />
+        </button>
+        <h1 className="font-display font-bold text-lg text-white">{t('claim_title')}</h1>
+      </div>
+      <div className="px-4 space-y-5">
+        <div className="card-dark p-5 rounded-2xl space-y-3 border border-red-500/30">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center flex-shrink-0">
+              <ShieldCheck size={20} className="text-red-300" />
+            </div>
+            <div>
+              <h3 className="font-display font-semibold text-white text-sm">Claim ပယ်ချခံရသည်</h3>
+              <p className="text-xs text-white/50 mt-1 font-myanmar leading-relaxed">
+                Admin မှ ဤလုပ်ငန်း၏ Claim ကို ပယ်ချလိုက်ပါသည်။ အချက်အလက် မှန်ကန်ကြောင်း သေချာပြီးပါက ထပ်တင်နိုင်ပါသည်။
+              </p>
+            </div>
+          </div>
+          <button onClick={() => setShowReapply(true)} className="btn-primary w-full">
+            Claim ထပ်တင်မည်
+          </button>
+          <button onClick={() => navigate(`/directory/${id}`)} className="btn-ghost w-full">
+            ပြန်သွားမည်
+          </button>
+        </div>
+      </div>
     </div>
   )
 
@@ -151,6 +234,13 @@ export default function ClaimPage() {
             </div>
           ))}
         </div>
+
+        {/* Re-applying after a rejection — keep the context visible */}
+        {existingClaim?.status === 'rejected' && showReapply && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-300 font-myanmar">
+            ယခင် Claim ပယ်ချခံရဖူးသည် — အချက်အလက် စစ်ပြီး ထပ်တင်နေပါသည်
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">

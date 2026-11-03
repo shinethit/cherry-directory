@@ -122,7 +122,15 @@ export function useLang() {
 }
 
 export function LangProvider({ children }) {
-  const [lang, setLang] = useState(() => localStorage.getItem('cd_lang') || 'mm')
+  // Safe storage: localStorage can throw (private mode / disabled
+  // cookies) — fall back to 'mm' instead of crashing the app (H-2).
+  const [lang, setLang] = useState(() => {
+    try {
+      return localStorage.getItem('cd_lang') || 'mm'
+    } catch {
+      return 'mm'
+    }
+  })
 
   function toggleLang() {
     setLang(l => {

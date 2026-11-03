@@ -18,7 +18,7 @@ const listeners = new Set()
 function notify() {
   const snapshot = { ...state }
   listeners.forEach(fn => {
-    try { fn(snapshot) } catch {}
+    try { fn(snapshot) } catch (e) { console.warn('cacheStatus listener failed:', e) }
   })
 }
 
@@ -66,6 +66,8 @@ export function finishRun() {
 }
 
 export function failRun(err) {
+  // lastRunAt is kept even on failure (C-L2) so the UI can show the
+  // failure state (when it last tried) instead of "never ran".
   state = {
     ...state,
     running: false,
