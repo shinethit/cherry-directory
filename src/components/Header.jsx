@@ -45,7 +45,7 @@ export default function Header() {
   // The version is marked seen ONLY when the user dismisses the modal, never on a timer.
   // (A-F7: retry-every-launch until seen is deliberate — no change.)
   useEffect(() => {
-    const CURRENT_VERSION = '9.3';
+    const CURRENT_VERSION = '9.4';
     const lastSeen = safeGet('cherry_last_seen_version');
     if (lastSeen === CURRENT_VERSION) return;
     let timer;
@@ -68,7 +68,7 @@ export default function Header() {
 
   function closeChangelog() {
     setShowChangelog(false);
-    safeSet('cherry_last_seen_version', '9.3');
+    safeSet('cherry_last_seen_version', '9.4');
   }
 
   function handleBack() {
@@ -286,7 +286,7 @@ export default function Header() {
             </div>
 
             <p className="text-[9px] text-white/20 text-center py-4">
-              {config.app_name} v9.3 • {config.app_city}
+              {config.app_name} v9.4 • {config.app_city}
             </p>
           </div>
         </div>
@@ -299,7 +299,7 @@ export default function Header() {
             <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#140020] z-10">
               <div>
                 <h3 className="font-display font-bold text-white text-base">Change Log</h3>
-                <p className="text-[10px] text-white/40 font-myanmar">Version 9.3</p>
+                <p className="text-[10px] text-white/40 font-myanmar">Version 9.4</p>
               </div>
               <button onClick={closeChangelog} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white">
                 <X size={16} />
@@ -307,6 +307,7 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
+                { v: '9.4', date: '2026-11-03', items: ['Lost & Found စာမျက်နှာတွင် ပိုနေသော `}` ဖြုတ်ခြင်း', 'push script ဗားရှင်းစာသား ဟောင်းနေခြင်း ပြင်ဆင်ခြင်း'] },
                 { v: '9.3', date: '2026-11-03', items: ['"ပြင်ဆင်နေသည်..." ရပ်နေသော ပြဿနာ ပြင်ဆင်ခြင်း', 'Home/Directory ဒေတာ တင်တာ timeout + retry', 'Points အတု ပြင်ဆင်ခြင်း + Chat အမှတ် RPC', 'Report/Claim/Jobs/Fuel ပြင်ဆင်မှုများ', 'Version နံပါတ် ၂ လုံးတွဲ (9.3) သို့ ပြောင်းခြင်း'] },
                 { v: '9.2', date: '2026-11-03', items: ['Version History ကို အစအဆုံး ပြန်ရေးခြင်း (ဖေဖော်ဝါရီ ၁၆ ကစ)', 'ရက်စွဲ မှားနေတာများ ပြင်ခြင်း', 'အထောက်အထား မရှိသော ပြောဆိုချက်များ ဖြုတ်ခြင်း'] },
                 { v: '9.1', date: '2026-11-03', items: ['လုံခြုံရေး ပြင်ဆင်ခြင်း — ကိုယ့်ဘာသာ Admin ဖြစ်လို့မရတော့ပါ', 'Toast အသိပေးချက်များ ပေါ်လာခြင်း', 'ဧည့်သည် လုပ်ငန်းတင်နိုင်ခြင်း (Admin စစ်ပြီးမှ ပေါ်မည်)', 'အလုပ်အကိုင် / ဘတ်စ်ကား / ခရီးစဉ် / Chat / အိမ်ငှား / ကျူရှင် / မှတ်တမ်း ပြင်ဆင်ခြင်း', 'Admin Panel အကာအကွယ် + Claim စစ်ဆေးခြင်း', 'Google ဖြင့် ဝင်ရောက်ခြင်း + စကားဝှက် ပြန်ယူခြင်း', 'ဆီဆိုင် စာမျက်နှာ ပြန်ဖွင့်ခြင်း', 'Directory "ထပ်တင်ရန်" ပြင်ဆင်ခြင်း'] },

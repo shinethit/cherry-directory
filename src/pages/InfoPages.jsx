@@ -72,7 +72,7 @@ export function AboutPage() {
         </div>
         <h2 className="font-display font-bold text-xl text-white">Cherry Directory</h2>
         <p className="text-sm text-brand-300">{config.app_city || "တောင်ကြီးမြို့"}</p>
-        <p className="text-white/50 text-xs">Version 9.3 • Since 2026</p>
+        <p className="text-white/50 text-xs">Version 9.4 • Since 2026</p>
         <p className="text-white/30 text-xs italic">by Shine Thit</p>
       </div>
 

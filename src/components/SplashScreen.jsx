@@ -44,7 +44,7 @@ export default function SplashScreen({ onConsent }) {
             တိုက်ရိုက်တင်ပြသော ပလက်ဖောင်းဖြစ်ပါသည်။
           </p>
           <p className="text-xs text-white/40">
-            Version 9.3 • Since 2026 • by Shine Thit
+            Version 9.4 • Since 2026 • by Shine Thit
           </p>
         </div>
 

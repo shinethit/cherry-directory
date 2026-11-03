@@ -401,7 +401,6 @@ export default function LostFoundPage() {
             </>
           )
         }
-        }
       </div>
 
       {showForm && (
