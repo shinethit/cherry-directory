@@ -296,9 +296,9 @@ export default function HomePage() {
     return () => clearTimeout(timer)
   }, [consentGiven, loadCommunityStats]);
 
-  // v9.12: visitor aggregates for the Hero card — once on mount, idle-time
+  // v9.12: visitor aggregates for the Hero strip — once on mount, idle-time
   // so it never competes with the main load. Fail-safe: any error leaves
-  // visitStats null and the card shows "—".
+  // visitStats null and the strip shows "—".
   useEffect(() => {
     let alive = true
     const load = async () => {
@@ -384,7 +384,7 @@ export default function HomePage() {
   const cityName = config?.app_city || 'တောင်ကြီးမြို့';
   const appName = config?.app_name || 'Cherry Directory';
 
-  // v9.12: visitor aggregates for the Hero card (derived once per render).
+  // v9.12: visitor aggregates for the Hero strip (derived once per render).
   const visitPct = devicePercentages(visitStats?.by_device, visitStats?.total ?? 0);
   const visitPeak = formatPeakHour(visitStats?.by_hour);
   const visitTopCountry = visitStats?.by_country?.[0] || null;
@@ -493,6 +493,18 @@ export default function HomePage() {
 
           </div>
 
+          {/* Visitor strip — v9.13: the 9.12 standalone card moved INSIDE the
+              Hero (same background, no separate box). Real aggregates only;
+              "—" when the migration has not run yet or the RPC fails. */}
+          <p className="mt-3 pt-2.5 border-t border-white/10 text-[11px] leading-relaxed text-white/60 font-myanmar">
+            👀 {lang === 'mm' ? 'ဒီနေ့' : 'Today'} {visitStatsLoading ? '…' : visitStats === null ? '—' : Number(visitStats.today).toLocaleString()}
+            {' · '}{lang === 'mm' ? 'စုစုပေါင်း' : 'Total'} {visitStatsLoading ? '…' : visitStats === null ? '—' : Number(visitStats.total).toLocaleString()}
+            {' · '}📱 {visitStatsLoading ? '…' : visitStats === null ? '—' : visitPct.phone + '%'}
+            {visitTopCountry && (<>{' · '}🌍 {visitTopCountry.name || visitTopCountry.code} {visitTopCountryPct}%</>)}
+            {visitPeak && (<>{' · '}{lang === 'mm' ? 'အကြည့်များဆုံး' : 'Peak'} {visitPeak}</>)}
+            {' · '}<Link to="/visitors" className="font-display font-bold text-brand-300 hover:text-brand-200">{lang === 'mm' ? 'အသေးစိတ် →' : 'Details →'}</Link>
+          </p>
+
         </div>
       </div>
 
@@ -529,40 +541,6 @@ export default function HomePage() {
           <Link to="/help" className="inline-flex items-center gap-1 text-sm font-display font-bold text-brand-300 hover:text-brand-200">
             {lang === 'mm' ? 'အပြည့်အစုံ ဖတ်ရန် → သုံးစွဲနည်း' : 'Read the full guide → How to Use'} <ChevronRight size={14} />
           </Link>
-        </div>
-      </div>
-
-      {/* Visitor summary — v9.12: real aggregates only (RPC). "—" when the
-          migration has not run yet or the RPC fails; never a fake 0. */}
-      <div className="px-4">
-        <div className="card-dark rounded-2xl p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="font-display font-bold text-base text-white">👀 {lang === 'mm' ? 'လာကြည့်သူများ' : 'Visitors'}</h2>
-            <Link to="/visitors" className="inline-flex items-center gap-1 text-sm font-display font-bold text-brand-300 hover:text-brand-200">
-              {lang === 'mm' ? 'အသေးစိတ် →' : 'Details →'} <ChevronRight size={14} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-center">
-              <p className="font-display font-bold text-lg text-white leading-none">{visitStatsLoading ? '…' : visitStats === null ? '—' : Number(visitStats.total).toLocaleString()}</p>
-              <p className="text-[10px] text-white/50 font-myanmar mt-1">{lang === 'mm' ? 'စုစုပေါင်း လာကြည့်သူ' : 'Total visits'}</p>
-            </div>
-            <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-center">
-              <p className="font-display font-bold text-lg text-white leading-none">{visitStatsLoading ? '…' : visitStats === null ? '—' : Number(visitStats.today).toLocaleString()}</p>
-              <p className="text-[10px] text-white/50 font-myanmar mt-1">{lang === 'mm' ? 'ဒီနေ့' : 'Today'}</p>
-            </div>
-          </div>
-          {visitStats !== null && (
-            <div className="space-y-1.5 text-xs text-white/60 font-myanmar">
-              <p>📱 {visitPct.phone}% · 💻 {visitPct.desktop}%{visitPct.tablet > 0 ? ` · 📟 ${visitPct.tablet}%` : ''}</p>
-              {visitTopCountry && (
-                <p>🌍 {visitTopCountry.name || visitTopCountry.code} {visitTopCountryPct}%</p>
-              )}
-              {visitPeak && (
-                <p>🕐 {lang === 'mm' ? 'အကြည့်များဆုံးအချိန်: ' : 'Peak time: '}{visitPeak}</p>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
