@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Search, CalendarDays, RefreshCw, Home, User, Briefcase, GraduationCap, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PostCard, ListingCard, SectionHeader } from '../components/UI';
@@ -455,6 +455,42 @@ export default function HomePage() {
 
           </div>
 
+        </div>
+      </div>
+
+      {/* How-to-use guide — v9.10: prominent on Home, right under the Hero. Guest vs Account at a glance; full guide at /help. */}
+      <div className="px-4">
+        <div className="card-dark rounded-2xl p-4 space-y-3">
+          <div>
+            <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? '🍒 Cherry Directory ဆိုတာဘာလဲ' : '🍒 What is Cherry Directory?'}</h2>
+            <p className="text-xs text-white/60 font-myanmar leading-relaxed mt-1">တောင်ကြီးမြို့ရဲ့ လုပ်ငန်း၊ သတင်း၊ ဈေးနှုန်း၊ အသိုင်းအဝိုင်း လမ်းညွှန် — အခမဲ့။</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="rounded-xl bg-white/5 border border-white/10 p-3 space-y-1.5">
+              <p className="text-sm font-display font-bold text-white">👤 {lang === 'mm' ? 'ဧည့်သည် — Login မလိုဘူး' : 'Guest — no login needed'}</p>
+              <ul className="space-y-1">
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>လုပ်ငန်းရှာဖွေ + ဖုန်းဆက်</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>ဈေးနှုန်း ကြည့်/တင်</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>လုပ်ငန်းတင် (Admin စစ်ပြီးမှ ပေါ်)</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>Chat (နာမည်ပေးပြီး ပြော)</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>ဆီဆိုင် လမ်းညွှန်</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>သတင်း/ပွဲ ကြည့်</li>
+              </ul>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-3 space-y-1.5">
+              <p className="text-sm font-display font-bold text-white">🔑 {lang === 'mm' ? 'Account ရှိရင် — အပေါ်ကအကုန် +' : 'With an account — all of the above +'}</p>
+              <ul className="space-y-1">
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>Review ရေး + အဆင့်သတ်မှတ်</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>သိမ်းဆည်း (Saved)</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>အမှတ် + Leaderboard</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>Event RSVP</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>Push Notification</li>
+              </ul>
+            </div>
+          </div>
+          <Link to="/help" className="inline-flex items-center gap-1 text-sm font-display font-bold text-brand-300 hover:text-brand-200">
+            {lang === 'mm' ? 'အပြည့်အစုံ ဖတ်ရန် → သုံးစွဲနည်း' : 'Read the full guide → How to Use'} <ChevronRight size={14} />
+          </Link>
         </div>
       </div>
 
