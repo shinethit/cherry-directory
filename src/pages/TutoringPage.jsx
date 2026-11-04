@@ -75,7 +75,7 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
   const handleContact = () => {
     if (!isLoggedIn) return
     if (post.phone) {
-      window.location.href = toTelHref(post.phone)
+      window.location.href = toTelHref(post.phone, isLoggedIn)
     } else if (post.user_id) {
       navigate(`/profile/${post.user_id}`)
     }
@@ -87,7 +87,7 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
         <div className="rounded-xl overflow-hidden">
           <img
             src={post.images[0]}
-            alt=""
+            alt={post.title_mm || post.title}
             loading="lazy"
             onError={e => { e.currentTarget.style.display = 'none' }}
             className="w-full h-36 object-cover"
@@ -104,14 +104,14 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
             <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-white/50">
               {postType.icon} {lang === 'mm' ? postType.mm : postType.en}
             </span>
-            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/5 text-white/40">
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/5 text-white/60">
               {grade.icon} {lang === 'mm' ? grade.mm : grade.en}
             </span>
             {post.is_urgent && <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/25 text-red-400">⚡ {lang === 'mm' ? 'အရေးကြီး' : 'Urgent'}</span>}
           </div>
           <h3 className="font-display font-semibold text-sm text-white">{post.title_mm || post.title}</h3>
           {post.location_mm && (
-            <div className="flex items-center gap-1 mt-1 text-white/40">
+            <div className="flex items-center gap-1 mt-1 text-white/60">
               <span className="text-[10px] font-myanmar">📍 {post.location_mm}</span>
             </div>
           )}
@@ -121,12 +121,12 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
                 <span className="text-gold-400 font-mono">{Number(post.price_hourly).toLocaleString()} Ks/နာရီ</span>
               )}
               {post.price_monthly && (
-                <span className="text-white/40 font-mono">{Number(post.price_monthly).toLocaleString()} Ks/လ</span>
+                <span className="text-white/60 font-mono">{Number(post.price_monthly).toLocaleString()} Ks/လ</span>
               )}
             </div>
           )}
           {post.availability_schedule && (
-            <div className="flex items-center gap-1 mt-1 text-white/30 text-[10px]">
+            <div className="flex items-center gap-1 mt-1 text-white/60 text-[10px]">
               <Clock size={9} /> {post.availability_schedule}
             </div>
           )}
@@ -141,7 +141,7 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
               {post.images?.length > 1 && (
                 <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
                   {post.images.slice(1).map((img, i) => (
-                    <img key={i} src={img} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10 flex-shrink-0" />
+                    <img key={i} src={img} alt={post.title_mm || post.title || 'ပုံ'} loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10 flex-shrink-0" />
                   ))}
                 </div>
               )}
@@ -158,19 +158,19 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
         <div className="flex gap-2 items-center flex-wrap">
           {post.phone && (
             isLoggedIn ? (
-              <button onClick={handleContact} className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300">
-                <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{post.phone}
+              <button onClick={handleContact} className="flex items-center gap-1.5 min-h-11 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">
+                <Phone size={14} /> {lang === 'mm' ? 'ဖုန်းခေါ်မည်' : 'Call'} {post.contact_name ? `${post.contact_name} · ` : ''}{post.phone}
               </button>
             ) : (
-              <span className="flex items-center gap-1 text-[10px] text-green-400/70">
-                <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.phone, false)}
-              </span>
+              <button onClick={() => navigate('/login')} className="flex items-center gap-1.5 min-h-11 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">
+                <Phone size={14} /> {maskPhone(post.phone, false)} · {lang === 'mm' ? 'ဖုန်းခေါ်ရန် Login ဝင်ပါ' : 'Login to call'}
+              </button>
             )
           )}
           {!post.phone && post.contact_name && (
-            <span className="text-[10px] text-white/40 font-myanmar">{post.contact_name}</span>
+            <span className="text-[10px] text-white/60 font-myanmar">{post.contact_name}</span>
           )}
-          <span className="text-[9px] text-white/30">{timeAgo(post.created_at, lang)}</span>
+          <span className="text-[9px] text-white/60">{timeAgo(post.created_at, lang)}</span>
           <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-brand-300 hover:text-brand-200">
             {expanded ? (lang === 'mm' ? '▲ ချုံ့မည်' : '▲ Less') : (lang === 'mm' ? '▼ အသေးစိတ်' : '▼ Details')}
           </button>
@@ -188,8 +188,8 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
                 </button>
               </>
             )}
-            <button onClick={() => onDelete(post.id)} className="w-6 h-6 rounded-lg bg-red-500/10 flex items-center justify-center">
-              <Trash2 size={11} className="text-red-400" />
+            <button onClick={() => onDelete(post.id)} className="w-6 h-6 rounded-lg btn-danger flex items-center justify-center">
+              <Trash2 size={11} className="text-white" />
             </button>
           </div>
         )}
@@ -236,7 +236,7 @@ function TutoringForm({ onClose, onSuccess, lang, editPost }) {
 
   if (!isLoggedIn) return (
     <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 pt-safe">
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
+      <div className="w-full max-w-lg bg-[#1a0030] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
         <p className="text-white font-myanmar mb-4">တင်ရန် Login လိုအပ်သည်</p>
         <button onClick={() => navigate('/login')} className="btn-primary w-full">Login ဝင်မည်</button>
         <button onClick={onClose} className="btn-ghost w-full mt-2">Cancel</button>
@@ -329,7 +329,7 @@ function TutoringForm({ onClose, onSuccess, lang, editPost }) {
           </div>
         </div>
 
-        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: သင်္ချာစာသင်မည်" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: သင်္ချာစာသင်မည်" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဖော်ပြချက်' : 'Description'}</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" placeholder="သင်ကြားမည့်ပုံစံ၊ အတွေ့အကြုံ၊ သင်ခန်းစာ..." /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'နေရာ' : 'Location'}</label><input value={form.location_mm} onChange={e => set('location_mm', e.target.value)} className="input-dark font-myanmar" placeholder="အွန်လိုင်း / မြို့နယ်..." /></div>
         
@@ -350,8 +350,8 @@ function TutoringForm({ onClose, onSuccess, lang, editPost }) {
           <div className="flex gap-2 flex-wrap">
             {images.map((url, i) => (
               <div key={i} className="relative w-16 h-16">
-                <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
-                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px]">✕</button>
+                <img src={url} alt={form.title_mm || 'ပုံ'} className="w-full h-full object-cover rounded-xl border border-white/10" />
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 btn-danger rounded-full text-white text-[10px]">✕</button>
               </div>
             ))}
             {images.length < 5 && <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />}
@@ -378,7 +378,7 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 pt-safe" onClick={onClose}>
-      <div className="bg-[#140020] rounded-2xl p-5 w-64 border border-white/10" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1a0030] rounded-2xl p-5 w-64 border border-white/10" onClick={e => e.stopPropagation()}>
         <p className="text-white text-sm font-display font-bold mb-3">Status ပြောင်းမည်</p>
         <div className="space-y-2">
           {Object.entries(STATUSES).map(([key, val]) => (
@@ -450,7 +450,7 @@ export default function TutoringPage() {
   }, [subjectFilter, gradeFilter, postTypeFilter, statusFilter, page])
 
   async function deletePost(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('tutoring').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -461,7 +461,7 @@ export default function TutoringPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">📚 {lang === 'mm' ? 'ဆရာ/ကျောင်းသား ချိတ်ဆက်ရေး' : 'Tutoring'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'ဆရာရှာ၊ ကျောင်းသားရှာ' : 'Find tutors & students'}</p>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? 'ဆရာရှာ၊ ကျောင်းသားရှာ' : 'Find tutors & students'}</p>
         </div>
         <button onClick={() => { setEditTarget(null); setShowForm(true) }} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5"><Plus size={14} /> {lang === 'mm' ? 'တင်မည်' : 'Post'}</button>
       </div>
@@ -470,24 +470,24 @@ export default function TutoringPage() {
       <div className="px-4 space-y-2 mb-4">
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
-            <select value={subjectFilter} onChange={e => { setSubjectFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+            <select value={subjectFilter} onChange={e => { setSubjectFilter(e.target.value); setPage(0) }} className="select-dark">
               {SUBJECTS.map(s => <option key={s.id} value={s.id}>{s.icon} {lang === 'mm' ? s.mm : s.en}</option>)}
             </select>
           </div>
           <div className="relative">
-            <select value={gradeFilter} onChange={e => { setGradeFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+            <select value={gradeFilter} onChange={e => { setGradeFilter(e.target.value); setPage(0) }} className="select-dark">
               {GRADE_LEVELS.map(g => <option key={g.id} value={g.id}>{g.icon} {lang === 'mm' ? g.mm : g.en}</option>)}
             </select>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
-            <select value={postTypeFilter} onChange={e => { setPostTypeFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+            <select value={postTypeFilter} onChange={e => { setPostTypeFilter(e.target.value); setPage(0) }} className="select-dark">
               {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>)}
             </select>
           </div>
           <div className="relative">
-            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+            <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} className="select-dark">
               <option value="all">📋 {lang === 'mm' ? 'အားလုံး' : 'All Status'}</option>
               {Object.entries(STATUSES).map(([key, val]) => (
                 <option key={key} value={key}>{val.icon} {lang === 'mm' ? val.mm : val.en}</option>
@@ -508,7 +508,7 @@ export default function TutoringPage() {
          posts.length === 0 ? (
            <div className="flex flex-col items-center py-14 text-center">
              <span className="text-4xl mb-3">📚</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'စာရင်း မရှိသေး' : 'No listings yet'}</p>
+             <p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'စာရင်း မရှိသေး' : 'No listings yet'}</p>
            </div>
          ) :
          posts.map(p => (

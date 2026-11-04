@@ -25,7 +25,10 @@ export function ConfirmProvider({ children }) {
         message: opts.message || '',
         confirmText: opts.confirmText || 'အတည်ပြု',
         cancelText: opts.cancelText || 'မလုပ်တော့ပါ',
-        destructive: opts.destructive !== false,
+        // H9: red confirm ONLY for destructive confirms. `danger` is the
+        // new opt-in flag (default false); `destructive` is kept as an
+        // alias. Callers that delete must pass { danger: true }.
+        danger: opts.danger === true || opts.destructive === true,
       })
     })
   }, [])
@@ -34,6 +37,14 @@ export function ConfirmProvider({ children }) {
     globalOpen = open
     return () => { globalOpen = null }
   }, [open])
+
+  // H10: close with Esc, same as Cancel.
+  useEffect(() => {
+    if (!state) return
+    const onKeyDown = (e) => { if (e.key === 'Escape') close(false) }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [state])
 
   const close = (result) => {
     setState(null)
@@ -52,12 +63,12 @@ export function ConfirmProvider({ children }) {
           onClick={() => close(false)}
         >
           <div
-            className="w-full max-w-sm bg-[#140020] border border-white/10 rounded-3xl overflow-hidden shadow-2xl shadow-black/50"
+            className="w-full max-w-sm bg-[#1a0030] border border-white/10 rounded-3xl overflow-hidden shadow-2xl shadow-black/50"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex items-start gap-3 p-5 pb-4">
               <div className={'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ' + (
-                state.destructive
+                state.danger
                   ? 'bg-red-500/15 text-red-400'
                   : 'bg-brand-600/20 text-brand-300'
               )}>
@@ -91,9 +102,9 @@ export function ConfirmProvider({ children }) {
               <button
                 onClick={() => close(true)}
                 className={'flex-1 py-2.5 rounded-xl text-sm font-display font-semibold transition-colors font-myanmar ' + (
-                  state.destructive
-                    ? 'bg-red-600 text-white hover:bg-red-500'
-                    : 'bg-brand-600 text-white hover:bg-brand-500'
+                  state.danger
+                    ? 'btn-danger'
+                    : 'btn-primary'
                 )}
               >
                 {state.confirmText}

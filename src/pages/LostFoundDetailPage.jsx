@@ -68,7 +68,7 @@ export default function LostFoundDetailPage() {
   }, [id])
 
   async function handleDelete() {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('lost_found').delete().eq('id', id)
     if (error) showError(error.message)
     else navigate('/lost-found')
@@ -111,11 +111,11 @@ export default function LostFoundDetailPage() {
   // Claiming only reveals the poster's contact to a logged-in user.
   function handleClaim() {
     if (!isLoggedIn) {
-      showError(lang === 'mm' ? 'Claim လုပ်ရန် Login ဝင်ပါ' : 'Please log in to claim')
+      showError(lang === 'mm' ? 'ပိုင်ဆိုင်ကြောင်း တောင်းဆိုရန် Login ဝင်ပါ' : 'Please log in to claim')
       return
     }
     setClaimed(true)
-    showSuccess(lang === 'mm' ? 'Claim မှတ်တမ်းတင်ပြီးပါပြီ — ဆက်သွယ်ရန် အချက်အလက်ကို အောက်မှာ ပြသထားသည်' : 'Claim noted — contact details are shown below')
+    showSuccess(lang === 'mm' ? 'ပိုင်ဆိုင်ကြောင်း တောင်းဆိုချက် မှတ်တမ်းတင်ပြီးပါပြီ — ဆက်သွယ်ရန် အချက်အလက်ကို အောက်မှာ ပြသထားသည်' : 'Claim noted — contact details are shown below')
   }
 
   async function handleReport() {
@@ -145,7 +145,14 @@ export default function LostFoundDetailPage() {
       <button onClick={loadPost} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button>
     </div>
   )
-  if (!post) return <div className="p-4 text-center text-white/40">မတွေ့ပါ</div>
+  if (!post) return (
+    <div className="p-4 text-center space-y-4">
+      <p className="text-white/60">မတွေ့ပါ</p>
+      <button onClick={() => navigate('/lost-found')} className="btn-primary text-sm px-4 py-3 min-h-[44px]">
+        ← {lang === 'mm' ? 'Lost & Found သို့ ပြန်သွားမည်' : 'Back to Lost & Found'}
+      </button>
+    </div>
+  )
 
   const isLost = post.type === 'lost'
   const cover = post.images?.[0] ? getOptimizedUrl(post.images[0], { width: 500 }) : null
@@ -184,6 +191,7 @@ export default function LostFoundDetailPage() {
             </div>
           </div>
           <input type="text" value={editForm.title_mm || ''} onChange={e => setEditForm({...editForm, title_mm: e.target.value})} className="input-dark" placeholder="ခေါင်းစဉ်" />
+          <input type="text" value={editForm.title || ''} onChange={e => setEditForm({...editForm, title: e.target.value})} className="input-dark" placeholder="Title (English)" />
           <textarea value={editForm.description_mm || ''} onChange={e => setEditForm({...editForm, description_mm: e.target.value})} className="input-dark resize-none h-32" placeholder="ဖော်ပြချက်" />
           <input type="text" value={editForm.location_mm || ''} onChange={e => setEditForm({...editForm, location_mm: e.target.value})} className="input-dark" placeholder="နေရာ" />
           <input type="text" value={editForm.contact_name || ''} onChange={e => setEditForm({...editForm, contact_name: e.target.value})} className="input-dark" placeholder="ဆက်သွယ်ရမည့်သူ" />
@@ -208,7 +216,7 @@ export default function LostFoundDetailPage() {
             <button onClick={() => setEditing(true)} className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
               <Pencil size={14} />
             </button>
-            <button onClick={handleDelete} className="w-8 h-8 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center">
+            <button onClick={handleDelete} className="w-8 h-8 rounded-lg btn-danger flex items-center justify-center">
               <Trash2 size={14} />
             </button>
           </div>
@@ -217,7 +225,7 @@ export default function LostFoundDetailPage() {
 
       {cover && (
         <div className="mx-4 rounded-2xl overflow-hidden h-56 mb-4 cursor-pointer" onClick={() => openLightbox(0)}>
-          <img src={cover} alt="" className="w-full h-full object-cover hover:scale-105 transition" />
+          <img src={cover} alt={post.title_mm || post.title} className="w-full h-full object-cover hover:scale-105 transition" />
         </div>
       )}
 
@@ -238,7 +246,7 @@ export default function LostFoundDetailPage() {
         )}
 
         {post.location_mm && (
-          <div className="flex items-center gap-2 text-white/40">
+          <div className="flex items-center gap-2 text-white/60">
             <MapPin size={14} />
             <span className="text-sm font-myanmar">{post.location_mm}</span>
           </div>
@@ -255,20 +263,20 @@ export default function LostFoundDetailPage() {
           <>
             {post.contact_phone && (
               isLoggedIn ? (
-                <a href={toTelHref(post.contact_phone)} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
+                <a href={toTelHref(post.contact_phone, isLoggedIn)} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/20 border border-green-500/30 text-green-400 font-semibold text-sm hover:bg-green-600/30 transition-colors">
                   <Phone size={16} /> {post.contact_name ? `${post.contact_name} · ` : ''}{post.contact_phone}
                 </a>
               ) : (
-                <span className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/10 border border-green-500/20 text-green-400/80 font-semibold text-sm">
-                  <Phone size={16} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.contact_phone, false)}
-                </span>
+                <button onClick={() => navigate('/login')} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600/10 border border-green-500/20 text-green-400/80 font-semibold text-sm hover:bg-green-600/20 transition-colors w-full">
+                  <Phone size={16} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.contact_phone, false)} · {lang === 'mm' ? 'Login ဝင်မှ ဖုန်းခေါ်နိုင်မည်' : 'Login to call'}
+                </button>
               )
             )}
             {!post.contact_phone && post.contact_name && (
               <p className="text-sm text-white/50 font-myanmar">ဆက်သွယ်ရမည့်သူ: {post.contact_name}</p>
             )}
             {!isLoggedIn && post.contact_phone && (
-              <p className="text-[10px] text-white/30 text-center font-myanmar">ဖုန်းအပြည့်အစုံ မြင်ရန် Login ဝင်ပါ</p>
+              <p className="text-[10px] text-white/60 text-center font-myanmar">ဖုန်းအပြည့်အစုံ မြင်ရန် Login ဝင်ပါ</p>
             )}
           </>
         ) : (
@@ -276,12 +284,12 @@ export default function LostFoundDetailPage() {
             <button onClick={handleClaim} className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-brand-600/30 border border-brand-400/40 text-brand-200 font-semibold text-sm hover:bg-brand-600/40 transition-colors">
               🙋 {lang === 'mm' ? 'ဒါ ကျွန်တော့်ပစ္စည်းပါ' : 'This is mine'}
             </button>
-            <p className="text-[10px] text-white/30 text-center font-myanmar">Claim လုပ်ပြီးမှ ပိုင်ရှင်နှင့် ဆက်သွယ်နိုင်မည် (Login လိုအပ်သည်)</p>
+            <p className="text-[10px] text-white/60 text-center font-myanmar">ပိုင်ဆိုင်ကြောင်း တောင်းဆိုပြီးမှ ပိုင်ရှင်နှင့် ဆက်သွယ်နိုင်မည် (Login လိုအပ်သည်)</p>
           </div>
         )}
 
         {claimed && post.type === 'found' && (
-          <p className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl p-3 font-myanmar">✓ Claim မှတ်တမ်းတင်ပြီးပါပြီ — အထက်ပါ ဖုန်းဖြင့် ပိုင်ရှင်ကို ဆက်သွယ်ပါ</p>
+          <p className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl p-3 font-myanmar">✓ ပိုင်ဆိုင်ကြောင်း တောင်းဆိုချက် မှတ်တမ်းတင်ပြီးပါပြီ — အထက်ပါ ဖုန်းဖြင့် ပိုင်ရှင်ကို ဆက်သွယ်ပါ</p>
         )}
 
         {post.status === 'resolved' && (
@@ -299,7 +307,7 @@ export default function LostFoundDetailPage() {
 
         {/* Report */}
         {!reporting ? (
-          <button onClick={() => setReporting(true)} className="w-full py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white/40 hover:text-red-400 hover:border-red-500/30 transition-colors">
+          <button onClick={() => setReporting(true)} className="w-full py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white/60 hover:text-red-400 hover:border-red-500/30 transition-colors">
             🚩 {lang === 'mm' ? 'Report လုပ်မည်' : 'Report this post'}
           </button>
         ) : (
@@ -309,10 +317,10 @@ export default function LostFoundDetailPage() {
               value={reportReason}
               onChange={e => setReportReason(e.target.value)}
               placeholder={lang === 'mm' ? 'Report လုပ်ရသည့် အကြောင်းရင်း...' : 'Reason for reporting...'}
-              className="input-dark text-sm font-myanmar"
+              className="input-dark font-myanmar"
             />
             <div className="flex gap-2">
-              <button onClick={handleReport} disabled={!reportReason.trim()} className="flex-1 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-bold disabled:opacity-40">
+              <button onClick={handleReport} disabled={!reportReason.trim()} className="flex-1 py-2 rounded-xl btn-danger text-xs font-bold disabled:opacity-40">
                 {lang === 'mm' ? 'Report တင်မည်' : 'Submit report'}
               </button>
               <button onClick={() => { setReporting(false); setReportReason('') }} className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs">
@@ -327,7 +335,7 @@ export default function LostFoundDetailPage() {
           <div className="grid grid-cols-3 gap-2">
             {post.images.slice(1).map((img, idx) => (
               <div key={idx} className="aspect-square rounded-lg overflow-hidden cursor-pointer" onClick={() => openLightbox(idx + 1)}>
-                <img src={getOptimizedUrl(img, { width: 200 })} alt="" className="w-full h-full object-cover" />
+                <img src={getOptimizedUrl(img, { width: 200 })} alt={post.title_mm || post.title || 'ပုံ'} className="w-full h-full object-cover" />
               </div>
             ))}
           </div>

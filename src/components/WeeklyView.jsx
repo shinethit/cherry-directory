@@ -75,7 +75,7 @@ export default function WeeklyView({ events = [], selected, setSelected, lang = 
                   {day.getDate()} {lang === 'mm' ? MY_MONTHS[day.getMonth()] : EN_MONTHS_S[day.getMonth()]}
                 </span>
                 {isToday && (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400">Today</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-green-500/20 text-green-400">ယနေ့</span>
                 )}
               </div>
               {dayEvents.length > 0 && (
@@ -85,7 +85,7 @@ export default function WeeklyView({ events = [], selected, setSelected, lang = 
               )}
             </div>
             {dayEvents.length === 0 ? (
-              <p className="text-[10px] text-white/25 font-myanmar">
+              <p className="text-[10px] text-white/60 font-myanmar">
                 {lang === 'mm' ? 'Event မရှိ' : 'No events'}
               </p>
             ) : (
@@ -98,7 +98,7 @@ export default function WeeklyView({ events = [], selected, setSelected, lang = 
                         {lang === 'mm' ? (ev.title_mm || ev.title) : ev.title}
                       </p>
                       {ev.event_start && (
-                        <p className="text-[9px] text-white/40 font-mono truncate">
+                        <p className="text-[9px] text-white/60 font-mono truncate">
                           {formatTime(ev.event_start, lang)}
                           {ev.event_location && ' · ' + ev.event_location}
                         </p>

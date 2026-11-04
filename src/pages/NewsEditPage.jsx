@@ -5,19 +5,21 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
+import { goBackOrHome } from '../lib/navigation'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { uploadImage } from '../lib/cloudinary'
-import { ImageUploader } from '../components/UI'
+import { ImageUploader, Skeleton } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError, showSuccess } from '../lib/toast'
 
-function Field({ label, children, required }) {
+function Field({ label, children, required, error }) {
   return (
     <div>
       <label className="block text-xs text-white/50 mb-1.5">
         {label} {required && <span className="text-brand-400">*</span>}
       </label>
       {children}
+      {error && <p className="text-xs text-red-400 mt-1 font-myanmar">{error}</p>}
     </div>
   )
 }
@@ -44,6 +46,7 @@ export default function NewsEditPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [canEdit, setCanEdit] = useState(false)
+  const [checked, setChecked] = useState(false)
 
   useEffect(() => {
     supabase
@@ -57,7 +60,8 @@ export default function NewsEditPage() {
         if (!data) { navigate('/news'); return }
         const allowed = isAdmin || isModerator || data.author_id === user?.id
         setCanEdit(allowed)
-        if (!allowed) { navigate('/news'); return }
+        setChecked(true)
+        if (!allowed) return
         setOriginal(data)
         setForm({
           title:       data.title || '',
@@ -77,7 +81,7 @@ export default function NewsEditPage() {
       if (!isLoggedIn) { showError('အကောင့်ဝင်မှ သတင်းထည့်နိုင်မည်'); navigate('/login'); return }
       const allowed = isAdmin || isModerator
       setCanEdit(allowed)
-      if (!allowed) navigate('/news')
+      setChecked(true)
     }
   }, [id, user, isAdmin, isModerator, navigate])
 
@@ -133,7 +137,7 @@ export default function NewsEditPage() {
   }
 
   async function handleDelete() {
-    if (!(await confirmDialog((lang === 'mm' ? 'ဤသတင်းကို ဖျက်မည်လား?' : 'Delete this post?')))) return
+    if (!(await confirmDialog((lang === 'mm' ? 'ဤသတင်းကို ဖျက်မည်လား?' : 'Delete this post?'), { danger: true }))) return
     const { error } = await supabase.from('posts').delete().eq('id', id)
     if (error) { showError(error.message); return }
     log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
@@ -141,14 +145,29 @@ export default function NewsEditPage() {
     navigate('/news')
   }
 
-  if (!canEdit) return null
+  if (!checked) return (
+    <div className="p-4 space-y-3">
+      <Skeleton className="h-12" />
+      <Skeleton className="h-40" />
+      <Skeleton className="h-24" />
+    </div>
+  )
+
+  if (!canEdit) return (
+    <div className="p-4 py-16 text-center space-y-3">
+      <p className="text-4xl">🔒</p>
+      <p className="font-display font-semibold text-white/70">{lang === 'mm' ? 'ပြင်ခွင့် မရှိပါ' : 'No permission to edit'}</p>
+      <p className="text-xs text-white/60 font-myanmar">{lang === 'mm' ? 'ဤသတင်းကို ပြင်ရန် Admin / Moderator (သို့မဟုတ်) ရေးသားသူ သာ ခွင့်ရှိသည်' : 'Only an admin, moderator or the author can edit this post'}</p>
+      <button onClick={() => navigate('/news')} className="btn-primary text-sm px-5 py-2.5">{lang === 'mm' ? 'သတင်းစာမျက်နှာသို့ ပြန်မည်' : 'Back to News'}</button>
+    </div>
+  )
 
   return (
     <div className="pb-10">
       {/* Sticky header */}
       <div className="flex items-center justify-between px-4 py-3 glass sticky top-[var(--header-h)] z-40 border-b border-white/8">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+          <button onClick={() => goBackOrHome(navigate, '/news')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
             <ArrowLeft size={18} className="text-white" />
           </button>
           <div>
@@ -157,13 +176,13 @@ export default function NewsEditPage() {
                 ? (lang === 'mm' ? 'သတင်း ပြင်မည်' : 'Edit News')
                 : (lang === 'mm' ? 'သတင်း ထည့်မည်' : 'Add News')}
             </h1>
-            <p className="text-[10px] text-white/40 font-myanmar">Admin / Moderator only</p>
+            <p className="text-[10px] text-white/60 font-myanmar">Admin / Moderator only</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {isEdit && (
-            <button onClick={handleDelete} className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center hover:bg-red-500/25 transition-colors">
-              <Trash2 size={16} className="text-red-400" />
+            <button onClick={handleDelete} className="w-9 h-9 rounded-xl btn-danger flex items-center justify-center transition-colors">
+              <Trash2 size={16} className="text-white" />
             </button>
           )}
           <button
@@ -198,12 +217,12 @@ export default function NewsEditPage() {
           )}
         </div>
 
-        <Field label="ခေါင်းစဉ် (English)">
-          <input type="text" value={form.title} onChange={e => set('title', e.target.value)} className="input-dark" placeholder="Title" />
+        <Field label="ခေါင်းစဉ် (English)" required>
+          <input type="text" value={form.title} onChange={e => set('title', e.target.value)} className={'input-dark' + ((!form.title && !form.title_mm) ? ' border-red-500/60' : '')} placeholder="Title" />
         </Field>
 
-        <Field label="ခေါင်းစဉ် (မြန်မာ)">
-          <input type="text" value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="သတင်း ခေါင်းစဉ်..." />
+        <Field label="ခေါင်းစဉ် (မြန်မာ)" required error={(!form.title && !form.title_mm) ? 'ခေါင်းစဉ် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ' : ''}>
+          <input type="text" value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className={'input-dark font-myanmar' + ((!form.title && !form.title_mm) ? ' border-red-500/60' : '')} placeholder="သတင်း ခေါင်းစဉ်..." />
         </Field>
 
         <Field label="အကျဉ်းချုပ် (Excerpt)">
@@ -236,7 +255,7 @@ export default function NewsEditPage() {
 
         {/* Category + Settings */}
         <div className="border-t border-white/8 pt-4 space-y-3">
-          <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">Settings</p>
+          <p className="text-xs text-white/60 font-display font-semibold uppercase tracking-wider">Settings</p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Category">
               <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark">

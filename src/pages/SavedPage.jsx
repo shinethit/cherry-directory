@@ -15,7 +15,7 @@ export default function SavedPage() {
   const [params, setParams] = useSearchParams()
   const { user, isLoggedIn } = useAuth()
   const { lang } = useLang()
-  useSEO({ title: lang === 'mm' ? 'သိမ်းထားသောများ' : 'Saved Items' })
+  useSEO({ title: lang === 'mm' ? 'သိမ်းထားသော' : 'Saved' })
 
   const rawTab = params.get('tab') || 'businesses'
   // Unknown ?tab= values match no branch and rendered a blank page —
@@ -70,7 +70,7 @@ export default function SavedPage() {
       setPosts(pData || [])
     } catch (err) {
       console.warn('Bookmarks load error:', err)
-      setBookmarksError(err?.message || 'Saved များ ရယူမရပါ')
+      setBookmarksError(err?.message || 'သိမ်းထားသောများ ရယူမရပါ')
       setListings([]); setPosts([])
     }
     setLoadingBookmarks(false)
@@ -106,7 +106,7 @@ export default function SavedPage() {
   }
 
   async function handleDeletePlace(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const prev = places
     setPlaces(prev => prev.filter(p => p.id !== id))
     const { error } = await supabase.from('saved_places').delete().eq('id', id)
@@ -160,9 +160,9 @@ export default function SavedPage() {
           </button>
           <div>
             <h1 className="font-display font-bold text-xl text-white">
-              🔖 {lang === 'mm' ? 'သိမ်းထားသောများ' : 'Saved'}
+              🔖 {lang === 'mm' ? 'သိမ်းထားသော' : 'Saved'}
             </h1>
-            <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
+            <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
               {lang === 'mm' ? `${totalCount} ခု သိမ်းထားသည်` : `${totalCount} items saved`}
             </p>
           </div>
@@ -178,12 +178,12 @@ export default function SavedPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 px-4 mb-4">
+      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
         {TABS.map(({ id, label, icon: Icon, count }) => (
           <button
             key={id}
             onClick={() => switchTab(id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-colors ${
+            className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-colors ${
               tab === id
                 ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
                 : 'bg-white/5 text-white/50 border border-white/10'
@@ -234,9 +234,9 @@ export default function SavedPage() {
           <div className="flex flex-col items-center py-12 text-center px-8">
             <span className="text-4xl mb-3">⚠️</span>
             <p className="font-display font-semibold text-white/70">
-              {lang === 'mm' ? 'Saved များ ရယူမရပါ' : 'Could not load saved items'}
+              {lang === 'mm' ? 'သိမ်းထားသောများ ရယူမရပါ' : 'Could not load saved items'}
             </p>
-            <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{bookmarksError}</p>
+            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">{bookmarksError}</p>
             <button onClick={loadBookmarks} className="btn-primary text-sm mt-4 px-5 py-2">
               {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
             </button>
@@ -244,12 +244,12 @@ export default function SavedPage() {
         )}
         {tab === 'businesses' && !bookmarksError && (
           loadingBookmarks ? (
-            <p className="text-white/40 text-sm text-center py-12">Loading...</p>
+            [1, 2, 3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
           ) : listings.length === 0 ? (
             <EmptyState
               icon="🔖"
-              title={lang === 'mm' ? 'Saved လုပ်ငန်း မရှိသေး' : 'No saved businesses'}
-              message={lang === 'mm' ? 'Directory မှ လုပ်ငန်းတွေကို Bookmark လုပ်ပါ' : 'Bookmark businesses from the directory'}
+              title={lang === 'mm' ? 'သိမ်းထားသော လုပ်ငန်း မရှိသေး' : 'No saved businesses'}
+              message={lang === 'mm' ? 'Directory မှ လုပ်ငန်းတွေကို သိမ်းထားပါ' : 'Bookmark businesses from the directory'}
             />
           ) : (
             listings.map(l => <ListingCard key={l.id} listing={l} />)
@@ -258,12 +258,12 @@ export default function SavedPage() {
 
         {tab === 'news' && !bookmarksError && (
           loadingBookmarks ? (
-            <p className="text-white/40 text-sm text-center py-12">Loading...</p>
+            [1, 2, 3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
           ) : posts.length === 0 ? (
             <EmptyState
               icon="📰"
-              title={lang === 'mm' ? 'Saved သတင်း မရှိသေး' : 'No saved news'}
-              message={lang === 'mm' ? 'News မှ သတင်းများကို Bookmark လုပ်ပါ' : 'Bookmark news articles'}
+              title={lang === 'mm' ? 'သိမ်းထားသော သတင်း မရှိသေး' : 'No saved news'}
+              message={lang === 'mm' ? 'News မှ သတင်းများကို သိမ်းထားပါ' : 'Bookmark news articles'}
             />
           ) : (
             posts.map(p => <PostCard key={p.id} post={p} />)
@@ -277,7 +277,7 @@ export default function SavedPage() {
               <p className="font-display font-semibold text-white/70">
                 {lang === 'mm' ? 'နေရာများ ရယူမရပါ' : 'Could not load saved places'}
               </p>
-              <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{placesError}</p>
+              <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">{placesError}</p>
               <button onClick={loadPlaces} className="btn-primary text-sm mt-4 px-5 py-2">
                 {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
               </button>
@@ -287,16 +287,16 @@ export default function SavedPage() {
           ) : places.length === 0 ? (
             <div className="flex flex-col items-center py-16 text-center">
               <span className="text-5xl mb-4">📍</span>
-              <p className="font-display font-semibold text-white/40">
+              <p className="font-display font-semibold text-white/60">
                 {lang === 'mm' ? 'သိမ်းထားတာ မရှိသေး' : 'No saved places yet'}
               </p>
-              <p className="text-xs text-white/25 mt-1 font-myanmar max-w-xs">
+              <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">
                 {lang === 'mm' ? 'သွားချင်တဲ့ နေရာ၊ မှတ်ထားချင်တဲ့ နေရာတွေကို သိမ်းထားပါ' : 'Save locations you want to remember'}
               </p>
             </div>
           ) : filteredPlaces.length === 0 ? (
             <div className="flex flex-col items-center py-16 text-center">
-              <p className="text-white/40 font-myanmar">
+              <p className="text-white/60 font-myanmar">
                 {lang === 'mm' ? 'ဤ Category တွင် မရှိပါ' : 'No places in this category'}
               </p>
             </div>

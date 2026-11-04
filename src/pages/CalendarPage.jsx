@@ -168,7 +168,7 @@ function EventCard({ event, compact = false }) {
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
           {isToday && (
             <span className="absolute top-2 left-2 bg-green-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
-              Today
+              ယနေ့
             </span>
           )}
           {isPast && (
@@ -223,7 +223,7 @@ function EventCard({ event, compact = false }) {
               )}
             </div>
             {event.event_start && (
-              <div className="flex items-center gap-1 mt-1 text-white/40">
+              <div className="flex items-center gap-1 mt-1 text-white/60">
                 <Clock size={10} />
                 <span className="text-[10px]">
                   {formatTime(event.event_start, lang)}
@@ -232,7 +232,7 @@ function EventCard({ event, compact = false }) {
               </div>
             )}
             {event.event_location && (
-              <div className="flex items-center gap-1 mt-0.5 text-white/40">
+              <div className="flex items-center gap-1 mt-0.5 text-white/60">
                 <MapPin size={10} />
                 <span className="text-[10px] truncate font-myanmar">{event.event_location}</span>
               </div>
@@ -344,6 +344,13 @@ export default function CalendarPage() {
     else setViewMonth(m => m + 1)
   }
 
+  function goToday() {
+    const now = new Date()
+    setViewYear(now.getFullYear())
+    setViewMonth(now.getMonth())
+    setSelected(now)
+  }
+
   // Events on a given day — multi-day events appear on EVERY day in
   // [event_start, event_end], not just the start day.
   function eventsOnDay(date) {
@@ -370,7 +377,7 @@ export default function CalendarPage() {
           <h1 className="font-display font-bold text-xl text-white">
             {lang === 'mm' ? 'ဖြစ်ရပ် Calendar' : 'Event Calendar'}
           </h1>
-          <p className="text-xs text-white/40 mt-0.5">
+          <p className="text-xs text-white/60 mt-0.5">
             {lang === 'mm' ? `${config.app_city || ''} ဖြစ်ရပ်များ` : 'Events'}
           </p>
         </div>
@@ -398,9 +405,15 @@ export default function CalendarPage() {
             onClick={() => setViewMode('week')}
             className={'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ' + (viewMode === 'week' ? 'bg-brand-600/60 text-brand-200' : 'text-white/50')}
           >
-            <List size={12} /> {lang === 'mm' ? 'ရက်' : 'Week'}
+            <List size={12} /> {lang === 'mm' ? 'ပတ်' : 'Week'}
           </button>
         </div>
+        <button
+          onClick={goToday}
+          className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-xs font-semibold text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+        >
+          {lang === 'mm' ? 'ယနေ့' : 'Today'}
+        </button>
       </div>
 
       {/* ── Category filter ── */}
@@ -438,7 +451,7 @@ export default function CalendarPage() {
             <p className="font-display font-bold text-base text-white">
               {MONTHS[viewMonth]}
             </p>
-            <p className="text-[10px] text-white/40 font-mono">{viewYear}</p>
+            <p className="text-[10px] text-white/60 font-mono">{viewYear}</p>
           </div>
           <button
             onClick={nextMonth}
@@ -451,7 +464,7 @@ export default function CalendarPage() {
         {/* Day labels */}
         <div className="grid grid-cols-7 border-b border-white/6">
           {DAYS.map(d => (
-            <div key={d} className="py-2 text-center text-[10px] font-display font-bold text-white/30">
+            <div key={d} className="py-2 text-center text-[10px] font-display font-bold text-white/60">
               {d}
             </div>
           ))}
@@ -481,7 +494,7 @@ export default function CalendarPage() {
                 }`}
               >
                 <span className={`text-xs font-display font-semibold leading-none ${
-                  isSelected ? 'text-white' : isToday ? 'text-gold-400' : hasDots ? 'text-white' : 'text-white/40'
+                  isSelected ? 'text-white' : isToday ? 'text-gold-400' : hasDots ? 'text-white' : 'text-white/60'
                 }`}>
                   {date.getDate()}
                 </span>
@@ -506,7 +519,7 @@ export default function CalendarPage() {
 
         {/* Loading state */}
         {loading && (
-          <div className="py-3 text-center text-xs text-white/30">
+          <div className="py-3 text-center text-xs text-white/60">
             {lang === 'mm' ? 'တင်နေသည်...' : 'Loading...'}
           </div>
         )}
@@ -532,7 +545,7 @@ export default function CalendarPage() {
                 : formatDateEnLong(selected.toISOString())}
             </p>
             {selectedEvents.length === 0 && (
-              <p className="text-xs text-white/30 mt-0.5 font-myanmar">
+              <p className="text-xs text-white/60 mt-0.5 font-myanmar">
                 {lang === 'mm' ? 'ဤရက်တွင် Event မရှိပါ' : 'No events on this day'}
               </p>
             )}
@@ -557,7 +570,7 @@ export default function CalendarPage() {
               <p className="font-display font-bold text-sm text-white">
                 {lang === 'mm' ? 'လာမည့် ဖြစ်ရပ်များ' : 'Upcoming Events'}
               </p>
-              <p className="text-[10px] text-white/30 mt-0.5">
+              <p className="text-[10px] text-white/60 mt-0.5">
                 {lang === 'mm' ? 'နောက်ထပ် ဖြစ်ရပ်များ' : 'Next scheduled events'}
               </p>
             </div>
@@ -583,7 +596,7 @@ export default function CalendarPage() {
           <p className="font-display font-semibold text-white/50">
             {lang === 'mm' ? 'Event မရှိသေးပါ' : 'No events yet'}
           </p>
-          <p className="text-xs text-white/30 mt-1 font-myanmar">
+          <p className="text-xs text-white/60 mt-1 font-myanmar">
             {lang === 'mm' ? 'ဤလတွင် Event မရှိပါ' : 'No events scheduled for this month'}
           </p>
         </div>

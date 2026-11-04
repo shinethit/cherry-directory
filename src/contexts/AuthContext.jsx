@@ -202,6 +202,7 @@ export function AuthProvider({ children }) {
   const isSuperAdmin = profile?.role === 'super_admin'
   const isAdmin = profile?.role === 'admin' || isSuperAdmin
   const isModerator = profile?.role === 'moderator' || isAdmin
+  const canManageDonations = isAdmin || (profile?.role === 'moderator' && profile?.can_manage_donations === true)
   const isLoggedIn = !!user
 
   return (
@@ -214,6 +215,7 @@ export function AuthProvider({ children }) {
       isSuperAdmin,
       isAdmin, 
       isModerator, 
+      canManageDonations,
       isLoggedIn, 
       signUp, 
       signIn, 

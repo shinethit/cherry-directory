@@ -83,7 +83,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
             <label className="block text-xs text-white/50 mb-1.5">
               {lang === 'mm' ? 'Category အမည် (မြန်မာ)' : 'Name (Myanmar)'} *
             </label>
-            <input autoFocus value={form.name_mm} onChange={e => set('name_mm', e.target.value)}
+            <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)}
               className="input-dark font-myanmar" placeholder="ဥပမာ: စားသောက်ဆိုင်" />
           </div>
           <div>
@@ -131,7 +131,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
           <div>
             <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဖော်ပြချက် (optional)' : 'Description (optional)'}</label>
             <input value={form.description_mm} onChange={e => set('description_mm', e.target.value)}
-              className="input-dark font-myanmar text-sm" placeholder={lang === 'mm' ? 'အကျဉ်းဖော်ပြချက်...' : 'Short description...'} />
+              className="input-dark font-myanmar" placeholder={lang === 'mm' ? 'အကျဉ်းဖော်ပြချက်...' : 'Short description...'} />
           </div>
 
           {/* Sort order + active */}
@@ -145,12 +145,12 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
               <label className="block text-xs text-white/50 mb-1.5">Status</label>
               <div className="flex gap-2">
                 <button onClick={() => set('is_active', !form.is_active)}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${form.is_active ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-white/5 border-white/10 text-white/40'}`}>
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${form.is_active ? 'bg-green-500/20 border-green-500/30 text-green-400' : 'bg-white/5 border-white/10 text-white/60'}`}>
                   {form.is_active ? (lang === 'mm' ? '✓ Active' : '✓ Active') : (lang === 'mm' ? '○ Hidden' : '○ Hidden')}
                 </button>
                 {!form.parent_id && !parentId && (
                   <button onClick={() => set('is_featured', !form.is_featured)}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${form.is_featured ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' : 'bg-white/5 border-white/10 text-white/40'}`}>
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${form.is_featured ? 'bg-amber-500/20 border-amber-500/30 text-amber-400' : 'bg-white/5 border-white/10 text-white/60'}`}>
                     {form.is_featured ? '⭐ Home မှာပြ' : '☆ Home မပြ'}
                   </button>
                 )}
@@ -172,8 +172,12 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
 }
 
 // ── Category Row (မပြောင်း) ───────────────────────────────────
-function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, onToggle }) {
+function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, onToggle, forceOpen }) {
   const [open, setOpen] = useState(false)
+  // Which sub-categories have their children (sub-sub-categories)
+  // expanded — keyed by sub id (G12).
+  const [openSubs, setOpenSubs] = useState({})
+  const toggleSub = (id) => setOpenSubs(o => ({ ...o, [id]: !o[id] }))
   const subsOfSub = (id) => (allCats || []).filter(c => c.parent_id === id)
 
   return (
@@ -185,79 +189,173 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
             {lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}
           </p>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[9px] text-white/30 bg-white/6 px-1.5 py-0.5 rounded-full">{cat.type}</span>
+            <span className="text-[9px] text-white/60 bg-white/6 px-1.5 py-0.5 rounded-full">{cat.type}</span>
             {subcats.length > 0 && (
               <span className="text-[9px] text-brand-300">{subcats.length} sub</span>
             )}
-            {!cat.is_active && <span className="text-[9px] text-white/30">hidden</span>}
+            {!cat.is_active && <span className="text-[9px] text-white/60">hidden</span>}
             {cat.is_featured && <span className="text-[9px] text-amber-400">⭐ home</span>}
           </div>
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {subcats.length > 0 && (
             <button onClick={() => setOpen(o => !o)}
-              className="w-7 h-7 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors">
-              {open ? <ChevronDown size={13} className="text-white/50" /> : <ChevronRight size={13} className="text-white/50" />}
+              className="w-9 h-9 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors">
+              {open ? <ChevronDown size={15} className="text-white/50" /> : <ChevronRight size={15} className="text-white/50" />}
             </button>
           )}
           <button onClick={() => onAddSub(cat)}
-            className="w-7 h-7 rounded-lg bg-brand-600/20 flex items-center justify-center hover:bg-brand-600/35 transition-colors"
+            className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center hover:bg-brand-600/35 transition-colors"
             title="Add sub-category">
-            <Plus size={12} className="text-brand-300" />
+            <Plus size={14} className="text-brand-300" />
           </button>
           <button onClick={() => onToggle(cat)}
-            className="w-7 h-7 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors"
+            className="w-9 h-9 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors"
             title={cat.is_active ? 'Hide' : 'Show'}>
-            {cat.is_active ? <Eye size={12} className="text-white/50" /> : <EyeOff size={12} className="text-white/30" />}
+            {cat.is_active ? <Eye size={14} className="text-white/50" /> : <EyeOff size={14} className="text-white/30" />}
           </button>
           <button onClick={() => onEdit(cat)}
-            className="w-7 h-7 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors">
-            <Pencil size={11} className="text-white/50" />
+            className="w-9 h-9 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors">
+            <Pencil size={13} className="text-white/50" />
           </button>
           <button onClick={() => onDelete(cat)}
-            className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 transition-colors">
-            <Trash2 size={11} className="text-red-400" />
+            className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center transition-colors">
+            <Trash2 size={13} className="text-white" />
           </button>
         </div>
       </div>
 
-      {open && subcats.length > 0 && (
+      {(open || forceOpen) && subcats.length > 0 && (
         <div className="border-t border-white/6 bg-white/2">
-          {subcats.map(sub => (
-            <div key={sub.id} className={`flex items-center gap-3 px-4 py-2.5 border-b border-white/4 last:border-0 ${!sub.is_active ? 'opacity-50' : ''}`}>
-              <span className="w-3 text-white/20 text-xs">↳</span>
-              <span className="text-base">{sub.icon}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-display font-semibold text-white/80">
-                  {lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}
-                </p>
-                <div className="flex items-center gap-1">
-                  {!sub.is_active && <span className="text-[9px] text-white/25">hidden</span>}
-                  {subsOfSub(sub.id).length > 0 && <span className="text-[9px] text-brand-300/70">{subsOfSub(sub.id).length} sub</span>}
+          {subcats.map(sub => {
+            const grandkids = subsOfSub(sub.id)
+            return (
+              <div key={sub.id} className="border-b border-white/4 last:border-0">
+                <div className={`flex items-center gap-3 px-4 py-2.5 ${!sub.is_active ? 'opacity-50' : ''}`}>
+                  <span className="w-3 text-white/60 text-xs">↳</span>
+                  <span className="text-base">{sub.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-display font-semibold text-white/80">
+                      {lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}
+                    </p>
+                    <div className="flex items-center gap-1">
+                      {!sub.is_active && <span className="text-[9px] text-white/60">hidden</span>}
+                      {grandkids.length > 0 && <span className="text-[9px] text-brand-300/70">{grandkids.length} sub</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {grandkids.length > 0 && (
+                      <button onClick={() => toggleSub(sub.id)}
+                        className="w-9 h-9 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors">
+                        {openSubs[sub.id] ? <ChevronDown size={14} className="text-white/50" /> : <ChevronRight size={14} className="text-white/50" />}
+                      </button>
+                    )}
+                    <button onClick={() => onAddSub(sub)}
+                      className="w-9 h-9 rounded-lg bg-brand-600/15 flex items-center justify-center hover:bg-brand-600/30 transition-colors"
+                      title="Add sub-sub-category">
+                      <Plus size={13} className="text-brand-300" />
+                    </button>
+                    <button onClick={() => onToggle(sub)}
+                      className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+                      {sub.is_active ? <Eye size={13} className="text-white/40" /> : <EyeOff size={13} className="text-white/25" />}
+                    </button>
+                    <button onClick={() => onEdit(sub)}
+                      className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+                      <Pencil size={12} className="text-white/40" />
+                    </button>
+                    <button onClick={() => onDelete(sub)}
+                      className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center transition-colors">
+                      <Trash2 size={12} className="text-white" />
+                    </button>
+                  </div>
                 </div>
+
+                {/* Sub-sub-categories (level 3), indented (G12) — auto-expanded while searching (G9) */}
+                {(openSubs[sub.id] || forceOpen) && grandkids.length > 0 && (
+                  <div className="border-t border-white/4 bg-white/1">
+                    {grandkids.map(gk => {
+                      const greatGrandkids = subsOfSub(gk.id)
+                      return (
+                        <div key={gk.id} className="border-b border-white/4 last:border-0">
+                          <div className={`flex items-center gap-3 pl-10 pr-4 py-2.5 ${!gk.is_active ? 'opacity-50' : ''}`}>
+                            <span className="w-3 text-white/60 text-xs">↳</span>
+                            <span className="text-sm">{gk.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-display font-semibold text-white/70">
+                                {lang === 'mm' ? (gk.name_mm || gk.name) : gk.name}
+                              </p>
+                              <div className="flex items-center gap-1">
+                                {!gk.is_active && <span className="text-[9px] text-white/60">hidden</span>}
+                                {greatGrandkids.length > 0 && <span className="text-[9px] text-brand-300/70">{greatGrandkids.length} sub</span>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {greatGrandkids.length > 0 && (
+                                <button onClick={() => toggleSub(gk.id)}
+                                  className="w-8 h-8 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors">
+                                  {openSubs[gk.id] ? <ChevronDown size={13} className="text-white/50" /> : <ChevronRight size={13} className="text-white/50" />}
+                                </button>
+                              )}
+                              <button onClick={() => onAddSub(gk)}
+                                className="w-8 h-8 rounded-lg bg-brand-600/15 flex items-center justify-center hover:bg-brand-600/30 transition-colors"
+                                title="Add sub-category">
+                                <Plus size={12} className="text-brand-300" />
+                              </button>
+                              <button onClick={() => onToggle(gk)}
+                                className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+                                {gk.is_active ? <Eye size={12} className="text-white/40" /> : <EyeOff size={12} className="text-white/25" />}
+                              </button>
+                              <button onClick={() => onEdit(gk)}
+                                className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+                                <Pencil size={11} className="text-white/40" />
+                              </button>
+                              <button onClick={() => onDelete(gk)}
+                                className="w-8 h-8 rounded-lg btn-danger flex items-center justify-center transition-colors">
+                                <Trash2 size={11} className="text-white" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Level 4 — shown when its parent is expanded */}
+                          {(openSubs[gk.id] || forceOpen) && greatGrandkids.length > 0 && (
+                            <div className="border-t border-white/4 bg-white/1">
+                              {greatGrandkids.map(ggk => (
+                                <div key={ggk.id} className={`flex items-center gap-3 pl-16 pr-4 py-2.5 border-b border-white/4 last:border-0 ${!ggk.is_active ? 'opacity-50' : ''}`}>
+                                  <span className="w-3 text-white/60 text-xs">↳</span>
+                                  <span className="text-sm">{ggk.icon}</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-display font-semibold text-white/70">
+                                      {lang === 'mm' ? (ggk.name_mm || ggk.name) : ggk.name}
+                                    </p>
+                                    {!ggk.is_active && <span className="text-[9px] text-white/60">hidden</span>}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button onClick={() => onToggle(ggk)}
+                                      className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+                                      {ggk.is_active ? <Eye size={12} className="text-white/40" /> : <EyeOff size={12} className="text-white/25" />}
+                                    </button>
+                                    <button onClick={() => onEdit(ggk)}
+                                      className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
+                                      <Pencil size={11} className="text-white/40" />
+                                    </button>
+                                    <button onClick={() => onDelete(ggk)}
+                                      className="w-8 h-8 rounded-lg btn-danger flex items-center justify-center transition-colors">
+                                      <Trash2 size={11} className="text-white" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-1">
-                <button onClick={() => onAddSub(sub)}
-                  className="w-6 h-6 rounded-lg bg-brand-600/15 flex items-center justify-center hover:bg-brand-600/30 transition-colors"
-                  title="Add sub-sub-category">
-                  <Plus size={10} className="text-brand-300" />
-                </button>
-                <button onClick={() => onToggle(sub)}
-                  className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
-                  {sub.is_active ? <Eye size={10} className="text-white/40" /> : <EyeOff size={10} className="text-white/25" />}
-                </button>
-                <button onClick={() => onEdit(sub)}
-                  className="w-6 h-6 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
-                  <Pencil size={9} className="text-white/40" />
-                </button>
-                <button onClick={() => onDelete(sub)}
-                  className="w-6 h-6 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 transition-colors">
-                  <Trash2 size={9} className="text-red-400/70" />
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -297,8 +395,17 @@ export default function CategoryManagerPage() {
   useEffect(() => { load() }, [load])
 
   const topLevel = cats.filter(c => !c.parent_id && c.type === typeFilter)
+  // Search matches top-level names AND sub-category names (G9) — a
+  // hit on a sub-category keeps its parent in the results, and the
+  // parent row auto-expands while searching (forceOpen below).
   const searchedTop = search
-    ? topLevel.filter(c => (c.name_mm || '').includes(search) || (c.name || '').toLowerCase().includes(search.toLowerCase()))
+    ? topLevel.filter(c => {
+        const q = search.toLowerCase()
+        const match = (x) => (x.name_mm || '').includes(search) || (x.name || '').toLowerCase().includes(q)
+        // Match descendants at any depth (sub / sub-sub / ...).
+        const matchTree = (id) => subsOf(id).some(s => match(s) || matchTree(s.id))
+        return match(c) || matchTree(c.id)
+      })
     : topLevel
 
   // NOTE: was `async` before — it returns a plain array now. As an
@@ -354,7 +461,7 @@ export default function CategoryManagerPage() {
     const msg = descendants.length > 0
       ? (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်ရင် Sub-category ${descendants.length} ခုလည်း ဖျက်မည်။ ဆက်မည်လား?` : `Deleting "${cat.name}" will also delete ${descendants.length} sub-categories. Continue?`)
       : (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်မည်လား?` : `Delete "${cat.name}"?`)
-    if (!(await confirmDialog(msg))) return
+    if (!(await confirmDialog(msg, { danger: true }))) return
     // Descendants are collected parent-before-child, so reversed
     // order deletes deepest first, then the parent itself.
     for (const child of [...descendants].reverse()) {
@@ -386,6 +493,8 @@ export default function CategoryManagerPage() {
 
   const totalActive  = cats.filter(c => c.is_active && c.type === typeFilter).length
   const totalHidden  = cats.filter(c => !c.is_active && c.type === typeFilter).length
+  // Header count (G19) — all categories of the current type filter.
+  const typeTotal = cats.filter(c => c.type === typeFilter).length
 
   // Auth guard: this page was protected only indirectly by the route
   // guard and its embedding in AdminPage — one routing mistake would
@@ -416,8 +525,8 @@ export default function CategoryManagerPage() {
             <h1 className="font-display font-bold text-xl text-white">
               📂 {lang === 'mm' ? 'Category စီမံမည်' : 'Category Manager'}
             </h1>
-            <p className="text-xs text-white/40 mt-0.5 font-myanmar">
-              {lang === 'mm' ? 'Admin/Mod — Category နှင့် Sub-category စီမံ' : 'Manage categories & sub-categories'}
+            <p className="text-xs text-white/60 mt-0.5 font-myanmar">
+              {lang === 'mm' ? `Admin/Mod — Category နှင့် Sub-category စီမံ • ${typeTotal} ခု` : `Manage categories & sub-categories • ${typeTotal} total`}
             </p>
           </div>
           <button
@@ -432,15 +541,15 @@ export default function CategoryManagerPage() {
       <div className="flex gap-2 px-4 mb-4">
         <div className="flex-1 card-dark rounded-2xl p-3 text-center">
           <p className="font-display font-bold text-lg text-white">{totalActive}</p>
-          <p className="text-[9px] text-white/40">{lang === 'mm' ? 'Active' : 'Active'}</p>
+          <p className="text-[9px] text-white/60">{lang === 'mm' ? 'Active' : 'Active'}</p>
         </div>
         <div className="flex-1 card-dark rounded-2xl p-3 text-center">
           <p className="font-display font-bold text-lg text-white/50">{totalHidden}</p>
-          <p className="text-[9px] text-white/30">{lang === 'mm' ? 'Hidden' : 'Hidden'}</p>
+          <p className="text-[9px] text-white/60">{lang === 'mm' ? 'Hidden' : 'Hidden'}</p>
         </div>
         <div className="flex-1 card-dark rounded-2xl p-3 text-center">
           <p className="font-display font-bold text-lg text-brand-300">{cats.filter(c => c.parent_id && c.type === typeFilter).length}</p>
-          <p className="text-[9px] text-white/40">Sub-cats</p>
+          <p className="text-[9px] text-white/60">Sub-cats</p>
         </div>
       </div>
 
@@ -456,7 +565,7 @@ export default function CategoryManagerPage() {
               <option key={t.v} value={t.v} style={{ backgroundColor: '#1a0030' }}>{t.mm}</option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
@@ -465,7 +574,7 @@ export default function CategoryManagerPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder={lang === 'mm' ? 'Category ရှာရန်...' : 'Search categories...'}
-          className="input-dark text-sm font-myanmar w-full"
+          className="input-dark font-myanmar w-full"
         />
       </div>
 
@@ -475,7 +584,7 @@ export default function CategoryManagerPage() {
         ) : searchedTop.length === 0 ? (
           <div className="flex flex-col items-center py-12 text-center">
             <span className="text-4xl mb-3">📂</span>
-            <p className="text-white/40 font-display font-semibold">
+            <p className="text-white/60 font-display font-semibold">
               {search ? (lang === 'mm' ? 'မတွေ့ပါ' : 'Not found') : (lang === 'mm' ? 'Category မရှိသေး' : 'No categories yet')}
             </p>
             <button onClick={() => setFormData({ initial: null, parentId: null, parentName: null })}
@@ -496,13 +605,14 @@ export default function CategoryManagerPage() {
               onDelete={handleDelete}
               onAddSub={c => setFormData({ initial: null, parentId: c.id, parentName: c.name_mm || c.name })}
               onToggle={handleToggle}
+              forceOpen={!!search}
             />
           ))
         )}
       </div>
 
       <div className="mx-4 mt-6 card-dark rounded-2xl p-4">
-        <p className="text-[10px] text-white/30 font-myanmar leading-relaxed">
+        <p className="text-[10px] text-white/60 font-myanmar leading-relaxed">
           💡 {lang === 'mm'
             ? '+ ကို နှိပ်ရင် Sub-category ထည့်နိုင် • Eye icon နှိပ်ရင် ဖျောက်/ပြနိုင် • Sort Order နည်းလေ အပေါ်ရောက်လေ'
             : 'Tap + to add sub-categories • Eye = show/hide • Lower sort order = higher position'}

@@ -344,7 +344,7 @@ export default function BulkImportPage() {
         </button>
         <div>
           <h1 className="font-display font-bold text-lg text-white">Bulk Import</h1>
-          <p className="text-[10px] text-white/40">CSV ဖြင့် လုပ်ငန်းများ တစ်ပြိုင်တည်း ထည့်သွင်းမည်</p>
+          <p className="text-[10px] text-white/60">CSV ဖြင့် လုပ်ငန်းများ တစ်ပြိုင်တည်း ထည့်သွင်းမည်</p>
         </div>
       </div>
 
@@ -357,6 +357,10 @@ export default function BulkImportPage() {
           <button onClick={generateTemplate} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600/20 border border-brand-400/30 text-brand-300 text-sm hover:bg-brand-600/30 transition-colors">
             <Download size={15} /> Template CSV ဒေါင်းလုတ်
           </button>
+          {/* Required columns (G5) — visible on the page, not only in the template */}
+          <p className="text-[11px] text-white/60 font-myanmar leading-relaxed">
+            လိုအပ်သော column: <span className="text-white/80 font-bold">name, category</span> • ကျန်သော column (name_mm, city, township, ward, address_mm, phone_1, phone_2, viber, telegram, whatsapp, facebook, description_mm, latitude, longitude) များ မထည့်လဲ ရသည်
+          </p>
         </div>
 
         <div className="card-dark rounded-2xl p-4 space-y-3">
@@ -373,12 +377,12 @@ export default function BulkImportPage() {
               <>
                 <FileSpreadsheet size={28} className="text-brand-300 mb-2" />
                 <p className="text-sm text-white/70 font-semibold">{fileName}</p>
-                <p className="text-xs text-white/40 mt-0.5">{preview?.rows?.length || 0} rows detected</p>
+                <p className="text-xs text-white/60 mt-0.5">{preview?.rows?.length || 0} rows detected</p>
               </>
             ) : (
               <>
                 <Upload size={28} className="text-white/20 mb-2" />
-                <p className="text-sm text-white/40">CSV ဖိုင် ရွေးချယ်ရန် နှိပ်ပါ</p>
+                <p className="text-sm text-white/60">CSV ဖိုင် ရွေးချယ်ရန် နှိပ်ပါ</p>
               </>
             )}
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
@@ -390,6 +394,33 @@ export default function BulkImportPage() {
             <div className="flex items-center justify-between">
               <p className="text-sm font-display font-semibold text-white">Preview</p>
               <span className="badge bg-brand-700/60 text-brand-200">{preview.rows.length} rows</span>
+            </div>
+
+            {/* First 5 rows as a table (G5) — check the data before importing */}
+            <div className="overflow-x-auto rounded-xl border border-white/10">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="text-white/60 border-b border-white/10">
+                    {['name', 'name_mm', 'category', 'city', 'phone_1'].map(h => (
+                      <th key={h} className="px-2 py-1.5 font-semibold whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.rows.slice(0, 5).map((r, i) => (
+                    <tr key={i} className="border-b border-white/5 last:border-0">
+                      <td className="px-2 py-1.5 text-white/80 truncate max-w-[120px]">{r.name || '—'}</td>
+                      <td className="px-2 py-1.5 text-white/80 truncate max-w-[100px]">{r.name_mm || '—'}</td>
+                      <td className="px-2 py-1.5 text-white/80 truncate max-w-[110px]">{r.category || '—'}</td>
+                      <td className="px-2 py-1.5 text-white/80 truncate max-w-[80px]">{r.city || '—'}</td>
+                      <td className="px-2 py-1.5 text-white/80 truncate max-w-[90px]">{r.phone_1 || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {preview.rows.length > 5 && (
+                <p className="text-[10px] text-white/60 px-2 py-1.5 font-myanmar">…နောက်ထပ် {preview.rows.length - 5} rows ရှိသည်</p>
+              )}
             </div>
 
             <button onClick={handleImport} disabled={importing} className="btn-primary w-full text-sm flex items-center justify-center gap-2 relative overflow-hidden">
@@ -420,19 +451,19 @@ export default function BulkImportPage() {
             <div className="grid grid-cols-4 gap-2">
               <div className="bg-white/5 rounded-xl p-3 text-center">
                 <p className="font-display font-bold text-xl text-white">{results.total}</p>
-                <p className="text-[9px] text-white/40">Total</p>
+                <p className="text-[9px] text-white/60">Total</p>
               </div>
               <div className="bg-green-500/10 rounded-xl p-3 text-center border border-green-500/20">
                 <p className="font-display font-bold text-xl text-green-400">{results.success}</p>
                 <p className="text-[9px] text-green-400/60">Success</p>
               </div>
               <div className={'rounded-xl p-3 text-center border ' + (results.failed > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/5')}>
-                <p className={'font-display font-bold text-xl ' + (results.failed > 0 ? 'text-red-400' : 'text-white/30')}>{results.failed}</p>
-                <p className={'text-[9px] ' + (results.failed > 0 ? 'text-red-400/60' : 'text-white/20')}>Failed</p>
+                <p className={'font-display font-bold text-xl ' + (results.failed > 0 ? 'text-red-400' : 'text-white/60')}>{results.failed}</p>
+                <p className={'text-[9px] ' + (results.failed > 0 ? 'text-red-400/60' : 'text-white/60')}>Failed</p>
               </div>
               <div className={'rounded-xl p-3 text-center border ' + (results.skipped.length > 0 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-white/5 border-white/5')}>
-                <p className={'font-display font-bold text-xl ' + (results.skipped.length > 0 ? 'text-amber-400' : 'text-white/30')}>{results.skipped.length}</p>
-                <p className={'text-[9px] ' + (results.skipped.length > 0 ? 'text-amber-400/60' : 'text-white/20')}>Skipped</p>
+                <p className={'font-display font-bold text-xl ' + (results.skipped.length > 0 ? 'text-amber-400' : 'text-white/60')}>{results.skipped.length}</p>
+                <p className={'text-[9px] ' + (results.skipped.length > 0 ? 'text-amber-400/60' : 'text-white/60')}>Skipped</p>
               </div>
             </div>
 
@@ -460,8 +491,13 @@ export default function BulkImportPage() {
               </div>
             )}
 
+            {/* Imported rows are pending — they appear only after an admin approves them (G10) */}
+            <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2 font-myanmar">
+              ⏳ Pending အခြေအနေ — Admin အတည်ပြုပြီးမှ Directory တွင် ပေါ်မည်
+            </p>
+
             <div className="flex gap-2">
-              <button onClick={() => navigate('/directory')} className="btn-primary flex-1 text-sm">Directory ကြည့်မည်</button>
+              <button onClick={() => navigate('/admin')} className="btn-primary flex-1 text-sm">Admin Panel တွင် Pending listing များ ကြည့်ရန်</button>
               <button onClick={() => { setPreview(null); setResults(null); setFileName(''); setProgress(0); setCancelled(false); cancelRef.current = false }} className="btn-ghost flex-1 text-sm">ထပ် Import လုပ်မည်</button>
             </div>
           </div>

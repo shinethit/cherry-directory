@@ -14,6 +14,7 @@ import {
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
 import { formatMyanmarDate } from '../lib/myanmarDate'
+import { goBackOrHome } from '../lib/navigation'
 
 // Notification type → icon + color mapping
 const TYPE_CFG = {
@@ -62,7 +63,9 @@ export default function NotificationsPage() {
       setNotifications(data || [])
     } catch (err) {
       console.warn('Load notifications error:', err)
-      setLoadError(err?.message || 'အသိပေးချက်များ ရယူမရပါ')
+      // F12: never render the raw Supabase English message — store a
+      // marker only; the screen renders fixed Myanmar text + Retry.
+      setLoadError('load_failed')
       setNotifications([])
     }
     setLoading(false)
@@ -106,7 +109,7 @@ export default function NotificationsPage() {
   }
 
   async function handleDelete(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဤအသိပေးချက်ကို ဖျက်မည်လား?' : 'Delete this notification?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဤအသိပေးချက်ကို ဖျက်မည်လား?' : 'Delete this notification?', { danger: true }))) return
     const prev = notifications
     setNotifications(prev => prev.filter(n => n.id !== id))
     try {
@@ -129,7 +132,16 @@ export default function NotificationsPage() {
     } else if (notif.type === 'fuel_status_update') {
       navigate('/fuel')
     } else if (notif.type === 'new_message') {
-      navigate('/chat')
+      // F11: go straight to the conversation when the notification
+      // carries a room id (passed via location state — there is no
+      // /chat/:roomId route; ChatPage must read state.roomId).
+      const roomId = data.room_id || data.chat_room_id || data.roomId
+      if (roomId) navigate('/chat', { state: { roomId } })
+      else navigate('/chat')
+    } else if (notif.type === 'system_alert') {
+      // F10: a system alert has no destination — marking it read (done
+      // at the top of handleOpen) is the whole action; the row visibly
+      // loses its unread dot and highlight.
     }
   }
 
@@ -161,7 +173,7 @@ export default function NotificationsPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => goBackOrHome(navigate, '/')}
             className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors"
           >
             <ArrowLeft size={18} className="text-white" />
@@ -170,7 +182,7 @@ export default function NotificationsPage() {
             <h1 className="font-display font-bold text-xl text-white flex items-center gap-2">
               🔔 {lang === 'mm' ? 'အသိပေးချက်များ' : 'Notifications'}
             </h1>
-            <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
+            <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
               {lang === 'mm'
                 ? `${notifications.length} ခု • ${unreadCount} ဖတ်မရသေး`
                 : `${notifications.length} total • ${unreadCount} unread`}
@@ -183,7 +195,7 @@ export default function NotificationsPage() {
             className="flex items-center gap-1.5 text-[10px] text-brand-300 hover:text-brand-200 transition-colors px-3 py-2 rounded-xl bg-brand-600/15 border border-brand-400/25"
           >
             <CheckCheck size={12} />
-            {lang === 'mm' ? 'အားလုံးဖတ်ပြီး' : 'Mark all'}
+            {lang === 'mm' ? 'အားလုံးဖတ်ပြီးဟု မှတ်မည်' : 'Mark all read'}
           </button>
         )}
       </div>
@@ -225,7 +237,9 @@ export default function NotificationsPage() {
             <p className="font-display font-semibold text-white/70">
               {lang === 'mm' ? 'အသိပေးချက်များ ရယူမရပါ' : 'Could not load notifications'}
             </p>
-            <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{loadError}</p>
+            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">
+              {lang === 'mm' ? 'တင်မရပါ — ပြန်ကြိုးစားမည်' : 'Could not load — please try again'}
+            </p>
             <button onClick={load} className="btn-primary text-sm mt-4 px-5 py-2">
               {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
             </button>
@@ -233,12 +247,12 @@ export default function NotificationsPage() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center py-16 text-center">
             <span className="text-5xl mb-4">🔔</span>
-            <p className="font-display font-semibold text-white/40">
+            <p className="font-display font-semibold text-white/60">
               {filter === 'unread'
                 ? (lang === 'mm' ? 'မဖတ်ရသေး အသိပေးချက် မရှိ' : 'No unread notifications')
                 : (lang === 'mm' ? 'အသိပေးချက် မရှိသေး' : 'No notifications yet')}
             </p>
-            <p className="text-xs text-white/25 mt-1 font-myanmar max-w-xs">
+            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">
               {lang === 'mm'
                 ? 'သင့်လုပ်ငန်း Approve ဖြစ်တာ၊ Review အသစ် ရတာတို့ ဤနေရာမှာ ပေါ်လာမည်'
                 : 'You will see notifications here when your listing is approved or you get a new review.'}
@@ -293,7 +307,7 @@ function NotificationRow({ notif, lang, onOpen, onDelete }) {
             {notif.message}
           </p>
         )}
-        <p className="text-[9px] text-white/30 mt-1">
+        <p className="text-[9px] text-white/60 mt-1">
           {timeAgoShort(notif.created_at, lang)}
         </p>
       </div>
@@ -301,7 +315,7 @@ function NotificationRow({ notif, lang, onOpen, onDelete }) {
       {/* Delete */}
       <button
         onClick={(e) => { e.stopPropagation(); onDelete() }}
-        className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 text-red-400 flex-shrink-0 mt-1"
+        className="w-7 h-7 rounded-lg btn-danger flex items-center justify-center flex-shrink-0 mt-1"
         aria-label="Delete"
       >
         <Trash2 size={12} />

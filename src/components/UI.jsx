@@ -54,7 +54,8 @@ export function ListingCard({ listing, compact = false }) {
   }
 
   return (
-    <div onClick={() => navigate(`/directory/${listing.id}`)} className="card-listing cursor-pointer p-4 flex gap-3 group">
+    <div onClick={() => navigate(`/directory/${listing.id}`)} role="button" tabIndex={0} aria-label={listing.name_mm || listing.name}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/directory/${listing.id}`) } }} className="card-listing cursor-pointer p-4 flex gap-3 group">
       {/* Logo */}
       <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
         {logo
@@ -73,11 +74,11 @@ export function ListingCard({ listing, compact = false }) {
               {listing.is_verified && <VerifiedOwnerBadge small />}
             </div>
             {listing.name_mm && listing.name && listing.name_mm !== listing.name && (
-              <p className="text-[10px] text-white/40 truncate">{listing.name}</p>
+              <p className="text-[10px] text-white/60 truncate">{listing.name}</p>
             )}
           </div>
-          <button onClick={toggleBookmark} disabled={bookmarkPending} className="text-white/30 hover:text-gold-400 transition-colors flex-shrink-0 mt-0.5 disabled:opacity-50">
-            {bookmarked ? <BookmarkCheck size={16} className="text-gold-400" /> : <Bookmark size={16} />}
+          <button onClick={toggleBookmark} disabled={bookmarkPending} className="w-9 h-9 flex items-center justify-center rounded-lg text-white/30 hover:text-gold-400 transition-colors flex-shrink-0 disabled:opacity-50" aria-label="သိမ်းမည်">
+            {bookmarked ? <BookmarkCheck size={18} className="text-gold-400" /> : <Bookmark size={18} />}
           </button>
         </div>
 
@@ -85,7 +86,7 @@ export function ListingCard({ listing, compact = false }) {
           {listing.rating_avg > 0 && (
             <div className="flex items-center gap-1">
               <StarRating rating={listing.rating_avg} size={11} />
-              <span className="text-[10px] text-white/40">({listing.rating_count})</span>
+              <span className="text-[10px] text-white/60">({listing.rating_count})</span>
             </div>
           )}
           <span className="badge bg-brand-700/60 text-brand-200 text-[9px]">{listing.category?.name_mm || listing.category?.name}</span>
@@ -95,7 +96,7 @@ export function ListingCard({ listing, compact = false }) {
         </div>
 
         {!compact && (
-          <div className="flex items-center gap-1 mt-1.5 text-white/40">
+          <div className="flex items-center gap-1 mt-1.5 text-white/60">
             <MapPin size={10} />
             <span className="text-[10px] truncate">{listing.ward ? `${listing.ward}, ` : ''}{listing.township || listing.city}</span>
           </div>
@@ -117,7 +118,8 @@ export function PostCard({ post }) {
   const typeLabel = post.type === 'event' ? '📅 Event' : post.type === 'announcement' ? '📢 ကြေညာချက်' : '📰 သတင်း'
 
   return (
-    <div onClick={() => navigate(`/news/${post.id}`)} className="card-listing cursor-pointer overflow-hidden">
+    <div onClick={() => navigate(`/news/${post.id}`)} role="button" tabIndex={0} aria-label={post.title_mm || post.title}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/news/${post.id}`) } }} className="card-listing cursor-pointer overflow-hidden">
       {cover && (
         <div className="h-40 overflow-hidden">
           <img src={cover} alt={post.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
@@ -126,11 +128,11 @@ export function PostCard({ post }) {
       <div className="p-4">
         <div className="flex items-center gap-2 mb-2">
           <span className={`badge ${typeColor}`}>{typeLabel}</span>
-          {post.is_pinned && <span className="badge bg-gold-500/20 text-gold-400">📌 Pinned</span>}
+          {post.is_pinned && <span className="badge bg-gold-500/20 text-gold-400">📌 ထင်ရှားထားသော</span>}
         </div>
         <h3 className="font-display font-semibold text-sm text-white line-clamp-2 leading-snug font-myanmar">{post.title_mm || post.title}</h3>
         {post.excerpt && <p className="text-[11px] text-white/50 mt-1.5 line-clamp-2 font-myanmar">{post.excerpt}</p>}
-        <div className="flex items-center justify-between mt-3 text-white/30 text-[10px]">
+        <div className="flex items-center justify-between mt-3 text-white/60 text-[10px]">
           <span>{post.author?.full_name || 'Admin'}</span>
           <span>{formatMyanmarDate(post.created_at)}</span>
           {isLoggedIn && (
@@ -144,11 +146,11 @@ export function PostCard({ post }) {
                 else addBookmark.mutate({ targetId: post.id, targetType: 'post' })
               }}
               disabled={addBookmark.isPending || removeBookmark.isPending}
-              className="flex items-center gap-1 text-brand-300 hover:text-brand-200 disabled:opacity-50"
-              aria-label="Save"
+              className="flex items-center gap-1.5 h-9 px-3 rounded-lg text-brand-300 hover:text-brand-200 disabled:opacity-50"
+              aria-label="သိမ်းမည်"
             >
-              {saved ? <BookmarkCheck size={12} /> : <Bookmark size={12} />}
-              {saved ? 'Saved' : 'Save'}
+              {saved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+              {saved ? 'သိမ်းထားပြီးပါပြီ' : 'သိမ်းမည်'}
             </button>
           )}
         </div>
@@ -163,7 +165,7 @@ export function SectionHeader({ title, subtitle, action, onAction }) {
     <div className="flex items-end justify-between px-4 mb-3">
       <div>
         <h2 className="font-display font-bold text-base text-white">{title}</h2>
-        {subtitle && <p className="text-[11px] text-white/40 mt-0.5">{subtitle}</p>}
+        {subtitle && <p className="text-[11px] text-white/60 mt-0.5">{subtitle}</p>}
       </div>
       {action && (
         <button onClick={onAction} className="text-brand-300 text-xs font-semibold hover:text-brand-200 transition-colors">{action} →</button>
@@ -178,7 +180,7 @@ export function EmptyState({ icon = '🔍', title, message }) {
     <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
       <span className="text-5xl mb-4">{icon}</span>
       <h3 className="font-display font-semibold text-white/70 mb-1">{title}</h3>
-      {message && <p className="text-sm text-white/40 font-myanmar">{message}</p>}
+      {message && <p className="text-sm text-white/60 font-myanmar">{message}</p>}
     </div>
   )
 }
@@ -238,10 +240,10 @@ export function ReactionBar({ targetType, targetId }) {
   }, [targetType, targetId, user?.id])
 
   async function react(emoji) {
-    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ Reaction ပေးနိုင်မည်'); navigate('/login'); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ တုံ့ပြန်မှု ပေးနိုင်မည်'); navigate('/login'); return }
     const { data: { user: authUser } } = await supabase.auth.getUser()
     const uid = authUser?.id || user?.id
-    if (!uid) { showError('အကောင့်ဝင်မှ Reaction ပေးနိုင်မည်'); navigate('/login'); return }
+    if (!uid) { showError('အကောင့်ဝင်မှ တုံ့ပြန်မှု ပေးနိုင်မည်'); navigate('/login'); return }
     if (myReactions.has(emoji)) {
       const { error } = await supabase.from('reactions').delete().match({ target_type: targetType, target_id: targetId, user_id: uid, emoji })
       if (error) { showError(error.message); return }

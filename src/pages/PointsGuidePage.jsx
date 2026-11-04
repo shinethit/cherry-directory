@@ -5,11 +5,24 @@ import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import { TIERS, getTier, getNextTier, getTierProgress, POINT_ACTIONS } from '../lib/tiers'
 
+// E10 (v9.5): where each "how to earn" action is done. Order mirrors
+// POINT_ACTIONS in src/lib/tiers.js (not owned by this track, so the
+// destination lives here by index): Review → directory, Submit → /submit,
+// Approved/Claim → my submissions, RSVP → calendar, Chat → /chat.
+const ACTION_LINKS = [
+  { to: '/directory',      mm: 'Review ရေးရန် →',          en: 'Write a review →' },
+  { to: '/submit',         mm: 'လုပ်ငန်း တင်ရန် →',         en: 'Submit a listing →' },
+  { to: '/my-submissions', mm: 'တင်ပြမှုများ ကြည့်ရန် →',    en: 'View my submissions →' },
+  { to: '/calendar',       mm: 'Event ကြည့်ရန် →',         en: 'View events →' },
+  { to: '/chat',           mm: 'Chat သွားရန် →',            en: 'Go to chat →' },
+  { to: '/my-submissions', mm: 'ပိုင်ဆိုင်ကြောင်း အခြေအနေ ကြည့်ရန် →',  en: 'View claim status →' },
+]
+
 export default function PointsGuidePage() {
   const navigate = useNavigate()
   const { profile, isLoggedIn } = useAuth()
   const { lang } = useLang()
-  useSEO({ title: lang === 'mm' ? 'Points လမ်းညွှန်' : 'Points Guide' })
+  useSEO({ title: lang === 'mm' ? 'အမှတ် လမ်းညွှန်' : 'Points Guide' })
 
   const myPoints = profile?.points || 0
   const currentTier = getTier(myPoints)
@@ -25,7 +38,7 @@ export default function PointsGuidePage() {
         <div>
           <h1 className="font-display font-bold text-lg text-white flex items-center gap-2">
             <Sparkles size={18} className="text-gold-400" />
-            {lang === 'mm' ? 'Points လမ်းညွှန်' : 'Points Guide'}
+            {lang === 'mm' ? 'အမှတ် လမ်းညွှန်' : 'Points Guide'}
           </h1>
         </div>
       </div>
@@ -45,14 +58,14 @@ export default function PointsGuidePage() {
               </div>
               <div className="text-right">
                 <p className="font-display font-bold text-xl text-white">{myPoints.toLocaleString()}</p>
-                <p className="text-[10px] text-white/50">pts</p>
+                <p className="text-[10px] text-white/50">{lang === 'mm' ? 'မှတ်' : 'pts'}</p>
               </div>
             </div>
             {nextTier ? (
               <>
                 <div className="flex items-center justify-between text-[10px] text-white/50 mb-1.5 font-myanmar">
                   <span>{lang === 'mm' ? `နောက်: ${nextTier.mm}` : `Next: ${nextTier.en}`}</span>
-                  <span>{progress.pointsToNext} pts</span>
+                  <span>{lang === 'mm' ? `${progress.pointsToNext} မှတ်` : `${progress.pointsToNext} pts`}</span>
                 </div>
                 <div className="h-2 rounded-full bg-black/30 overflow-hidden">
                   <div className={`h-full bg-gradient-to-r ${currentTier.gradient} transition-all`} style={{ width: `${progress.percent}%` }} />
@@ -68,22 +81,23 @@ export default function PointsGuidePage() {
       <div className="px-4 mb-5">
         <h2 className="text-xs font-display font-bold text-white/60 uppercase tracking-wider mb-3 flex items-center gap-2">
           <Target size={14} className="text-brand-300" />
-          {lang === 'mm' ? 'Points ရယူနည်း' : 'How to Earn'}
+          {lang === 'mm' ? 'အမှတ် ရယူနည်း' : 'How to Earn'}
         </h2>
         <div className="space-y-2">
           {POINT_ACTIONS.map(({ icon: Icon, points, mm, en }, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-white/4 border border-white/8">
+            <button key={i} onClick={() => navigate(ACTION_LINKS[i]?.to || '/leaderboard')} className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/4 border border-white/8 hover:border-brand-400/40 hover:bg-white/6 transition-colors text-left">
               <div className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center flex-shrink-0">
                 <Icon size={15} className="text-brand-300" />
               </div>
               <p className="flex-1 text-xs text-white/70 font-myanmar">{lang === 'mm' ? mm : en}</p>
               <span className="font-mono font-bold text-sm text-green-400">+{points}</span>
-            </div>
+              <span className="text-[11px] font-bold text-brand-300 whitespace-nowrap">{lang === 'mm' ? ACTION_LINKS[i]?.mm : ACTION_LINKS[i]?.en}</span>
+            </button>
           ))}
         </div>
-        <p className="text-[10px] text-white/30 font-myanmar mt-2">
+        <p className="text-[10px] text-white/60 font-myanmar mt-2">
           {lang === 'mm'
-            ? 'Approved / Claim Points များသည် Admin အတည်ပြုပြီးမှ ရရှိပါသည်။ Chat Points သည် တစ်နေ့ အများဆုံး ၁၀ Points သာ ရသည်။'
+            ? 'Approved / ပိုင်ဆိုင်ကြောင်း အမှတ်များသည် Admin အတည်ပြုပြီးမှ ရရှိပါသည်။ Chat အမှတ်သည် တစ်နေ့ အများဆုံး ၁၀ အမှတ် သာ ရသည်။'
             : 'Approved / Claim points are awarded only after Admin approval. Chat points are capped at 10 per day.'}
         </p>
       </div>
@@ -104,8 +118,10 @@ export default function PointsGuidePage() {
                     <p className={`font-display font-bold text-sm ${tier.color}`}>{lang === 'mm' ? tier.mm : tier.en}</p>
                     {isCurrent && <span className="text-[8px] bg-white/20 text-white px-1.5 py-0.5 rounded-full font-bold">{lang === 'mm' ? 'သင်ရှိသည်' : 'You'}</span>}
                   </div>
-                  <p className="text-[10px] text-white/40 font-mono mt-0.5">
-                    {tier.max === Infinity ? `${tier.min}+ pts` : `${tier.min} – ${tier.max} pts`}
+                  <p className="text-[10px] text-white/60 font-mono mt-0.5">
+                    {tier.max === Infinity
+                      ? (lang === 'mm' ? `${tier.min}+ မှတ်` : `${tier.min}+ pts`)
+                      : (lang === 'mm' ? `${tier.min} – ${tier.max} မှတ်` : `${tier.min} – ${tier.max} pts`)}
                   </p>
                 </div>
               </div>

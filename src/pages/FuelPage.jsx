@@ -12,7 +12,7 @@ const STATUS_CFG = {
   available:   { mm: 'ရနိုင်',   en: 'Available', color: 'text-green-400', bg: 'bg-green-500/15 border-green-500/25', dot: 'bg-green-500' },
   limited:     { mm: 'အနည်းငယ်', en: 'Limited',   color: 'text-amber-400', bg: 'bg-amber-500/15 border-amber-500/25', dot: 'bg-amber-500' },
   unavailable: { mm: 'မရ',       en: 'Unavailable',color: 'text-red-400',   bg: 'bg-red-500/15   border-red-500/25',   dot: 'bg-red-500'   },
-  unknown:     { mm: 'မသိ',      en: 'Unknown',    color: 'text-white/30',  bg: 'bg-white/5      border-white/8',       dot: 'bg-white/20'  },
+  unknown:     { mm: 'မသိ',      en: 'Unknown',    color: 'text-white/60',  bg: 'bg-white/5      border-white/8',       dot: 'bg-white/20'  },
 }
 
 function timeAgo(iso, lang) {
@@ -29,6 +29,8 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
   const [showQueueForm, setShowQueueForm] = useState(false)
   const [qCars, setQCars] = useState('')
   const [qBikes, setQBikes] = useState('')
+  const [queueSubmitting, setQueueSubmitting] = useState(false)
+  const [reportBusy, setReportBusy] = useState(null)
 
   const stationFuelNames = station.fuel_type_names || []
   const stationFuels = allFuelTypes.filter(ft => stationFuelNames.includes(ft.name))
@@ -42,7 +44,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-display font-semibold text-sm text-white truncate">{lang === 'mm' ? (station.name_mm || station.name) : station.name}</p>
-          <p className="text-[10px] text-white/40 font-myanmar truncate">{station.address} • {station.township}</p>
+          <p className="text-[10px] text-white/60 font-myanmar truncate">{station.address} • {station.township}</p>
           <div className="flex gap-1.5 mt-1.5 flex-wrap">
             {stationFuels.map(ft => {
               const row = (station.fuels || {})[ft.name]
@@ -55,11 +57,11 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
               )
             })}
             {stationFuels.length === 0 && (
-              <span className="text-[9px] text-white/20">ဆီအမျိုးအစား မသတ်မှတ်ရ</span>
+              <span className="text-[9px] text-white/60">ဆီအမျိုးအစား မသတ်မှတ်ရ</span>
             )}
           </div>
         </div>
-        <span className="text-white/30 text-xs mt-1 flex-shrink-0">{expanded ? '▲' : '▼'}</span>
+        <span className="text-white/60 text-xs mt-1 flex-shrink-0">{expanded ? '▲' : '▼'}</span>
       </button>
 
       {expanded && (
@@ -67,7 +69,7 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
           {/* Fuel Types Status */}
           <div className="space-y-3">
             {stationFuels.length === 0 && (
-              <p className="text-xs text-white/30 text-center py-2">ဆီအမျိုးအစား မသတ်မှတ်ရသေး</p>
+              <p className="text-xs text-white/60 text-center py-2">ဆီအမျိုးအစား မသတ်မှတ်ရသေး</p>
             )}
             {stationFuels.map(ft => {
               const row = (station.fuels || {})[ft.name]
@@ -79,14 +81,14 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
                     <p className="text-xs font-display font-semibold text-white">{lang === 'mm' ? ft.name_mm : ft.name}</p>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className={`text-[10px] font-bold ${st.color}`}>{lang === 'mm' ? st.mm : st.en}</span>
-                      {row?.reported_at && <span className="text-[9px] text-white/25">{timeAgo(row.reported_at, lang)}</span>}
+                      {row?.reported_at && <span className="text-[11px] text-white/60">{timeAgo(row.reported_at, lang)}</span>}
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1 flex-shrink-0">
+                  <div className="flex flex-row gap-1 flex-shrink-0">
                     {['available','limited','unavailable'].map(s => (
-                      <button key={s} onClick={() => onReport(station.id, ft.id, s)}
-                        className={`text-[8px] font-bold px-2 py-1 rounded-lg border transition-colors ${
-                          row?.status === s ? STATUS_CFG[s].bg + ' ' + STATUS_CFG[s].color : 'bg-white/5 border-white/10 text-white/30 hover:text-white/60'
+                      <button key={s} disabled={reportBusy === `${ft.id}:${s}`} onClick={async () => { if (reportBusy) return; setReportBusy(`${ft.id}:${s}`); try { await onReport(station.id, ft.id, s) } finally { setReportBusy(null) } }}
+                        className={`min-h-[36px] flex-1 text-xs font-bold px-2 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
+                          row?.status === s ? STATUS_CFG[s].bg + ' ' + STATUS_CFG[s].color : 'bg-white/5 border-white/10 text-white/60 hover:text-white/60'
                         }`}>
                         {s === 'available' ? (lang === 'mm' ? 'ရ' : 'Yes') :
                          s === 'limited'   ? (lang === 'mm' ? 'နည်း' : 'Few') :
@@ -106,19 +108,19 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
                 စောင့်ဆိုင်းနေသော ယာဉ်များ (ခန့်မှန်း)
               </p>
               {station.queue_updated_at && (
-                <span className="text-[9px] text-white/30">{timeAgo(station.queue_updated_at, lang)}</span>
+                <span className="text-[11px] text-white/60">{timeAgo(station.queue_updated_at, lang)}</span>
               )}
             </div>
             
             <div className="flex gap-2 mb-3">
               <div className="flex-1 bg-black/20 rounded-lg p-2 text-center border border-white/5">
-                <p className="text-xs text-white/40 mb-0.5">🚗 ကား</p>
+                <p className="text-xs text-white/60 mb-0.5">🚗 ကား</p>
                 <p className="text-sm font-bold text-white">
                   {station.waiting_cars != null ? `~ ${station.waiting_cars} စီး` : '-'}
                 </p>
               </div>
               <div className="flex-1 bg-black/20 rounded-lg p-2 text-center border border-white/5">
-                <p className="text-xs text-white/40 mb-0.5">🛵 ဆိုင်ကယ်</p>
+                <p className="text-xs text-white/60 mb-0.5">🛵 ဆိုင်ကယ်</p>
                 <p className="text-sm font-bold text-white">
                   {station.waiting_motorcycles != null ? `~ ${station.waiting_motorcycles} စီး` : '-'}
                 </p>
@@ -132,22 +134,24 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
               </button>
             ) : (
               <div className="p-3 bg-black/30 rounded-xl border border-white/10 animate-fade-in">
-                <p className="text-[10px] text-white/40 mb-2 font-myanmar text-center">ခန့်မှန်း အရေအတွက်ကို ထည့်ပါ</p>
+                <p className="text-[10px] text-white/60 mb-2 font-myanmar text-center">ခန့်မှန်း အရေအတွက်ကို ထည့်ပါ</p>
                 <div className="flex gap-2 mb-2">
                   <input type="number" placeholder="ကား" value={qCars} onChange={e => setQCars(e.target.value)}
-                    className="input-dark text-xs flex-1 text-center font-bold" min="0" />
+                    className="input-dark flex-1 text-center font-bold" min="0" />
                   <input type="number" placeholder="ဆိုင်ကယ်" value={qBikes} onChange={e => setQBikes(e.target.value)}
-                    className="input-dark text-xs flex-1 text-center font-bold" min="0" />
+                    className="input-dark flex-1 text-center font-bold" min="0" />
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => {
-                    onQueueReport(station.id, qCars, qBikes);
+                  <button disabled={queueSubmitting} onClick={async () => {
+                    if (queueSubmitting) return
+                    setQueueSubmitting(true)
+                    try { await onQueueReport(station.id, qCars, qBikes) } finally { setQueueSubmitting(false) }
                     setShowQueueForm(false);
                     setQCars('');
                     setQBikes('');
                   }}
-                    className="flex-1 py-2 bg-blue-500 text-white rounded-lg text-xs font-bold font-myanmar">
-                    အတည်ပြုမည်
+                    className="flex-1 py-2 bg-blue-500 text-white rounded-lg text-xs font-bold font-myanmar disabled:opacity-50">
+                    {queueSubmitting ? 'တင်နေသည်...' : 'အတည်ပြုမည်'}
                   </button>
                   <button onClick={() => setShowQueueForm(false)}
                     className="px-3 py-2 bg-white/10 text-white/50 rounded-lg text-xs font-bold">
@@ -221,7 +225,7 @@ function FuelTypesTab({ onChanged }) {
   }
 
   async function deleteFuelType(id) {
-    if (!(await confirmDialog('ဆီအမျိုးအစားကို ဖျက်မည်လား? ဆိုင်များမှ ဆီပိတ်သွားနိုင်သည်။'))) return
+    if (!(await confirmDialog('ဆီအမျိုးအစားကို ဖျက်မည်လား? ဆိုင်များမှ ဆီပိတ်သွားနိုင်သည်။', { danger: true }))) return
     const { error } = await supabase.from('fuel_types').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -237,12 +241,12 @@ function FuelTypesTab({ onChanged }) {
         <p className="text-xs text-white/50 font-bold">➕ ဆီအမျိုးအစားအသစ် ထည့်မည်</p>
         <div className="grid grid-cols-2 gap-2">
           <input value={form.name} onChange={e => set('name', e.target.value)}
-            placeholder="Name (English)" className="input-dark text-sm" />
+            placeholder="Name (English)" className="input-dark" />
           <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)}
-            placeholder="အမည် (မြန်မာ)" className="input-dark text-sm font-myanmar" />
+            placeholder="အမည် (မြန်မာ)" className="input-dark font-myanmar" />
         </div>
         <div>
-          <p className="text-[10px] text-white/40 mb-1.5">Icon ရွေးမည် (emoji)</p>
+          <p className="text-[10px] text-white/60 mb-1.5">Icon ရွေးမည် (emoji)</p>
           <div className="flex gap-2 flex-wrap items-center">
             {EMOJIS.map(e => (
               <button key={e} onClick={() => set('icon', e)}
@@ -262,11 +266,11 @@ function FuelTypesTab({ onChanged }) {
 
       {/* List */}
       {loading ? (
-        <p className="text-xs text-white/30 text-center py-4">ဖွင့်နေသည်...</p>
+        <p className="text-xs text-white/60 text-center py-4">ဖွင့်နေသည်...</p>
       ) : (
         <div className="space-y-2">
           {list.length === 0 && (
-            <p className="text-xs text-white/30 text-center py-4">ဆီအမျိုးအစား မရှိသေးပါ</p>
+            <p className="text-xs text-white/60 text-center py-4">ဆီအမျိုးအစား မရှိသေးပါ</p>
           )}
           {list.map(ft => (
             <div key={ft.id} className="rounded-xl bg-white/5 border border-white/8 p-3">
@@ -274,12 +278,12 @@ function FuelTypesTab({ onChanged }) {
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <input value={editData.name} onChange={e => setE('name', e.target.value)}
-                      className="input-dark text-sm" placeholder="Name (English)" />
+                      className="input-dark" placeholder="Name (English)" />
                     <input value={editData.name_mm} onChange={e => setE('name_mm', e.target.value)}
-                      className="input-dark text-sm font-myanmar" placeholder="အမည် (မြန်မာ)" />
+                      className="input-dark font-myanmar" placeholder="အမည် (မြန်မာ)" />
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] text-white/40">Icon:</span>
+                    <span className="text-[10px] text-white/60">Icon:</span>
                     {EMOJIS.map(e => (
                       <button key={e} onClick={() => setE('icon', e)}
                         className={`w-8 h-8 rounded-lg text-base flex items-center justify-center border transition-colors ${
@@ -295,7 +299,7 @@ function FuelTypesTab({ onChanged }) {
                       သိမ်းမည်
                     </button>
                     <button onClick={() => setEditId(null)}
-                      className="flex-1 px-3 py-2 bg-white/8 text-white/40 text-xs rounded-xl">
+                      className="flex-1 px-3 py-2 bg-white/8 text-white/60 text-xs rounded-xl">
                       ဖျက်သိမ်းမည်
                     </button>
                   </div>
@@ -306,7 +310,7 @@ function FuelTypesTab({ onChanged }) {
                     <span className="text-xl">{ft.icon}</span>
                     <div>
                       <p className="text-sm font-semibold text-white font-myanmar">{ft.name_mm}</p>
-                      <p className="text-[10px] text-white/40">{ft.name}</p>
+                      <p className="text-[10px] text-white/60">{ft.name}</p>
                     </div>
                   </div>
                   <div className="flex gap-1.5">
@@ -315,7 +319,7 @@ function FuelTypesTab({ onChanged }) {
                       <Pencil size={12} />
                     </button>
                     <button onClick={() => deleteFuelType(ft.id)}
-                      className="w-7 h-7 bg-red-500/10 text-red-400 rounded-lg flex items-center justify-center">
+                      className="w-7 h-7 btn-danger rounded-lg flex items-center justify-center">
                       <Trash2 size={12} />
                     </button>
                   </div>
@@ -392,7 +396,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
   }
 
   async function deleteStation(id) {
-    if (!(await confirmDialog('ဆိုင်ကို ဖျက်မည်လား?'))) return
+    if (!(await confirmDialog('ဆိုင်ကို ဖျက်မည်လား?', { danger: true }))) return
     const { error } = await supabase.from('fuel_stations').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -414,13 +418,13 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
       <div className="flex border-b border-white/8 bg-white/2">
         <button onClick={() => setModalTab('stations')}
           className={`flex-1 py-2.5 text-xs font-bold transition-colors border-b-2 ${
-            modalTab === 'stations' ? 'text-brand-300 border-brand-400' : 'text-white/40 border-transparent'
+            modalTab === 'stations' ? 'text-brand-300 border-brand-400' : 'text-white/60 border-transparent'
           }`}>
           🏪 ဆိုင်များ ({list.length})
         </button>
         <button onClick={() => setModalTab('fueltypes')}
           className={`flex-1 py-2.5 text-xs font-bold transition-colors border-b-2 ${
-            modalTab === 'fueltypes' ? 'text-brand-300 border-brand-400' : 'text-white/40 border-transparent'
+            modalTab === 'fueltypes' ? 'text-brand-300 border-brand-400' : 'text-white/60 border-transparent'
           }`}>
           ⛽ ဆီအမျိုးအစားများ ({allFuelTypes.length})
         </button>
@@ -433,16 +437,16 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
             <div className="space-y-2 p-3 rounded-2xl bg-white/3 border border-white/8">
               <p className="text-xs text-white/50 font-bold">➕ ဆိုင်အသစ်ထည့်မည်</p>
               <input value={form.name} onChange={e => set('name', e.target.value)}
-                placeholder="Station Name" className="input-dark text-sm w-full" />
+                placeholder="Station Name" className="input-dark w-full" />
               <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)}
-                placeholder="အမည် (မြန်မာ)" className="input-dark text-sm w-full font-myanmar" />
+                placeholder="အမည် (မြန်မာ)" className="input-dark w-full font-myanmar" />
               <div className="grid grid-cols-2 gap-2">
                 <input value={form.township} onChange={e => set('township', e.target.value)}
-                  placeholder="မြို့နယ်" className="input-dark text-sm" />
+                  placeholder="မြို့နယ်" className="input-dark" />
                 <input value={form.address} onChange={e => set('address', e.target.value)}
-                  placeholder="လိပ်စာ" className="input-dark text-sm" />
+                  placeholder="လိပ်စာ" className="input-dark" />
               </div>
-              <p className="text-[10px] text-white/40 font-bold uppercase mt-2">လောင်စာဆီ အမျိုးအစားများ</p>
+              <p className="text-[10px] text-white/60 font-bold uppercase mt-2">လောင်စာဆီ အမျိုးအစားများ</p>
               {allFuelTypes.length === 0 ? (
                 <p className="text-[10px] text-amber-400 py-1">
                   ⚠️ ဆီအမျိုးအစား မရှိသေး — "ဆီအမျိုးအစားများ" tab မှ ဦးစွာထည့်ပါ
@@ -471,27 +475,27 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
             </div>
 
             {loading ? (
-              <p className="text-xs text-white/30 text-center py-4">ဖွင့်နေသည်...</p>
+              <p className="text-xs text-white/60 text-center py-4">ဖွင့်နေသည်...</p>
             ) : (
               <div className="space-y-2">
                 {list.length === 0 && (
-                  <p className="text-xs text-white/30 text-center py-4">ဆိုင် မရှိသေးပါ</p>
+                  <p className="text-xs text-white/60 text-center py-4">ဆိုင် မရှိသေးပါ</p>
                 )}
                 {list.map(s => (
                   <div key={s.id} className="rounded-xl bg-white/5 border border-white/8 p-3">
                     {editId === s.id ? (
                       <div className="space-y-2">
                         <input value={editData.name} onChange={e => setE('name', e.target.value)}
-                          className="input-dark text-sm w-full" />
+                          className="input-dark w-full" />
                         <input value={editData.name_mm} onChange={e => setE('name_mm', e.target.value)}
-                          className="input-dark text-sm w-full font-myanmar" />
+                          className="input-dark w-full font-myanmar" />
                         <div className="grid grid-cols-2 gap-2">
                           <input value={editData.township || ''} onChange={e => setE('township', e.target.value)}
-                            className="input-dark text-sm" placeholder="မြို့နယ်" />
+                            className="input-dark" placeholder="မြို့နယ်" />
                           <input value={editData.address || ''} onChange={e => setE('address', e.target.value)}
-                            className="input-dark text-sm" placeholder="လိပ်စာ" />
+                            className="input-dark" placeholder="လိပ်စာ" />
                         </div>
-                        <p className="text-[10px] text-white/40 font-bold uppercase">ဆီအမျိုးအစားများ</p>
+                        <p className="text-[10px] text-white/60 font-bold uppercase">ဆီအမျိုးအစားများ</p>
                         {allFuelTypes.length === 0 ? (
                           <p className="text-[10px] text-amber-400">⚠️ ဆီအမျိုးအစား tab မှ ဦးစွာထည့်ပါ</p>
                         ) : (
@@ -516,7 +520,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                             သိမ်းမည်
                           </button>
                           <button onClick={() => setEditId(null)}
-                            className="flex-1 px-3 py-2 bg-white/8 text-white/40 text-xs rounded-xl">
+                            className="flex-1 px-3 py-2 bg-white/8 text-white/60 text-xs rounded-xl">
                             ဖျက်သိမ်းမည်
                           </button>
                         </div>
@@ -525,7 +529,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                       <div className="flex items-start justify-between">
                         <div>
                           <p className="text-sm font-semibold text-white font-myanmar">{s.name_mm || s.name}</p>
-                          <p className="text-[10px] text-white/40">{s.address} • {s.township}</p>
+                          <p className="text-[10px] text-white/60">{s.address} • {s.township}</p>
                           <div className="flex gap-1 mt-1.5 flex-wrap">
                             {(s.fuel_type_names || []).map(name => {
                               const ft = allFuelTypes.find(f => f.name === name)
@@ -536,7 +540,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                               ) : null
                             })}
                             {(s.fuel_type_names || []).length === 0 && (
-                              <span className="text-[8px] text-white/20">ဆီ မသတ်မှတ်ရ</span>
+                              <span className="text-[8px] text-white/60">ဆီ မသတ်မှတ်ရ</span>
                             )}
                           </div>
                         </div>
@@ -546,7 +550,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                             <Pencil size={12} />
                           </button>
                           <button onClick={() => deleteStation(s.id)}
-                            className="w-7 h-7 bg-red-500/10 text-red-400 rounded-lg flex items-center justify-center">
+                            className="w-7 h-7 btn-danger rounded-lg flex items-center justify-center">
                             <Trash2 size={12} />
                           </button>
                         </div>
@@ -671,29 +675,29 @@ export default function FuelPage() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  // Optimistic update for queue
+  // Optimistic update for queue — partial update only: a report for
+  // one vehicle type must never null the other type's count (FB-7).
   async function handleQueueReport(stationId, cars, bikes) {
     const c = cars === '' ? null : parseInt(cars, 10)
     const b = bikes === '' ? null : parseInt(bikes, 10)
-    
-    const { error } = await supabase.from('fuel_stations').update({
-      waiting_cars: c,
-      waiting_motorcycles: b,
-      queue_updated_at: new Date().toISOString()
-    }).eq('id', stationId)
+
+    const updates = { queue_updated_at: new Date().toISOString() }
+    if (cars !== '') updates.waiting_cars = c
+    if (bikes !== '') updates.waiting_motorcycles = b
+    const { error } = await supabase.from('fuel_stations').update(updates).eq('id', stationId)
 
     if (error) {
       showError('Error updating queue: ' + error.message)
       return
     }
 
-    // Update local state
+    // Update local state — keep the untouched vehicle count as-is.
     setStations(prevStations => prevStations.map(station => {
       if (station.id !== stationId) return station
       return {
         ...station,
-        waiting_cars: c,
-        waiting_motorcycles: b,
+        ...(cars !== '' ? { waiting_cars: c } : {}),
+        ...(bikes !== '' ? { waiting_motorcycles: b } : {}),
         queue_updated_at: new Date().toISOString()
       }
     }))
@@ -713,20 +717,20 @@ export default function FuelPage() {
 
       {isModerator && (
         <button onClick={() => setShowManage(true)}
-          className="mx-4 mb-3 w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white/50 font-bold flex items-center justify-center gap-2">
+          className="mx-4 mb-3 w-[calc(100%-2rem)] py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-white/50 font-bold flex items-center justify-center gap-2">
           ⚙️ ဓာတ်ဆီဆိုင် / ဆီအမျိုးအစား စီမံမည်
         </button>
       )}
 
       {loading ? (
-        <div className="px-4 py-8 text-center text-white/30 text-sm">ဖွင့်နေသည်...</div>
+        <div className="px-4 py-8 text-center text-white/60 text-sm">ဖွင့်နေသည်...</div>
       ) : loadError ? (
         <div className="px-4 py-8 text-center space-y-3">
           <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
           <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
         </div>
       ) : stations.length === 0 ? (
-        <div className="px-4 py-8 text-center text-white/30 text-sm">ဆိုင် မရှိသေးပါ</div>
+        <div className="px-4 py-8 text-center text-white/60 text-sm">ဆိုင် မရှိသေးပါ</div>
       ) : (
         <div className="px-4 space-y-2">
           {stations.map(s => (
@@ -760,7 +764,7 @@ export default function FuelPage() {
             </div>
           ))}
         </div>
-        <p className="text-[9px] text-white/20 mt-3 font-myanmar border-t border-white/6 pt-3">
+        <p className="text-[9px] text-white/60 mt-3 font-myanmar border-t border-white/6 pt-3">
           ⚠️ {lang === 'mm' ? 'ဤ Data သည် Community Report ဖြစ်ပြီး တိကျမှု 100% ကို မသေချာနိုင်' : 'Community data — accuracy not guaranteed'}
         </p>
       </div>

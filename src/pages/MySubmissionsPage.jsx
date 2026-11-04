@@ -51,7 +51,7 @@ export default function MySubmissionsPage() {
   useEffect(() => { load() }, [load])
 
   async function handleDelete(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this listing?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this listing?', { danger: true }))) return
     const { error } = await supabase.from('listings').delete().eq('id', id)
     if (error) {
       console.error('Delete listing failed:', error)
@@ -110,7 +110,7 @@ export default function MySubmissionsPage() {
             <h1 className="font-display font-bold text-xl text-white">
               📝 {lang === 'mm' ? 'ကျွန်တော့်တင်ထားသောများ' : 'My Submissions'}
             </h1>
-            <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
+            <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
               {lang === 'mm' ? items.length + ' ခု တင်ထားသည်' : items.length + ' submissions'}
             </p>
           </div>
@@ -150,7 +150,7 @@ export default function MySubmissionsPage() {
             <p className="font-display font-semibold text-white/70">
               {lang === 'mm' ? 'တင်ထားသောများ ရယူမရပါ' : 'Could not load your submissions'}
             </p>
-            <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{loadError}</p>
+            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">{loadError}</p>
             <button onClick={load} className="btn-primary text-sm mt-4 px-5 py-2">
               {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
             </button>
@@ -163,7 +163,7 @@ export default function MySubmissionsPage() {
           />
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
-            <p className="text-white/40 font-myanmar text-sm">
+            <p className="text-white/60 font-myanmar text-sm">
               {lang === 'mm' ? 'ဤ status တွင် မရှိပါ' : 'Nothing in this status'}
             </p>
           </div>
@@ -194,7 +194,7 @@ export default function MySubmissionsPage() {
                       {item.is_featured && <span className="text-[10px] text-gold-400 flex-shrink-0">⭐</span>}
                       {item.is_verified && <span className="text-[10px] text-gold-400 flex-shrink-0">✓</span>}
                     </div>
-                    <p className="text-[10px] text-white/40 mt-0.5 truncate font-myanmar">
+                    <p className="text-[10px] text-white/60 mt-0.5 truncate font-myanmar">
                       {item.category?.icon} {lang === 'mm' ? (item.category?.name_mm || item.category?.name) : item.category?.name}
                     </p>
 
@@ -203,12 +203,31 @@ export default function MySubmissionsPage() {
                         <Icon size={10} /> {lang === 'mm' ? meta.label_mm : meta.label_en}
                       </span>
                       {item.view_count > 0 && (
-                        <span className="text-[10px] text-white/40">👁 {item.view_count}</span>
+                        <span className="text-[10px] text-white/60">👁 {item.view_count}</span>
                       )}
                       {item.rating_count > 0 && (
                         <span className="text-[10px] text-amber-400">★ {Number(item.rating_avg).toFixed(1)} ({item.rating_count})</span>
                       )}
                     </div>
+
+                    {/* B4: there is NO rejection-reason column on listings
+                        in any schema/migration, so no reason can be shown.
+                        Show guidance + an edit/resubmit link instead. */}
+                    {item.status === 'rejected' && (
+                      <div className="mt-2 rounded-xl bg-red-500/10 border border-red-500/25 p-2.5">
+                        <p className="text-[11px] text-red-300 font-myanmar">
+                          {lang === 'mm'
+                            ? 'ပယ်ချခံရပါတယ် — အမည်၊ လိပ်စာ၊ ဖုန်း၊ ပုံ အချက်အလက် ပြည့်စုံမှန်း စစ်ပြီး ပြင်ပြီး ပြန်တင်ပါ။ Admin မှ ပြန်စစ်ဆေးမည်။'
+                            : 'Rejected — check that name, address, phone and photos are complete, then edit and resubmit. Admin will review it again.'}
+                        </p>
+                        <button
+                          onClick={() => navigate('/directory/' + item.id + '/edit')}
+                          className="mt-1.5 text-[11px] font-bold text-brand-300 underline"
+                        >
+                          {lang === 'mm' ? 'ပြင်ပြီး ပြန်တင်ရန် →' : 'Edit and resubmit →'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -216,23 +235,23 @@ export default function MySubmissionsPage() {
                 <div className="border-t border-white/8 flex">
                   <button
                     onClick={() => navigate('/directory/' + item.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-white/60 hover:bg-white/5 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-white/60 hover:bg-white/5 transition-colors"
                   >
-                    <Eye size={12} /> {lang === 'mm' ? 'ကြည့်' : 'View'}
+                    <Eye size={14} /> {lang === 'mm' ? 'ကြည့်' : 'View'}
                   </button>
                   <div className="w-px bg-white/8" />
                   <button
                     onClick={() => navigate('/directory/' + item.id + '/edit')}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-brand-300 hover:bg-brand-600/10 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-brand-300 hover:bg-brand-600/10 transition-colors"
                   >
-                    <Edit3 size={12} /> {lang === 'mm' ? 'ပြင်' : 'Edit'}
+                    <Edit3 size={14} /> {lang === 'mm' ? 'ပြင်' : 'Edit'}
                   </button>
                   <div className="w-px bg-white/8" />
                   <button
                     onClick={() => handleDelete(item.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
                   >
-                    <Trash2 size={12} /> {lang === 'mm' ? 'ဖျက်' : 'Delete'}
+                    <Trash2 size={14} /> {lang === 'mm' ? 'ဖျက်' : 'Delete'}
                   </button>
                 </div>
               </div>

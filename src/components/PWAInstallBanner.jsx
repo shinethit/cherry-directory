@@ -104,16 +104,16 @@ export default function PWAInstallBanner() {
   )
 
   return (
-    <div className="fixed bottom-[88px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-[100]">
+    <div className="fixed bottom-[164px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-[100]">
       <div className="bg-[#1a0028]/95 backdrop-blur-md border border-brand-400/20 rounded-2xl p-3 shadow-xl shadow-black/40 flex items-center gap-3">
         <img src="/icons/icon-96.png" alt="" className="w-11 h-11 rounded-xl flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-display font-bold text-white leading-tight">Cherry Directory</p>
           <p className="text-[10px] text-white/50 font-myanmar">App အနေနဲ့ Install လုပ်မယ်</p>
         </div>
-        <button onClick={install} disabled={installing} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-brand-600 rounded-xl text-white text-xs font-display font-semibold">
+        <button onClick={install} disabled={installing} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] btn-primary rounded-xl text-xs font-display font-semibold">
           <Download size={13} />
-          {installing ? '...' : 'Install'}
+          {installing ? 'တင်နေသည်…' : 'Install လုပ်မည်'}
         </button>
         <button onClick={dismiss} className="flex-shrink-0 w-7 h-7 flex items-center justify-center bg-white/8 rounded-full">
           <X size={13} className="text-white/50" />

@@ -42,11 +42,11 @@ function NoticeCard({ notice, lang, isMod, onDelete }) {
           </span>
           {notice.is_pinned && <span className="text-[9px] text-gold-400">📌</span>}
           {isUrgent && <span className="text-[9px] text-red-400 font-bold">⚠️ Urgent</span>}
-          {notice.ward && <span className="text-[9px] text-white/30 font-myanmar">{notice.ward}</span>}
+          {notice.ward && <span className="text-[9px] text-white/60 font-myanmar">{notice.ward}</span>}
         </div>
         {isMod && (
-          <button onClick={() => onDelete(notice.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 text-red-400 transition-colors flex-shrink-0">
-            <Trash2 size={12} />
+          <button onClick={() => onDelete(notice.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center transition-colors flex-shrink-0">
+            <Trash2 size={14} />
           </button>
         )}
       </div>
@@ -54,7 +54,7 @@ function NoticeCard({ notice, lang, isMod, onDelete }) {
       {(notice.content_mm || notice.content) && (
         <p className="text-xs text-white/60 font-myanmar leading-relaxed">{lang === 'mm' ? (notice.content_mm || notice.content) : notice.content}</p>
       )}
-      <div className="flex items-center gap-2 text-[9px] text-white/25">
+      <div className="flex items-center gap-2 text-[9px] text-white/60">
         <span className="font-myanmar">{notice.poster_name || 'Community'}</span>
         <span>•</span>
         <span>{timeAgo(notice.posted_at, lang)}</span>
@@ -101,8 +101,8 @@ function PostForm({ onClose, onSuccess, lang }) {
     <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto pt-safe">
       <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
-        <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ကြေညာချက် တင်မည်' : 'Post Notice'}</h2>
-        <button onClick={submit} disabled={submitting || (!form.title && !form.title_mm)} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : lang === 'mm' ? 'တင်မည်' : 'Post'}</button>
+        <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'ရပ်ကွက်ကြေညာချက် တင်မည်' : 'Post Notice'}</h2>
+        <button onClick={submit} disabled={submitting || (!form.title && !form.title_mm)} className="btn-primary text-xs px-4 py-2 disabled:opacity-40 disabled:cursor-not-allowed">{submitting ? '...' : lang === 'mm' ? 'တင်မည်' : 'Post'}</button>
       </div>
       <div className="px-4 py-4 space-y-4 pb-24">
         <div>
@@ -116,7 +116,7 @@ function PostForm({ onClose, onSuccess, lang }) {
             ))}
           </div>
         </div>
-        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကြေညာချက် ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကြေညာချက် ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အကြောင်းအရာ' : 'Content'}</label><textarea value={form.content_mm} onChange={e => set('content_mm', e.target.value)} className="input-dark font-myanmar resize-none h-28" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ရပ်ကွက်/နေရာ' : 'Ward/Area'}</label><input value={form.ward} onChange={e => set('ward', e.target.value)} className="input-dark font-myanmar" placeholder={lang === 'mm' ? 'ဥပမာ: ဗိုလ်ချုပ်ရပ်ကွက်' : 'e.g. Bogyoke Ward'} /></div>
         <button onClick={() => set('is_urgent', !form.is_urgent)} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${form.is_urgent ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
@@ -135,6 +135,7 @@ export default function NoticeBoardPage() {
 
   const [notices, setNotices]   = useState([])
   const [loading, setLoading]   = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [catFilter, setCat]     = useState('all')
   const [showForm, setShowForm] = useState(false)
   // Moderator: show pending count
@@ -144,6 +145,7 @@ export default function NoticeBoardPage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
     let q = supabase.from('notices').select('*').eq('status', 'approved').order('is_pinned', { ascending: false }).order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(50)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
@@ -153,11 +155,14 @@ export default function NoticeBoardPage() {
     const now = Date.now()
     setNotices((data || []).filter(n => !n.expires_at || new Date(n.expires_at).getTime() >= now))
     if (isModerator) {
-      const { count, error: countError } = await supabase.from('notices').select('*', { count: 'exact', head: true }).eq('status', 'pending')
-      if (countError) throw countError
-      setPendingCount(count || 0)
+      // A pending-count failure must not mark the notice list as failed.
+      try {
+        const { count, error: countError } = await supabase.from('notices').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+        if (countError) throw countError
+        setPendingCount(count || 0)
+      } catch (countErr) { console.warn(countErr) }
     }
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true); setNotices([]) }
     setLoading(false)
   }
 
@@ -171,7 +176,7 @@ export default function NoticeBoardPage() {
   useEffect(() => { if (showPending) loadPending() }, [showPending])
 
   async function deleteNotice(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this notice?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this notice?', { danger: true }))) return
     const { error } = await supabase.from('notices').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -194,8 +199,8 @@ export default function NoticeBoardPage() {
     <div className="pb-8">
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
-          <h1 className="font-display font-bold text-xl text-white">📢 {lang === 'mm' ? 'ကြေညာချက်များ' : 'Announcements'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'ရပ်ကွက် ကြေညာချက်များ' : 'Community notices & announcements'}</p>
+          <h1 className="font-display font-bold text-xl text-white">📢 {lang === 'mm' ? 'ရပ်ကွက်ကြေညာချက်' : 'Announcements'}</h1>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? 'ရပ်ကွက် ကြေညာချက်များ' : 'Community notices & announcements'}</p>
         </div>
         <div className="flex gap-2">
           {isModerator && pendingCount > 0 && (
@@ -203,7 +208,7 @@ export default function NoticeBoardPage() {
               ⏳ {pendingCount}
             </button>
           )}
-          <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5"><Plus size={14} /> Post</button>
+          <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5"><Plus size={14} /> {lang === 'mm' ? 'တင်မည်' : 'တင်မည်'}</button>
         </div>
       </div>
 
@@ -220,13 +225,14 @@ export default function NoticeBoardPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
       <div className="px-4 space-y-2 pb-24">
         {loading ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />) :
-         notices.length === 0 ? <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">📋</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ကြေညာချက် မရှိသေး' : 'No notices yet'}</p></div> :
+         loadError ? <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30"><p className="text-sm text-red-400 font-myanmar">{lang === 'mm' ? 'တင်မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ' : 'Failed to load — check your connection and retry'}</p><button onClick={load} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button></div> :
+         notices.length === 0 ? <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">📋</span><p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'ကြေညာချက် မရှိသေး' : 'No notices yet'}</p></div> :
          notices.map(n => <NoticeCard key={n.id} notice={n} lang={lang} isMod={isModerator} onDelete={deleteNotice} />)}
       </div>
 
@@ -244,7 +250,7 @@ export default function NoticeBoardPage() {
                 {n.content_mm && <p className="text-xs text-white/50 font-myanmar">{n.content_mm}</p>}
                 <div className="flex gap-2">
                   <button onClick={() => approveNotice(n.id)} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-green-500/15 border border-green-500/25 text-green-400 text-xs font-bold hover:bg-green-500/25">✓ Approve</button>
-                  <button onClick={() => rejectNotice(n.id)} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl bg-red-500/15 border border-red-500/25 text-red-400 text-xs font-bold hover:bg-red-500/25">✕ Reject</button>
+                  <button onClick={() => rejectNotice(n.id)} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-xl btn-danger text-xs font-bold">✕ Reject</button>
                 </div>
               </div>
             ))}

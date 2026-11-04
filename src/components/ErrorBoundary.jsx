@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component {
           <div className="card-dark rounded-2xl p-6 max-w-md w-full text-center border border-red-500/30">
             <span className="text-5xl mb-4 block">😵</span>
             <h2 className="text-white font-display font-bold text-xl mb-3">
-              Something went wrong
+              တစ်ခုခု မှားသွားပါပြီ
             </h2>
             {/* I-LOW: never render the raw error text — it can leak paths,
                 query fragments or other internals. Generic message only;
@@ -41,19 +41,19 @@ export class ErrorBoundary extends Component {
             <div className="flex gap-2">
               <button 
                 onClick={() => window.location.reload()} 
-                className="flex-1 btn-primary text-sm py-2"
+                className="flex-1 btn-primary text-sm py-3 min-h-[44px]"
               >
-                Refresh Page
+                ပြန်ကြိုးစားမည်
               </button>
               <button 
                 onClick={() => window.location.href = '/'} 
-                className="flex-1 btn-ghost text-sm py-2"
+                className="flex-1 btn-ghost text-sm py-3 min-h-[44px]"
               >
-                Go Home
+                ပင်မသို့ သွားမည်
               </button>
             </div>
-            <p className="text-[10px] text-white/30 mt-4 font-myanmar">
-              If problem persists, please contact support
+            <p className="text-[10px] text-white/50 mt-4 font-myanmar">
+              ပြဿနာ ဆက်ဖြစ်နေပါက Admin ကို ဆက်သွယ်ပါ
             </p>
           </div>
         </div>

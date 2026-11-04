@@ -41,6 +41,17 @@ function readingTime(text, lang) {
   return lang === 'mm' ? `${mins} မိနစ် ဖတ်ရန်` : `${mins} min read`
 }
 
+// Image with a skeleton placeholder while it loads (no blank gap).
+function GalleryImg({ src, className, alt }) {
+  const [loaded, setLoaded] = useState(false)
+  return (
+    <div className="relative w-full h-full">
+      {!loaded && <div className="absolute inset-0 shimmer" />}
+      <img src={src} alt={alt || 'ပုံ'} loading="lazy" onLoad={() => setLoaded(true)} className={className + (loaded ? ' opacity-100' : ' opacity-0') + ' transition-opacity duration-300'} />
+    </div>
+  )
+}
+
 function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
   const navigate = useNavigate()
   const cat = HISTORY_CATS.find(c => c.id === post.category) || HISTORY_CATS[0]
@@ -49,7 +60,7 @@ function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
     <div className="card-dark rounded-2xl overflow-hidden border border-white/8 hover:border-brand-500/30 transition-all cursor-pointer" onClick={() => navigate(`/history/${post.id}`)}>
       {post.cover_url && (
         <div className="h-40 overflow-hidden">
-          <img src={post.cover_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+          <GalleryImg src={post.cover_url} className="w-full h-full object-cover" alt={post.title_mm || post.title} />
         </div>
       )}
       <div className="p-4 space-y-2">
@@ -60,7 +71,7 @@ function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
               {lang === 'mm' ? cat.mm : cat.en}
             </span>
             {post.location_mm && (
-              <span className="text-[9px] text-white/40 flex items-center gap-1">
+              <span className="text-[9px] text-white/60 flex items-center gap-1">
                 <MapPin size={9} /> {post.location_mm}
               </span>
             )}
@@ -70,8 +81,8 @@ function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
               <button onClick={() => onEdit(post)} className="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12">
                 <Edit2 size={11} className="text-white/50" />
               </button>
-              <button onClick={() => onDelete(post.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20">
-                <Trash2 size={11} className="text-red-400" />
+              <button onClick={() => onDelete(post.id)} className="w-7 h-7 rounded-lg btn-danger flex items-center justify-center">
+                <Trash2 size={11} className="text-white" />
               </button>
             </div>
           )}
@@ -83,13 +94,13 @@ function HistoryCard({ post, lang, isModerator, onEdit, onDelete }) {
           <p className="text-xs text-white/60 font-myanmar line-clamp-3">{post.excerpt_mm}</p>
         )}
 
-        <div className="flex items-center gap-3 text-[10px] text-white/30 pt-1 flex-wrap">
+        <div className="flex items-center gap-3 text-[10px] text-white/60 pt-1 flex-wrap">
           {post.event_date && (
             <span className="flex items-center gap-1"><Calendar size={10} /> {formatMyanmarDate(post.event_date)}</span>
           )}
           <span className="flex items-center gap-1"><Clock size={10} /> {timeAgo(post.created_at, lang)}</span>
           {post.content_mm && (
-            <span className="flex items-center gap-1 text-white/40">📖 {readingTime(post.content_mm, lang)}</span>
+            <span className="flex items-center gap-1 text-white/60">📖 {readingTime(post.content_mm, lang)}</span>
           )}
           {post.author_name && <span>✍️ {post.author_name}</span>}
         </div>
@@ -133,7 +144,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
 
   if (!isModerator) return (
     <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 pt-safe">
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
+      <div className="w-full max-w-lg bg-[#1a0030] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
         <p className="text-white font-myanmar mb-4">သမိုင်းအကြောင်း တင်ရန် Moderator သာ ခွင့်ရှိသည်</p>
         <button onClick={onClose} className="btn-primary w-full">ပိတ်မည်</button>
       </div>
@@ -221,7 +232,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
           </div>
         </div>
 
-        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: တောင်ကြီးမြို့ သမိုင်းအကျဉ်း" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: တောင်ကြီးမြို့ သမိုင်းအကျဉ်း" /></div>
         
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'နေရာ' : 'Location'}</label><input value={form.location_mm} onChange={e => set('location_mm', e.target.value)} className="input-dark font-myanmar" placeholder="တောင်ကြီးမြို့၊ အင်းလေးကန်၊ ကလောမြို့..." /></div>
         
@@ -241,7 +252,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ်ပုံ (Cover)' : 'Cover Image'}</label>
           {coverUrl ? (
             <div className="relative h-32">
-              <img src={coverUrl} alt="" className="w-full h-full object-cover rounded-xl" />
+              <img src={coverUrl} alt={form.title_mm || form.title || 'Cover'} className="w-full h-full object-cover rounded-xl" />
               <button onClick={() => setCoverUrl('')} className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-lg flex items-center justify-center text-white text-xs">✕</button>
             </div>
           ) : (
@@ -254,8 +265,8 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
           <div className="flex gap-2 flex-wrap">
             {images.map((url, i) => (
               <div key={i} className="relative w-20 h-20">
-                <img src={url} alt="" className="w-full h-full object-cover rounded-xl" />
-                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px]">✕</button>
+                <GalleryImg src={url} className="w-full h-full object-cover rounded-xl" alt={form.title_mm || form.title || 'ပုံ'} />
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-7 h-7 btn-danger rounded-full text-white text-xs flex items-center justify-center">✕</button>
               </div>
             ))}
             {images.length < 10 && <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />}
@@ -279,6 +290,7 @@ export function HistoryDetailPage() {
   const [post, setPost] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+  const [retryCount, setRetryCount] = useState(0)
   const [related, setRelated] = useState([])
 
   useEffect(() => {
@@ -290,7 +302,9 @@ export function HistoryDetailPage() {
       const { data, error } = await supabase.from('history').select('*').eq('id', id).eq('status', 'published').single()
       if (cancelled) return
       if (error) {
-        setLoadError(error.message)
+        // Never show the raw Supabase error to the user: 'not_found'
+        // for a missing post, 'load_failed' for anything else.
+        setLoadError(error.code === 'PGRST116' ? 'not_found' : 'load_failed')
         setPost(null)
         setLoading(false)
         return
@@ -313,7 +327,7 @@ export function HistoryDetailPage() {
     }
     load()
     return () => { cancelled = true }
-  }, [id])
+  }, [id, retryCount])
 
   if (loading) return (
     <div className="p-4">
@@ -323,15 +337,26 @@ export function HistoryDetailPage() {
   )
 
   if (loadError) return (
-    <div className="p-4 text-center">
-      <p className="text-white/40 mb-1">{lang === 'mm' ? 'မတွေ့ပါ' : 'Not found'}</p>
-      <p className="text-red-400/70 text-xs mb-3">{loadError}</p>
-      <button onClick={() => navigate('/history')} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'သမိုင်းစာမျက်နှာသို့ ပြန်မည်' : 'Back to History'}</button>
+    <div className="p-4 py-16 text-center space-y-3">
+      <p className="text-4xl">{loadError === 'not_found' ? '😶' : '⚠️'}</p>
+      <p className="text-sm text-red-400 font-myanmar">
+        {loadError === 'not_found'
+          ? (lang === 'mm' ? 'မတွေ့ပါ' : 'Not found')
+          : (lang === 'mm' ? 'တင်မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ' : 'Failed to load — check your connection and try again')}
+      </p>
+      {loadError === 'load_failed' && (
+        <div>
+          <button onClick={() => setRetryCount(c => c + 1)} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button>
+        </div>
+      )}
+      <div>
+        <button onClick={() => navigate('/history')} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'သမိုင်းစာမျက်နှာသို့ ပြန်မည်' : 'Back to History'}</button>
+      </div>
     </div>
   )
 
   if (!post) return (
-    <div className="p-4 text-center text-white/40">
+    <div className="p-4 text-center text-white/60">
       {lang === 'mm' ? 'မတွေ့ပါ' : 'Not found'}
     </div>
   )
@@ -350,7 +375,7 @@ export function HistoryDetailPage() {
             {lang === 'mm' ? cat.mm : cat.en}
           </span>
           {post.location_mm && (
-            <span className="text-[10px] text-white/40 flex items-center gap-1 truncate">
+            <span className="text-[10px] text-white/60 flex items-center gap-1 truncate">
               <MapPin size={10} /> {post.location_mm}
             </span>
           )}
@@ -364,14 +389,14 @@ export function HistoryDetailPage() {
 
       {post.cover_url && (
         <div className="mx-4 rounded-2xl overflow-hidden h-56 mb-4">
-          <img src={post.cover_url} alt="" className="w-full h-full object-cover" />
+          <img src={post.cover_url} alt={post.title_mm || post.title} className="w-full h-full object-cover" />
         </div>
       )}
 
       <div className="px-4 space-y-4">
         <h1 className="font-display font-bold text-2xl text-white leading-tight">{post.title_mm || post.title}</h1>
         
-        <div className="flex items-center gap-3 text-xs text-white/40 flex-wrap">
+        <div className="flex items-center gap-3 text-xs text-white/60 flex-wrap">
           {post.event_date && (
             <span className="flex items-center gap-1"><Calendar size={12} /> {formatMyanmarDate(post.event_date, { year: true })}</span>
           )}
@@ -396,7 +421,7 @@ export function HistoryDetailPage() {
           <div className="grid grid-cols-2 gap-2 mt-4">
             {post.images.map((img, i) => (
               <div key={i} className="aspect-video rounded-xl overflow-hidden">
-                <img src={img} alt="" className="w-full h-full object-cover" />
+                <GalleryImg src={img} className="w-full h-full object-cover" alt={post.title_mm || post.title} />
               </div>
             ))}
           </div>
@@ -404,7 +429,7 @@ export function HistoryDetailPage() {
 
         {post.author_bio && (
           <div className="card-dark p-4 rounded-2xl mt-4">
-            <p className="text-xs text-white/40 mb-1">✍️ {lang === 'mm' ? 'ရေးသားသူအကြောင်း' : 'About the Author'}</p>
+            <p className="text-xs text-white/60 mb-1">✍️ {lang === 'mm' ? 'ရေးသားသူအကြောင်း' : 'About the Author'}</p>
             <p className="text-xs text-white/60 font-myanmar">{post.author_bio}</p>
           </div>
         )}
@@ -426,7 +451,7 @@ export function HistoryDetailPage() {
                   >
                     {r.cover_url ? (
                       <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={r.cover_url} alt="" className="w-full h-full object-cover" />
+                        <img src={r.cover_url} alt={r.title_mm || r.title} className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-14 h-14 rounded-lg bg-brand-700/40 flex items-center justify-center flex-shrink-0 text-2xl">
@@ -437,14 +462,14 @@ export function HistoryDetailPage() {
                       <p className="text-sm font-display font-semibold text-white truncate font-myanmar">
                         {r.title_mm || r.title}
                       </p>
-                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-white/40">
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-white/60">
                         <span>{rCat.icon} {lang === 'mm' ? rCat.mm : rCat.en}</span>
                         {r.event_date && (
                           <span>· {formatMyanmarDate(r.event_date)}</span>
                         )}
                       </div>
                     </div>
-                    <span className="text-white/20 flex-shrink-0">→</span>
+                    <span className="text-white/60 flex-shrink-0">→</span>
                   </button>
                 )
               })}
@@ -538,7 +563,7 @@ export default function HistoryPage() {
   }, [])
 
   async function deletePost(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('history').delete().eq('id', id)
     if (error) {
       console.error('Delete error:', error)
@@ -553,7 +578,7 @@ export default function HistoryPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">📜 {lang === 'mm' ? 'ဒေသဆိုင်ရာ သမိုင်းကြောင်းများ' : 'Local History'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">
             {lang === 'mm' ? `${config.app_city || ''} ဒေသဆိုင်ရာ သမိုင်း၊ ယဉ်ကျေးမှု၊ သိသင့်သိထိုက်ရာ` : 'History, culture, and knowledge about our region'}
           </p>
         </div>
@@ -562,6 +587,15 @@ export default function HistoryPage() {
             <Plus size={14} /> {lang === 'mm' ? 'တင်မည်' : 'Post'}
           </button>
         )}
+      </div>
+
+      {/* Intro — what this page is about */}
+      <div className="px-4 mb-3">
+        <p className="text-xs text-white/50 font-myanmar leading-relaxed bg-white/4 border border-white/8 rounded-2xl px-4 py-3">
+          {lang === 'mm'
+            ? `${config.app_city || 'တောင်ကြီး'}မြို့သည် ရှမ်းပြည်နယ်၏ မြို့တော်ဖြစ်ပြီး တောင်တန်းများအကြားတွင် တည်ရှိကာ သမိုင်းဝင် စေတီပုထိုးများ၊ ရိုးရာ ပွဲတော်များနှင့် ယဉ်ကျေးမှု အမွေအနှစ်များ ကြွယ်ဝသော မြို့ ဖြစ်သည်။ ဤစာမျက်နှာတွင် မြို့နှင့် ဒေသအနှံ့၏ သမိုင်းကြောင်း၊ ဓလေ့ထုံးတမ်းနှင့် ထင်ရှားသော နေရာများကို ဖတ်ရှုနိုင်ပါသည်။`
+            : `${config.app_city || 'Taunggyi'}, the capital of Shan State, is a mountain city rich in historic pagodas, traditional festivals and cultural heritage. Read the history, traditions and landmarks of the city and region here.`}
+        </p>
       </div>
 
       {/* Search bar */}
@@ -573,12 +607,12 @@ export default function HistoryPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={lang === 'mm' ? 'သမိုင်းကြောင်း ရှာရန်...' : 'Search history...'}
-            className="input-dark pl-9 pr-9 text-sm w-full font-myanmar"
+            className="input-dark pl-9 pr-9 w-full font-myanmar"
           />
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white"
             >
               <X size={14} />
             </button>
@@ -599,7 +633,7 @@ export default function HistoryPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
@@ -609,15 +643,14 @@ export default function HistoryPage() {
         ) : loadError ? (
           <div className="flex flex-col items-center py-14 text-center">
             <span className="text-4xl mb-3">⚠️</span>
-            <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ရယူရာတွင် အမှားရှိသည်' : 'Failed to load'}</p>
-            <p className="text-red-400/70 text-xs mt-1 mb-3">{loadError}</p>
-            <button onClick={load} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button>
+            <p className="text-red-400 font-display font-semibold">{lang === 'mm' ? 'တင်မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ' : 'Failed to load — check your connection and try again'}</p>
+            <button onClick={load} className="btn-primary text-xs px-4 py-2 mt-3">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button>
           </div>
         ) : posts.length === 0 ? (
           <div className="flex flex-col items-center py-14 text-center">
             <span className="text-4xl mb-3">📜</span>
-            <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'စာရင်း မရှိသေး' : 'No posts yet'}</p>
-            {isModerator && <p className="text-xs text-white/30 mt-2">"တင်မည်" ကို နှိပ်ပြီး ပထမဆုံး သမိုင်းအကြောင်း ရေးပါ</p>}
+            <p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'စာရင်း မရှိသေး' : 'No posts yet'}</p>
+            {isModerator && <p className="text-xs text-white/60 mt-2">"တင်မည်" ကို နှိပ်ပြီး ပထမဆုံး သမိုင်းအကြောင်း ရေးပါ</p>}
           </div>
         ) : (
           posts.map(p => (

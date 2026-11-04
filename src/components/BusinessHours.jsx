@@ -19,6 +19,24 @@ function parseMin(t) {
   return h * 60 + m
 }
 
+const MY_DIGITS = ['၀', '၁', '၂', '၃', '၄', '၅', '၆', '၇', '၈', '၉']
+function myNum(n) {
+  return String(n).split('').map(c => MY_DIGITS[+c] ?? c).join('')
+}
+
+// H14: "21:00" → "ည ၉ နာရီ" (mm) / "9 PM" (en) for the open/closed badge.
+function formatHourLabel(t, lang) {
+  const mins = parseMin(t)
+  if (mins == null) return ''
+  const h = Math.floor(mins / 60)
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  if (lang === 'mm') {
+    const part = h < 12 ? 'မနက်' : h < 17 ? 'နေ့လယ်' : h < 20 ? 'ညနေ' : 'ည'
+    return `${part} ${myNum(h12)} နာရီ`
+  }
+  return `${h12} ${h < 12 ? 'AM' : 'PM'}`
+}
+
 export default function BusinessHours({ hours, lang = 'mm' }) {
   if (!hours || typeof hours !== 'object') return null
 
@@ -47,7 +65,7 @@ export default function BusinessHours({ hours, lang = 'mm' }) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Clock size={14} className="text-brand-300" />
-          <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">
+          <p className="text-xs text-white/60 font-display font-semibold uppercase tracking-wider">
             {lang === 'mm' ? 'ဖွင့်ချိန်' : 'Business Hours'}
           </p>
         </div>
@@ -58,8 +76,16 @@ export default function BusinessHours({ hours, lang = 'mm' }) {
         )}>
           <span className={'w-1.5 h-1.5 rounded-full ' + (isOpen ? 'bg-green-400 animate-pulse' : 'bg-red-400')} />
           {isOpen
-            ? (lang === 'mm' ? 'ယခု ဖွင့်ထားသည်' : 'Open Now')
-            : (lang === 'mm' ? 'ယခု ပိတ်ထားသည်' : 'Closed Now')}
+            ? (lang === 'mm'
+              ? `ယခု ဖွင့်ထားသည် · ${formatHourLabel(todayHours.close, lang)} ထိ`
+              : `Open Now · until ${formatHourLabel(todayHours.close, lang)}`)
+            : (lang === 'mm'
+              ? (todayHours && todayHours.open
+                ? `ယခု ပိတ်ထားသည် · ${formatHourLabel(todayHours.open, lang)} မှ ဖွင့်မည်`
+                : 'ယခု ပိတ်ထားသည်')
+              : (todayHours && todayHours.open
+                ? `Closed Now · opens ${formatHourLabel(todayHours.open, lang)}`
+                : 'Closed Now'))}
         </span>
       </div>
       <div className="space-y-1">
@@ -73,11 +99,13 @@ export default function BusinessHours({ hours, lang = 'mm' }) {
               isToday ? 'bg-brand-600/20 text-brand-200 font-semibold' : 'text-white/60'
             )}>
               <span className="font-myanmar">{lang === 'mm' ? meta.mm : meta.en}</span>
-              <span className="font-mono">
-                {closed
-                  ? (lang === 'mm' ? 'ပိတ်' : 'Closed')
-                  : day.open + ' – ' + day.close}
-              </span>
+              {closed ? (
+                <span className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 text-[10px] font-bold font-myanmar">
+                  {lang === 'mm' ? 'ပိတ်' : 'Closed'}
+                </span>
+              ) : (
+                <span className="font-mono">{day.open + ' – ' + day.close}</span>
+              )}
             </div>
           )
         })}
@@ -133,7 +161,7 @@ export function BusinessHoursEditor({ value, onChange, lang = 'mm' }) {
           const isOpen = day && day.open && day.close
           return (
             <div key={d} className="flex items-center gap-2">
-              <span className={'w-20 text-xs flex-shrink-0 ' + (isOpen ? 'text-white/70' : 'text-white/30')}>
+              <span className={'w-20 text-xs flex-shrink-0 ' + (isOpen ? 'text-white/70' : 'text-white/60')}>
                 {lang === 'mm' ? meta.mm : meta.en}
               </span>
               {isOpen ? (
@@ -142,18 +170,18 @@ export function BusinessHoursEditor({ value, onChange, lang = 'mm' }) {
                     type="time"
                     value={day.open || '09:00'}
                     onChange={e => setTime(d, 'open', e.target.value)}
-                    className="input-dark text-xs flex-1 min-w-0"
+                    className="input-dark flex-1 min-w-0"
                   />
-                  <span className="text-white/30 text-xs">–</span>
+                  <span className="text-white/60 text-xs">–</span>
                   <input
                     type="time"
                     value={day.close || '17:00'}
                     onChange={e => setTime(d, 'close', e.target.value)}
-                    className="input-dark text-xs flex-1 min-w-0"
+                    className="input-dark flex-1 min-w-0"
                   />
                 </>
               ) : (
-                <span className="flex-1 text-xs text-white/30 italic font-myanmar px-2">
+                <span className="flex-1 text-xs text-white/60 italic font-myanmar px-2">
                   {lang === 'mm' ? 'ပိတ်ထားသည်' : 'Closed'}
                 </span>
               )}

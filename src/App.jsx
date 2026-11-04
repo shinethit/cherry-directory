@@ -14,24 +14,22 @@ import { ConfirmProvider } from './components/ConfirmModal'
 
 // ── Lazy pages — default exports ─────────────────────────────
 // H-28: lazy() has no timeout and no retry — a hung or failed chunk fetch
-// used to show "Loading..." forever. lazyWithRetry retries the import once,
-// then reloads the page (a stale cached chunk / failed deploy is the usual
-// cause); the Suspense fallback below escalates to an error screen with
-// Retry if the chunk still hasn't arrived after 10 s.
+// used to show "Loading..." forever. FB-2: lazyWithRetry tries at most 3
+// times (first try + 2 retries), then throws — the ErrorBoundary shows a
+// Myanmar error screen with a retry button. It NEVER reloads the page
+// itself: an unconditional reload here used to loop forever.
 function lazyWithRetry(importFn) {
   return lazy(async () => {
-    try {
-      return await importFn()
-    } catch (err) {
-      console.warn('[chunk] First load failed, retrying once:', err)
+    let lastErr
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
         return await importFn()
-      } catch (err2) {
-        console.warn('[chunk] Retry failed, reloading page:', err2)
-        window.location.reload()
-        throw err2
+      } catch (err) {
+        lastErr = err
+        console.warn(`[chunk] Load failed (attempt ${attempt + 1}/3):`, err)
       }
     }
+    throw lastErr
   })
 }
 
@@ -68,6 +66,8 @@ const NotificationsPage   = lazyWithRetry(() => import('./pages/NotificationsPag
 const SavedPage           = lazyWithRetry(() => import('./pages/SavedPage'))
 const MySubmissionsPage   = lazyWithRetry(() => import('./pages/MySubmissionsPage'))
 const MyRsvpsPage         = lazyWithRetry(() => import('./pages/MyRsvpsPage'))
+const MyReviewsPage       = lazyWithRetry(() => import('./pages/MyReviewsPage'))
+const NotFoundPage        = lazyWithRetry(() => import('./pages/NotFoundPage'))
 const NewsEditPage        = lazyWithRetry(() => import('./pages/NewsEditPage'))
 const RentPage            = lazyWithRetry(() => import('./pages/RentPage'))
 const TutoringPage        = lazyWithRetry(() => import('./pages/TutoringPage'))
@@ -169,7 +169,7 @@ function TimedSuspense({ children }) {
     const t = setTimeout(() => { if (!loadedRef.current) setTimedOut(true) }, CHUNK_TIMEOUT_MS)
     return () => clearTimeout(t)
   }, [pathname])
-  if (timedOut) return <ErrorScreen onRetry={() => window.location.reload()} />
+  if (timedOut) return <ErrorScreen onRetry={() => window.location.reload()} variant="chunk" />
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <SuspenseLoaded onLoaded={() => { loadedRef.current = true }} />
@@ -207,7 +207,7 @@ function AppRoutes() {
   }, [loading])
 
   if (loading && !timeoutExceeded) return <LoadingSpinner />
-  if (timeoutExceeded) return <ErrorScreen onRetry={() => window.location.reload()} />
+  if (timeoutExceeded) return <ErrorScreen onRetry={() => window.location.reload()} variant="auth" />
 
   return (
     <div
@@ -251,6 +251,8 @@ function AppRoutes() {
           <Route path="/health" element={<HealthServicePage />} />
           <Route path="/notices" element={<NoticeBoardPage />} />
           <Route path="/donations" element={<DonationPage />} />
+          <Route path="/donations/:id" element={<DonationPage />} />
+          <Route path="/my-reviews" element={<MyReviewsPage />} />
           <Route path="/tours" element={<ToursPage />} />
           <Route path="/rent" element={<RentPage />} />
           <Route path="/tutoring" element={<TutoringPage />} />
@@ -272,7 +274,7 @@ function AppRoutes() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/help" element={<HelpPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </TimedSuspense>
       <BottomNav />
@@ -281,14 +283,21 @@ function AppRoutes() {
   )
 }
 
-function ErrorScreen({ onRetry }) {
+// FB-4: different text per situation — a slow auth load is not a chunk
+// failure, and neither is "cannot connect to server".
+function ErrorScreen({ onRetry, variant }) {
+  const copy = variant === 'chunk'
+    ? { title: 'App တင်မရပါ', body: 'App ရဲ့ အစိတ်အပိုင်း တစ်ခုခု တင်မရပါ — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ။' }
+    : variant === 'auth'
+      ? { title: 'အကောင့် တင်နေသည်…', body: 'အကောင့် ဖွင့်တာ ကြာနေသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ။' }
+      : { title: 'ချိတ်ဆက်၍ မရပါ', body: 'ဆာဗာသို့ ချိတ်ဆက်၍ မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။' }
   return (
     <div className="min-h-dvh bg-[#0d0015] flex items-center justify-center p-4">
       <div className="card-dark rounded-2xl p-6 max-w-md text-center border border-red-500/30">
         <span className="text-5xl mb-4 block">⚠️</span>
-        <h2 className="text-white font-display font-bold text-lg mb-2">Connection Issue</h2>
-        <p className="text-white/50 text-sm font-myanmar mb-4">Unable to connect to server. Please check your internet connection.</p>
-        <button onClick={onRetry} className="btn-primary text-sm py-2 px-6">Retry</button>
+        <h2 className="text-white font-display font-bold text-lg mb-2">{copy.title}</h2>
+        <p className="text-white/50 text-sm font-myanmar mb-4">{copy.body}</p>
+        <button onClick={onRetry} className="btn-primary text-sm py-3 px-6 min-h-[44px]">ပြန်ကြိုးစားမည်</button>
       </div>
     </div>
   )

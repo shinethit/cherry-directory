@@ -44,38 +44,38 @@ export function PlaceCard({ place, lang, onDelete, onEdit, onOpenMap }) {
           </p>
         )}
         {place.note && (
-          <p className="text-[10px] text-white/40 mt-0.5 font-myanmar line-clamp-1">
+          <p className="text-[10px] text-white/60 mt-0.5 font-myanmar line-clamp-1">
             💬 {place.note}
           </p>
         )}
         {hasCoords && (
-          <p className="text-[9px] text-white/25 mt-1 font-mono">
+          <p className="text-[9px] text-white/60 mt-1 font-mono">
             {lat.toFixed(4)}, {lng.toFixed(4)}
           </p>
         )}
       </div>
 
-      <div className="flex flex-col gap-1 flex-shrink-0">
+      <div className="flex flex-col gap-2 flex-shrink-0">
         <button
           onClick={onOpenMap}
-          className="w-7 h-7 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center hover:bg-blue-500/25"
+          className="w-9 h-9 rounded-lg bg-blue-500/15 text-blue-400 flex items-center justify-center hover:bg-blue-500/25"
           title={lang === 'mm' ? 'Google Maps' : 'Google Maps'}
         >
-          <ExternalLink size={12} />
+          <ExternalLink size={14} />
         </button>
         <button
           onClick={onEdit}
-          className="w-7 h-7 rounded-lg bg-white/8 text-white/50 flex items-center justify-center hover:bg-white/15"
+          className="w-9 h-9 rounded-lg bg-white/8 text-white/50 flex items-center justify-center hover:bg-white/15"
           title={lang === 'mm' ? 'ပြင်မည်' : 'Edit'}
         >
-          <Edit2 size={12} />
+          <Edit2 size={14} />
         </button>
         <button
           onClick={onDelete}
-          className="w-7 h-7 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500/20"
+          className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center"
           title={lang === 'mm' ? 'ဖျက်မည်' : 'Delete'}
         >
-          <Trash2 size={12} />
+          <Trash2 size={14} />
         </button>
       </div>
     </div>
@@ -140,7 +140,7 @@ export function PlaceForm({ lang, initial, userId, onClose, onSaved }) {
           disabled={saving || (!form.name && !form.name_mm)}
           className="btn-primary text-xs px-4 py-2 disabled:opacity-50"
         >
-          {saving ? '...' : (lang === 'mm' ? 'သိမ်း' : 'Save')}
+          {saving ? '...' : (lang === 'mm' ? 'သိမ်းမည်' : 'Save')}
         </button>
       </div>
 
@@ -150,7 +150,6 @@ export function PlaceForm({ lang, initial, userId, onClose, onSaved }) {
             {lang === 'mm' ? 'နေရာအမည် (မြန်မာ)' : 'Name (Myanmar)'} *
           </label>
           <input
-            autoFocus
             value={form.name_mm}
             onChange={e => set('name_mm', e.target.value)}
             className="input-dark font-myanmar"
@@ -218,7 +217,7 @@ export function PlaceForm({ lang, initial, userId, onClose, onSaved }) {
             <button
               type="button"
               onClick={() => setShowMap(true)}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-white/15 text-white/40 text-sm hover:border-brand-400/30 hover:text-brand-300 transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-white/15 text-white/60 text-sm hover:border-brand-400/30 hover:text-brand-300 transition-colors"
             >
               <MapPin size={14} />
               {lang === 'mm' ? 'မြေပုံပေါ်မှ ရွေးမည်' : 'Pick on Map'}

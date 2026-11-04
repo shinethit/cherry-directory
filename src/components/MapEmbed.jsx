@@ -82,7 +82,9 @@ export default function MapEmbed({ lat, lng, name, address, zoom = 15 }) {
 
     const marker = L.marker([lat, lng], { icon }).addTo(map)
     markerRef.current = marker
-    marker.bindPopup(popupEl()).openPopup()
+    // B32: do NOT auto-open the popup — it covers the map. It opens on
+    // marker tap instead.
+    marker.bindPopup(popupEl())
 
     mapInstanceRef.current = map
     // eslint-disable-next-line react-hooks/exhaustive-deps

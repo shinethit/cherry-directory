@@ -29,13 +29,20 @@ export function maskPhone(phone, isLoggedIn) {
 }
 
 // tel: link that dials correctly (uses +95 international format).
-export function toTelHref(phone) {
+// `allowed` gates the link: guests must never get a working tel: link
+// for a masked number (S2/FB-1) — pass the login state; returns null
+// when not allowed. Defaults to true so public numbers (e.g. emergency
+// contacts) keep working without a caller change.
+export function toTelHref(phone, allowed = true) {
+  if (!allowed) return null
   const d = toIntlDigits(phone)
   return d ? `tel:+${d}` : ''
 }
 
 // wa.me needs the country code WITHOUT '+' and WITHOUT the leading 0.
-export function toWaHref(phone, text = '') {
+// Same `allowed` gate as toTelHref — null for guests.
+export function toWaHref(phone, text = '', allowed = true) {
+  if (!allowed) return null
   const d = toIntlDigits(phone)
   if (!d) return ''
   const q = text ? `?text=${encodeURIComponent(text)}` : ''

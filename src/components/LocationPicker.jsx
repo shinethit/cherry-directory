@@ -47,16 +47,32 @@ export default function LocationPicker({ onSelect, onClose }) {
     if (position) onSelect(position);
   };
 
+  // B33: use the phone's current GPS as the pin (no address search box
+  // in this app — the map itself is the picker).
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const latLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setCenter(latLng);
+        setPosition(latLng);
+      },
+      () => {},
+      { timeout: 10000 }
+    );
+  };
+
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4 pt-safe" onClick={onClose}>
-      <div className="bg-[#140020] rounded-2xl w-full max-w-2xl border border-white/10 overflow-hidden" onClick={e => e.stopPropagation()}>
+    // B33: once a pin is picked, a stray backdrop tap must not discard it.
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4 pt-safe" onClick={() => { if (!position) onClose(); }}>
+      <div className="bg-[#1a0030] rounded-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto border border-white/10" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-4 border-b border-white/10">
           <h3 className="font-display font-bold text-white">မြေပုံပေါ်တွင် နေရာရွေးပါ</h3>
           <button onClick={onClose} className="text-white/50 hover:text-white">
             <X size={18} />
           </button>
         </div>
-        <div className="h-96 w-full">
+        <div className="h-[50dvh] w-full">
           <MapContainer
             center={center}
             zoom={13}
@@ -80,6 +96,13 @@ export default function LocationPicker({ onSelect, onClose }) {
               မြေပုံပေါ်ရှိ နေရာကို နှိပ်ပြီး ရွေးပါ။
             </p>
           )}
+          <button
+            type="button"
+            onClick={useCurrentLocation}
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-brand-300 hover:border-brand-400/30 transition-colors"
+          >
+            📍 လက်ရှိနေရာ သုံးမည်
+          </button>
           <div className="flex gap-2">
             <button
               onClick={onClose}
@@ -90,7 +113,7 @@ export default function LocationPicker({ onSelect, onClose }) {
             <button
               onClick={handleConfirm}
               disabled={!position}
-              className="flex-1 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-display font-semibold hover:bg-brand-500 transition-colors disabled:opacity-50"
+              className="flex-1 py-2.5 rounded-xl btn-primary text-sm font-display font-semibold transition-colors disabled:opacity-50"
             >
               အတည်ပြုမည်
             </button>

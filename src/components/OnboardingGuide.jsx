@@ -33,18 +33,18 @@ const STEPS = [
     icon: '🏘️',
     mm: {
       title: 'Community Features များ',
-      desc: 'ဈေးနှုန်း၊ လျှပ်စစ်၊ ဓာတ်ဆီ၊ ရာသီဥတု စတဲ့ သတင်းအချက်အလက်များ',
+      desc: 'ဈေးနှုန်း၊ လျှပ်စစ်၊ ဓာတ်ဆီ စတဲ့ သတင်းအချက်အလက်များ',
     },
     en: {
       title: 'Community Features',
-      desc: 'Prices, power, fuel, weather and more — reported by community',
+      desc: 'Prices, power, fuel and more — reported by community',
     },
   },
   {
     icon: '🏆',
     mm: {
-      title: 'Points ရယူပါ',
-      desc: 'Review ရေး၊ Listing တင်၊ Chat လုပ်ပြီး Points ရယူပြီး Leaderboard မှာ ပါဝင်ပါ',
+      title: 'အမှတ် ရယူပါ',
+      desc: 'Review ရေး၊ Listing တင်၊ Chat လုပ်ပြီး အမှတ် ရယူပြီး Leaderboard မှာ ပါဝင်ပါ',
     },
     en: {
       title: 'Earn Points',
@@ -134,7 +134,6 @@ export default function OnboardingGuide() {
   return (
     <div
       className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/85 backdrop-blur-md p-6 pt-safe"
-      onClick={skip}
     >
       <div
         className="w-full max-w-md bg-gradient-to-br from-[#1a0030] to-[#0d0015] border border-brand-400/30 rounded-3xl p-6 space-y-5 shadow-2xl shadow-brand-900/50"
@@ -144,7 +143,8 @@ export default function OnboardingGuide() {
         <div className="flex justify-end">
           <button
             onClick={skip}
-            className="flex items-center gap-1 text-[10px] text-white/40 hover:text-white/70 transition-colors"
+            className="flex items-center gap-1 text-xs px-3 py-2 min-h-[36px] text-white/60 hover:text-white/80 transition-colors"
+            aria-label={lang === 'mm' ? 'ကျော်မည်' : 'Skip'}
           >
             {lang === 'mm' ? 'ကျော်မည်' : 'Skip'} <X size={12} />
           </button>
@@ -167,13 +167,19 @@ export default function OnboardingGuide() {
           </p>
         </div>
 
-        {/* Progress dots */}
+        {/* Progress dots — tappable to jump to a step */}
         <div className="flex items-center justify-center gap-1.5">
           {STEPS.map((_, i) => (
-            <div
+            <button
               key={i}
-              className={`rounded-full transition-all ${i === step ? 'w-6 h-1.5 bg-brand-500' : 'w-1.5 h-1.5 bg-white/20'}`}
-            />
+              onClick={() => setStep(i)}
+              aria-label={lang === 'mm' ? `အဆင့် ${i + 1}` : `Step ${i + 1}`}
+              className="flex items-center justify-center min-w-[24px] min-h-[24px] p-1"
+            >
+              <span
+                className={`block rounded-full transition-all ${i === step ? 'w-6 h-1.5 bg-brand-500' : 'w-1.5 h-1.5 bg-white/20'}`}
+              />
+            </button>
           ))}
         </div>
 
@@ -185,7 +191,7 @@ export default function OnboardingGuide() {
               className="flex items-center gap-1 px-4 py-2.5 rounded-xl bg-white/8 border border-white/15 text-white/70 text-sm font-semibold hover:bg-white/12 transition-colors"
             >
               <ChevronLeft size={14} />
-              {lang === 'mm' ? 'နောက်' : 'Back'}
+              {lang === 'mm' ? 'ပြန်သွားမည်' : 'Back'}
             </button>
           )}
           <button
@@ -201,7 +207,7 @@ export default function OnboardingGuide() {
         </div>
 
         {/* Step counter */}
-        <p className="text-[9px] text-white/25 text-center font-mono">
+        <p className="text-[10px] text-white/50 text-center font-mono">
           {step + 1} / {STEPS.length}
         </p>
       </div>

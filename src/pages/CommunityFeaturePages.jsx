@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'   // ✅ Added
+import { useNavigate, useParams } from 'react-router-dom'   // ✅ Added
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,7 +9,7 @@ import { Plus, Trash2, ArrowLeft, Clock, Edit2, Copy, Check } from 'lucide-react
 import { ImageUploader } from '../components/UI'
 import { uploadImage } from '../lib/cloudinary'
 import { confirmDialog } from '../lib/confirmDialog'
-import { showError } from '../lib/toast'
+import { showError, showSuccess } from '../lib/toast'
 import { yangonToday, mmtParts, formatMyanmarDate } from '../lib/myanmarDate'
 import ShareButton from '../components/ShareButton'
 
@@ -74,12 +74,43 @@ function CopyButton({ value, label, lang }) {
   return (
     <button
       onClick={handleCopy}
-      className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/6 hover:bg-white/10 border border-white/10 transition-colors"
+      className="flex items-center gap-1.5 min-h-9 px-3 py-2 rounded-lg bg-white/6 hover:bg-white/10 border border-white/10 transition-colors"
       title={copied ? (lang === 'mm' ? 'ကူးပြီး' : 'Copied') : (lang === 'mm' ? 'ကူးမည်' : 'Copy')}
     >
-      {copied ? <Check size={10} className="text-green-400" /> : <Copy size={10} className="text-white/50" />}
-      <span className="text-[9px] text-white/60 font-mono">{value}</span>
+      {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} className="text-white/50" />}
+      <span className="flex flex-col items-start leading-tight">
+        {label && <span className="text-[11px] font-bold text-white/85">{label}</span>}
+        <span className="text-[11px] text-white/60 font-mono">{value}</span>
+      </span>
     </button>
+  )
+}
+
+// E1 (v9.5): collected_amount editor — shown ONLY to users who may
+// manage donations (admin/super_admin, or a moderator with the explicit
+// can_manage_donations permission granted by an admin). The DB trigger
+// in supabase-migration-9.5.sql enforces the same rule server-side,
+// so an organizer without the permission can never save a change here
+// (the update fails and showError reports it).
+function CollectedEditor({ donation, lang, onSaved }) {
+  const [val, setVal] = useState(String(donation.collected_amount ?? 0))
+  const [saving, setSaving] = useState(false)
+  async function save() {
+    const n = parseInt(val, 10)
+    if (isNaN(n) || n < 0) { showError(lang === 'mm' ? 'မှန်ကန်သော ငွေပမာဏ ထည့်ပါ' : 'Enter a valid amount'); return }
+    setSaving(true)
+    const { error } = await supabase.from('donations').update({ collected_amount: n }).eq('id', donation.id)
+    setSaving(false)
+    if (error) { showError(error.message); return }
+    showSuccess(lang === 'mm' ? 'ရရှိငွေ ပြင်ဆင်ပြီးပါပြီ ✓' : 'Collected amount updated ✓')
+    onSaved()
+  }
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <label className="text-[11px] text-white/50 font-myanmar">{lang === 'mm' ? 'ရရှိပြီး ငွေ ပြင်ဆင်ရန် (Ks)' : 'Edit collected (Ks)'}</label>
+      <input type="number" min="0" value={val} onChange={e => setVal(e.target.value)} className="input-dark font-mono w-32" />
+      <button onClick={save} disabled={saving} className="btn-primary text-xs px-3 py-2 min-h-9">{saving ? '...' : (lang === 'mm' ? 'သိမ်းမည်' : 'Save')}</button>
+    </div>
   )
 }
 
@@ -95,7 +126,9 @@ function daysLeft(deadline, lang) {
 
 export function DonationPage() {
   const { lang } = useLang()
-  const { user, profile, isLoggedIn, isModerator } = useAuth()
+  const { user, profile, isLoggedIn, isModerator, isAdmin, canManageDonations } = useAuth()
+  // E6: /donations/:id (share URL) highlights that campaign once loaded.
+  const { id: highlightId } = useParams()
   const config = useAppConfig()
   useSEO({ title: lang === 'mm' ? 'လှူဒါန်းမှု' : 'Donations' })
 
@@ -103,9 +136,16 @@ export function DonationPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [catFilter, setCat] = useState('all')
+  const [donLimit, setDonLimit] = useState(30)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ title_mm: '', description_mm: '', category: 'community', target_amount: '', deadline: '', contact_name: '', contact_phone: '', kbz_pay: '', wave_pay: '', bank_name: '', bank_account: '', bank_holder: '', images: [], is_urgent: false })
   const [imgLoading, setImgLoading] = useState(false)
+
+  // E6: scroll the shared campaign into view once the list has loaded.
+  useEffect(() => {
+    if (!highlightId || loading || items.length === 0) return
+    document.getElementById(`donation-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [highlightId, loading, items.length])
 
   async function handleImageUpload(file) {
     setImgLoading(true)
@@ -124,7 +164,7 @@ export function DonationPage() {
     setLoading(true)
     setLoadError(false)
     try {
-      let q = supabase.from('donations').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
+      let q = supabase.from('donations').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(donLimit)
       if (catFilter !== 'all') q = q.eq('category', catFilter)
       const { data, error } = await q
       if (error) throw error
@@ -141,7 +181,7 @@ export function DonationPage() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'donations' }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [catFilter])
+  }, [catFilter, donLimit])
 
   async function submit() {
     if (!isLoggedIn) { showError(lang === 'mm' ? 'Campaign တင်ရန် Login ဝင်ပါ' : 'Login to post a campaign'); return }
@@ -175,6 +215,7 @@ export function DonationPage() {
       })
       if (error) throw error
       setShowForm(false)
+      showSuccess(lang === 'mm' ? 'လှူဒါန်းမှု တင်ပြီးပါပြီ ✓' : 'Campaign posted ✓')
       load()
     } catch (err) {
       showError(err.message || (lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post campaign'))
@@ -184,7 +225,7 @@ export function DonationPage() {
   }
 
   async function deleteDonation(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('donations').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -195,7 +236,7 @@ export function DonationPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">❤️ {lang === 'mm' ? 'လှူဒါန်းမှု' : 'Donations'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကျောင်း၊ ဘုန်းကြီးကျောင်း၊ Community ငွေကြေးစုဆောင်းမှု` : 'Community fundraising campaigns'}</p>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကျောင်း၊ ဘုန်းကြီးကျောင်း၊ Community ငွေကြေးစုဆောင်းမှု` : 'Community fundraising campaigns'}</p>
         </div>
         {isLoggedIn && <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Post</button>}
       </div>
@@ -209,18 +250,18 @@ export function DonationPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
       <div className="px-4 space-y-3 pb-24">
         {loading ? [1,2].map(n => <div key={n} className="h-36 rounded-2xl shimmer" />) :
          loadError ? <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30"><p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p><button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button></div> :
-         items.length === 0 ? <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">❤️</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Campaign မရှိသေး' : 'No campaigns yet'}</p></div> :
+         items.length === 0 ? <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">❤️</span><p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'Campaign မရှိသေး' : 'No campaigns yet'}</p></div> :
          items.map(d => {
            const cat = DON_CATS.find(c => c.id === d.category)
            return (
-             <div key={d.id} className="card-dark rounded-2xl p-4 space-y-3">
+             <div key={d.id} id={`donation-${d.id}`} className={`card-dark rounded-2xl p-4 space-y-3 ${highlightId === d.id ? 'ring-2 ring-brand-400' : ''}`}>
                <div className="flex items-start justify-between gap-2">
                  <div className="flex-1">
                    <div className="flex items-center gap-2 mb-1">
@@ -234,25 +275,40 @@ export function DonationPage() {
                      "Admin deletes donations" (admin/mod) — an organizer
                      shown the button would always be refused by RLS. */}
                  {isModerator && (
-                   <button onClick={() => deleteDonation(d.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 text-red-400 flex-shrink-0"><Trash2 size={12} /></button>
+                   <button onClick={() => deleteDonation(d.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center flex-shrink-0"><Trash2 size={14} /></button>
                  )}
                </div>
 
-               {/* Goal amount only — nothing ever writes
-                   collected_amount, so it is not rendered (no donation
-                   flow in this version). */}
-               {d.target_amount && (
-                 <div className="flex items-center gap-3 text-xs flex-wrap">
-                   <span className="text-white/50">{lang === 'mm' ? 'ပန်းတိုင်' : 'Goal'}: <span className="text-white font-bold font-mono">{Number(d.target_amount).toLocaleString()} Ks</span></span>
-                 </div>
-               )}
+               {/* Goal + collected progress (E1) — collected_amount
+                   is stored in the DB (default 0) and edited only by
+                   users who may manage donations (see CollectedEditor). */}
+               {(d.target_amount || Number(d.collected_amount) > 0) && (() => {
+                 const collected = Number(d.collected_amount) || 0
+                 const pct = d.target_amount ? Math.min(100, Math.round((collected / Number(d.target_amount)) * 100)) : 0
+                 return (
+                   <div className="space-y-1.5">
+                     <div className="flex items-center gap-3 text-xs flex-wrap">
+                       {d.target_amount && (
+                         <span className="text-white/50">{lang === 'mm' ? 'ပန်းတိုင်' : 'Goal'}: <span className="text-white font-bold font-mono">{Number(d.target_amount).toLocaleString()} Ks</span></span>
+                       )}
+                       <span className="text-white/50">{lang === 'mm' ? 'ရရှိပြီး' : 'Raised'}: <span className="text-green-400 font-bold font-mono">{collected.toLocaleString()} Ks{d.target_amount ? ` (${pct}%)` : ''}</span></span>
+                     </div>
+                     {d.target_amount && (
+                       <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                         <div className="h-full bg-gradient-to-r from-green-500 to-emerald-400 transition-all" style={{ width: `${pct}%` }} />
+                       </div>
+                     )}
+                     {canManageDonations && <CollectedEditor donation={d} lang={lang} onSaved={load} />}
+                   </div>
+                 )
+               })()}
 
                {/* Images gallery */}
                {d.images?.length > 0 && (
                  <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
                    {d.images.slice(0, 4).map((img, i) => (
                      <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-white/10">
-                       <img src={img} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
+                       <img src={img} alt={d.title_mm || 'လှူဒါန်းမှု ပုံ'} className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
                      </a>
                    ))}
                    {d.images.length > 4 && (
@@ -280,6 +336,10 @@ export function DonationPage() {
                        <Check size={9} /> {lang === 'mm' ? 'အတည်ပြုပြီး' : 'Verified'}
                      </span>
                    )}
+                   {/* Exact end date (E21) — the badge above is relative only */}
+                   {d.deadline && (
+                     <span className="text-[10px] text-white/60 font-myanmar">{lang === 'mm' ? 'ပြီးဆုံးရက်' : 'Ends'}: {fmtDateShort(d.deadline, lang)}</span>
+                   )}
                  </div>
                )}
 
@@ -298,7 +358,7 @@ export function DonationPage() {
                {/* Share */}
                <div className="flex justify-end pt-1 border-t border-white/6">
                  <ShareButton
-                   url={window.location.origin + '/donations'}
+                   url={window.location.origin + '/donations/' + d.id}
                    title={d.title_mm || d.title}
                    description={d.description_mm || ''}
                  />
@@ -306,14 +366,19 @@ export function DonationPage() {
              </div>
            )
          })}
+        {!loading && !loadError && items.length >= donLimit && (
+          <button onClick={() => setDonLimit(l => l + 30)} className="w-full py-3 rounded-2xl bg-white/6 border border-white/10 text-sm text-white/70 hover:bg-white/10">
+            {lang === 'mm' ? 'ထပ်တင်ရန်' : 'Load more'}
+          </button>
+        )}
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 z-[200] flex flex-col bg-[#0d0015] overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto pt-safe">
           <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Campaign တင်မည်' : 'Create Campaign'}</h2>
-            <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : 'Post'}</button>
+            <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : (lang === 'mm' ? 'တင်မည်' : 'Post')}</button>
           </div>
           <div className="px-4 py-4 space-y-4 pb-24">
             <div>
@@ -324,7 +389,7 @@ export function DonationPage() {
                 ))}
               </div>
             </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className={'input-dark font-myanmar' + (!form.title_mm ? ' border-red-500/60' : '')} />{!form.title_mm && <p className="text-xs text-red-400 mt-1 font-myanmar">ခေါင်းစဉ် ထည့်ပါ</p>}</div>
             <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-24" /></div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -343,11 +408,11 @@ export function DonationPage() {
               <div className="flex gap-2 flex-wrap">
                 {form.images.map((url, i) => (
                   <div key={i} className="relative w-20 h-20">
-                    <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
+                    <img src={url} alt={form.title_mm || 'ပုံ'} className="w-full h-full object-cover rounded-xl border border-white/10" />
                     <button
                       type="button"
                       onClick={() => set('images', form.images.filter((_, j) => j !== i))}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center"
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 btn-danger rounded-full text-white text-[10px] flex items-center justify-center"
                     >✕</button>
                   </div>
                 ))}
@@ -355,23 +420,24 @@ export function DonationPage() {
                   <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />
                 )}
               </div>
-              <p className="text-[9px] text-white/25 mt-1.5">{lang === 'mm' ? 'အများဆုံး ၅ ပုံ' : 'Max 5 photos'}</p>
+              <p className="text-[9px] text-white/60 mt-1.5">{lang === 'mm' ? 'အများဆုံး ၅ ပုံ' : 'Max 5 photos'}</p>
             </div>
             <div className="border-t border-white/8 pt-3">
-              <p className="text-xs text-white/40 mb-2 font-display font-semibold uppercase tracking-wider">ငွေလွှဲ အချက်အလက်</p>
+              <p className="text-xs text-white/60 mb-2 font-display font-semibold uppercase tracking-wider">ငွေလွှဲ အချက်အလက်</p>
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-2">
-                  <div><label className="block text-[10px] text-white/40 mb-1">ဆက်သွယ်ရမည့်သူ</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar text-sm" /></div>
-                  <div><label className="block text-[10px] text-white/40 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark text-sm" placeholder="09..." /></div>
+                  <div><label className="block text-[10px] text-white/60 mb-1">ဆက်သွယ်ရမည့်သူ</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar" /></div>
+                  <div><label className="block text-[10px] text-white/60 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className={'input-dark' + ((!form.contact_phone && !form.kbz_pay && !form.wave_pay && !form.bank_account) ? ' border-red-500/60' : '')} placeholder="09..." /></div>
                 </div>
-                <div><label className="block text-[10px] text-white/40 mb-1">KBZPay</label><input value={form.kbz_pay} onChange={e => set('kbz_pay', e.target.value)} className="input-dark font-mono text-sm" placeholder="09..." /></div>
-                <div><label className="block text-[10px] text-white/40 mb-1">WavePay</label><input value={form.wave_pay} onChange={e => set('wave_pay', e.target.value)} className="input-dark font-mono text-sm" placeholder="09..." /></div>
+                <div><label className="block text-[10px] text-white/60 mb-1">KBZPay</label><input value={form.kbz_pay} onChange={e => set('kbz_pay', e.target.value)} className="input-dark font-mono" placeholder="09..." /></div>
+                <div><label className="block text-[10px] text-white/60 mb-1">WavePay</label><input value={form.wave_pay} onChange={e => set('wave_pay', e.target.value)} className="input-dark font-mono" placeholder="09..." /></div>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="col-span-1"><label className="block text-[10px] text-white/40 mb-1">ဘဏ်</label><input value={form.bank_name} onChange={e => set('bank_name', e.target.value)} className="input-dark text-sm" placeholder="KBZ" /></div>
-                  <div className="col-span-1"><label className="block text-[10px] text-white/40 mb-1">Account No</label><input value={form.bank_account} onChange={e => set('bank_account', e.target.value)} className="input-dark font-mono text-sm" /></div>
-                  <div className="col-span-1"><label className="block text-[10px] text-white/40 mb-1">နာမည်</label><input value={form.bank_holder} onChange={e => set('bank_holder', e.target.value)} className="input-dark font-myanmar text-sm" /></div>
+                  <div className="col-span-1"><label className="block text-[10px] text-white/60 mb-1">ဘဏ်</label><input value={form.bank_name} onChange={e => set('bank_name', e.target.value)} className="input-dark" placeholder="KBZ" /></div>
+                  <div className="col-span-1"><label className="block text-[10px] text-white/60 mb-1">Account No</label><input value={form.bank_account} onChange={e => set('bank_account', e.target.value)} className="input-dark font-mono" /></div>
+                  <div className="col-span-1"><label className="block text-[10px] text-white/60 mb-1">နာမည်</label><input value={form.bank_holder} onChange={e => set('bank_holder', e.target.value)} className="input-dark font-myanmar" /></div>
                 </div>
               </div>
+              {(!form.contact_phone && !form.kbz_pay && !form.wave_pay && !form.bank_account) && <p className="text-xs text-red-400 mt-1 font-myanmar">ဖုန်း (သို့) KBZPay / WavePay / ဘဏ်အကောင့် တစ်ခုခု ထည့်ပါ — လှူမည့်သူ ဆက်သွယ်နိုင်ရန်</p>}
             </div>
             <button onClick={() => set('is_urgent', !form.is_urgent)} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${form.is_urgent ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
               ⚡ {lang === 'mm' ? 'Urgent — အမြန်လိုအပ်' : 'Mark as Urgent'}
@@ -422,7 +488,7 @@ function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
             <button onClick={() => onEdit(service)} className="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/30">
               <Edit2 size={12} />
             </button>
-            <button onClick={() => onDelete(service.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 text-red-400">
+            <button onClick={() => onDelete(service.id)} className="w-7 h-7 rounded-lg btn-danger flex items-center justify-center">
               <Trash2 size={12} />
             </button>
           </div>
@@ -438,14 +504,14 @@ function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
         </div>
       )}
 
-      <div className="flex items-center gap-3 flex-wrap text-[10px] text-white/40">
+      <div className="flex items-center gap-3 flex-wrap text-[10px] text-white/60">
         {service.location_mm && <span className="font-myanmar">📍 {service.location_mm}</span>}
         {service.start_date && <span>📅 {fmtDateShort(service.start_date, lang)}{service.end_date && service.end_date !== service.start_date ? ` – ${fmtDateShort(service.end_date, lang)}` : ''}</span>}
         {service.start_time && <span>🕐 {service.start_time}{service.end_time ? `–${service.end_time}` : ''}</span>}
       </div>
 
-      <div className="flex gap-2">
-        {service.contact_phone && <a href={`tel:${service.contact_phone}`} className="text-[10px] text-green-400 flex items-center gap-1">📞 {service.contact_phone}</a>}
+      <div className="flex gap-2 flex-wrap">
+        {service.contact_phone && <a href={`tel:${service.contact_phone}`} className="flex items-center gap-1.5 min-h-9 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">📞 {lang === 'mm' ? 'ဖုန်းခေါ်မည်' : 'Call'} {service.contact_phone}</a>}
         {service.facebook && <a href={service.facebook} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400">FB Page →</a>}
       </div>
     </div>
@@ -541,7 +607,7 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
 
   if (!isLoggedIn) return (
     <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 pt-safe">
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
+      <div className="w-full max-w-lg bg-[#1a0030] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
         <p className="text-white font-myanmar mb-4">တင်ရန် Login လိုအပ်သည်</p>
         <button onClick={() => navigate('/login')} className="btn-primary w-full">Login ဝင်မည်</button>
         <button onClick={onClose} className="btn-ghost w-full mt-2">Cancel</button>
@@ -566,28 +632,28 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
           </div>
         </div>
 
-        <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={form.type === 'blood_drive' ? 'ဥပမာ: သွေးလှူဒါန်းပွဲ — မြေနီတောင်ဆေးရုံ' : 'ဥပမာ: အခမဲ့ဆေးခန်း — ဆရာဝန် ၅ ဦး'} /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">ခေါင်းစဉ် (မြန်မာ) *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className={'input-dark font-myanmar' + (!form.title_mm ? ' border-red-500/60' : '')} placeholder={form.type === 'blood_drive' ? 'ဥပမာ: သွေးလှူဒါန်းပွဲ — မြေနီတောင်ဆေးရုံ' : 'ဥပမာ: အခမဲ့ဆေးခန်း — ဆရာဝန် ၅ ဦး'} />{!form.title_mm && <p className="text-xs text-red-400 mt-1 font-myanmar">ခေါင်းစဉ် ထည့်ပါ</p>}</div>
         <div><label className="block text-xs text-white/50 mb-1.5">အဖွဲ့အစည်း/ဆေးရုံ</label><input value={form.organizer_mm} onChange={e => set('organizer_mm', e.target.value)} className="input-dark font-myanmar" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
         {form.type === 'blood_drive' && (
           <div><label className="block text-xs text-white/50 mb-1.5">🩸 လိုအပ်သော သွေးအုပ်စု</label>
             <div className="flex gap-2 flex-wrap">
               {BLOOD_TYPES.map(bt => (
-                <button key={bt} onClick={() => toggleBloodType(bt)} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${form.blood_types_needed.includes(bt) ? 'bg-red-500/25 border-red-500/40 text-red-400' : 'bg-white/5 border-white/10 text-white/40'}`}>{bt}</button>
+                <button key={bt} onClick={() => toggleBloodType(bt)} className={`px-3 py-1.5 rounded-full text-xs font-bold border ${form.blood_types_needed.includes(bt) ? 'bg-red-500/25 border-red-500/40 text-red-400' : 'bg-white/5 border-white/10 text-white/60'}`}>{bt}</button>
               ))}
             </div>
           </div>
         )}
         <div><label className="block text-xs text-white/50 mb-1.5">နေရာ</label><input value={form.location_mm} onChange={e => set('location_mm', e.target.value)} className="input-dark font-myanmar" /></div>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="block text-[10px] text-white/40 mb-1">Start Date</label><input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} className="input-dark" /></div>
-          <div><label className="block text-[10px] text-white/40 mb-1">End Date</label><input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} className="input-dark" /></div>
-          <div><label className="block text-[10px] text-white/40 mb-1">Start Time</label><input type="time" value={form.start_time} onChange={e => set('start_time', e.target.value)} className="input-dark" /></div>
-          <div><label className="block text-[10px] text-white/40 mb-1">End Time</label><input type="time" value={form.end_time} onChange={e => set('end_time', e.target.value)} className="input-dark" /></div>
+          <div><label className="block text-[10px] text-white/60 mb-1">Start Date</label><input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} className="input-dark" /></div>
+          <div><label className="block text-[10px] text-white/60 mb-1">End Date</label><input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} className="input-dark" /></div>
+          <div><label className="block text-[10px] text-white/60 mb-1">Start Time</label><input type="time" value={form.start_time} onChange={e => set('start_time', e.target.value)} className="input-dark" /></div>
+          <div><label className="block text-[10px] text-white/60 mb-1">End Time</label><input type="time" value={form.end_time} onChange={e => set('end_time', e.target.value)} className="input-dark" /></div>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div><label className="block text-[10px] text-white/40 mb-1">ဆက်သွယ်ရမည့်သူ</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar text-sm" /></div>
-          <div><label className="block text-[10px] text-white/40 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark text-sm" placeholder="09..." /></div>
+          <div><label className="block text-[10px] text-white/60 mb-1">ဆက်သွယ်ရမည့်သူ</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar" /></div>
+          <div><label className="block text-[10px] text-white/60 mb-1">ဖုန်း</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark" placeholder="09..." /></div>
         </div>
         <div><label className="block text-xs text-white/50 mb-1.5">Facebook Page</label><input value={form.facebook} onChange={e => set('facebook', e.target.value)} className="input-dark" placeholder="https://facebook.com/..." /></div>
         <div>
@@ -595,8 +661,8 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
           <div className="flex gap-2 flex-wrap">
             {images.map((url, i) => (
               <div key={i} className="relative w-16 h-16">
-                <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
-                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px]">✕</button>
+                <img src={url} alt={form.title_mm || 'ပုံ'} className="w-full h-full object-cover rounded-xl border border-white/10" />
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 btn-danger rounded-full text-white text-[10px]">✕</button>
               </div>
             ))}
             {images.length < 5 && <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />}
@@ -621,6 +687,7 @@ export function HealthServicePage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [typeFilter, setType] = useState('all')
+  const [healthLimit, setHealthLimit] = useState(30)
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
 
@@ -628,7 +695,7 @@ export function HealthServicePage() {
     setLoading(true)
     setLoadError(false)
     try {
-      let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(30)
+      let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(healthLimit)
       if (typeFilter !== 'all') q = q.eq('type', typeFilter)
       const { data, error } = await q
       if (error) throw error
@@ -645,10 +712,10 @@ export function HealthServicePage() {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'health_services' }, load)
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [typeFilter])
+  }, [typeFilter, healthLimit])
 
   async function deleteItem(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('health_services').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -674,7 +741,7 @@ export function HealthServicePage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🏥 {lang === 'mm' ? 'ကျန်းမာရေးဝန်ဆောင်မှု' : 'Health Services'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} အခမဲ့ဆေးခန်း • သွေးလှူ • ဆေးထိုး` : 'Free clinic • Blood drives • Vaccination'}</p>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} အခမဲ့ဆေးခန်း • သွေးလှူ • ဆေးထိုး` : 'Free clinic • Blood drives • Vaccination'}</p>
         </div>
         <button onClick={() => { setEditTarget(null); setShowForm(true) }} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> Post</button>
       </div>
@@ -688,7 +755,7 @@ export function HealthServicePage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
@@ -701,7 +768,7 @@ export function HealthServicePage() {
            </div>
          ) :
          items.length === 0 ? (
-           <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">🏥</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ဝန်ဆောင်မှု မရှိသေး' : 'No services posted'}</p></div>
+           <div className="flex flex-col items-center py-12 text-center"><span className="text-4xl mb-3">🏥</span><p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'ဝန်ဆောင်မှု မရှိသေး' : 'No services posted'}</p></div>
          ) :
          items.map(item => (
            <HealthCard
@@ -714,6 +781,11 @@ export function HealthServicePage() {
              onDelete={deleteItem}
            />
          ))}
+        {!loading && !loadError && items.length >= healthLimit && (
+          <button onClick={() => setHealthLimit(l => l + 30)} className="w-full py-3 rounded-2xl bg-white/6 border border-white/10 text-sm text-white/70 hover:bg-white/10">
+            {lang === 'mm' ? 'ထပ်တင်ရန်' : 'Load more'}
+          </button>
+        )}
       </div>
 
       {showForm && (
@@ -742,7 +814,25 @@ const SEAT_LABELS = {
   many:    { mm: 'နေရာများများ',  en: 'Many seats', color: 'text-green-400' },
   few:     { mm: 'နေရာနည်းနည်း',  en: 'Few seats',  color: 'text-amber-400' },
   full:    { mm: 'ပြည့်သွားပြီ',   en: 'Full',       color: 'text-red-400' },
-  unknown: { mm: 'မသိရ',          en: 'Unknown',    color: 'text-white/40' },
+  unknown: { mm: 'မသိရ',          en: 'Unknown',    color: 'text-white/60' },
+}
+
+// E2 (v9.5): bus_routes has duration_hours but NO arrival_time and NO
+// operator phone column — arrival is estimated from departure_time +
+// duration_hours. Operator phone stays unavailable (needs a
+// bus_routes.operator_phone column + data — schema decision).
+function arrivalEstimate(departureTime, durationHours) {
+  if (!departureTime || durationHours == null) return null
+  const [h, m] = String(departureTime).split(':').map(Number)
+  if (isNaN(h)) return null
+  const total = h * 60 + (m || 0) + Math.round(Number(durationHours) * 60)
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+// E22: date arithmetic on a YYYY-MM-DD string (UTC math, no TZ shift).
+function addDays(dateStr, n) {
+  const [y, m, d] = String(dateStr).split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10)
 }
 
 export function BusSchedulePage() {
@@ -773,7 +863,7 @@ export function BusSchedulePage() {
     setLoadError(false)
     try {
       let q = supabase.from('bus_departures')
-        .select('*, bus_routes(from_city, to_city, operator, type, normal_fare)')
+        .select('*, bus_routes(from_city, to_city, operator, type, normal_fare, duration_hours)')
         .eq('departure_date', dateFilter)
         .order('departure_time', { ascending: true })
       if (routeFilter !== 'all') q = q.eq('route_id', routeFilter)
@@ -820,7 +910,7 @@ export function BusSchedulePage() {
   }
 
   async function deleteSchedule(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('bus_departures').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -833,7 +923,7 @@ export function BusSchedulePage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🚌 {lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကားထွက်ချိန် Community Report` : 'Community reported bus departures'}</p>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကားထွက်ချိန် Community Report` : 'Community reported bus departures'}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
       </div>
@@ -845,10 +935,14 @@ export function BusSchedulePage() {
               <option key={r.id} value={r.id} style={{ backgroundColor: '#1a0030' }}>{routeLabel(r)}</option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div>
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ရက်စွဲ' : 'Date'}</label>
+          <div className="flex gap-2 mb-2">
+            <button onClick={() => setDateFilter(yangonToday())} className={`flex-1 py-2 rounded-xl text-xs font-bold border ${dateFilter === yangonToday() ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{lang === 'mm' ? 'ယနေ့' : 'Today'}</button>
+            <button onClick={() => setDateFilter(addDays(yangonToday(), 1))} className={`flex-1 py-2 rounded-xl text-xs font-bold border ${dateFilter === addDays(yangonToday(), 1) ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{lang === 'mm' ? 'မနက်ဖြန်' : 'Tomorrow'}</button>
+          </div>
           <input type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)} className="input-dark" />
         </div>
       </div>
@@ -863,11 +957,12 @@ export function BusSchedulePage() {
          departures.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center">
              <span className="text-4xl mb-3">🚌</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ဒီနေ့ ကားထွက်ချိန် မရှိသေး' : 'No departures reported for this date'}</p>
+             <p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'ဒီနေ့ ကားထွက်ချိန် မရှိသေး' : 'No departures reported for this date'}</p>
            </div>
          ) :
          departures.map(s => {
            const seat = SEAT_LABELS[s.seats_available] || SEAT_LABELS.unknown
+           const eta = arrivalEstimate(s.departure_time, s.bus_routes?.duration_hours)
            return (
              <div key={s.id} className="card-dark rounded-2xl p-4">
                <div className="flex items-start justify-between gap-2">
@@ -875,14 +970,16 @@ export function BusSchedulePage() {
                    <p className="font-display font-semibold text-sm text-white font-myanmar">{routeLabel(s.bus_routes)}</p>
                    <div className="flex items-center gap-3 mt-1 flex-wrap">
                      {s.departure_time && <span className="text-xs text-brand-300">🕐 {s.departure_time}</span>}
+                     {eta && <span className="text-xs text-white/50">→ {lang === 'mm' ? 'ရောက်ချိန် ခန့်မှန်း' : 'ETA'} {eta}</span>}
+                     {s.bus_routes?.duration_hours != null && <span className="text-xs text-white/60">⏱ ~{s.bus_routes.duration_hours} {lang === 'mm' ? 'နာရီ' : 'h'}</span>}
                      <span className={`text-xs font-bold ${seat.color}`}>{lang === 'mm' ? seat.mm : seat.en}</span>
                      {s.actual_fare
                        ? <span className="text-xs text-gold-400 font-mono">{Number(s.actual_fare).toLocaleString()} Ks</span>
-                       : (s.bus_routes?.normal_fare ? <span className="text-xs text-white/40 font-mono">~{Number(s.bus_routes.normal_fare).toLocaleString()} Ks</span> : null)}
+                       : (s.bus_routes?.normal_fare ? <span className="text-xs text-white/60 font-mono">~{Number(s.bus_routes.normal_fare).toLocaleString()} Ks</span> : null)}
                    </div>
-                   {s.notes && <p className="text-xs text-white/40 mt-1 font-myanmar">{s.notes}</p>}
+                   {s.notes && <p className="text-xs text-white/60 mt-1 font-myanmar">{s.notes}</p>}
                  </div>
-                 {isModerator && <button onClick={() => deleteSchedule(s.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400"><Trash2 size={12} /></button>}
+                 {isModerator && <button onClick={() => deleteSchedule(s.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center"><Trash2 size={14} /></button>}
                </div>
              </div>
            )
@@ -906,8 +1003,8 @@ export function BusSchedulePage() {
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">ရက်စွဲ *</label><input type="date" value={form.departure_date} onChange={e => set('departure_date', e.target.value)} className="input-dark" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ထွက်ချိန် *</label><input type="time" value={form.departure_time} onChange={e => set('departure_time', e.target.value)} className="input-dark" /></div>
+              <div><label className="block text-[10px] text-white/60 mb-1">ရက်စွဲ *</label><input type="date" value={form.departure_date} onChange={e => set('departure_date', e.target.value)} className="input-dark" /></div>
+              <div><label className="block text-[10px] text-white/60 mb-1">ထွက်ချိန် *</label><input type="time" value={form.departure_time} onChange={e => set('departure_time', e.target.value)} className="input-dark" /></div>
             </div>
             <div>
               <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'နေရာ အခြေအနေ' : 'Seat availability'}</label>
@@ -968,6 +1065,7 @@ export function ToursPage() {
   useSEO({ title: 'Tour Guide' })
 
   const [tours, setTours] = useState([])
+  const [guides, setGuides] = useState({})
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
   const [typeFilter, setType] = useState('all')
@@ -1003,6 +1101,17 @@ export function ToursPage() {
     }
   }
 
+  // E3: guide contact lives on tour_guides (public select, status =
+  // 'active') — packages only carry guide_id, usually null. Join here
+  // client-side; no guide picker is invented.
+  async function loadGuides() {
+    const { data, error } = await supabase.from('tour_guides').select('id, name, name_mm, phone, facebook').eq('status', 'active')
+    if (error) { console.warn('Load guides error:', error); return }
+    const map = {}
+    ;(data || []).forEach(g => { map[g.id] = g })
+    setGuides(map)
+  }
+
   async function load() {
     setLoading(true)
     setLoadError(false)
@@ -1031,6 +1140,7 @@ export function ToursPage() {
 
   useEffect(() => {
     load()
+    loadGuides()
   }, [typeFilter])
 
   // Realtime subscription for tours
@@ -1094,7 +1204,7 @@ export function ToursPage() {
   }
 
   async function deleteTour(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('tour_packages').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -1105,7 +1215,7 @@ export function ToursPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🏔️ Tour Guide / Trekking</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} Trekking / Boat Trip ခရီးစဉ်များ` : 'Local trekking & boat tour packages'}</p>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} Trekking / Boat Trip ခရီးစဉ်များ` : 'Local trekking & boat tour packages'}</p>
         </div>
         {/* Add is admin/mod only: tour_packages has a select-only policy,
             so an insert from anyone else would always fail at RLS. */}
@@ -1116,7 +1226,7 @@ export function ToursPage() {
           <select value={typeFilter} onChange={e => setType(e.target.value)} className="select-dark">
             {TOUR_TYPES.map(t => <option key={t.id} value={t.id} style={{ backgroundColor: '#1a0030' }}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>)}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
       <div className="px-4 space-y-3 pb-24">
@@ -1130,7 +1240,7 @@ export function ToursPage() {
          tours.length === 0 ? (
            <div className="flex flex-col items-center py-12 text-center">
              <span className="text-4xl mb-3">🏔️</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Tour Package မရှိသေး' : 'No tour packages yet'}</p>
+             <p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'Tour Package မရှိသေး' : 'No tour packages yet'}</p>
            </div>
          ) :
          tours.map(t => {
@@ -1146,7 +1256,7 @@ export function ToursPage() {
                      <div className="flex gap-1 mb-2 overflow-x-auto scrollbar-hide">
                        {t.images.slice(0, 3).map((img, i) => (
                          <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-white/10">
-                           <img src={img} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
+                           <img src={img} alt={t.name_mm || 'ခရီးစဉ် ပုံ'} className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
                          </a>
                        ))}
                        {t.images.length > 3 && (
@@ -1164,16 +1274,16 @@ export function ToursPage() {
                    <h3 className="font-display font-semibold text-sm text-white font-myanmar">{lang === 'mm' ? (t.name_mm || t.name) : (t.name || t.name_mm)}</h3>
                    {t.description_mm && <p className="text-xs text-white/50 mt-1 font-myanmar line-clamp-2">{t.description_mm}</p>}
                    <div className="flex items-center gap-3 mt-1.5 flex-wrap text-[10px]">
-                     {t.duration_days && <span className="text-white/40 font-myanmar">⏱ {t.duration_days} {lang === 'mm' ? 'ရက်' : t.duration_days > 1 ? 'days' : 'day'}</span>}
+                     {t.duration_days && <span className="text-white/60 font-myanmar">⏱ {t.duration_days} {lang === 'mm' ? 'ရက်' : t.duration_days > 1 ? 'days' : 'day'}</span>}
                      {(t.price_mmk || t.price_usd) && (
                        <span className="text-gold-400 font-mono">
-                         {t.price_mmk ? `${Number(t.price_mmk).toLocaleString()} Ks` : ''}
+                         {t.price_mmk ? `${Number(t.price_mmk).toLocaleString()} Ks${lang === 'mm' ? '/လူ' : '/person'}` : ''}
                          {t.price_mmk && t.price_usd ? ' · ' : ''}
-                         {t.price_usd ? `$${Number(t.price_usd).toLocaleString()}` : ''}
+                         {t.price_usd ? `$${Number(t.price_usd).toLocaleString()}${lang === 'mm' ? '/လူ' : '/person'}` : ''}
                        </span>
                      )}
                      {(t.start_location || t.end_location) && (
-                       <span className="text-white/40 font-myanmar">📍 {t.start_location || ''}{t.start_location && t.end_location ? ' → ' : ''}{t.end_location || ''}</span>
+                       <span className="text-white/60 font-myanmar">📍 {t.start_location || ''}{t.start_location && t.end_location ? ' → ' : ''}{t.end_location || ''}</span>
                      )}
                    </div>
 
@@ -1189,8 +1299,24 @@ export function ToursPage() {
                        })}
                      </div>
                    )}
+
+                   {/* Guide contact (E3) — guide data comes from
+                       tour_guides; most packages have guide_id null. */}
+                   {(() => {
+                     const g = t.guide_id ? guides[t.guide_id] : null
+                     if (g) {
+                       return (
+                         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                           <span className="text-[10px] text-white/50 font-myanmar">🧭 Guide: {lang === 'mm' ? (g.name_mm || g.name) : (g.name || g.name_mm)}</span>
+                           {g.phone && <a href={`tel:${g.phone}`} className="flex items-center gap-1 min-h-9 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-xs font-bold">📞 {lang === 'mm' ? 'ဆက်သွယ်ရန်' : 'Contact'} {g.phone}</a>}
+                           {!g.phone && g.facebook && <a href={g.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400">FB Page →</a>}
+                         </div>
+                       )
+                     }
+                     return <p className="text-[10px] text-white/60 font-myanmar mt-1.5">{lang === 'mm' ? 'Guide အချက်အလက် မရှိသေးပါ — Admin သို့ ဆက်သွယ်ပါ' : 'No guide info yet — contact Admin'}</p>
+                   })()}
                  </div>
-                 {isModerator && <button onClick={() => deleteTour(t.id)} className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 flex-shrink-0"><Trash2 size={12} /></button>}
+                 {isModerator && <button onClick={() => deleteTour(t.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center flex-shrink-0"><Trash2 size={14} /></button>}
                </div>
              </div>
            )
@@ -1212,12 +1338,12 @@ export function ToursPage() {
                 ))}
               </div>
             </div>
-            <div><label className="block text-xs text-white/50 mb-1.5">ခရီးစဉ် အမည် *</label><input autoFocus value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+            <div><label className="block text-xs text-white/50 mb-1.5">ခရီးစဉ် အမည် *</label><input value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className={'input-dark font-myanmar' + (!form.name_mm ? ' border-red-500/60' : '')} />{!form.name_mm && <p className="text-xs text-red-400 mt-1 font-myanmar">ခရီးစဉ် အမည် ထည့်ပါ</p>}</div>
             <div><label className="block text-xs text-white/50 mb-1.5">ဖော်ပြချက်</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">ကြာချိန် (ရက်)</label><input type="number" min="1" value={form.duration_days} onChange={e => set('duration_days', e.target.value)} className="input-dark font-mono" placeholder="1" /></div>
+              <div><label className="block text-[10px] text-white/60 mb-1">ကြာချိန် (ရက်) *</label><input type="number" min="1" value={form.duration_days} onChange={e => set('duration_days', e.target.value)} className={'input-dark font-mono' + ((!form.duration_days || parseInt(form.duration_days) < 1) ? ' border-red-500/60' : '')} placeholder="1" />{(!form.duration_days || parseInt(form.duration_days) < 1) && <p className="text-xs text-red-400 mt-1 font-myanmar">ကြာချိန် (ရက်) ထည့်ပါ</p>}</div>
               <div>
-                <label className="block text-[10px] text-white/40 mb-1">ခက်ခဲမှု</label>
+                <label className="block text-[10px] text-white/60 mb-1">ခက်ခဲမှု</label>
                 <select value={form.difficulty} onChange={e => set('difficulty', e.target.value)} className="select-dark">
                   <option value="">{lang === 'mm' ? 'မသတ်မှတ်ပါ' : 'Not specified'}</option>
                   {TOUR_DIFFICULTIES.map(d => (
@@ -1227,12 +1353,12 @@ export function ToursPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">ဈေး (Ks)</label><input type="number" value={form.price_mmk} onChange={e => set('price_mmk', e.target.value)} className="input-dark font-mono" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ဈေး (USD)</label><input type="number" value={form.price_usd} onChange={e => set('price_usd', e.target.value)} className="input-dark font-mono" /></div>
+              <div><label className="block text-[10px] text-white/60 mb-1">ဈေး (Ks)</label><input type="number" value={form.price_mmk} onChange={e => set('price_mmk', e.target.value)} className="input-dark font-mono" /></div>
+              <div><label className="block text-[10px] text-white/60 mb-1">ဈေး (USD)</label><input type="number" value={form.price_usd} onChange={e => set('price_usd', e.target.value)} className="input-dark font-mono" /></div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div><label className="block text-[10px] text-white/40 mb-1">စတင်ရာ</label><input value={form.start_location} onChange={e => set('start_location', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကလော" /></div>
-              <div><label className="block text-[10px] text-white/40 mb-1">ပြီးဆုံးရာ</label><input value={form.end_location} onChange={e => set('end_location', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: အင်းလေး" /></div>
+              <div><label className="block text-[10px] text-white/60 mb-1">စတင်ရာ</label><input value={form.start_location} onChange={e => set('start_location', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကလော" /></div>
+              <div><label className="block text-[10px] text-white/60 mb-1">ပြီးဆုံးရာ</label><input value={form.end_location} onChange={e => set('end_location', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: အင်းလေး" /></div>
             </div>
 
             {/* Includes */}
@@ -1244,7 +1370,7 @@ export function ToursPage() {
                     key={inc.id}
                     type="button"
                     onClick={() => toggleInclude(inc.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${form.includes.includes(inc.id) ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-white/5 border-white/10 text-white/40'}`}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-colors ${form.includes.includes(inc.id) ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300' : 'bg-white/5 border-white/10 text-white/60'}`}
                   >
                     <span>{inc.icon}</span>
                     <span>{lang === 'mm' ? inc.mm : inc.en}</span>
@@ -1259,11 +1385,11 @@ export function ToursPage() {
               <div className="flex gap-2 flex-wrap">
                 {form.images.map((url, i) => (
                   <div key={i} className="relative w-20 h-20">
-                    <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
+                    <img src={url} alt={form.name_mm || 'ပုံ'} className="w-full h-full object-cover rounded-xl border border-white/10" />
                     <button
                       type="button"
                       onClick={() => set('images', form.images.filter((_, j) => j !== i))}
-                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center"
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 btn-danger rounded-full text-white text-[10px] flex items-center justify-center"
                     >✕</button>
                   </div>
                 ))}
@@ -1271,7 +1397,7 @@ export function ToursPage() {
                   <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />
                 )}
               </div>
-              <p className="text-[9px] text-white/25 mt-1.5">{lang === 'mm' ? 'အများဆုံး ၆ ပုံ' : 'Max 6 photos'}</p>
+              <p className="text-[9px] text-white/60 mt-1.5">{lang === 'mm' ? 'အများဆုံး ၆ ပုံ' : 'Max 6 photos'}</p>
             </div>
           </div>
         </div>

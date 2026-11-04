@@ -36,6 +36,9 @@ export default function ProfilePage() {
   const [otherProfile, setOtherProfile] = useState(null)
   const [otherLoading, setOtherLoading] = useState(isOther)
   const [otherError, setOtherError] = useState('')
+  // Public profile extras (F9): the other user's review count + listings.
+  const [otherReviews, setOtherReviews] = useState(0)
+  const [otherListings, setOtherListings] = useState([])
 
   useEffect(() => {
     if (!isOther) return
@@ -51,6 +54,16 @@ export default function ProfilePage() {
           .single()
         if (error) throw error
         if (!cancelled) setOtherProfile(data)
+        // Review count + approved listings for the public profile (F9).
+        // Best-effort: a failure here must not break the profile itself.
+        const [rc, lc] = await Promise.allSettled([
+          supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', profileId),
+          supabase.from('listings').select('id, name, name_mm, address, address_mm, cover_url, logo_url').eq('submitted_by', profileId).eq('status', 'approved').order('created_at', { ascending: false }).limit(10),
+        ])
+        if (!cancelled) {
+          if (rc.status === 'fulfilled') setOtherReviews(rc.value?.count || 0)
+          if (lc.status === 'fulfilled') setOtherListings(lc.value?.data || [])
+        }
       } catch (err) {
         console.warn('Other profile load failed:', err)
         if (!cancelled) setOtherError(err?.message || 'Profile မတွေ့ပါ')
@@ -122,6 +135,13 @@ export default function ProfilePage() {
   async function handleAvatarChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
+    // Avatar size limit (F16): the upload helper enforces none, so
+    // check here — the 2MB cap and the note below must match.
+    if (file.size > 2 * 1024 * 1024) {
+      showError('ပုံ အများဆုံး 2MB သာ တင်နိုင်ပါသည် — ပုံသေးသေးလေး ရွေးပါ')
+      e.target.value = ''
+      return
+    }
     setUploading(true)
     try {
       const url = await uploadImage(file, 'avatars')
@@ -244,40 +264,47 @@ export default function ProfilePage() {
           )}
           {!isOther && <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-brand-600 rounded-full flex items-center justify-center border-2 border-[#0d0015] text-[10px]">✏️</div>}
         </div>
+        {/* Avatar tap target is the 80px photo itself (F16) — the note
+            below states the 2MB limit the upload check enforces. */}
+        {!isOther && !editing && (
+          <p className="text-[10px] text-white/60 font-myanmar">Avatar ပြောင်းရန် ပုံကို နှိပ်ပါ · ပုံ အများဆုံး 2MB</p>
+        )}
 
         {editing ? (
           <div className="space-y-2 text-left">
             <div>
-              <label className="block text-[10px] text-white/40 mb-1">{lang === 'mm' ? 'နာမည်' : 'Full Name'}</label>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} className="input-dark text-sm" />
+              <label className="block text-[10px] text-white/60 mb-1">{lang === 'mm' ? 'နာမည်' : 'Full Name'}</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)} className="input-dark" />
             </div>
             <div>
-              <label className="block text-[10px] text-white/40 mb-1">
-                Nickname <span className="text-white/25 font-normal">(optional · shown as @name)</span>
+              <label className="block text-[10px] text-white/60 mb-1">
+                Nickname <span className="text-white/60 font-normal">(optional · shown as @name)</span>
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-sm">@</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/60 text-sm">@</span>
                 <input
                   type="text"
                   value={nickname}
                   onChange={e => { setNickname(e.target.value.toLowerCase()); setNickError('') }}
-                  className="input-dark text-sm pl-7"
+                  className="input-dark pl-7"
                   placeholder="yourname"
                   maxLength={20}
                 />
               </div>
               {nickError && <p className="text-[10px] text-red-400 mt-1">{nickError}</p>}
-              <p className="text-[9px] text-white/25 mt-1">စာလုံး၊ ဂဏန်း၊ underscore (_) သာ — ၃ မှ ၂၀ လုံးအထိ။</p>
+              <p className="text-[9px] text-white/60 mt-1">စာလုံး၊ ဂဏန်း၊ underscore (_) သာ — ၃ မှ ၂၀ လုံးအထိ။</p>
             </div>
             <div>
-              <label className="block text-[10px] text-white/40 mb-1">Bio</label>
-              <textarea value={bio} onChange={e => setBio(e.target.value)} className="input-dark text-sm resize-none h-16 font-myanmar" placeholder="Bio..." maxLength={200} />
+              <label className="block text-[10px] text-white/60 mb-1">Bio</label>
+              <textarea value={bio} onChange={e => setBio(e.target.value)} className="input-dark resize-none h-16 font-myanmar" placeholder="Bio..." maxLength={200} />
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={saveProfile} disabled={saving} className="btn-primary flex-1 text-sm">
                 {saving ? '...' : lang === 'mm' ? 'Save' : 'Save'}
               </button>
-              <button onClick={() => { setEditing(false); setNickError('') }} className="btn-ghost flex-1 text-sm">
+              {/* Cancel restores the original values (F7 / FB-13) — closing
+                  edit mode alone left the edited text in the form. */}
+              <button onClick={() => { setName(profile?.full_name || ''); setNickname(profile?.nickname || ''); setBio(profile?.bio || ''); setEditing(false); setNickError('') }} className="btn-ghost flex-1 text-sm">
                 {lang === 'mm' ? 'Cancel' : 'Cancel'}
               </button>
             </div>
@@ -297,13 +324,14 @@ export default function ProfilePage() {
               </span>
               {/* Tier badge always renders — even at 0 points (tier 0 /
                   Bronze), a user must see their tier (F-LOW-2). */}
-              <span className="badge bg-gold-500/15 text-gold-400 border border-gold-500/25">
-                <Trophy size={10} /> {(viewed?.points || 0).toLocaleString()} pts
-              </span>
+              {/* Points with label + link to the Points Guide (F18). */}
+              <button onClick={() => navigate('/points')} className="badge bg-gold-500/15 text-gold-400 border border-gold-500/25 hover:bg-gold-500/25 transition-colors">
+                <Trophy size={10} /> {lang === 'mm' ? `အမှတ်: ${(viewed?.points || 0).toLocaleString()} မှတ်` : `Points: ${(viewed?.points || 0).toLocaleString()}`}
+              </button>
               <TierBadge points={viewed?.points || 0} size="sm" lang={lang} />
             </div>
             {viewed?.last_seen && (
-              <p className="text-[10px] text-white/25">
+              <p className="text-[10px] text-white/60">
                 <Clock size={9} className="inline mr-1" />
                 {timeAgo(viewed.last_seen, lang)}
               </p>
@@ -317,28 +345,67 @@ export default function ProfilePage() {
         )}
       </div>
 
+      {/* ── Public profile extras (F9): review count + listings ── */}
+      {isOther && (
+      <div className="card-dark p-4 rounded-3xl space-y-3">
+        <div className="flex items-center gap-2">
+          <Star size={15} className="text-gold-400" />
+          <p className="text-sm font-display font-semibold text-white">
+            {lang === 'mm' ? `Reviews ${otherReviews} ခု` : `Reviews: ${otherReviews}`}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] text-white/60 font-display font-semibold uppercase tracking-wider px-1 mb-2">
+            {lang === 'mm' ? 'တင်ထားသော လုပ်ငန်းများ' : 'Listings'}
+          </p>
+          {otherListings.length === 0 ? (
+            <p className="text-xs text-white/60 font-myanmar px-1">{lang === 'mm' ? 'လုပ်ငန်း မတင်ထားသေးပါ' : 'No listings yet'}</p>
+          ) : (
+            <div className="space-y-2">
+              {otherListings.map(l => (
+                <button key={l.id} onClick={() => navigate(`/directory/${l.id}`)} className="w-full flex items-center gap-3 p-2 rounded-2xl hover:bg-white/6 transition-colors text-left">
+                  <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                    {(l.cover_url || l.logo_url)
+                      ? <img src={l.cover_url || l.logo_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      : <Building2 size={16} className="text-white/30" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate font-myanmar">{lang === 'mm' ? (l.name_mm || l.name) : l.name}</p>
+                    {(l.address_mm || l.address) && (
+                      <p className="text-[11px] text-white/60 truncate font-myanmar">{lang === 'mm' ? (l.address_mm || l.address) : (l.address || l.address_mm)}</p>
+                    )}
+                  </div>
+                  <ChevronRight size={16} className="text-white/20 flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      )}
+
       {/* ── Stats grid (own profile only) ── */}
       {!isOther && (
       <div className="grid grid-cols-4 gap-2">
         {[
           { icon: Building2,    label: lang === 'mm' ? 'လုပ်ငန်း' : 'Listings',  value: myStats.listings,  action: () => navigate('/my-submissions') },
-          { icon: Star,         label: 'Reviews',                               value: myStats.reviews },
-          { icon: BookMarked,   label: lang === 'mm' ? 'Saved' : 'Saved',      value: myStats.bookmarks, action: () => navigate('/bookmarks') },
+          { icon: Star,         label: 'Reviews',                               value: myStats.reviews,  action: () => navigate('/my-reviews') },
+          { icon: BookMarked,   label: lang === 'mm' ? 'သိမ်းထားသော' : 'Saved',      value: myStats.bookmarks, action: () => navigate('/bookmarks') },
           { icon: Calendar,     label: lang === 'mm' ? 'RSVP' : 'RSVPs',       value: myStats.rsvps,    action: () => navigate('/my-rsvps') },
         ].map(({ icon: Icon, label, value, action, highlight }) => (
           action ? (
             <button key={label} onClick={action} className="card-dark p-3 rounded-2xl text-center hover:bg-white/8 transition-colors">
               <Icon size={15} className={`mx-auto mb-1 ${highlight ? 'text-gold-400' : 'text-brand-300'}`} />
               <p className={`font-display font-bold text-base ${highlight ? 'text-gold-400' : 'text-white'}`}>{(value || 0).toLocaleString()}</p>
-              <p className="text-[8px] text-white/40">{label}</p>
+              <p className="text-[8px] text-white/60">{label}</p>
             </button>
           ) : (
-            // Reviews has no dedicated page — render as text, never as a
-            // disabled button with no destination (F-MED-5).
+            // F8 (v9.5): Reviews now has a dedicated page (/my-reviews),
+            // so the stat is a button like the others.
             <div key={label} className="card-dark p-3 rounded-2xl text-center">
               <Icon size={15} className="mx-auto mb-1 text-brand-300" />
               <p className="font-display font-bold text-base text-white">{(value || 0).toLocaleString()}</p>
-              <p className="text-[8px] text-white/40">{label}</p>
+              <p className="text-[8px] text-white/60">{label}</p>
             </div>
           )
         ))}
@@ -354,7 +421,7 @@ export default function ProfilePage() {
       {/* ── Settings (own profile only) ── */}
       {!isOther && (
       <div className="space-y-2">
-        <p className="text-[10px] text-white/30 font-display font-semibold uppercase tracking-wider px-1">
+        <p className="text-[10px] text-white/60 font-display font-semibold uppercase tracking-wider px-1">
           {lang === 'mm' ? 'Settings' : 'Settings'}
         </p>
 
@@ -363,7 +430,7 @@ export default function ProfilePage() {
             {pushEnabled ? <Bell size={18} className="text-brand-300" /> : <BellOff size={18} className="text-white/40" />}
             <div className="text-left flex-1">
               <p className="text-sm font-display font-semibold text-white">Push Notifications</p>
-              <p className="text-xs text-white/40">{pushEnabled ? (lang === 'mm' ? 'ဖွင့်ထားသည်' : 'Enabled') : (lang === 'mm' ? 'ပိတ်ထားသည်' : 'Disabled')}</p>
+              <p className="text-xs text-white/60">{pushEnabled ? (lang === 'mm' ? 'ဖွင့်ထားသည်' : 'Enabled') : (lang === 'mm' ? 'ပိတ်ထားသည်' : 'Disabled')}</p>
             </div>
             <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${pushEnabled ? 'bg-brand-500' : 'bg-white/15'}`}>
               <div className={`w-4 h-4 rounded-full bg-white transition-transform ${pushEnabled ? 'translate-x-4' : ''}`} />
@@ -376,7 +443,7 @@ export default function ProfilePage() {
             <Download size={18} className="text-brand-300" />
             <div className="text-left flex-1">
               <p className="text-sm font-display font-semibold text-white">{lang === 'mm' ? 'App တင်မည်' : 'Install App'}</p>
-              <p className="text-xs text-white/40">{lang === 'mm' ? 'Home screen မှာ ထည့်မည်' : 'Add to home screen'}</p>
+              <p className="text-xs text-white/60">{lang === 'mm' ? 'Home screen မှာ ထည့်မည်' : 'Add to home screen'}</p>
             </div>
           </button>
         )}
@@ -386,14 +453,14 @@ export default function ProfilePage() {
       {/* ── Quick links (own profile only) ── */}
       {!isOther && (
       <div className="space-y-2">
-        <p className="text-[10px] text-white/30 font-display font-semibold uppercase tracking-wider px-1">
+        <p className="text-[10px] text-white/60 font-display font-semibold uppercase tracking-wider px-1">
           {lang === 'mm' ? 'အမြန်လင့်' : 'Quick Links'}
         </p>
 
         {[
           { icon: Trophy,    label: 'Top Contributors', labelMm: 'Top Contributors', path: '/leaderboard', color: 'text-gold-400' },
           { icon: Sparkles,  label: 'Points Guide',     labelMm: 'Points လမ်းညွှန်',  path: '/points',      color: 'text-gold-400' },
-          { icon: BookMarked,label: 'Saved Items',      labelMm: 'Saved Items',      path: '/bookmarks',  color: 'text-brand-300' },
+          { icon: BookMarked,label: 'Saved Items',      labelMm: 'သိမ်းထားသော',      path: '/bookmarks',  color: 'text-brand-300' },
           { icon: MapPin,     label: 'Saved Places',     labelMm: 'သိမ်းထားသောနေရာများ', path: '/saved-places', color: 'text-emerald-300' },
           { icon: Calendar,   label: 'My RSVPs',          labelMm: 'တက်မည့် ဖြစ်ရပ်များ',  path: '/my-rsvps',   color: 'text-green-300' },
           { icon: Building2, label: 'My Submissions',  labelMm: 'ကျွန်တော့်တင်ထားသောများ', path: '/my-submissions', color: 'text-amber-300' },
@@ -421,7 +488,7 @@ export default function ProfilePage() {
       {/* ── Offline Cache (own profile only) ── */}
       {!isOther && (
       <div className="space-y-2">
-        <p className="text-[10px] text-white/30 font-display font-semibold uppercase tracking-wider px-1">
+        <p className="text-[10px] text-white/60 font-display font-semibold uppercase tracking-wider px-1">
           {lang === 'mm' ? 'အော့ဖ်လိုင်း' : 'Offline'}
         </p>
         <OfflineCachePanel />
@@ -447,7 +514,7 @@ export default function ProfilePage() {
             </button>
           ))}
         </div>
-        <p className="text-center text-[10px] text-white/20 mt-4 mb-2">
+        <p className="text-center text-[10px] text-white/60 mt-4 mb-2">
           {config.app_name || 'Cherry Directory'} • {config.app_city || 'Taunggyi'} © {new Date().getFullYear()}
         </p>
       </div>

@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Search } from 'lucide-react'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
+import { APP_VERSION } from '../lib/appVersion'
+import { goBackOrHome } from '../lib/navigation'
 
 // ── Shared layout ─────────────────────────────────────────────
 function InfoLayout({ title, titleMm, children }) {
@@ -10,7 +13,7 @@ function InfoLayout({ title, titleMm, children }) {
   return (
     <div className="pb-12">
       <div className="flex items-center gap-3 px-4 py-3">
-        <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
+        <button onClick={() => goBackOrHome(navigate, '/')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
           <ArrowLeft size={18} className="text-white" />
         </button>
         <h1 className="font-display font-bold text-lg text-white">{titleMm || title}</h1>
@@ -72,8 +75,8 @@ export function AboutPage() {
         </div>
         <h2 className="font-display font-bold text-xl text-white">Cherry Directory</h2>
         <p className="text-sm text-brand-300">{config.app_city || "တောင်ကြီးမြို့"}</p>
-        <p className="text-white/50 text-xs">Version 9.4 • Since 2026</p>
-        <p className="text-white/30 text-xs italic">by Shine Thit</p>
+        <p className="text-white/50 text-xs">Version {APP_VERSION} • Since 2026</p>
+        <p className="text-white/60 text-xs italic">by Shine Thit</p>
       </div>
 
       <Section titleMm="Cherry Directory ဆိုသည်မှာ">
@@ -85,17 +88,21 @@ export function AboutPage() {
         <p>မြို့သူ မြို့သားများ တစ်ဦးနှင့်တစ်ဦး ချိတ်ဆက်ပြီး ဒေသတွင်း သတင်းအချက်အလက်များကို မျှဝေနိုင်ရေး၊ ဒေသ စီးပွားရေး ဖွံ့ဖြိုးတိုးတက်ရေး၊ Community Spirit ကို ပိုမိုခိုင်မာအောင် ဆောင်ရွက်ပေးနိုင်ရန် ဖြစ်ပါသည်။</p>
       </Section>
 
+      <Section titleMm="အသုံးပြုနည်း အကျဉ်း">
+        <p>Home မှ လုပ်ငန်းများကို ရှာဖွေကြည့်ရှုနိုင်ပြီး ကြိုက်သော လုပ်ငန်းကို သိမ်းထားနိုင်ပါသည်။ Community တွင် ဈေးနှုန်း၊ လျှပ်စစ်နှင့် ဓာတ်ဆီ အခြေအနေများကို တင်ပြ၍ အခြားသူများနှင့် မျှဝေနိုင်ပြီး Calendar တွင် ရပ်ရွာပွဲများကို ကြည့်ရှုကာ RSVP လုပ်နိုင်ပါသည်။ အကောင့်ဖွင့်ထားသူများသည် မိမိလုပ်ငန်းကို Submit လုပ်ပြီး ပိုင်ရှင် Verify လုပ်နိုင်ပါသည်။</p>
+      </Section>
+
       <Section titleMm="ဆိုင်ပိုင်ရှင်များအတွက်">
-        <p>သင်၏ လုပ်ငန်းကို Cherry Directory ထဲ ထည့်သွင်းပြီး ပိုမိုသော ဖောက်သည်များကို ဆွဲဆောင်နိုင်ပါသည်။ Business Claim feature ကိုသုံး၍ သင်၏ လုပ်ငန်းကို Verify လုပ်နိုင်ပြီး Verified Badge ရရှိနိုင်ပါသည်။</p>
+        <p>သင်၏ လုပ်ငန်းကို Cherry Directory ထဲ ထည့်သွင်းပြီး ပိုမိုသော ဖောက်သည်များကို ဆွဲဆောင်နိုင်ပါသည်။ ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်းကို သုံး၍ သင်၏ လုပ်ငန်းကို Verify လုပ်နိုင်ပြီး Verified Badge ရရှိနိုင်ပါသည်။</p>
       </Section>
 
       <Section titleMm="Community Contributors">
-        <p>ဈေးနှုန်းများ တင်ပြခြင်း၊ လျှပ်စစ်အခြေအနေ Report လုပ်ခြင်း၊ ဓာတ်ဆီ ရမရ အသိပေးခြင်း၊ Review ရေးသားခြင်းစသည်ဖြင့် Community ကို ပါဝင်ကူညီသော User တိုင်းကို Points နှင့် Top Contributor Badge ဖြင့် ချီးမြှင့်ပါသည်။</p>
+        <p>ဈေးနှုန်းများ တင်ပြခြင်း၊ လျှပ်စစ်အခြေအနေ Report လုပ်ခြင်း၊ ဓာတ်ဆီ ရမရ အသိပေးခြင်း၊ Review ရေးသားခြင်းစသည်ဖြင့် Community ကို ပါဝင်ကူညီသော User တိုင်းကို အမှတ် နှင့် Top Contributor Badge ဖြင့် ချီးမြှင့်ပါသည်။</p>
       </Section>
 
       <div className="card-dark rounded-2xl p-4 text-center space-y-2">
-        <p className="text-xs text-white/40">Built with ❤️ for {config.app_city || "our city"}</p>
-        <p className="text-xs text-white/30">© {new Date().getFullYear()} Cherry Directory. All rights reserved.</p>
+        <p className="text-xs text-white/60">Built with ❤️ for {config.app_city || "our city"}</p>
+        <p className="text-xs text-white/60">© {new Date().getFullYear()} Cherry Directory. All rights reserved.</p>
       </div>
     </InfoLayout>
   )
@@ -108,7 +115,7 @@ export function PrivacyPage() {
   const updated = 'နိုဝင်ဘာ 2026'
   return (
     <InfoLayout title="Privacy Policy" titleMm="ကိုယ်ရေးလုံခြုံမှုမူဝါဒ">
-      <p className="text-xs text-white/30">Last updated: {updated}</p>
+      <p className="text-xs text-white/60">Last updated: {updated}</p>
 
       {/* ⚠️ DISCLAIMER BANNER - Prominent Yellow with Red Text */}
       <DisclaimerBanner />
@@ -155,8 +162,8 @@ export function PrivacyPage() {
         <ul className="space-y-1.5 ml-2">
           {[
             'Account စစ်မှန်ကြောင်း အတည်ပြုရန်',
-            'App Features (Bookmark, Review, RSVP) လုပ်ဆောင်ရန်',
-            'Community Leaderboard ဖော်ပြရန် (Points calculation)',
+            'App Features (သိမ်းထားခြင်း, Review, RSVP) လုပ်ဆောင်ရန်',
+            'Community Leaderboard ဖော်ပြရန် (အမှတ် တွက်ချက်မှု)',
             'Admin မှ Content Moderation ဆောင်ရွက်ရန်',
           ].map((item, i) => (
             <li key={i} className="flex items-start gap-2 text-white/55">
@@ -188,7 +195,10 @@ export function TermsPage() {
   useSEO({ title: lang === 'mm' ? 'ဝန်ဆောင်မှုစည်းမျဉ်း' : 'Terms of Service' })
   return (
     <InfoLayout title="Terms of Service" titleMm="ဝန်ဆောင်မှုစည်းမျဉ်း">
-      <p className="text-xs text-white/30">Last updated: နိုဝင်ဘာ 2026</p>
+      <p className="text-xs text-white/60">Last updated: နိုဝင်ဘာ 2026</p>
+      {/* H20: this page is informational only — no separate "Agree" button;
+          using the app counts as agreement, as stated below. */}
+      <p className="text-xs text-white/60 italic">ဤစာမျက်နှာသည် စည်းမျဉ်းများကို အသိပေးရန် အချက်အလက်သာ ဖြစ်ပါသည် — သီးခြား "သဘောတူ" ခလုတ် မလိုအပ်ပါ။</p>
 
       <Section titleMm="သဘောတူညီချက်">
         <p>Cherry Directory ကို သုံးစွဲသောအခါ ဤ Terms of Service ကို သဘောတူကြောင်း မှတ်ယူပါသည်။</p>
@@ -209,7 +219,7 @@ export function TermsPage() {
         <ul className="space-y-1.5 ml-2">
           {[
             'မမှန်ကန်သော အချက်အလက်များ တင်ပြခြင်း',
-            'တစ်ပါးသူ လုပ်ငန်းကို ခွင့်မပြုဘဲ Claim လုပ်ခြင်း',
+            'တစ်ပါးသူ လုပ်ငန်းကို ခွင့်မပြုဘဲ ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်း',
             'Spam, Fake reviews ရေးသားခြင်း',
             'အခြားသုံးစွဲသူများကို နှောင့်ယှက်ခြင်း၊ စော်ကားခြင်း',
             'Copyright ချိုးဖောက်သော ပစ္စည်းများ တင်ခြင်း',
@@ -241,6 +251,7 @@ export function TermsPage() {
 export function HelpPage() {
   const { lang } = useLang()
   useSEO({ title: lang === 'mm' ? 'သုံးစွဲနည်း' : 'How to Use' })
+  const [query, setQuery] = useState('')
 
   const sections = [
     {
@@ -267,7 +278,7 @@ export function HelpPage() {
       icon: '📅',
       titleMm: 'Event Calendar သုံးနည်း',
       steps: [
-        'Center bottom "Calendar" icon ကို နှိပ်ပါ',
+        'Bottom navigation မှ Home ၏ ညာဘက်ရှိ "Calendar" icon ကို နှိပ်ပါ',
         'ပြက္ခဒိန်ထဲ Event ရှိသော နေ့ တွင် Purple dot ပြနေမည်',
         'Date ကို နှိပ်ရင် ထိုနေ့ Event list ကျဆင်းမည်',
         '"Going" သို့မဟုတ် "Interested" ကို နှိပ်၍ RSVP လုပ်နိုင်သည်',
@@ -295,12 +306,12 @@ export function HelpPage() {
     },
     {
       icon: '🏆',
-      titleMm: 'Points ရရှိနည်း',
+      titleMm: 'အမှတ် ရရှိနည်း',
       steps: [
-        'Review ရေးသားပါ (+5 pts)',
-        'လုပ်ငန်း Submit ပြီး Approved ဖြစ်ရပါသည် (+10/+20 pts)',
-        'Event RSVP လုပ်ပါ (+2 pts)',
-        'Chat Message ပို့ပါ (+1 pt, max 10/day)',
+        'Review ရေးသားပါ (+5 အမှတ်)',
+        'လုပ်ငန်း တင်ပြီး အတည်ပြုခံရပါသည် (+10/+20 အမှတ်)',
+        'Event RSVP လုပ်ပါ (+2 အမှတ်)',
+        'Chat Message ပို့ပါ (+1 အမှတ်, တစ်နေ့ အများဆုံး ၁၀ အမှတ်)',
         'Leaderboard တွင် ကိုယ့် Rank ကြည့်နိုင်သည်',
       ],
     },
@@ -318,7 +329,7 @@ export function HelpPage() {
       icon: '📱',
       titleMm: 'App ကို Phone ထဲ ထည့်နည်း (PWA)',
       steps: [
-        'Browser မှ Cherry Directory ဖွင့်ပြီး Header ရှိ "Install" ကို နှိပ်ပါ',
+        'Home စာမျက်နှာ၏ ညာဘက်ထောင့်ရှိ 📲 "App ထည့်မည်" ခလုတ်ကို နှိပ်ပါ',
         '"Add to Home Screen" ကို ရွေးချယ်ပါ',
         'Internet မရှိလည်း Cache ဒေတာ ကြည့်ရှုနိုင်သည်',
         'Push Notification ဖွင့်ရန် Profile > Push Notifications toggle ကို on လုပ်ပါ',
@@ -326,9 +337,29 @@ export function HelpPage() {
     },
   ]
 
+  // H12: filter help sections by the search box (title + steps).
+  const q = query.trim().toLowerCase()
+  const filteredSections = q
+    ? sections.filter(sec =>
+        sec.titleMm.toLowerCase().includes(q) ||
+        sec.steps.some(step => step.toLowerCase().includes(q)))
+    : sections
+
   return (
     <InfoLayout title="How to Use" titleMm="သုံးစွဲနည်းလမ်းညွှန်">
-      {sections.map((sec, si) => (
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+        <input
+          type="text"
+          placeholder="အကူအညီ ရှာမယ်... (ဥပမာ လုပ်ငန်း၊ ဈေးနှုန်း)"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          className="input-dark pl-8 w-full"
+        />
+      </div>
+      {filteredSections.length === 0 ? (
+        <p className="text-sm text-white/60 text-center py-8 font-myanmar">"{query}" နှင့် ကိုက်ညီသော အကူအညီ မတွေ့ပါ</p>
+      ) : filteredSections.map((sec, si) => (
         <div key={si} className="card-dark rounded-2xl p-4 space-y-3">
           <div className="flex items-center gap-2">
             <span className="text-2xl">{sec.icon}</span>

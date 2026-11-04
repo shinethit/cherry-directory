@@ -1,9 +1,20 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { getOptimizedUrl } from '../lib/cloudinary'
 
 export default function Lightbox({ images, initialIndex = 0, onClose }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
+  // H25: touch swipe — record where the swipe starts.
+  const touchStartX = useRef(null)
+
+  function handleTouchEnd(e) {
+    if (touchStartX.current == null) return
+    const dx = e.changedTouches[0].clientX - touchStartX.current
+    touchStartX.current = null
+    if (Math.abs(dx) < 50) return
+    if (dx < 0) setCurrentIndex(i => Math.min(images.length - 1, i + 1))
+    else setCurrentIndex(i => Math.max(0, i - 1))
+  }
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -22,7 +33,12 @@ export default function Lightbox({ images, initialIndex = 0, onClose }) {
   const currentImage = images[currentIndex] ? getOptimizedUrl(images[currentIndex], { width: 1200 }) : null
 
   return (
-    <div className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-md flex items-center justify-center pt-safe" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-md flex items-center justify-center pt-safe"
+      onClick={onClose}
+      onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
+      onTouchEnd={handleTouchEnd}
+    >
       <button onClick={onClose} className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
         <X size={24} className="text-white" />
       </button>
@@ -45,7 +61,7 @@ export default function Lightbox({ images, initialIndex = 0, onClose }) {
         </>
       )}
       <div className="max-w-[90vw] max-h-[90vh] flex items-center justify-center" onClick={e => e.stopPropagation()}>
-        {currentImage && <img src={currentImage} alt="" className="max-w-full max-h-[90vh] object-contain" />}
+        {currentImage && <img src={currentImage} alt={`ပုံ ${currentIndex + 1} / ${images.length}`} className="max-w-full max-h-[90vh] object-contain" />}
       </div>
       {images.length > 1 && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 rounded-full px-3 py-1 text-white text-sm">

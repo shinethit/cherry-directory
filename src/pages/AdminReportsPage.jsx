@@ -35,6 +35,8 @@ export default function AdminReportsPage() {
   const [loadError, setLoadError] = useState('')
   const [tab, setTab] = useState('pending')
   const [actionBusy, setActionBusy] = useState(null)
+  // Sort order (G21) — newest first by default.
+  const [sortOrder, setSortOrder] = useState('new')
   // "Show more" paging — the old .limit(100) silently hid everything
   // past the first 100 reports.
   const [limit, setLimit] = useState(100)
@@ -50,7 +52,7 @@ export default function AdminReportsPage() {
         .from('reports')
         .select('*, reporter:profiles!reporter_id(full_name, nickname)')
         .eq('status', tab)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: sortOrder === 'old' })
         .limit(limit)
       if (error) throw error
 
@@ -67,7 +69,7 @@ export default function AdminReportsPage() {
       setItems((data || []).map(r => ({ ...r, _target: listingMap[r.target_id] || null })))
     } catch (e) { console.warn(e); setLoadError(e?.message || 'Report များ ရယူမရပါ') }
     setLoading(false)
-  }, [tab, limit, authLoading, isAdmin, isModerator])
+  }, [tab, limit, sortOrder, authLoading, isAdmin, isModerator])
 
   useEffect(() => { load() }, [load])
 
@@ -121,8 +123,9 @@ export default function AdminReportsPage() {
 
   if (!isAdmin && !isModerator) {
     return (
-      <div className="flex items-center justify-center min-h-[60dvh] px-8 text-center">
+      <div className="flex flex-col items-center justify-center min-h-[60dvh] px-8 text-center gap-3">
         <p className="text-white/50 font-myanmar">🔒 Admin / Moderator သာ ကြည့်နိုင်သည်</p>
+        <button onClick={() => navigate('/')} className="btn-primary text-xs px-4 py-2">Home သို့ ပြန်သွားမည်</button>
       </div>
     )
   }
@@ -144,7 +147,7 @@ export default function AdminReportsPage() {
             <h1 className="font-display font-bold text-xl text-white">
               🚩 {lang === 'mm' ? 'Report များ' : 'Reports'}
             </h1>
-            <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
+            <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
               {lang === 'mm' ? items.length + ' ခု' : items.length + ' items'}
             </p>
           </div>
@@ -166,6 +169,16 @@ export default function AdminReportsPage() {
             {lang === 'mm' ? t.mm : t.en}
           </button>
         ))}
+        {/* Sort by date (G21) */}
+        <select
+          value={sortOrder}
+          onChange={e => { setSortOrder(e.target.value); setLimit(100) }}
+          className="select-dark font-semibold ml-auto"
+          style={{ backgroundColor: '#1a0030' }}
+        >
+          <option value="new">ရက်စွဲ အသစ်</option>
+          <option value="old">ရက်စွဲ အဟောင်း</option>
+        </select>
       </div>
 
       <div className="px-4 space-y-2">
@@ -174,13 +187,13 @@ export default function AdminReportsPage() {
         ) : loadError ? (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
             <p className="text-sm text-red-400 font-myanmar">Report များ ရယူရာတွင် အမှားဖြစ်သွားသည်</p>
-            <p className="text-[10px] text-white/30">{loadError}</p>
+            <p className="text-[10px] text-white/60">{loadError}</p>
             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
           </div>
         ) : items.length === 0 ? (
           <div className="text-center py-16">
             <span className="text-5xl mb-3 block">✓</span>
-            <p className="text-white/40 font-myanmar">
+            <p className="text-white/60 font-myanmar">
               {lang === 'mm' ? 'Report မရှိပါ' : 'No reports'}
             </p>
           </div>
@@ -199,7 +212,7 @@ export default function AdminReportsPage() {
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <Flag size={14} className="text-red-400 flex-shrink-0" />
                     <span className="text-xs text-white/70 font-mono">{r.target_type}</span>
-                    <span className="text-[10px] text-white/40">
+                    <span className="text-[10px] text-white/60">
                       {REASON_LABEL[r.reason]?.[lang] || r.reason}
                     </span>
                   </div>
@@ -210,13 +223,18 @@ export default function AdminReportsPage() {
 
                 <div className="text-sm text-white/80 font-myanmar truncate">{targetName}</div>
 
+                {/* Short reason/summary per report (G14) */}
+                <p className="text-xs text-white/50 font-myanmar">
+                  အကြောင်းရင်း: {REASON_LABEL[r.reason]?.[lang] || r.reason}
+                </p>
+
                 {r.note && (
                   <p className="text-xs text-white/50 font-myanmar bg-white/4 rounded-lg p-2 line-clamp-3">
                     💬 {r.note}
                   </p>
                 )}
 
-                <div className="flex items-center justify-between text-[10px] text-white/30">
+                <div className="flex items-center justify-between text-[10px] text-white/60">
                   <span>{r.reporter?.full_name || r.reporter?.nickname || (lang === 'mm' ? 'ဧည့်သည်' : 'Guest')}</span>
                   <span>{formatMyanmarDate(r.created_at)}</span>
                 </div>
@@ -242,7 +260,7 @@ export default function AdminReportsPage() {
                       <button
                         onClick={() => updateStatus(r, 'dismissed')}
                         disabled={actionBusy === r.id}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-white/40 bg-white/8 rounded-xl hover:bg-white/12 transition-colors disabled:opacity-50"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-white/60 bg-white/8 rounded-xl hover:bg-white/12 transition-colors disabled:opacity-50"
                       >
                         <XCircle size={11} /> {actionBusy === r.id ? '...' : (lang === 'mm' ? 'ပယ်ချ' : 'Dismiss')}
                       </button>

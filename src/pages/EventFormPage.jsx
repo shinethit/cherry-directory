@@ -10,15 +10,17 @@ import { uploadImage } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
 import { localInputToMMT, mmtInputFromStored } from '../lib/myanmarDate'
+import { goBackOrHome } from '../lib/navigation'
 import { showError, showSuccess } from '../lib/toast'
 
-function Field({ label, children, required }) {
+function Field({ label, children, required, error }) {
   return (
     <div>
       <label className="block text-xs text-white/50 mb-1.5">
         {label} {required && <span className="text-brand-400">*</span>}
       </label>
       {children}
+      {error && <p className="text-xs text-red-400 mt-1 font-myanmar">{error}</p>}
     </div>
   )
 }
@@ -46,6 +48,12 @@ export default function EventFormPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [canEdit, setCanEdit] = useState(false)
+
+  // Safe back (S9): shared goBackOrHome — deep-link visitors go to the
+  // Calendar instead of being ejected out of the app.
+  function goBack() {
+    goBackOrHome(navigate, '/calendar')
+  }
 
   useEffect(() => {
     // Wait for the role to load — redirecting before it is known would
@@ -138,7 +146,7 @@ export default function EventFormPage() {
   }
 
   async function handleDelete() {
-    if (!(await confirmDialog(`"${form.title}" ကို ဖျက်မည်လား?`))) return
+    if (!(await confirmDialog(`"${form.title}" ကို ဖျက်မည်လား?`, { danger: true }))) return
     const { error } = await supabase.from('posts').delete().eq('id', id)
     if (error) { showError(error.message); return }
     log({ action: 'delete', table: 'posts', id, name: form.title, before: original })
@@ -153,20 +161,20 @@ export default function EventFormPage() {
       {/* Sticky header */}
       <div className="flex items-center justify-between px-4 py-3 glass sticky top-[var(--header-h)] z-40 border-b border-white/8">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+          <button onClick={goBack} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center" aria-label="Back">
             <ArrowLeft size={18} className="text-white" />
           </button>
           <div>
             <h1 className="font-display font-bold text-sm text-white">
               {isEdit ? 'Event ပြင်မည်' : 'Event ထည့်မည်'}
             </h1>
-            <p className="text-[10px] text-white/40">Admin / Moderator only</p>
+            <p className="text-[10px] text-white/60">Admin / Moderator only</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {isEdit && (
-            <button onClick={handleDelete} className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center hover:bg-red-500/25 transition-colors">
-              <Trash2 size={16} className="text-red-400" />
+            <button onClick={handleDelete} className="w-9 h-9 rounded-xl btn-danger flex items-center justify-center transition-colors">
+              <Trash2 size={16} className="text-white" />
             </button>
           )}
           <button
@@ -199,27 +207,28 @@ export default function EventFormPage() {
           )}
         </div>
 
-        <Field label="ခေါင်းစဉ် (English)" required>
-          <input type="text" value={form.title} onChange={e => set('title', e.target.value)} className="input-dark" placeholder="Event title" required />
+        <Field label="ခေါင်းစဉ် (English)" required error={!form.title ? 'ခေါင်းစဉ် ထည့်ပါ' : ''}>
+          <input type="text" value={form.title} onChange={e => set('title', e.target.value)} className={'input-dark' + (!form.title ? ' border-red-500/60' : '')} placeholder="e.g. Taunggyi Literature Festival" required />
         </Field>
 
         <Field label="ခေါင်းစဉ် (မြန်မာ)">
-          <input type="text" value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဖြစ်ရပ် ခေါင်းစဉ်..." />
+          <input type="text" value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ — တောင်ကြီး စာပေပွဲတော်" />
         </Field>
 
         {/* Date & Time */}
         <div className="border-t border-white/8 pt-4">
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-1">
             <CalendarDays size={14} className="text-brand-300" />
-            <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">ရက်စွဲနှင့် အချိန်</p>
+            <p className="text-xs text-white/60 font-display font-semibold uppercase tracking-wider">ရက်စွဲနှင့် အချိန်</p>
           </div>
+          <p className="text-[10px] text-white/60 font-myanmar mb-3">ဥပမာ — 2026-11-10 09:00 (ရက်၊ လ၊ နှစ်၊ အချိန်)</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Start date & time" required>
+            <Field label="Start date & time" required error={!form.event_start ? 'စတင်ရက်/အချိန် ထည့်ပါ' : ''}>
               <input
                 type="datetime-local"
                 value={form.event_start}
                 onChange={e => set('event_start', e.target.value)}
-                className="input-dark text-sm"
+                className={'input-dark' + (!form.event_start ? ' border-red-500/60' : '')}
                 required
               />
             </Field>
@@ -229,7 +238,7 @@ export default function EventFormPage() {
                 value={form.event_end}
                 onChange={e => set('event_end', e.target.value)}
                 min={form.event_start}
-                className="input-dark text-sm"
+                className="input-dark"
               />
             </Field>
           </div>
@@ -270,8 +279,16 @@ export default function EventFormPage() {
 
         {/* Settings */}
         <div className="border-t border-white/8 pt-4 space-y-3">
-          <p className="text-xs text-white/40 font-display font-semibold uppercase tracking-wider">Settings</p>
+          <p className="text-xs text-white/60 font-display font-semibold uppercase tracking-wider">Settings</p>
           <div className="grid grid-cols-2 gap-3">
+            <Field label="Category">
+              <select value={form.category_id} onChange={e => set('category_id', e.target.value)} className="select-dark">
+                <option value="">— ရွေးရန် —</option>
+                {categories.map(c => (
+                  <option key={c.id} value={c.id}>{c.icon} {c.name_mm || c.name}</option>
+                ))}
+              </select>
+            </Field>
             <Field label="Status">
               <select value={form.status} onChange={e => set('status', e.target.value)} className="select-dark">
                 <option value="published">Published</option>

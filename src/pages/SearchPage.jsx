@@ -194,6 +194,14 @@ export default function SearchPage() {
     s => (results[s.id] || []).length > 0
   )
 
+  // B10: a section capped at 8 shows more than 8 in reality — link out to
+  // the full list instead of silently stopping at 8.
+  const anyCapped = sourcesWithResults.some(s => (results[s.id] || []).length === 8)
+  function seeMoreUrl(source) {
+    if (source.id === 'listing') return `/directory?q=${encodeURIComponent(query)}`
+    return source.routePrefix.replace(/\/$/, '') || '/'
+  }
+
   return (
     <div className="pb-8 min-h-[80dvh]">
       {/* Header */}
@@ -211,12 +219,12 @@ export default function SearchPage() {
             onChange={e => setQuery(e.target.value)}
             placeholder={lang === 'mm' ? 'လုပ်ငန်း၊ သတင်း၊ အလုပ်...' : 'Business, news, job...'}
             autoFocus
-            className="input-dark pl-10 pr-10 text-sm w-full"
+            className="input-dark pl-10 pr-10 w-full"
           />
           {query && (
             <button
               onClick={clearSearch}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white"
             >
               <X size={16} />
             </button>
@@ -224,7 +232,7 @@ export default function SearchPage() {
         </div>
 
         {/* Status */}
-        <div className="mt-2 text-[10px] text-white/40 font-myanmar">
+        <div className="mt-2 text-[10px] text-white/60 font-myanmar">
           {loading ? (
             <span className="flex items-center gap-1">
               <Loader2 size={10} className="animate-spin" />
@@ -237,8 +245,8 @@ export default function SearchPage() {
           ) : searched && query.length >= 2 ? (
             <span>
               {lang === 'mm'
-                ? `${totalResults} ရလဒ် တွေ့သည်`
-                : `${totalResults} results found`}
+                ? `${totalResults} ရလဒ် တွေ့သည်${anyCapped ? ' (တစ်ခုစီတွင် ပထမ ၈ ခုသာ ပြထားသည်)' : ''}`
+                : `${totalResults} results found${anyCapped ? ' (first 8 per section shown)' : ''}`}
             </span>
           ) : query.length > 0 && query.length < 2 ? (
             <span>{lang === 'mm' ? 'အနည်းဆုံး ၂ လုံး ရိုက်ပါ' : 'Type at least 2 characters'}</span>
@@ -286,24 +294,38 @@ export default function SearchPage() {
         {!searched && (
           <div className="flex flex-col items-center py-16 text-center">
             <span className="text-5xl mb-4">🔍</span>
-            <p className="text-white/40 font-display font-semibold">
+            <p className="text-white/60 font-display font-semibold">
               {lang === 'mm' ? 'ရှာဖွေရန် အသင့်' : 'Ready to search'}
             </p>
-            <p className="text-xs text-white/25 mt-1 font-myanmar max-w-xs">
+            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">
               {lang === 'mm'
                 ? 'လုပ်ငန်း၊ သတင်း၊ အလုပ်၊ အိမ်၊ ဆရာ၊ အရေးပေါ် နံပါတ် စသည် အားလုံး ရှာနိုင်သည်'
                 : 'Search businesses, news, jobs, rentals, tutors, emergency contacts, and more'}
             </p>
+            {/* B10: show the 9 searchable types up front — tabs only
+                appear after results, so users had no idea what can be searched. */}
+            <div className="flex flex-wrap justify-center gap-2 mt-6 px-4">
+              {SEARCH_SOURCES.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => navigate(s.id === 'listing' ? '/directory' : seeMoreUrl(s))}
+                  className="flex items-center gap-1 px-3 py-2 rounded-full text-xs font-semibold bg-white/5 text-white/60 border border-white/10 hover:text-white/90 hover:border-brand-400/30 transition-colors"
+                >
+                  <span>{s.icon}</span>
+                  <span>{s.label[lang] || s.label.mm}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {searched && !loading && totalResults === 0 && (
           <div className="flex flex-col items-center py-16 text-center">
             <span className="text-5xl mb-4">😶</span>
-            <p className="text-white/40 font-display font-semibold">
+            <p className="text-white/60 font-display font-semibold">
               {lang === 'mm' ? 'ရလဒ် မတွေ့ပါ' : 'No results'}
             </p>
-            <p className="text-xs text-white/25 mt-1 font-myanmar">
+            <p className="text-xs text-white/60 mt-1 font-myanmar">
               {lang === 'mm' ? 'အခြား စကားလုံးနဲ့ ပြန်ရှာကြည့်ပါ' : 'Try different keywords'}
             </p>
           </div>
@@ -322,7 +344,7 @@ export default function SearchPage() {
                   {source.label[lang] || source.label.mm}
                 </p>
                 <div className="flex-1 h-px bg-white/8" />
-                <span className="text-[10px] text-white/30">{items.length}</span>
+                <span className="text-[10px] text-white/60">{items.length}</span>
               </div>
               <div className="space-y-1.5">
                 {items.map(item => (
@@ -335,6 +357,14 @@ export default function SearchPage() {
                   />
                 ))}
               </div>
+              {items.length === 8 && (
+                <button
+                  onClick={() => navigate(seeMoreUrl(source))}
+                  className="w-full text-center text-xs text-brand-300 hover:text-brand-200 py-2 font-myanmar"
+                >
+                  {lang === 'mm' ? 'အားလုံးကြည့်ရန် → (ပထမ ၈ ခုသာ ပြထားသည်)' : 'See all → (showing first 8)'}
+                </button>
+              )}
             </div>
           )
         })}
@@ -359,12 +389,12 @@ function ResultRow({ source, item, lang, onNavigate }) {
           {title}
         </p>
         {subtitle && (
-          <p className="text-[10px] text-white/40 mt-0.5 truncate font-myanmar">
+          <p className="text-[10px] text-white/60 mt-0.5 truncate font-myanmar">
             {subtitle}
           </p>
         )}
       </div>
-      <span className="text-white/20 flex-shrink-0">→</span>
+      <span className="text-white/60 flex-shrink-0">→</span>
     </button>
   )
 }

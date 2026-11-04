@@ -23,9 +23,7 @@ export default function VerifiedOwnerBadge({ small = false }) {
           />
         </svg>
       </span>
-      <span className="badge-text">
-        {small ? 'Verified Owner' : 'Verified by Owner'}
-      </span>
+      <span className="badge-text">ပိုင်ရှင် အတည်ပြု ✓</span>
     </span>
   )
 }

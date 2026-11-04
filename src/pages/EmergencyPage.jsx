@@ -63,7 +63,7 @@ function ContactCard({ contact, lang, isMod, onEdit, onDelete }) {
                 </span>
               )}
               {contact.address_mm || contact.address ? (
-                <span className="text-[9px] text-white/30 font-myanmar">
+                <span className="text-[9px] text-white/60 font-myanmar">
                   📍 {lang === 'mm' ? (contact.address_mm || contact.address) : contact.address}
                 </span>
               ) : null}
@@ -84,8 +84,8 @@ function ContactCard({ contact, lang, isMod, onEdit, onDelete }) {
               <Pencil size={11} className="text-white/50" />
             </button>
             <button onClick={() => onDelete(contact.id)}
-              className="w-7 h-7 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 transition-colors">
-              <Trash2 size={11} className="text-red-400" />
+              className="w-7 h-7 rounded-lg btn-danger flex items-center justify-center transition-colors">
+              <Trash2 size={11} className="text-white" />
             </button>
           </div>
         )}
@@ -97,7 +97,7 @@ function ContactCard({ contact, lang, isMod, onEdit, onDelete }) {
           <a
             key={i}
             href={toTelHref(phone)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-display font-bold text-sm transition-all active:scale-95 ${
+            className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl font-display font-bold text-sm transition-all active:scale-95 ${
               i === 0
                 ? 'bg-green-500 text-white shadow-lg shadow-green-900/40 flex-1 justify-center'
                 : 'bg-white/10 border border-white/15 text-white/70 hover:bg-white/15'
@@ -182,7 +182,8 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အမည် (မြန်မာ)' : 'Name (Myanmar)'} *</label>
-            <input autoFocus value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ပြည်သူ့ဆေးရုံ" />
+            <input value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className={'input-dark font-myanmar' + ((!form.name_mm && !form.name) ? ' border-red-500/60' : '')} placeholder="ဥပမာ: ပြည်သူ့ဆေးရုံ" />
+            {(!form.name_mm && !form.name) && <p className="text-xs text-red-400 mt-1 font-myanmar">အမည် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ</p>}
           </div>
           <div className="col-span-2">
             <label className="block text-xs text-white/50 mb-1.5">Name (English)</label>
@@ -199,11 +200,12 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
             ['phone_3', 'ဖုန်း (၃) — optional'],
           ].map(([k, lbl]) => (
             <div key={k}>
-              <label className="block text-[10px] text-white/40 mb-1">{lbl}</label>
+              <label className="block text-[10px] text-white/60 mb-1">{lbl}</label>
               <input type="tel" value={form[k]} onChange={e => set(k, e.target.value)}
-                className="input-dark font-mono" placeholder="081-xxxx / 09-xxxxxxxxx" />
+                className={'input-dark font-mono' + ((k === 'phone_1' && !form.phone_1) ? ' border-red-500/60' : '')} placeholder="081-xxxx / 09-xxxxxxxxx" />
             </div>
           ))}
+          {!form.phone_1 && <p className="text-xs text-red-400 mt-1 font-myanmar">ဖုန်းနံပါတ် (၁) ထည့်ပါ</p>}
         </div>
 
         <div>
@@ -268,7 +270,7 @@ export default function EmergencyPage() {
   useEffect(() => { load() }, [])
 
   async function handleDelete(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this contact?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this contact?', { danger: true }))) return
     const { error } = await supabase.from('emergency_contacts').update({ is_active: false }).eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -292,7 +294,7 @@ export default function EmergencyPage() {
           <h1 className="font-display font-bold text-xl text-white">
             🆘 {lang === 'mm' ? 'အရေးပေါ် ဆက်သွယ်ရေး' : 'Emergency Contacts'}
           </h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">
             {lang === 'mm' ? `${config.app_city || 'မြို့'} • တစ်ချက်နှိပ်ပြီး ဖုန်းခေါ်နိုင်` : 'One-tap calling'}
           </p>
         </div>
@@ -328,15 +330,15 @@ export default function EmergencyPage() {
         </p>
         <div className="flex gap-2">
           {[
-            { label: 'Police', number: '199', icon: '👮' },
-            { label: 'Fire', number: '191', icon: '🚒' },
-            { label: 'Ambulance', number: '192', icon: '🚑' },
+            { label: 'ရဲ (Police)', number: '199', icon: '👮' },
+            { label: 'မီး (Fire)', number: '191', icon: '🚒' },
+            { label: 'လူနာတင် (Ambulance)', number: '192', icon: '🚑' },
           ].map(({ label, number, icon }) => (
             <a key={number} href={`tel:${number}`}
-              className="flex-1 flex flex-col items-center py-3 rounded-xl bg-red-500/20 border border-red-500/25 hover:bg-red-500/30 active:scale-95 transition-all">
+              className="flex-1 flex flex-col items-center py-3 min-h-[44px] rounded-xl bg-red-500/20 border border-red-500/25 hover:bg-red-500/30 active:scale-95 transition-all">
               <span className="text-xl mb-1">{icon}</span>
               <p className="font-mono font-bold text-red-300 text-sm">{number}</p>
-              <p className="text-[9px] text-red-400/60">{label}</p>
+              <p className="text-[11px] text-red-400/60">{label}</p>
             </a>
           ))}
         </div>
@@ -358,7 +360,7 @@ export default function EmergencyPage() {
             </p>
           </div>
         </div>
-        <span className="text-white/30">→</span>
+        <span className="text-white/60">→</span>
       </button>
 
       {/* Category filter */}
@@ -375,7 +377,7 @@ export default function EmergencyPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
@@ -391,11 +393,11 @@ export default function EmergencyPage() {
         ) : grouped.length === 0 ? (
           <div className="flex flex-col items-center py-14 text-center">
             <span className="text-4xl mb-3">📞</span>
-            <p className="font-display font-semibold text-white/40">
+            <p className="font-display font-semibold text-white/60">
               {lang === 'mm' ? 'ဆက်သွယ်ရေး မရှိသေး' : 'No contacts yet'}
             </p>
             {isModerator && (
-              <p className="text-xs text-white/25 mt-1 font-myanmar">
+              <p className="text-xs text-white/60 mt-1 font-myanmar">
                 {lang === 'mm' ? '"ထည့်မည်" ကို နှိပ်ပြီး ထည့်သွင်းပါ' : 'Tap "Add" to add the first contact'}
               </p>
             )}

@@ -46,6 +46,11 @@ export default function DirectoryPage() {
   // Filters
   const [city, setCity] = useState(searchParams.get('city') || 'All')
   const [verifiedOnly, setVerifiedOnly] = useState(searchParams.get('verified') === 'true')
+  // B7: user-chosen sort (rating / newest / name)
+  const [sort, setSort] = useState('rating')
+  // B8: collapse the search/filter rows once the user scrolls down, so
+  // the sticky header stops eating ~1/3 of a phone screen.
+  const [headerCollapsed, setHeaderCollapsed] = useState(false)
   
   // Debounced search
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
@@ -67,17 +72,25 @@ export default function DirectoryPage() {
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current)
     }
-    
+
     debounceTimer.current = setTimeout(() => {
       setQ(searchInput)
     }, 500)
-    
+
     return () => {
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current)
       }
     }
   }, [searchInput])
+
+  // B8: collapse the listings-level header on scroll down, restore on scroll up.
+  useEffect(() => {
+    function onScroll() { setHeaderCollapsed(window.scrollY > 140) }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   
   const cities = ['All', ...(config.cities || [])]
   const cityLabels = {
@@ -302,13 +315,13 @@ export default function DirectoryPage() {
       setListings([])
       setTotal(0)
     }
-  }, [selectedSubcategory, city, verifiedOnly, q, page])
+  }, [selectedSubcategory, city, verifiedOnly, q, page, sort])
 
   const loadListings = useCallback(async () => {
     if (!selectedSubcategory) return
-    // A changed subcategory/city/verified/search is a fresh query (page 0);
+    // A changed subcategory/city/verified/search/sort is a fresh query (page 0);
     // an unchanged filter with page > 0 is an append.
-    const filterKey = `${selectedSubcategory.id}|${city}|${verifiedOnly}|${q}`
+    const filterKey = `${selectedSubcategory.id}|${city}|${verifiedOnly}|${q}|${sort}`
     const reset = filterKey !== lastFilterKeyRef.current || pageRef.current === 0
     if (reset) {
       lastFilterKeyRef.current = filterKey
@@ -329,9 +342,12 @@ export default function DirectoryPage() {
         .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
         .eq('status', 'approved')
         .eq('category_id', selectedSubcategory.id)
-        .order('rating_avg', { ascending: false, nullsFirst: false })
-        .order('name', { ascending: true })
-        .range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
+
+      // B7: sort chosen by the user — rating (default), newest, or name.
+      if (sort === 'newest') query = query.order('created_at', { ascending: false })
+      else if (sort === 'name') query = query.order('name', { ascending: true })
+      else query = query.order('rating_avg', { ascending: false, nullsFirst: false }).order('name', { ascending: true })
+      query = query.range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
 
       if (q.trim()) query = query.or(`name.ilike.%${esc}%,name_mm.ilike.%${esc}%,description.ilike.%${esc}%,description_mm.ilike.%${esc}%`)
       if (city !== 'All') query = query.eq('city', city)
@@ -364,7 +380,7 @@ export default function DirectoryPage() {
       if (reset) setListings([])
     }
     if (myId === requestIdRef.current) setListingsLoading(false)
-  }, [selectedSubcategory, city, verifiedOnly, q])
+  }, [selectedSubcategory, city, verifiedOnly, q, sort])
 
   function handleCategorySelect(cat) {
     setSelectedCategory(cat)
@@ -437,9 +453,10 @@ export default function DirectoryPage() {
     setQ('')
     setCity('All')
     setVerifiedOnly(false)
+    setSort('rating')
   }
 
-  const hasFilters = q || city !== 'All' || verifiedOnly
+  const hasFilters = q || city !== 'All' || verifiedOnly || sort !== 'rating'
 
   // ── Wait for URL resolution ──
   // If ?cat= is present but hasn't been resolved yet, show loading
@@ -448,7 +465,7 @@ export default function DirectoryPage() {
       <div className="flex items-center justify-center min-h-[60dvh]">
         <div className="text-center">
           <div className="w-8 h-8 border-3 border-brand-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-white/40 text-xs font-myanmar">ရှာဖွေနေသည်...</p>
+          <p className="text-white/60 text-xs font-myanmar">ရှာဖွေနေသည်...</p>
         </div>
       </div>
     )
@@ -461,7 +478,7 @@ export default function DirectoryPage() {
         <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/10">
           <div className="px-4 py-4">
             <h1 className="font-display font-bold text-lg text-white">📂 အမျိုးအစားများ</h1>
-            <p className="text-xs text-white/40 font-myanmar mt-1">လုပ်ငန်းအမျိုးအစားကို ရွေးပါ</p>
+            <p className="text-xs text-white/60 font-myanmar mt-1">လုပ်ငန်းအမျိုးအစားကို ရွေးပါ</p>
           </div>
         </div>
 
@@ -480,18 +497,21 @@ export default function DirectoryPage() {
               <button
                 key={cat.id}
                 onClick={() => handleCategorySelect(cat)}
-                className="w-full flex items-center justify-between p-4 rounded-2xl card-dark hover:bg-white/8 transition-colors"
+                disabled={cat.listing_count === 0}
+                className={`w-full flex items-center justify-between p-4 rounded-2xl card-dark transition-colors ${cat.listing_count === 0 ? 'opacity-50' : 'hover:bg-white/8'}`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
                   <span className="text-2xl flex-shrink-0">{cat.icon}</span>
                   <div className="text-left min-w-0 flex-1 overflow-hidden">
                     <p className="font-display font-semibold text-white truncate">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</p>
-                    <p className="text-[10px] text-white/40 font-myanmar truncate">{cat.name_mm || cat.name}</p>
+                    {(lang === 'mm' ? cat.name : cat.name_mm) && (
+                      <p className="text-[10px] text-white/60 font-myanmar truncate">{lang === 'mm' ? cat.name : cat.name_mm}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   <span className="bg-brand-600/30 px-2 py-1 rounded-full text-xs font-bold text-brand-300 whitespace-nowrap">
-                    {cat.listing_count} လုပ်ငန်း
+                    {cat.listing_count === 0 ? 'မရှိသေး' : `${cat.listing_count} လုပ်ငန်း`}
                   </span>
                   <ChevronRight size={18} className="text-white/30 flex-shrink-0" />
                 </div>
@@ -509,7 +529,7 @@ export default function DirectoryPage() {
       <div className="pb-8">
         <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/10">
           <div className="px-4 py-3">
-            <button onClick={goBack} className="flex items-center gap-2 mb-2 text-white/60 hover:text-white">
+            <button onClick={goBack} className="flex items-center gap-2 mb-2 py-2 px-2 -ml-2 text-white/60 hover:text-white">
               <ChevronRight size={16} className="rotate-180" />
               <span className="text-xs">နောက်သို့</span>
             </button>
@@ -517,7 +537,7 @@ export default function DirectoryPage() {
               <span className="text-2xl flex-shrink-0">{selectedCategory.icon}</span>
               <h1 className="font-display font-bold text-lg text-white truncate">{lang === 'mm' ? (selectedCategory.name_mm || selectedCategory.name) : selectedCategory.name}</h1>
             </div>
-            <p className="text-xs text-white/40 font-myanmar mt-1">အမျိုးအစားခွဲကို ရွေးပါ</p>
+            <p className="text-xs text-white/60 font-myanmar mt-1">အမျိုးအစားခွဲကို ရွေးပါ</p>
           </div>
         </div>
 
@@ -535,7 +555,7 @@ export default function DirectoryPage() {
                     <span className="text-2xl flex-shrink-0">{selectedCategory.icon}</span>
                     <div className="text-left min-w-0 flex-1 overflow-hidden">
                       <p className="font-display font-semibold text-white truncate">အားလုံး</p>
-                      <p className="text-[10px] text-white/40 font-myanmar truncate">All listings</p>
+                      <p className="text-[10px] text-white/60 font-myanmar truncate">All listings</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-2">
@@ -551,18 +571,21 @@ export default function DirectoryPage() {
                 <button
                   key={sub.id}
                   onClick={() => handleSubcategorySelect(sub)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl card-dark hover:bg-white/8 transition-colors"
+                  disabled={sub.listing_count === 0}
+                  className={`w-full flex items-center justify-between p-4 rounded-2xl card-dark transition-colors ${sub.listing_count === 0 ? 'opacity-50' : 'hover:bg-white/8'}`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
                     <span className="text-2xl flex-shrink-0">{sub.icon}</span>
                     <div className="text-left min-w-0 flex-1 overflow-hidden">
                       <p className="font-display font-semibold text-white truncate">{lang === 'mm' ? (sub.name_mm || sub.name) : sub.name}</p>
-                      <p className="text-[10px] text-white/40 font-myanmar truncate">{sub.name_mm || sub.name}</p>
+                      {(lang === 'mm' ? sub.name : sub.name_mm) && (
+                        <p className="text-[10px] text-white/60 font-myanmar truncate">{lang === 'mm' ? sub.name : sub.name_mm}</p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                     <span className="bg-brand-600/30 px-2 py-1 rounded-full text-xs font-bold text-brand-300 whitespace-nowrap">
-                      {sub.listing_count} လုပ်ငန်း
+                      {sub.listing_count === 0 ? 'မရှိသေး' : `${sub.listing_count} လုပ်ငန်း`}
                     </span>
                     <ChevronRight size={18} className="text-white/30 flex-shrink-0" />
                   </div>
@@ -583,7 +606,7 @@ export default function DirectoryPage() {
   return (
     <div className="flex flex-col min-h-full">
       <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/10 px-4 py-3 space-y-3">
-        <button onClick={goBack} className="flex items-center gap-2 text-white/60 hover:text-white">
+        <button onClick={goBack} className="flex items-center gap-2 py-2 px-2 -ml-2 text-white/60 hover:text-white">
           <ChevronRight size={16} className="rotate-180" />
           <span className="text-xs">နောက်သို့</span>
         </button>
@@ -598,6 +621,9 @@ export default function DirectoryPage() {
           </h1>
         </div>
 
+        {/* B8: search + filters collapse away on scroll down, return on scroll up */}
+        {!headerCollapsed && (
+        <>
         {/* Search input with debounce */}
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
@@ -606,7 +632,7 @@ export default function DirectoryPage() {
             placeholder="လုပ်ငန်းအမည် ရှာရန်..."
             value={searchInput}
             onChange={e => setSearchInput(e.target.value)}
-            className="input-dark pl-9 pr-10 text-sm w-full"
+            className="input-dark pl-9 pr-10 w-full"
           />
           {searchInput && (
             <button onClick={() => { setSearchInput(''); setQ('') }} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
@@ -619,7 +645,7 @@ export default function DirectoryPage() {
         <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 w-full">
           <button
             onClick={() => setVerifiedOnly(v => !v)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-semibold border transition-all ${
               verifiedOnly
                 ? 'border-gold-500/50 text-gold-400'
                 : 'bg-white/5 border-white/10 text-white/50 hover:text-white/80'
@@ -634,7 +660,7 @@ export default function DirectoryPage() {
             <select
               value={city}
               onChange={e => setCity(e.target.value)}
-              className={`appearance-none pl-3 pr-7 py-1.5 rounded-full text-xs font-semibold border outline-none transition-colors cursor-pointer ${
+              className={`appearance-none pl-3 pr-7 py-2.5 rounded-full text-xs font-semibold border outline-none transition-colors cursor-pointer ${
                 city !== 'All'
                   ? 'border-gold-500/40 text-gold-400'
                   : 'bg-white/5 border-white/10 text-white/60'
@@ -653,23 +679,40 @@ export default function DirectoryPage() {
             <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
           </div>
 
+          <div className="relative flex-shrink-0">
+            <select
+              value={sort}
+              onChange={e => setSort(e.target.value)}
+              aria-label="စီရန်"
+              className="appearance-none pl-3 pr-7 py-2.5 rounded-full text-xs font-semibold border outline-none transition-colors cursor-pointer bg-white/5 border-white/10 text-white/60"
+              style={{ backgroundColor: 'rgba(255,255,255,0.05)', fontFamily: 'Pyidaungsu, DM Sans, sans-serif' }}
+            >
+              <option value="rating" style={{ backgroundColor: '#1a0030' }}>⭐ Rating အမြင့်</option>
+              <option value="newest" style={{ backgroundColor: '#1a0030' }}>🆕 အသစ်</option>
+              <option value="name" style={{ backgroundColor: '#1a0030' }}>🔤 နာမည်</option>
+            </select>
+            <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+          </div>
+
           {hasFilters && (
-            <button onClick={clearFilters} className="flex-shrink-0 w-6 h-6 rounded-full bg-white/8 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors">
-              <X size={12} />
+            <button onClick={clearFilters} aria-label="ရှင်းမည်" title="ရှင်းမည်" className="flex-shrink-0 w-9 h-9 rounded-full bg-white/8 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors">
+              <X size={14} />
             </button>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* Results count */}
       <div className="px-4 py-2 flex items-center justify-between flex-wrap gap-1">
-        <p className="text-[11px] text-white/40">
+        <p className="text-[11px] text-white/60">
           {listingsLoading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ရလဒ်`}
         </p>
       </div>
 
       {/* Listings */}
-      <div className="px-4 space-y-2 pb-36">
+      <div className="px-4 space-y-2 pb-8">
         {listingsError && (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်{listings.length > 0 ? ' — အဟောင်းများကို ပြထားသည်' : ''}</p>

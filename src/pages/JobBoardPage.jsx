@@ -48,7 +48,7 @@ function normalizePostType(v) {
 const STATUSES = {
   active:    { mm: 'လျှောက်လို့ရ',  en: 'Open',       color: 'text-green-400', bg: 'bg-green-500/15', icon: '✅' },
   filled:    { mm: 'ပြည့်သွားပြီ',  en: 'Filled',      color: 'text-red-400',   bg: 'bg-red-500/15',   icon: '❌' },
-  expired:   { mm: 'သက်တမ်းကုန်',   en: 'Expired',     color: 'text-white/40',  bg: 'bg-white/8',      icon: '⌛' },
+  expired:   { mm: 'သက်တမ်းကုန်',   en: 'Expired',     color: 'text-white/60',  bg: 'bg-white/8',      icon: '⌛' },
 }
 
 function timeAgo(iso, lang) {
@@ -66,6 +66,11 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
   const type = JOB_TYPES.find(t => t.id === job.type) || JOB_TYPES[0]
   const postType = POST_TYPES.find(t => t.id === job.post_type) || POST_TYPES[1]
   const status = STATUSES[job.status] || STATUSES.active
+  // Seeker cards must not say "လျှောက်လို့ရ" (that wording only fits a
+  // job offer) — a seeker is looking for work (D13).
+  const isSeeker = job.post_type === 'seeker'
+  const statusMm = isSeeker && job.status === 'active' ? 'အလုပ်ရှာနေသည်' : status.mm
+  const statusEn = isSeeker && job.status === 'active' ? 'Seeking work' : status.en
   const isOwner = isLoggedIn && (job.poster_id === userId)
 
   const salaryStr = job.salary_min
@@ -75,7 +80,7 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
   const handleContact = () => {
     if (!isLoggedIn) return
     if (job.contact_phone) {
-      window.location.href = toTelHref(job.contact_phone)
+      window.location.href = toTelHref(job.contact_phone, isLoggedIn)
     } else if (job.poster_id) {
       navigate(`/profile/${job.poster_id}`)
     }
@@ -92,7 +97,7 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
             {job.is_urgent && <span className="text-[8px] font-bold text-red-400 bg-red-500/15 border border-red-500/25 px-1.5 py-0.5 rounded-full">⚡ Urgent</span>}
-            <span className="text-[9px] text-white/40 bg-white/6 px-1.5 py-0.5 rounded-full">{cat?.icon} {lang === 'mm' ? cat?.mm : cat?.en}</span>
+            <span className="text-[9px] text-white/60 bg-white/6 px-1.5 py-0.5 rounded-full">{cat?.icon} {lang === 'mm' ? cat?.mm : cat?.en}</span>
             <span className="text-[9px] text-brand-300 bg-brand-600/15 border border-brand-400/20 px-1.5 py-0.5 rounded-full">{lang === 'mm' ? type?.mm : type?.en}</span>
             {/* Post type with stronger visual */}
             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${postTypeStyle}`}>
@@ -104,7 +109,7 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
             <p className="text-xs text-white/50 font-myanmar">{lang === 'mm' ? (job.company_mm || job.company) : (job.company || job.company_mm)}</p>
           )}
           {job.location_mm && (
-            <div className="flex items-center gap-1 mt-1 text-white/40">
+            <div className="flex items-center gap-1 mt-1 text-white/60">
               <MapPin size={10} />
               <span className="text-[10px] truncate font-myanmar">{job.location_mm}</span>
             </div>
@@ -112,16 +117,16 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
         </div>
 
         <div className={`text-right flex-shrink-0 ${status.bg} px-2 py-1 rounded-lg`}>
-          <span className={`text-[9px] font-bold ${status.color}`}>{status.icon} {lang === 'mm' ? status.mm : status.en}</span>
+          <span className={`text-[9px] font-bold ${status.color}`}>{status.icon} {lang === 'mm' ? statusMm : statusEn}</span>
         </div>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-xs font-bold text-green-400">{salaryStr}</span>
+        <span className="text-xs font-bold text-green-400">{lang === 'mm' ? 'လစာ: ' : 'Salary: '}{salaryStr}</span>
       </div>
 
       {job.requirements_mm && (
-        <p className="text-[10px] text-white/40 font-myanmar line-clamp-1">📋 {job.requirements_mm}</p>
+        <p className="text-[10px] text-white/60 font-myanmar line-clamp-1">📋 {job.requirements_mm}</p>
       )}
 
       {expanded && (
@@ -133,7 +138,7 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
             <p className="text-xs text-white/50 leading-relaxed">📋 {job.requirements}</p>
           )}
           {job.expires_at && (
-            <p className="text-[10px] text-white/40">⏳ {lang === 'mm' ? 'သက်တမ်းကုန်' : 'Expires'}: {formatMyanmarDate(job.expires_at)}</p>
+            <p className="text-[10px] text-white/60">⏳ {lang === 'mm' ? 'သက်တမ်းကုန်' : 'Expires'}: {formatMyanmarDate(job.expires_at)}</p>
           )}
         </div>
       )}
@@ -142,19 +147,26 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
         <div className="flex gap-2 items-center flex-wrap">
           {job.contact_phone && (
             isLoggedIn ? (
-              <button onClick={handleContact} className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300">
-                <Phone size={10} /> {job.contact_name ? `${job.contact_name} · ` : ''}{job.contact_phone}
+              <button onClick={handleContact} className="flex items-center justify-center gap-2 min-h-[44px] px-4 py-2 rounded-xl bg-green-500/20 border border-green-500/30 text-green-400 hover:bg-green-500/30 text-base font-bold">
+                <Phone size={16} /> {lang === 'mm' ? 'ဖုန်းခေါ်မည်' : 'Call'} {job.contact_name ? `· ${job.contact_name}` : ''} {job.contact_phone}
               </button>
             ) : (
-              <span className="flex items-center gap-1 text-[10px] text-green-400/70">
-                <Phone size={10} /> {job.contact_name ? `${job.contact_name} · ` : ''}{maskPhone(job.contact_phone, false)}
-              </span>
+              <button onClick={() => navigate('/login')} className="flex items-center gap-1 text-sm text-green-400/70 hover:text-green-400">
+                <Phone size={12} /> {job.contact_name ? `${job.contact_name} · ` : ''}{maskPhone(job.contact_phone, false)} · {lang === 'mm' ? 'Login ဝင်မှ ဖုန်းခေါ်နိုင်မည်' : 'Login to call'}
+              </button>
             )
           )}
           {!job.contact_phone && job.contact_name && (
-            <span className="text-[10px] text-white/40 font-myanmar">{job.contact_name}</span>
+            <span className="text-[10px] text-white/60 font-myanmar">{job.contact_name}</span>
           )}
-          <span className="text-[10px] text-white/30">{timeAgo(job.posted_at, lang)}</span>
+          {job.contact_fb && (
+            job.contact_fb.startsWith('http') ? (
+              <a href={job.contact_fb} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300">📘 Facebook</a>
+            ) : (
+              <span className="flex items-center gap-1 text-xs text-blue-400/80">📘 {job.contact_fb}</span>
+            )
+          )}
+          <span className="text-[10px] text-white/60">{timeAgo(job.posted_at, lang)}</span>
           <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-brand-300 hover:text-brand-200">
             {expanded ? (lang === 'mm' ? '▲ ချုံ့မည်' : '▲ Less') : (lang === 'mm' ? '▼ အသေးစိတ်' : '▼ Details')}
           </button>
@@ -168,8 +180,8 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
             <button onClick={() => onEdit(job)} className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/30">
               <Edit2 size={11} />
             </button>
-            <button onClick={() => onDelete(job.id)} className="w-6 h-6 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20">
-              <Trash2 size={11} className="text-red-400" />
+            <button onClick={() => onDelete(job.id)} className="w-6 h-6 rounded-lg btn-danger flex items-center justify-center">
+              <Trash2 size={11} className="text-white" />
             </button>
           </div>
         )}
@@ -218,7 +230,7 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
 
   if (!isLoggedIn) return (
     <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 pt-safe">
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
+      <div className="w-full max-w-lg bg-[#1a0030] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
         <p className="text-white font-myanmar mb-4">တင်ရန် Login လိုအပ်သည်</p>
         <button onClick={() => navigate('/login')} className="btn-primary w-full">Login ဝင်မည်</button>
         <button onClick={onClose} className="btn-ghost w-full mt-2">Cancel</button>
@@ -281,14 +293,18 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
           <div className="flex gap-2">
             {POST_TYPES.filter(t => t.id !== 'all').map(t => (
               <button key={t.id} onClick={() => set('post_type', t.id)}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-display font-bold border transition-all ${form.post_type === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
+                className={`flex-1 py-2.5 rounded-xl text-sm font-display font-bold border transition-all ${form.post_type === t.id
+                  ? (t.id === 'offer'
+                      ? 'bg-blue-500/25 border-blue-500/50 text-blue-300'
+                      : 'bg-green-500/25 border-green-500/50 text-green-300')
+                  : 'bg-white/5 border-white/10 text-white/50'}`}>
                 {t.icon} {lang === 'mm' ? t.mm : t.en}
               </button>
             ))}
           </div>
         </div>
 
-        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကော်ဖီဆိုင် Cashier လိုသည် / စာရေးအလုပ်ရှာသည်" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: ကော်ဖီဆိုင် Cashier လိုသည် / စာရေးအလုပ်ရှာသည်" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (အင်္ဂလိပ်)' : 'Title (English)'}</label><input value={form.title} onChange={e => set('title', e.target.value)} className="input-dark" placeholder="e.g. Cashier wanted" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကုမ္ပဏီ/လုပ်ငန်းအမည်' : 'Company Name'}</label><input value={form.company_mm} onChange={e => set('company_mm', e.target.value)} className="input-dark font-myanmar" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကုမ္ပဏီ/လုပ်ငန်းအမည် (အင်္ဂလိပ်)' : 'Company Name (English)'}</label><input value={form.company} onChange={e => set('company', e.target.value)} className="input-dark" /></div>
@@ -316,7 +332,7 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
           <div><label className="block text-xs text-white/50 mb-1.5">လစာ Min</label><input type="number" value={form.salary_min} onChange={e => set('salary_min', e.target.value)} className="input-dark" placeholder="150000" /></div>
           <div><label className="block text-xs text-white/50 mb-1.5">Max</label><input type="number" value={form.salary_max} onChange={e => set('salary_max', e.target.value)} className="input-dark" /></div>
           <div><label className="block text-xs text-white/50 mb-1.5">Unit</label>
-            <select value={form.salary_unit} onChange={e => set('salary_unit', e.target.value)} className="select-dark text-xs">
+            <select value={form.salary_unit} onChange={e => set('salary_unit', e.target.value)} className="select-dark">
               <option value="day">ရက်</option><option value="week">ပတ်</option><option value="month">လ</option>
             </select>
           </div>
@@ -330,6 +346,8 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
           <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဆက်သွယ်ရမည့်သူ' : 'Contact Name'}</label><input value={form.contact_name} onChange={e => set('contact_name', e.target.value)} className="input-dark font-myanmar" /></div>
           <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဖုန်း' : 'Phone'}</label><input type="tel" value={form.contact_phone} onChange={e => set('contact_phone', e.target.value)} className="input-dark" placeholder="09..." /></div>
         </div>
+
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'Facebook (အမည် / လင့်)' : 'Facebook (name / link)'}</label><input value={form.contact_fb} onChange={e => set('contact_fb', e.target.value)} className="input-dark font-myanmar" placeholder="e.g. facebook.com/..." /></div>
 
         <button onClick={() => set('is_urgent', !form.is_urgent)} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${form.is_urgent ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
           ⚡ {lang === 'mm' ? 'Urgent — အမြန်လိုသည်' : 'Mark as Urgent'}
@@ -351,7 +369,7 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 pt-safe" onClick={onClose}>
-      <div className="bg-[#140020] rounded-2xl p-5 w-64 border border-white/10" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1a0030] rounded-2xl p-5 w-64 border border-white/10" onClick={e => e.stopPropagation()}>
         <p className="text-white text-sm font-display font-bold mb-3">Status ပြောင်းမည်</p>
         <div className="space-y-2">
           {Object.entries(STATUSES).map(([key, val]) => (
@@ -428,7 +446,7 @@ export default function JobBoardPage() {
   }, [catFilter, postTypeFilter, statusFilter, page])
 
   async function deleteJob(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('jobs').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -439,10 +457,10 @@ export default function JobBoardPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">💼 {lang === 'mm' ? 'အလုပ်ကြော်ငြာ' : 'Job Board'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} အလုပ်ရှင် / အလုပ်ရှာ` : `Employers & Job Seekers`}</p>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} အလုပ်ရှင် / အလုပ်ရှာ` : `Employers & Job Seekers`}</p>
         </div>
         <button onClick={() => { setEditTarget(null); setShowForm(true) }} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0">
-          <Plus size={14} /> Post
+          <Plus size={14} /> တင်မည်
         </button>
       </div>
 
@@ -450,14 +468,14 @@ export default function JobBoardPage() {
       <div className="px-4 space-y-2 mb-4">
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
-            <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+            <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(0) }} className="select-dark">
               {JOB_CATS.map(c => (
                 <option key={c.id} value={c.id}>{c.icon} {lang === 'mm' ? c.mm : c.en}</option>
               ))}
             </select>
           </div>
           <div className="relative">
-            <select value={postTypeFilter} onChange={e => { setPostTypeFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+            <select value={postTypeFilter} onChange={e => { setPostTypeFilter(e.target.value); setPage(0) }} className="select-dark">
               {POST_TYPES.map(t => (
                 <option key={t.id} value={t.id}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>
               ))}
@@ -465,7 +483,7 @@ export default function JobBoardPage() {
           </div>
         </div>
         <div className="relative">
-          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} className="select-dark">
             <option value="all">📋 {lang === 'mm' ? 'အားလုံး' : 'All Status'}</option>
             {Object.entries(STATUSES).map(([key, val]) => (
               <option key={key} value={key}>{val.icon} {lang === 'mm' ? val.mm : val.en}</option>
@@ -485,7 +503,7 @@ export default function JobBoardPage() {
          jobs.length === 0 ? (
            <div className="flex flex-col items-center py-14 text-center">
              <span className="text-4xl mb-3">💼</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'ကြော်ငြာ မရှိသေး' : 'No jobs posted yet'}</p>
+             <p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'ကြော်ငြာ မရှိသေး' : 'No jobs posted yet'}</p>
            </div>
          ) :
          jobs.map(j => (

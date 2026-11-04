@@ -36,11 +36,11 @@ export const T = {
   review_placeholder: { mm: 'မှတ်ချက်ရေးရန်... (optional)', en: 'Write a comment... (optional)' },
   submit_review: { mm: 'Review တင်မယ်', en: 'Submit Review' },
   submitting: { mm: 'တင်နေသည်...', en: 'Submitting...' },
-  reactions: { mm: 'Reactions', en: 'Reactions' },
+  reactions: { mm: 'တုံ့ပြန်မှုများ', en: 'Reactions' },
   claim_business: { mm: 'ဒါ ကျွန်တော်လုပ်ငန်း', en: 'Claim this Business' },
   claimed: { mm: 'Verified ဆိုင်ရှင်', en: 'Verified Owner' },
-  bookmark_save: { mm: 'Save ထားမည်', en: 'Save' },
-  bookmark_saved: { mm: 'Save ထားပြီး', en: 'Saved' },
+  bookmark_save: { mm: 'သိမ်းမည်', en: 'Save' },
+  bookmark_saved: { mm: 'သိမ်းထားပြီးပါပြီ', en: 'Saved' },
   // News
   all_types: { mm: 'အားလုံး', en: 'All' },
   pinned: { mm: 'Pinned', en: 'Pinned' },
@@ -106,12 +106,12 @@ export const T = {
   loading: { mm: 'Loading...', en: 'Loading...' },
   ok: { mm: 'OK', en: 'OK' },
   // Claim
-  claim_title: { mm: 'ဆိုင် Claim လုပ်မည်', en: 'Claim Your Business' },
+  claim_title: { mm: 'ဆိုင်ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်း', en: 'Claim Your Business' },
   claim_desc: { mm: 'ဤလုပ်ငန်းသည် သင်၏ လုပ်ငန်းဖြစ်ကြောင်း Admin ထံ လျှောက်ထားမည်', en: 'Request ownership verification of this listing' },
   claim_phone: { mm: 'Verification ဖုန်းနံပါတ်', en: 'Your contact number for verification' },
   claim_note: { mm: 'Admin မှ စစ်ဆေးပြီး ၁-၂ ရက်အတွင်း အကြောင်းပြန်မည်', en: 'Admin will verify and respond within 1-2 days' },
-  claim_submit: { mm: 'Claim လျှောက်မည်', en: 'Submit Claim' },
-  claim_sent: { mm: 'Claim လျှောက်ထားပြီ', en: 'Claim Submitted' },
+  claim_submit: { mm: 'ပိုင်ဆိုင်ကြောင်း တောင်းဆိုမည်', en: 'Submit Claim' },
+  claim_sent: { mm: 'ပိုင်ဆိုင်ကြောင်း တောင်းဆိုပြီးပါပြီ', en: 'Claim Submitted' },
   claim_pending: { mm: 'စစ်ဆေးဆဲ', en: 'Pending Review' },
 }
 

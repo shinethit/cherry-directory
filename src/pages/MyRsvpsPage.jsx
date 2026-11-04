@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
 import { useSEO } from '../hooks/useSEO'
+import { goBackOrHome } from '../lib/navigation'
 import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { getCountdown } from '../lib/countdown'
@@ -48,7 +49,12 @@ export default function MyRsvpsPage() {
         .map(r => (r.post ? { ...r.post, _rsvp: r.status } : null))
         .filter(p => p && p.type === 'event')
       setItems(list)
-    } catch (e) { console.warn(e); setLoadError(e.message || 'Error') }
+    } catch (e) {
+      console.warn(e)
+      // V4: never render the raw Supabase English message — store a
+      // marker only; the screen renders fixed Myanmar text + Retry.
+      setLoadError('load_failed')
+    }
     setLoading(false)
   }, [user])
 
@@ -109,15 +115,16 @@ export default function MyRsvpsPage() {
     <div className="pb-8 min-h-[80dvh]">
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+          <button onClick={() => goBackOrHome(navigate, '/calendar')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
             <ArrowLeft size={18} className="text-white" />
           </button>
           <div>
             <h1 className="font-display font-bold text-xl text-white">
               🎟️ {lang === 'mm' ? 'တက်မည့် ဖြစ်ရပ်များ' : 'My RSVPs'}
             </h1>
-            <p className="text-[10px] text-white/40 mt-0.5 font-myanmar">
-              {lang === 'mm' ? items.length + ' ခု' : items.length + ' events'}
+            <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
+              {/* F13: on error the count is unknown — show "—", never "0 ခု". */}
+              {loadError ? '—' : lang === 'mm' ? items.length + ' ခု' : items.length + ' events'}
             </p>
           </div>
         </div>
@@ -155,7 +162,9 @@ export default function MyRsvpsPage() {
             <p className="font-display font-semibold text-white/70">
               {lang === 'mm' ? 'RSVP များ ရယူမရပါ' : 'Could not load your RSVPs'}
             </p>
-            <p className="text-xs text-white/40 mt-1 font-myanmar max-w-xs">{loadError}</p>
+            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">
+              {lang === 'mm' ? 'တင်မရပါ — ပြန်ကြိုးစားမည်' : 'Could not load — please try again'}
+            </p>
             <button onClick={load} className="btn-primary text-sm mt-4 px-5 py-2">
               {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
             </button>
@@ -204,15 +213,15 @@ export default function MyRsvpsPage() {
                       {cd && <span className={'text-[10px] font-bold ' + cd.cls}>{cd.label}</span>}
                     </div>
                     {ev.event_start && (
-                      <p className="text-[10px] text-white/40 mt-1 flex items-center gap-1">
+                      <p className="text-[10px] text-white/60 mt-1 flex items-center gap-1">
                         <Clock size={9} />
                         {lang === 'mm'
-                          ? formatMyanmarDateTime(ev.event_start)
-                          : new Date(ev.event_start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          ? 'ပွဲရက်: ' + formatMyanmarDateTime(ev.event_start)
+                          : 'Date: ' + new Date(ev.event_start).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
                     {ev.event_location && (
-                      <p className="text-[10px] text-white/40 mt-0.5 flex items-center gap-1 truncate font-myanmar">
+                      <p className="text-[10px] text-white/60 mt-0.5 flex items-center gap-1 truncate font-myanmar">
                         <MapPin size={9} /> {ev.event_location}
                       </p>
                     )}
@@ -222,7 +231,7 @@ export default function MyRsvpsPage() {
                   <div className="border-t border-white/8">
                     <button
                       onClick={() => cancelRsvp(ev.id)}
-                      className="w-full py-2.5 text-xs text-white/40 hover:text-red-400 hover:bg-red-500/5 transition-colors"
+                      className="w-full py-2.5 text-xs text-white/60 hover:text-red-400 hover:bg-red-500/5 transition-colors"
                     >
                       {lang === 'mm' ? 'RSVP ပယ်ဖျက်' : 'Cancel RSVP'}
                     </button>

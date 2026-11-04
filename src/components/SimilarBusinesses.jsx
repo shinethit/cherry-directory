@@ -32,10 +32,16 @@ export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }
 
   return (
     <div>
-      <p className="text-sm font-display font-bold text-white mb-3">
-        {lang === 'mm' ? 'ဆင်တူလုပ်ငန်းများ' : 'Similar Businesses'}
-      </p>
-      <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm font-display font-bold text-white">
+          {lang === 'mm' ? 'ဆင်တူလုပ်ငန်းများ' : 'Similar Businesses'}
+        </p>
+        {items.length > 2 && (
+          <span className="text-[10px] text-white/60 font-myanmar">→ ပွတ်ဆွဲပါ</span>
+        )}
+      </div>
+      <div className="relative">
+        <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4">
         {items.map(l => {
           const img = l.logo_url || l.cover_url
           const displayName = lang === 'mm' ? (l.name_mm || l.name) : l.name
@@ -49,7 +55,7 @@ export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }
                 {img ? (
                   <img
                     src={getOptimizedUrl(img, { width: 200 })}
-                    alt=""
+                    alt={displayName}
                     className="w-full h-full object-cover"
                     loading="lazy"
                   />
@@ -66,10 +72,10 @@ export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }
                     <span className="text-[10px] text-amber-400 font-bold">
                       ★ {Number(l.rating_avg).toFixed(1)}
                     </span>
-                    <span className="text-[9px] text-white/30">({l.rating_count})</span>
+                    <span className="text-[9px] text-white/60">({l.rating_count})</span>
                   </>
                 ) : (
-                  <span className="text-[9px] text-white/30">
+                  <span className="text-[9px] text-white/60">
                     {lang === 'mm' ? 'အသစ်' : 'New'}
                   </span>
                 )}
@@ -80,6 +86,9 @@ export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }
             </button>
           )
         })}
+        </div>
+        {/* B31: right-edge fade hints the row scrolls horizontally. */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-2 w-10 bg-gradient-to-l from-[#140020] via-[#140020]/60 to-transparent" />
       </div>
     </div>
   )

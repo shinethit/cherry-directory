@@ -9,18 +9,14 @@ import { useAuth } from '../contexts/AuthContext';
 import SplashScreen from '../components/SplashScreen';
 import ShareButton from '../components/ShareButton';
 import { usePWA } from '../hooks/usePWA'
-import { subscribe as subscribeCache, inspectLocalStorage } from '../lib/cacheStatus';
 import { yangonToday, formatMyanmarDateTime, mmtParts, MY_MONTHS } from '../lib/myanmarDate';
 import { safeGet, safeSet } from '../lib/safeStorage';
 import { withTimeout, TimeoutError } from '../lib/withTimeout';
-import { showError, showWarning } from '../lib/toast';
+import { showError } from '../lib/toast';
 
 // How long the main Home queries may run before the page gives up and
-// shows a retry instead of skeletons forever (C-2).
-const LOAD_TIMEOUT_MS = 15000;
-// Hard fallback: the hero "preparing" line must never persist — force the
-// ready state this long after mount even if loadData is still stuck (C-1).
-const HERO_FORCE_READY_MS = 5000;
+// shows a retry instead of skeletons forever (C-2, V2: 10 s, not 15 s).
+const LOAD_TIMEOUT_MS = 10000;
 
 // Helper: country code → full name
 
@@ -39,9 +35,10 @@ export default function HomePage() {
   const { isLoggedIn, user } = useAuth();
   const { installable, installApp } = usePWA()
 
-  // Offline cache status
-  const [cacheStorage, setCacheStorage] = useState({ exists: false, queryCount: 0 })
-  
+  // V2: after 5 s of loading, show a progress hint so the user knows the
+  // app is still working instead of staring at skeletons in silence.
+  const [slowLoad, setSlowLoad] = useState(false)
+
   // --- Splash consent: daily check (safe storage — never throws, H-2) ---
   const [consentGiven, setConsentGiven] = useState(() => {
     const lastShown = safeGet('cherry_consent_date');
@@ -57,6 +54,8 @@ export default function HomePage() {
   const [selectedCat, setSelectedCat] = useState(null);
   const [selectedSub, setSelectedSub] = useState(null);
   const [upcomingEvents, setUpcomingEvents] = useState([]);
+  // A3: a null count means the count query failed — render "—", never a
+  // misleading "0". (Initial 0 is only shown while loading, as "…".)
   const [stats, setStats] = useState({ listings: 0, posts: 0 });
   const [quickLinks, setQuickLinks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -82,28 +81,6 @@ export default function HomePage() {
   const [jobSeekersCount, setJobSeekersCount] = useState(0);
   const [communityStatsLoading, setCommunityStatsLoading] = useState(true);
 
-  // --- Hero line (C-1): driven by real state, never a display-phase
-  // machine. While loadData is running show "preparing"; once it settles
-  // (or after a 5 s hard fallback) show the cached-offline line if there
-  // is cached data, otherwise nothing. The label can never persist.
-  const [heroForceReady, setHeroForceReady] = useState(false)
-  useEffect(() => {
-    const t = setTimeout(() => setHeroForceReady(true), HERO_FORCE_READY_MS)
-    return () => clearTimeout(t)
-  }, [])
-  const heroReady = !loading || heroForceReady
-
-  // --- Offline cache status: refresh on cache notifications + when the
-  // tab becomes visible again — no 3 s polling (C-M2) ---
-  useEffect(() => {
-    const refresh = () => setCacheStorage(inspectLocalStorage())
-    const unsub = subscribeCache(() => refresh())
-    refresh()
-    const onVisible = () => { if (!document.hidden) refresh() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => { unsub(); document.removeEventListener('visibilitychange', onVisible) }
-  }, [])
-
   // --- Online/Offline listener ---
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -119,7 +96,7 @@ export default function HomePage() {
 
 
   // --- Main data loading (listings, posts, categories, quick links) ---
-  // 15 s timeout (C-2): a hung query can no longer freeze Home as
+  // 10 s timeout (C-2, V2): a hung query can no longer freeze Home as
   // skeletons forever — on timeout the banner + retry appear. Offline
   // (B-M3): skip Supabase entirely, clear loading, show the offline notice.
   // Only core sections (posts / featured / categories) set dataError (B-M1).
@@ -129,12 +106,15 @@ export default function HomePage() {
       setLoading(false);
       setDataError(false);
       setLoadTimedOut(false);
+      setSlowLoad(false);
       return;
     }
     setLoading(true);
     setDataError(false);
     setLoadTimedOut(false);
     setSectionErrors({});
+    setSlowLoad(false);
+    const slowTimer = setTimeout(() => setSlowLoad(true), 5000);
     try {
       const results = await withTimeout(Promise.allSettled([
         supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
@@ -161,21 +141,21 @@ export default function HomePage() {
       setAllCategories(all);
       setHomeCategories(all.filter(c => !c.parent_id));
       setStats({
-        listings: results[3]?.status === 'fulfilled' ? results[3].value.count || 0 : 0,
-        posts: results[6]?.status === 'fulfilled' ? results[6].value.count || 0 : 0,
+        listings: failed.listingsCount ? null : (results[3]?.value?.count ?? 0),
+        posts: failed.postsCount ? null : (results[6]?.value?.count ?? 0),
       });
       setUpcomingEvents(results[4]?.status === 'fulfilled' ? results[4].value.data || [] : []);
       setQuickLinks(results[5]?.status === 'fulfilled' ? results[5].value.data || [] : []);
     } catch (err) {
       console.error('Data load error:', err);
       setDataError(true);
+      // V2: the error banner below is the only notice — no duplicate toast.
       if (err instanceof TimeoutError) {
         setLoadTimedOut(true);
-        showWarning('Data တင်တာ ကြာနေသည် — ပြန်ကြိုးစားပါ');
-      } else {
-        showError('Data တင်ရာတွင် အမှားဖြစ်သွားသည်');
       }
     } finally {
+      clearTimeout(slowTimer);
+      setSlowLoad(false);
       setLoading(false);
     }
   }, []);
@@ -187,21 +167,22 @@ export default function HomePage() {
   }, [consentGiven, loadData]);
 
   // --- Community stats (silent fail) ---
-  // Same 15 s timeout as the main load (H-4): the loading flag is cleared
+  // Same 10 s timeout as the main load (H-4): the loading flag is cleared
   // in finally, so the six cells can never show '...' forever.
   const loadCommunityStats = useCallback(async () => {
     setCommunityStatsLoading(true);
     try {
-      // Helper: run a count query silently
+      // Helper: run a count query silently — null on failure (FB-5), so a
+      // failed load shows "—" instead of a misleading "0".
       async function count(table, filterFn) {
         try {
           let q = supabase.from(table).select('*', { count: 'exact', head: true });
           if (filterFn) q = filterFn(q);
           const { count: c, error } = await q;
-          if (error) return 0;
+          if (error) return null;
           return c || 0;
         } catch {
-          return 0;
+          return null;
         }
       }
 
@@ -222,8 +203,14 @@ export default function HomePage() {
       setJobOpeningsCount(jobOpenings)
       setJobSeekersCount(jobSeekers)
     } catch (e) {
-      // Timeout or other failure: keep the previous (or zero) counts.
+      // Timeout or other failure: show "—", not the previous (or zero) counts.
       console.warn('Community stats load failed:', e)
+      setRentListingsCount(null)
+      setRentSeekersCount(null)
+      setTutorOffersCount(null)
+      setTutorRequestsCount(null)
+      setJobOpeningsCount(null)
+      setJobSeekersCount(null)
     } finally {
       setCommunityStatsLoading(false)
     }
@@ -307,8 +294,8 @@ export default function HomePage() {
       {/* Header with Share & Refresh */}
       <div className="px-4 flex justify-between items-center mb-1">
         <div>
-          <h1 className="font-display font-bold text-lg text-white">Cherry Directory</h1>
-          <p className="text-xs text-white/40 font-myanmar">{cityName}</p>
+          <h1 className="font-display font-bold text-xl text-white">Cherry Directory</h1>
+          <p className="text-xs text-white/60 font-myanmar">{cityName}</p>
         </div>
         <div className="flex items-center gap-3">
           <ShareButton
@@ -327,20 +314,25 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* V2: loading for more than 5 s — show a progress hint. */}
+      {loading && slowLoad && (
+        <p className="px-4 text-center text-xs text-white/60 font-myanmar">တင်နေသည်… ခဏစောင့်ပါ</p>
+      )}
+
       {/* Offline notice (B-M3): shown instead of a silent empty page when
           there is no connection — Supabase calls are skipped, retry reloads. */}
       {!isOnline && !loading && (
         <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-amber-500/30">
           <p className="text-sm text-amber-400 font-myanmar">အင်တာနက် မရှိပါ — Offline ဖြစ်နေသည်</p>
-          <button onClick={loadData} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          <button onClick={handleRefresh} className="btn-primary text-sm px-6 py-3 min-h-[44px]">ပြန်ကြိုးစားမည်</button>
         </div>
       )}
 
       {/* Data error banner — shown when a core query fails or the load times out */}
       {dataError && !loading && (
         <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
-          <p className="text-sm text-red-400 font-myanmar">{loadTimedOut ? 'Data တင်တာ အချိန်ကုန်သွားသည် (15 စက္ကန့်) — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ' : 'Data တင်ရာတွင် အမှားဖြစ်သွားသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ'}</p>
-          <button onClick={loadData} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          <p className="text-sm text-red-400 font-myanmar">{loadTimedOut ? 'Data တင်တာ အချိန်ကုန်သွားသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ' : 'Data တင်ရာတွင် အမှားဖြစ်သွားသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ'}</p>
+          <button onClick={handleRefresh} className="btn-primary text-sm px-6 py-3 min-h-[44px]">ပြန်ကြိုးစားမည်</button>
         </div>
       )}
 
@@ -352,61 +344,37 @@ export default function HomePage() {
 
             {/* LEFT: Title + description + search */}
             <div className="flex-1 min-w-0">
-              <p className="text-gold-400 text-[10px] font-display font-semibold tracking-widest uppercase mb-0.5">{cityName}</p>
-              <h2 className="font-display font-bold text-lg text-white leading-tight mb-1.5">
+              <h2 className="font-display font-bold text-xl text-white leading-tight mb-1.5">
                 Cherry Directory 🍒
               </h2>
-              {/* Offline cache status — driven by real state (C-1): while the
-                  main load is running show "preparing"; once it settles (or
-                  the 5 s hard fallback fires) show the cached line if any
-                  data is cached, otherwise nothing. Never stuck. */}
-              {!heroReady ? (
-                <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-white/30 animate-pulse" />
-                  <span className="text-white/40 font-myanmar">
-                    {lang === 'mm' ? 'ပြင်ဆင်နေသည်...' : 'Preparing...'}
-                  </span>
-                </div>
-              ) : (cacheStorage.exists && cacheStorage.queryCount > 0) ? (
-                <div className="flex items-center gap-1.5 mb-1.5 text-[10px]">
-                  <svg width="14" height="12" viewBox="0 0 64 56" fill="none" style={{ display: 'block' }}>
-                    <ellipse cx="32" cy="40" rx="18" ry="10" fill="#4ade80" />
-                    <circle cx="46" cy="26" r="11" fill="#4ade80" />
-                    <polygon points="40,18 42,10 46,16" fill="#4ade80" />
-                    <polygon points="50,16 53,10 55,18" fill="#4ade80" />
-                    <circle cx="43" cy="25" r="1.5" fill="#14532d" />
-                    <circle cx="50" cy="25" r="1.5" fill="#14532d" />
-                  </svg>
-                  <span className="text-green-300 font-myanmar">
-                    {lang === 'mm'
-                      ? `Offline သိမ်းပြီး · ${cacheStorage.queryCount} မျိုး`
-                      : `Cached offline · ${cacheStorage.queryCount} items`}
-                  </span>
-                </div>
-              ) : null}
 
-              
-                <p className="text-white/60 text-[10px] font-myanmar mb-2.5 leading-relaxed">
+              <p className="text-white/80 text-xs font-myanmar mb-2.5 leading-relaxed">
                 မြို့တွင်း လုပ်ငန်းများ၊ သတင်းများ၊ ဖြစ်ရပ်များ အားလုံး တစ်နေရာတည်းတွင် ရှာဖွေနိုင်
               </p>
-              <button onClick={() => navigate('/directory')} className="btn-primary flex items-center gap-1.5 text-xs py-2 px-3">
-                <Search size={13} /> လုပ်ငန်းရှာမယ်
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => navigate('/directory')} className="btn-primary flex items-center gap-1.5 text-xs py-2 px-3">
+                  <Search size={13} /> လုပ်ငန်းရှာမယ်
+                </button>
+                {/* D1: Emergency one tap from Home — no digging through Community. */}
+                <button onClick={() => navigate('/emergency')} className="flex items-center gap-1.5 text-xs py-2 px-3 rounded-full bg-red-600 hover:bg-red-500 text-white font-display font-bold transition-colors">
+                  🆘 အရေးပေါ်
+                </button>
+              </div>
             </div>
 
             {/* RIGHT: Vertical stats — 1 col x 3 rows */}
             <div className="flex flex-col gap-1.5 flex-shrink-0 w-[70px]">
               <div className="glass rounded-lg px-2 py-1.5 text-center">
-                <p className="font-display font-bold text-sm text-white leading-none">{stats.listings.toLocaleString()}</p>
+                <p className="font-display font-bold text-sm text-white leading-none">{loading ? '…' : stats.listings == null ? '—' : stats.listings.toLocaleString()}</p>
                 <p className="text-[8px] text-white/60 mt-0.5 leading-tight">လုပ်ငန်း</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
-                <p className="font-display font-bold text-sm text-white leading-none">{stats.posts.toLocaleString()}</p>
+                <p className="font-display font-bold text-sm text-white leading-none">{loading ? '…' : stats.posts == null ? '—' : stats.posts.toLocaleString()}</p>
                 <p className="text-[8px] text-white/60 mt-0.5 leading-tight">သတင်း</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
-                <p className="font-display font-bold text-sm text-gold-400 leading-none">Free</p>
-                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">သုံးရေး</p>
+                <p className="font-display font-bold text-sm text-gold-400 leading-none">အခမဲ့</p>
+                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">သုံးနိုင်သည်</p>
               </div>
             </div>
 
@@ -429,7 +397,7 @@ export default function HomePage() {
               >
                 <span className="text-lg leading-none">{link.icon}</span>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-display font-semibold leading-tight truncate">{lang === 'mm' ? (link.title_mm || link.title) : link.title}</p>
+                  <p className="text-[10px] font-display font-semibold leading-tight line-clamp-2">{lang === 'mm' ? (link.title_mm || link.title) : link.title}</p>
                 </div>
               </button>
             ))
@@ -451,24 +419,24 @@ export default function HomePage() {
             </div>
             <button
               onClick={() => navigate('/rent?type=available')}
-              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+              className="w-full flex items-center justify-between py-2.5 hover:opacity-80 transition-opacity"
             >
               <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
                 {lang === 'mm' ? 'ငှားရန်' : 'For rent'}
               </span>
               <span className="text-xs font-display font-bold text-white flex-shrink-0">
-                {communityStatsLoading ? '...' : rentListingsCount}
+                {communityStatsLoading ? '...' : (rentListingsCount ?? '—')}
               </span>
             </button>
             <button
               onClick={() => navigate('/rent?type=seeker')}
-              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+              className="w-full flex items-center justify-between py-2.5 hover:opacity-80 transition-opacity"
             >
               <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
                 {lang === 'mm' ? 'ငှားလို' : 'Seeker'}
               </span>
               <span className="text-xs font-display font-bold text-white flex-shrink-0">
-                {communityStatsLoading ? '...' : rentSeekersCount}
+                {communityStatsLoading ? '...' : (rentSeekersCount ?? '—')}
               </span>
             </button>
           </div>
@@ -483,24 +451,24 @@ export default function HomePage() {
             </div>
             <button
               onClick={() => navigate('/tutoring?type=offer')}
-              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+              className="w-full flex items-center justify-between py-2.5 hover:opacity-80 transition-opacity"
             >
               <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
                 {lang === 'mm' ? 'ဆရာ' : 'Tutor'}
               </span>
               <span className="text-xs font-display font-bold text-white flex-shrink-0">
-                {communityStatsLoading ? '...' : tutorOffersCount}
+                {communityStatsLoading ? '...' : (tutorOffersCount ?? '—')}
               </span>
             </button>
             <button
               onClick={() => navigate('/tutoring?type=request')}
-              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+              className="w-full flex items-center justify-between py-2.5 hover:opacity-80 transition-opacity"
             >
               <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
                 {lang === 'mm' ? 'ကျောင်းသား' : 'Student'}
               </span>
               <span className="text-xs font-display font-bold text-white flex-shrink-0">
-                {communityStatsLoading ? '...' : tutorRequestsCount}
+                {communityStatsLoading ? '...' : (tutorRequestsCount ?? '—')}
               </span>
             </button>
           </div>
@@ -515,24 +483,24 @@ export default function HomePage() {
             </div>
             <button
               onClick={() => navigate('/jobs')}
-              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+              className="w-full flex items-center justify-between py-2.5 hover:opacity-80 transition-opacity"
             >
               <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
                 {lang === 'mm' ? 'ခေါ်စာ' : 'Hiring'}
               </span>
               <span className="text-xs font-display font-bold text-white flex-shrink-0">
-                {communityStatsLoading ? '...' : jobOpeningsCount}
+                {communityStatsLoading ? '...' : (jobOpeningsCount ?? '—')}
               </span>
             </button>
             <button
               onClick={() => navigate('/jobs?type=seeker')}
-              className="w-full flex items-center justify-between py-1 hover:opacity-80 transition-opacity"
+              className="w-full flex items-center justify-between py-2.5 hover:opacity-80 transition-opacity"
             >
               <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">
                 {lang === 'mm' ? 'ရှာသူ' : 'Seeker'}
               </span>
               <span className="text-xs font-display font-bold text-white flex-shrink-0">
-                {communityStatsLoading ? '...' : jobSeekersCount}
+                {communityStatsLoading ? '...' : (jobSeekersCount ?? '—')}
               </span>
             </button>
           </div>
@@ -547,7 +515,7 @@ export default function HomePage() {
         </div>
       ) : homeCategories.length === 0 ? (
         <div className="px-4 py-8 text-center">
-          <p className="text-white/30 text-sm font-myanmar">Category မရှိသေး</p>
+          <p className="text-white/60 text-sm font-myanmar">Category မရှိသေး</p>
         </div>
       ) : (
         <div>
@@ -562,7 +530,7 @@ export default function HomePage() {
                   className={`flex flex-col items-center gap-0.5 py-2 px-1 card-dark hover:bg-white/8 transition-colors rounded-lg ${cat.is_featured ? 'border border-amber-500/20' : ''}`}
                 >
                   <span className="text-xl">{cat.icon}</span>
-                  <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</span>
+                  <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar line-clamp-2">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</span>
                 </button>
               );
             })}
@@ -714,7 +682,7 @@ export default function HomePage() {
       {isLoggedIn && recentFavorites.length > 0 && (
         <div>
           <SectionHeader
-            title={lang === 'mm' ? 'သိမ်းထားသောများ' : 'Saved Items'}
+            title={lang === 'mm' ? 'သိမ်းထားသော' : 'Saved Items'}
             subtitle="Favorites"
             action={lang === 'mm' ? 'အားလုံး' : 'View all'}
             onAction={() => navigate('/saved')}
@@ -742,7 +710,7 @@ export default function HomePage() {
                   {l.rating_avg > 0 && (
                     <p className="text-[9px] text-amber-400 font-bold mt-0.5">
                       ★ {Number(l.rating_avg).toFixed(1)}
-                      <span className="text-white/30 ml-1">({l.rating_count})</span>
+                      <span className="text-white/60 ml-1">({l.rating_count})</span>
                     </p>
                   )}
                 </button>
@@ -763,43 +731,43 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Featured Listings */}
-      {(loading || featured.length > 0) && (
-        <div>
-          <SectionHeader title="Featured လုပ်ငန်းများ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
-          <div className="px-4 space-y-2">
-            {loading
-              ? [1, 2, 3].map(n => <ShimmerSkeleton key={n} className="h-20" />)
-              : featured.map(l => <ListingCard key={l.id} listing={l} compact />)}
-          </div>
+      {/* Featured Listings — header stays even when empty (A16) */}
+      <div>
+        <SectionHeader title="Featured လုပ်ငန်းများ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
+        <div className="px-4 space-y-2">
+          {loading
+            ? [1, 2, 3].map(n => <ShimmerSkeleton key={n} className="h-20" />)
+            : featured.length > 0
+              ? featured.map(l => <ListingCard key={l.id} listing={l} compact />)
+              : <p className="text-white/50 text-sm font-myanmar text-center py-4">Featured လုပ်ငန်း မရှိသေးပါ</p>}
         </div>
-      )}
+      </div>
 
-      {/* News & Events */}
-      {(loading || posts.length > 0) && (
-        <div>
-          <SectionHeader title="သတင်းနှင့် ဖြစ်ရပ်များ" subtitle="News & Events" action="အားလုံး" onAction={() => navigate('/news')} />
-          <div className="px-4 space-y-3">
-            {loading
-              ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-48" />)
-              : posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} />)}
-          </div>
+      {/* News & Events — header stays even when empty (A16) */}
+      <div>
+        <SectionHeader title="သတင်းနှင့် ဖြစ်ရပ်များ" subtitle="News & Events" action="အားလုံး" onAction={() => navigate('/news')} />
+        <div className="px-4 space-y-3">
+          {loading
+            ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-48" />)
+            : posts.length > 0
+              ? posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} />)
+              : <p className="text-white/50 text-sm font-myanmar text-center py-4">သတင်း မရှိသေးပါ</p>}
         </div>
-      )}
+      </div>
 
-      {/* Upcoming Events */}
-      {(loading || upcomingEvents.length > 0) && (
-        <div>
-          <SectionHeader
-            title="လာမည့် ဖြစ်ရပ်များ"
-            subtitle="Upcoming Events"
-            action="Calendar"
-            onAction={() => navigate('/calendar')}
-          />
-          <div className="px-4 space-y-2">
-            {loading
-              ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-16" />)
-              : upcomingEvents.map(ev => {
+      {/* Upcoming Events — header stays even when empty (A16) */}
+      <div>
+        <SectionHeader
+          title="လာမည့် ဖြစ်ရပ်များ"
+          subtitle="Upcoming Events"
+          action="Calendar"
+          onAction={() => navigate('/calendar')}
+        />
+        <div className="px-4 space-y-2">
+          {loading
+            ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-16" />)
+            : upcomingEvents.length > 0
+              ? upcomingEvents.map(ev => {
                 // MMT helpers (H-23): device-timezone getMonth()/getDate()
                 // showed the wrong day around midnight; mmtParts uses
                 // Myanmar wall time instead.
@@ -822,17 +790,17 @@ export default function HomePage() {
                       <p className="text-sm font-display font-semibold text-white truncate">
                         {ev.title_mm || ev.title}
                       </p>
-                      <p className="text-[10px] text-white/40 mt-0.5 truncate font-myanmar">
+                      <p className="text-[10px] text-white/60 mt-0.5 truncate font-myanmar">
                         {ev.event_location || formatMyanmarDateTime(ev.event_start)}
                       </p>
                     </div>
                     <CalendarDays size={16} className="text-white/20 flex-shrink-0" />
                   </div>
                 )
-              })}
+              })
+              : <p className="text-white/50 text-sm font-myanmar text-center py-4">လာမည့် ဖြစ်ရပ် မရှိသေးပါ</p>}
           </div>
         </div>
-      )}
 
       <div className="h-4" />
 
@@ -848,22 +816,23 @@ export default function HomePage() {
             <button
               key={path}
               onClick={() => navigate(path)}
-              className="text-xs text-white/60 hover:text-white hover:bg-white/10 transition-colors font-myanmar font-semibold bg-white/5 border border-white/10 px-4 py-2 rounded-full shadow-sm"
+              className="text-xs text-white/60 hover:text-white hover:bg-white/10 transition-colors font-myanmar font-semibold bg-white/5 border border-white/10 px-4 py-3 min-h-[44px] rounded-full shadow-sm"
             >
               {label}
             </button>
           ))}
         </div>
-        <p className="text-center text-[10px] text-white/30 mt-5 font-display font-medium tracking-wider uppercase">
+        <p className="text-center text-[10px] text-white/50 mt-5 font-display font-medium tracking-wider uppercase">
           {appName} • {cityName}
         </p>
       </div>
 
-      {/* PWA Install Button */}
+      {/* PWA Install Button — A4: parked above both banners (install banner
+          sits at bottom-[164px], update prompt at bottom-[88px]). */}
       {installable && (
         <button
           onClick={installApp}
-          className="fixed bottom-24 right-4 z-50 bg-brand-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-pulse hover:bg-brand-500 transition-all"
+          className="fixed bottom-[240px] right-4 z-50 bg-brand-600 text-white px-4 py-2.5 min-h-[44px] rounded-full shadow-lg flex items-center gap-2 animate-pulse hover:bg-brand-500 transition-all"
         >
           📲 App ထည့်မည်
         </button>

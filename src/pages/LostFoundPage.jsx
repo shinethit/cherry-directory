@@ -46,37 +46,37 @@ function PostCard({ post, lang }) {
       <div className="flex gap-3 p-4">
         {cover ? (
           <div className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-white/5">
-            <img src={cover} alt="" className="w-full h-full object-cover" />
+            <img src={cover} alt={post.title_mm || post.title} className="w-full h-full object-cover" />
           </div>
         ) : (
-          <div className="w-20 h-20 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center flex-shrink-0 text-3xl">
-            {cat?.icon}
+          <div className="w-20 h-20 rounded-xl bg-white/5 border border-white/8 flex items-center justify-center flex-shrink-0 text-4xl">
+            {cat?.icon || '🔍'}
           </div>
         )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2 mb-1">
-            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${
+            <span className={`text-[11px] font-bold px-2 py-1 rounded-full border flex-shrink-0 ${
               isLost
                 ? 'bg-red-500/15 text-red-400 border-red-500/25'
                 : 'bg-green-500/15 text-green-400 border-green-500/25'
             }`}>
               {isLost ? (lang === 'mm' ? 'ပျောက်ဆုံး' : 'LOST') : (lang === 'mm' ? 'တွေ့ရှိ' : 'FOUND')}
             </span>
-            <span className="text-[9px] text-white/40 bg-white/6 px-1.5 py-0.5 rounded-full">{cat?.icon} {lang === 'mm' ? cat?.mm : cat?.en}</span>
+            <span className="text-[9px] text-white/60 bg-white/6 px-1.5 py-0.5 rounded-full">{cat?.icon} {lang === 'mm' ? cat?.mm : cat?.en}</span>
             {post.is_urgent && <span className="text-[9px] text-amber-400 font-bold">⚠️ Urgent</span>}
           </div>
           <h3 className="text-sm font-display font-semibold text-white line-clamp-1">
             {lang === 'mm' ? (post.title_mm || post.title) : post.title}
           </h3>
           {post.location_mm || post.location ? (
-            <div className="flex items-center gap-1 mt-1 text-white/40">
+            <div className="flex items-center gap-1 mt-1 text-white/60">
               <MapPin size={10} />
               <span className="text-[10px] truncate font-myanmar">{lang === 'mm' ? (post.location_mm || post.location) : post.location}</span>
             </div>
           ) : null}
           <div className="flex items-center justify-between mt-1.5">
-            <span className="text-[10px] text-white/30">{timeAgo(post.reported_at, lang)}</span>
+            <span className="text-[10px] text-white/60">{timeAgo(post.reported_at, lang)}</span>
             {post.status === 'resolved' && (
               <span className="flex items-center gap-1 text-[9px] text-green-400">
                 <CheckCircle size={10} /> {lang === 'mm' ? 'ဖြေရှင်းပြီး' : 'Resolved'}
@@ -145,7 +145,7 @@ function PostForm({ onClose, onSuccess, lang }) {
           <ArrowLeft size={18} className="text-white" />
         </button>
         <h2 className="font-display font-bold text-base text-white">
-          {lang === 'mm' ? 'ပျောက်ဆုံး/တွေ့ရှိ Post တင်မည်' : 'Post Lost/Found'}
+          {lang === 'mm' ? 'ပျောက်ဆုံး/တွေ့ရှိ တင်မည်' : 'Post Lost/Found'}
         </h2>
         <button onClick={submit} disabled={submitting || (!form.title && !form.title_mm)} className="btn-primary text-xs px-4 py-2">
           {submitting ? '...' : lang === 'mm' ? 'တင်မည်' : 'Post'}
@@ -157,7 +157,7 @@ function PostForm({ onClose, onSuccess, lang }) {
         <div className="flex gap-2">
           {[{v:'lost',mm:'ပျောက်ဆုံး',en:'Lost',color:'red'},{v:'found',mm:'တွေ့ရှိ',en:'Found',color:'green'}].map(t => (
             <button key={t.v} onClick={() => setField('type', t.v)}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-display font-bold border transition-all ${form.type === t.v ? (t.color === 'red' ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-green-500/20 border-green-500/40 text-green-400') : 'bg-white/5 border-white/10 text-white/40'}`}>
+              className={`flex-1 py-2.5 rounded-xl text-sm font-display font-bold border transition-all ${form.type === t.v ? (t.color === 'red' ? 'bg-red-500/20 border-red-500/40 text-red-400' : 'bg-green-500/20 border-green-500/40 text-green-400') : 'bg-white/5 border-white/10 text-white/60'}`}>
               {lang === 'mm' ? t.mm : t.en}
             </button>
           ))}
@@ -178,7 +178,12 @@ function PostForm({ onClose, onSuccess, lang }) {
 
         <div>
           <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label>
-          <input autoFocus value={form.title_mm} onChange={e => setField('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={lang === 'mm' ? 'ဥပမာ: မဲ့နက်ကြောင်ပျောက် ဒေါ်မေမြ...' : 'e.g. Lost black cat near...'} />
+          <input value={form.title_mm} onChange={e => setField('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder={lang === 'mm' ? 'ဥပမာ: မဲ့နက်ကြောင်ပျောက် ဒေါ်မေမြ...' : 'e.g. Lost black cat near...'} />
+        </div>
+
+        <div>
+          <label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (အင်္ဂလိပ်)' : 'Title (English)'}</label>
+          <input value={form.title} onChange={e => setField('title', e.target.value)} className="input-dark" placeholder={lang === 'mm' ? 'ဥပမာ: Lost black cat...' : 'e.g. Lost black cat...'} />
         </div>
 
         <div>
@@ -223,8 +228,8 @@ function PostForm({ onClose, onSuccess, lang }) {
           <div className="flex gap-2 flex-wrap">
             {images.map((url, i) => (
               <div key={i} className="relative w-20 h-20">
-                <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
-                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px] flex items-center justify-center">✕</button>
+                <img src={url} alt={form.title_mm || 'ပုံ'} className="w-full h-full object-cover rounded-xl border border-white/10" />
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 btn-danger rounded-full text-white text-[10px] flex items-center justify-center">✕</button>
               </div>
             ))}
             {images.length < 3 && <ImageUploader onUpload={handleImg} loading={imgLoading} label="ပုံ" />}
@@ -315,12 +320,12 @@ export default function LostFoundPage() {
           <h1 className="font-display font-bold text-xl text-white">
             🔍 {lang === 'mm' ? 'ပျောက်ဆုံးပစ္စည်း' : 'Lost & Found'}
           </h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">
             {lang === 'mm' ? 'ပျောက်ဆုံးသူ/ပစ္စည်း ရှာဖွေပေးရန် Community' : 'Community help finding missing people & items'}
           </p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0">
-          <Plus size={14} /> Post
+          <Plus size={14} /> တင်မည်
         </button>
       </div>
 
@@ -338,7 +343,7 @@ export default function LostFoundPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div className="relative flex-1">
           <select
@@ -352,7 +357,7 @@ export default function LostFoundPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
         <div className="relative flex-1">
           <select
@@ -370,7 +375,7 @@ export default function LostFoundPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-2 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
@@ -381,7 +386,7 @@ export default function LostFoundPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder={lang === 'mm' ? 'ခေါင်းစဉ် / နေရာ ရှာရန်...' : 'Search title / location...'}
-          className="input-dark w-full text-sm font-myanmar"
+          className="input-dark w-full font-myanmar"
         />
       </div>
 
@@ -389,7 +394,7 @@ export default function LostFoundPage() {
         {loading
           ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />)
           : posts.length === 0 ? (
-            <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">🔍</span><p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'Post မရှိသေး' : 'No posts yet'}</p></div>
+            <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">🔍</span><p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'Post မရှိသေး' : 'No posts yet'}</p></div>
           ) : (
             <>
               {posts.map(p => <PostCard key={p.id} post={p} lang={lang} />)}

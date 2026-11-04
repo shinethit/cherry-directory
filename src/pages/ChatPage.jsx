@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Send, Reply, X, Trash2, Plus, Pencil, Settings } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -38,12 +39,12 @@ function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap, lang })
       )}
       <div className={`max-w-[75%] ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
         {!isMe && (
-          <span className="text-[10px] text-white/40 mb-1 ml-1 font-display">
+          <span className="text-[10px] text-white/60 mb-1 ml-1 font-display">
             {msg.user?.full_name || msg.guest_name || 'Guest'}
           </span>
         )}
         {msg.reply_to && (
-          <div className={`text-[10px] text-white/40 mb-1 px-2 py-1 rounded-lg border-l-2 border-brand-400 bg-white/5 max-w-full ${isMe ? 'self-end' : ''}`}>
+          <div className={`text-[10px] text-white/60 mb-1 px-2 py-1 rounded-lg border-l-2 border-brand-400 bg-white/5 max-w-full ${isMe ? 'self-end' : ''}`}>
             {quoted ? (
               <>↩ <span className="text-brand-300 font-semibold">{quoted.user?.full_name || quoted.guest_name || 'Guest'}</span>: <span className="line-clamp-2">{quoted.content}</span></>
             ) : (
@@ -55,15 +56,15 @@ function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap, lang })
           <p className="text-sm text-white font-myanmar leading-relaxed">{msg.content}</p>
         </div>
         <div className="flex items-center gap-2 mt-1">
-          <span className="text-[9px] text-white/25">
+          <span className="text-[9px] text-white/60">
             {formatMMTTime(msg.created_at, lang)}
           </span>
-          <button onClick={() => onReply(msg)} className="text-[9px] text-white/30 hover:text-brand-300 transition-colors flex items-center gap-0.5">
-            <Reply size={10} /> Reply
+          <button onClick={() => onReply(msg)} className="text-xs text-white/60 hover:text-brand-300 transition-colors flex items-center gap-0.5 px-2 py-2 min-h-[36px]">
+            <Reply size={12} /> Reply
           </button>
           {canDelete && (
-            <button onClick={() => onDelete(msg.id)} className="text-[9px] text-red-400/70 hover:text-red-400 transition-colors flex items-center gap-0.5">
-              <Trash2 size={10} /> Delete
+            <button onClick={() => onDelete(msg.id)} className="text-xs text-red-400/70 hover:text-red-400 transition-colors flex items-center gap-0.5 px-2 py-2 min-h-[36px]">
+              <Trash2 size={12} /> Delete
             </button>
           )}
         </div>
@@ -76,6 +77,10 @@ export default function ChatPage() {
   const { user, profile, isLoggedIn, isAdmin, isModerator } = useAuth()
   const { lang } = useLang()
   const { award } = usePoints()
+  const location = useLocation()
+  // F11: a notification tap navigates here with state.roomId — open that
+  // room instead of the first one. Consumed once on the first rooms load.
+  const pendingRoomIdRef = useRef(location.state?.roomId || null)
   const [rooms, setRooms] = useState([])
   const [activeRoom, setActiveRoom] = useState(null)
   const [messages, setMessages] = useState([])
@@ -120,9 +125,11 @@ export default function ChatPage() {
   const [newRoomDesc, setNewRoomDesc] = useState('')
   const [editingRoom, setEditingRoom] = useState(null)
   const [roomError, setRoomError] = useState('')
+  const [roomsError, setRoomsError] = useState(false)
 
   // Load rooms
   const loadRooms = async () => {
+    setRoomsError(false)
     try {
       // chat_rooms has no sort_order column — order by created_at.
       const { data, error } = await supabase
@@ -131,9 +138,16 @@ export default function ChatPage() {
         .order('created_at', { ascending: true })
       if (error) throw error
       setRooms(data || [])
-      if (data?.length && !activeRoom) setActiveRoom(data[0])
+      // F11: honour the notification's roomId on first load; otherwise
+      // keep the old behaviour (first room).
+      const targetId = pendingRoomIdRef.current
+      pendingRoomIdRef.current = null
+      const target = targetId ? (data || []).find(r => r.id === targetId) : null
+      if (target) setActiveRoom(target)
+      else if (data?.length && !activeRoom) setActiveRoom(data[0])
     } catch (err) {
       console.error('loadRooms error:', err)
+      setRoomsError(true)
       showError('Rooms ရယူရာတွင် အမှားရှိသည်: ' + err.message)
     }
   }
@@ -298,7 +312,7 @@ export default function ChatPage() {
   }
 
   const deleteMessage = async (messageId) => {
-    if (!(await confirmDialog('ဖျက်မည်လား?'))) return
+    if (!(await confirmDialog('ဖျက်မည်လား?', { danger: true }))) return
     try {
       const { error } = await supabase.from('chat_messages').delete().eq('id', messageId)
       if (error) throw error
@@ -385,7 +399,7 @@ export default function ChatPage() {
   }
 
   const handleDeleteRoom = async (roomId) => {
-    if (!(await confirmDialog('ဒီ Room ကို ဖျက်မည်လား? အတွင်းက မက်ဆေ့များပါ ဖျက်မည်။'))) return
+    if (!(await confirmDialog('ဒီ Room ကို ဖျက်မည်လား? အတွင်းက မက်ဆေ့များပါ ဖျက်မည်။', { danger: true }))) return
     try {
       const { error } = await supabase.from('chat_rooms').delete().eq('id', roomId)
       if (error) throw error
@@ -403,7 +417,7 @@ export default function ChatPage() {
     <>
             {showRoomManager && (isAdmin || isModerator) && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4" onClick={() => setShowRoomManager(false)}>
-          <div className="bg-[#140020] rounded-2xl w-full max-w-md border border-white/10 overflow-hidden" onClick={e => e.stopPropagation()}>
+          <div className="bg-[#1a0030] rounded-2xl w-full max-w-md border border-white/10 overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-4 border-b border-white/10">
               <h3 className="font-display font-bold text-white">Chat Room စီမံမည်</h3>
               <button onClick={() => setShowRoomManager(false)} className="text-white/50 hover:text-white">
@@ -423,16 +437,16 @@ export default function ChatPage() {
                   placeholder="အခန်းအမည် (မြန်မာ/အင်္ဂလိပ်)"
                   value={newRoomName}
                   onChange={e => setNewRoomName(e.target.value)}
-                  className="input-dark text-sm"
+                  className="input-dark"
                 />
                 <input
                   type="text"
                   placeholder="ဖော်ပြချက် (optional)"
                   value={newRoomDesc}
                   onChange={e => setNewRoomDesc(e.target.value)}
-                  className="input-dark text-sm"
+                  className="input-dark"
                 />
-                <button onClick={handleCreateRoom} className="w-full btn-primary text-sm py-2 flex items-center justify-center gap-1">
+                <button onClick={handleCreateRoom} className="w-full btn-primary text-sm py-3 min-h-[44px] flex items-center justify-center gap-1">
                   <Plus size={14} /> အခန်းသစ်ထည့်မည်
                 </button>
               </div>
@@ -447,13 +461,13 @@ export default function ChatPage() {
                           type="text"
                           value={editingRoom.name}
                           onChange={e => setEditingRoom({ ...editingRoom, name: e.target.value })}
-                          className="input-dark text-sm w-full"
+                          className="input-dark w-full"
                         />
                         <input
                           type="text"
                           value={editingRoom.description || ''}
                           onChange={e => setEditingRoom({ ...editingRoom, description: e.target.value })}
-                          className="input-dark text-sm w-full"
+                          className="input-dark w-full"
                           placeholder="ဖော်ပြချက်"
                         />
                         <div className="flex gap-2">
@@ -497,11 +511,20 @@ export default function ChatPage() {
       <div className="flex items-center justify-center h-[80dvh] p-4 text-center">
         <div className="card-dark p-6 rounded-2xl max-w-sm">
           <span className="text-4xl mb-3 block">💬</span>
-          <p className="text-white/70 font-myanmar">Chat room မရှိသေးပါ။</p>
-          {(isAdmin || isModerator) && (
-            <button onClick={() => setShowRoomManager(true)} className="btn-primary text-xs px-3 py-1.5 mt-3">
-              Room အသစ်ဖန်တီးမည်
-            </button>
+          {roomsError ? (
+            <>
+              <p className="text-red-400 font-myanmar mb-3">တင်မရပါ — ပြန်ကြိုးစားမည်</p>
+              <button onClick={loadRooms} className="btn-primary text-sm px-4 py-3 min-h-[44px]">ပြန်ကြိုးစားမည်</button>
+            </>
+          ) : (
+            <>
+              <p className="text-white/70 font-myanmar">Chat room မရှိသေးပါ။</p>
+              {(isAdmin || isModerator) && (
+                <button onClick={() => setShowRoomManager(true)} className="btn-primary text-sm px-4 py-3 min-h-[44px] mt-3">
+                  Room အသစ်ဖန်တီးမည်
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -573,7 +596,7 @@ export default function ChatPage() {
       {/* Input area */}
       <div className="px-4 pt-3 pb-4 border-t border-white/8" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {!isLoggedIn && guestName && (
-          <p className="text-[10px] text-white/30 mb-1.5">
+          <p className="text-[10px] text-white/60 mb-1.5">
             Guest: {guestName} •{' '}
             <button onClick={() => setShowNamePrompt(true)} className="text-brand-300 hover:text-brand-200">
               ပြောင်းရန်
@@ -592,7 +615,7 @@ export default function ChatPage() {
               }
             }}
             placeholder={isLoggedIn ? 'မက်ဆေ့ ရေးရန်...' : 'မက်ဆေ့ ရေးရန်... (Guest)'}
-            className="input-dark flex-1 text-sm py-2 font-myanmar"
+            className="input-dark flex-1 py-2 font-myanmar"
             style={{ fontSize: '16px' }}
             maxLength={500}
           />
@@ -632,7 +655,7 @@ export default function ChatPage() {
                 Cancel
               </button>
             </div>
-            <p className="text-[10px] text-white/30 mt-3 text-center font-myanmar">
+            <p className="text-[10px] text-white/60 mt-3 text-center font-myanmar">
               Login လုပ်ပါက နာမည်ကို automatically သုံးမည်
             </p>
           </div>

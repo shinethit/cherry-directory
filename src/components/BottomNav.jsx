@@ -12,10 +12,10 @@ export default function BottomNav() {
 
   const navItems = [
     { path: '/directory', icon: Search, label: 'ရှာဖွေ' },
-    { path: '/community', icon: Users, label: 'Community' },
-    { path: '/', icon: Home, label: 'Home', isCenter: true },
-    { path: '/calendar', icon: Calendar, label: 'Calendar' },
-    { path: '/profile', icon: User, label: 'Profile' },
+    { path: '/community', icon: Users, label: 'အသိုင်းအဝိုင်း' },
+    { path: '/', icon: Home, label: 'ပင်မ', isCenter: true },
+    { path: '/calendar', icon: Calendar, label: 'ပြက္ခဒိန်' },
+    { path: '/profile', icon: User, label: 'ပရိုဖိုင်' },
   ]
 
   return (
@@ -23,20 +23,24 @@ export default function BottomNav() {
       {/* Floating Add Button */}
       <NavLink
         to="/submit"
-        className="fixed left-4 z-50 w-12 h-12 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-lg shadow-brand-900/40 border-2 border-white/20 hover:scale-105 transition-transform"
+        aria-label="လုပ်ငန်း တင်မည်"
+        className="fixed left-4 z-50 h-12 px-3 rounded-full bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center gap-1.5 shadow-lg shadow-brand-900/40 border-2 border-white/20 hover:scale-105 transition-transform"
         style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom))' }}
       >
-        <PlusCircle size={24} className="text-white" />
+        <PlusCircle size={22} className="text-white flex-shrink-0" />
+        <span className="text-xs font-bold text-white">တင်မည်</span>
       </NavLink>
 
       {/* Admin Floating Button */}
       {(isAdmin || isModerator) && (
         <NavLink
           to="/admin"
-          className="fixed right-4 z-50 w-10 h-10 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shadow-lg hover:bg-amber-500/30 transition-all"
+          aria-label="Admin Panel"
+          className="fixed right-4 z-50 h-10 px-3 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center gap-1.5 shadow-lg hover:bg-amber-500/30 transition-all"
           style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom))' }}
         >
-          <Shield size={18} className="text-amber-400" />
+          <Shield size={16} className="text-amber-400 flex-shrink-0" />
+          <span className="text-xs font-bold text-amber-400">Admin</span>
         </NavLink>
       )}
 
@@ -58,13 +62,13 @@ export default function BottomNav() {
                     to={item.path}
                     className="relative -top-4"
                   >
-                    <div className={`flex flex-col items-center gap-0.5 py-2 px-4 rounded-2xl transition-all duration-200 ${
+                    <div className={`flex flex-col items-center gap-0.5 py-2 px-4 rounded-2xl border-b-2 transition-all duration-200 ${
                       active
-                        ? 'text-brand-400 bg-brand-600/30 shadow-lg shadow-brand-900/30'
-                        : 'text-white/40 hover:text-white/70'
+                        ? 'text-brand-300 bg-brand-600/30 shadow-lg shadow-brand-900/30 border-brand-400'
+                        : 'text-white/60 hover:text-white/80 border-transparent'
                     }`}>
                       <Icon size={28} strokeWidth={active ? 2.5 : 1.8} />
-                      <span className="text-[10px] font-medium mt-0.5">{item.label}</span>
+                      <span className={`text-xs font-medium mt-0.5 ${active ? 'font-bold' : ''}`}>{item.label}</span>
                     </div>
                   </NavLink>
                 )
@@ -75,15 +79,15 @@ export default function BottomNav() {
                   key={item.path}
                   to={item.path}
                   className={({ isActive }) =>
-                    `flex flex-col items-center gap-0.5 py-2 px-3 rounded-2xl transition-all duration-200 ${
+                    `flex flex-col items-center gap-0.5 py-2 px-3 rounded-2xl border-b-2 transition-all duration-200 ${
                       active
-                        ? 'text-brand-400 bg-brand-600/20'
-                        : 'text-white/40 hover:text-white/70'
+                        ? 'text-brand-300 bg-brand-600/20 border-brand-400'
+                        : 'text-white/60 hover:text-white/80 border-transparent'
                     }`
                   }
                 >
                   <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
-                  <span className="text-[10px] font-medium">{item.label}</span>
+                  <span className={`text-xs font-medium ${active ? 'font-bold' : ''}`}>{item.label}</span>
                 </NavLink>
               )
             })}

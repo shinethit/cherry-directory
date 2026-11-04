@@ -31,6 +31,8 @@ export default function NewsPage() {
   const [posts, setPosts]   = useState([])
   const [pinned, setPinned] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [pageSize, setPageSize] = useState(30)
   const [loadError, setLoadError] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   // Calendar "See all" links here as /news?type=event.
@@ -42,7 +44,8 @@ export default function NewsPage() {
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
   async function load() {
-    setLoading(true)
+    if (pageSize > 30) setLoadingMore(true)
+    else setLoading(true)
     setLoadError(false)
     try {
       let postsQuery = supabase
@@ -51,7 +54,7 @@ export default function NewsPage() {
         .eq('status', 'published')
         .eq('is_pinned', false)
         .order('created_at', { ascending: false })
-        .limit(30)
+        .limit(pageSize)
 
       if (type) postsQuery = postsQuery.eq('type', type)
 
@@ -75,12 +78,13 @@ export default function NewsPage() {
       setPosts(postsData || [])
     } catch (e) { console.warn(e); setLoadError(true); setPinned([]); setPosts([]) }
     setLoading(false)
+    setLoadingMore(false)
   }
 
-  useEffect(() => { load() }, [type])
+  useEffect(() => { load() }, [type, pageSize])
 
   async function handleDelete(postId) {
-    if (!(await confirmDialog(lang === 'mm' ? 'Post ကို ဖျက်မှာလား?' : 'Delete this post?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဤသတင်းကို ဖျက်မှာလား?' : 'Delete this post?', { danger: true }))) return
     const { error } = await supabase.from('posts').delete().eq('id', postId)
     if (error) showError(error.message)
     else load()
@@ -121,7 +125,7 @@ export default function NewsPage() {
         <div className="relative">
           <select
             value={type}
-            onChange={e => { setType(e.target.value); if (e.target.value) setSearchParams({ type: e.target.value }, { replace: true }); else setSearchParams({}, { replace: true }) }}
+            onChange={e => { setType(e.target.value); setPageSize(30); if (e.target.value) setSearchParams({ type: e.target.value }, { replace: true }); else setSearchParams({}, { replace: true }) }}
             className="select-dark"
           >
             {TYPES.map(t => (
@@ -130,36 +134,39 @@ export default function NewsPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
       {!loading && pinned.length > 0 && (
         <div className="px-4 mb-4">
           <p className="text-[11px] text-gold-500/70 font-display font-semibold uppercase tracking-wider mb-2">
-            📌 {lang === 'mm' ? 'Pinned' : 'Pinned'}
+            📌 {lang === 'mm' ? 'ပင်ထားသည်' : 'Pinned'}
           </p>
           <div className="space-y-3">
             {pinned.map(p => (
-              <div key={p.id} className="relative">
-                <div onClick={() => navigate(`/news/${p.id}`)}>
+              <div key={p.id} className="relative transition-transform hover:-translate-y-0.5">
+                <div onClick={() => navigate(`/news/${p.id}`)} className="cursor-pointer">
                   <PostCard post={p} />
+                  <p className="text-right text-[11px] text-brand-300 font-semibold mt-1.5 pr-1">{lang === 'mm' ? 'ဆက်ဖတ်ရန် →' : 'Read more →'}</p>
                 </div>
                 {canEdit && (
-                  <div className="absolute top-2 right-2 flex gap-1">
+                  <div className="absolute top-2 right-2 flex gap-2">
                     <button
                       onClick={(e) => { e.stopPropagation(); navigate(p.type === 'event' ? `/events/edit/${p.id}` : `/news/edit/${p.id}`); }}
-                      className="p-1.5 bg-black/50 rounded-lg text-white/70 hover:text-white"
-                      title="Edit"
+                      className="p-2.5 bg-black/50 rounded-lg text-white/80 hover:text-white"
+                      title={lang === 'mm' ? 'ပြင်မည်' : 'Edit'}
+                      aria-label={lang === 'mm' ? 'ပြင်မည်' : 'Edit'}
                     >
-                      <Edit2 size={12} />
+                      <Edit2 size={16} />
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
-                      className="p-1.5 bg-black/50 rounded-lg text-white/70 hover:text-red-400"
-                      title="Delete"
+                      className="p-2.5 btn-danger rounded-lg text-white"
+                      title={lang === 'mm' ? 'ဖျက်မည်' : 'Delete'}
+                      aria-label={lang === 'mm' ? 'ဖျက်မည်' : 'Delete'}
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 )}
@@ -181,34 +188,38 @@ export default function NewsPage() {
         ) : posts.length === 0 ? (
           <EmptyState
             icon="📰"
-            title={lang === 'mm' ? 'Post မရှိသေးပါ' : 'No posts yet'}
+            title={lang === 'mm' ? 'သတင်း မရှိသေးပါ' : 'No posts yet'}
             message={
               canEdit
                 ? (lang === 'mm' ? '"သတင်းထည့်" ကို နှိပ်ပြီး ပထမဆုံး သတင်း ရေးပါ' : 'Click "Add News" to write the first post')
-                : (lang === 'mm' ? 'မကြာမီ Post တွေ တွေ့ရမည်' : 'Posts will appear here soon')
+                : (lang === 'mm' ? 'မကြာမီ သတင်းတွေ တွေ့ရမည်' : 'Posts will appear here soon')
             }
           />
         ) : (
-          posts.map(p => (
-            <div key={p.id} className="relative group">
+          <>
+          {posts.map(p => (
+            <div key={p.id} className="relative group transition-transform hover:-translate-y-0.5">
               <div onClick={() => navigate(`/news/${p.id}`)} className="cursor-pointer">
                 <PostCard post={p} />
+                <p className="text-right text-[11px] text-brand-300 font-semibold mt-1.5 pr-1">{lang === 'mm' ? 'ဆက်ဖတ်ရန် →' : 'Read more →'}</p>
               </div>
               {canEdit && (
-                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-2 right-2 flex gap-2">
                   <button
                     onClick={(e) => { e.stopPropagation(); navigate(p.type === 'event' ? `/events/edit/${p.id}` : `/news/edit/${p.id}`); }}
-                    className="p-1.5 bg-black/60 rounded-lg text-white/80 hover:text-white backdrop-blur-sm"
-                    title="Edit"
+                    className="p-2.5 bg-black/60 rounded-lg text-white/80 hover:text-white backdrop-blur-sm"
+                    title={lang === 'mm' ? 'ပြင်မည်' : 'Edit'}
+                    aria-label={lang === 'mm' ? 'ပြင်မည်' : 'Edit'}
                   >
-                    <Edit2 size={12} />
+                    <Edit2 size={16} />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
-                    className="p-1.5 bg-black/60 rounded-lg text-white/80 hover:text-red-400 backdrop-blur-sm"
-                    title="Delete"
+                    className="p-2.5 btn-danger rounded-lg text-white backdrop-blur-sm"
+                    title={lang === 'mm' ? 'ဖျက်မည်' : 'Delete'}
+                    aria-label={lang === 'mm' ? 'ဖျက်မည်' : 'Delete'}
                   >
-                    <Trash2 size={12} />
+                    <Trash2 size={16} />
                   </button>
                 </div>
               )}
@@ -222,7 +233,17 @@ export default function NewsPage() {
                 </button>
               )}
             </div>
-          ))
+          ))}
+          {posts.length >= pageSize && (
+            <button
+              onClick={() => setPageSize(s => s + 30)}
+              disabled={loadingMore}
+              className="btn-primary w-full text-sm px-4 py-3 disabled:opacity-50"
+            >
+              {loadingMore ? (lang === 'mm' ? 'တင်နေသည်...' : 'Loading...') : (lang === 'mm' ? 'ထပ်တင်ရန်' : 'Load more')}
+            </button>
+          )}
+          </>
         )}
       </div>
 

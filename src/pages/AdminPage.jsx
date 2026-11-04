@@ -38,8 +38,12 @@ export default function AdminPage() {
   const [editingId, setEditingId]     = useState(null)
   const [editForm, setEditForm]       = useState({})
   const [reports, setReports]         = useState({})
-  const [showReports, setShowReports] = useState(null)
   const [deleting, setDeleting]       = useState(null)
+  // Unfiltered pending count for the filter badge (G7) — the listing
+  // list itself is server-filtered, so it can never be counted from it.
+  const [pendingListingsCount, setPendingListingsCount] = useState(0)
+  // Busy id for the donation-permission toggle (moderators only).
+  const [donationBusy, setDonationBusy] = useState(null)
 
   // Dashboard Stats (no "Online Now" / "Active Today" — nothing
   // updates profiles on login/activity, so those tiles were fake)
@@ -88,6 +92,14 @@ export default function AdminPage() {
       const { data: rows, error } = await query
       if (error) throw error
       setData(rows || [])
+
+      // Pending badge count (G7) — counted from ALL listings, never
+      // from the filtered list above.
+      const { count: pendingCount } = await supabase
+        .from('listings')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending')
+      setPendingListingsCount(pendingCount || 0)
 
       if (rows) {
         // One query for all report counts (was N+1 sequential
@@ -195,7 +207,7 @@ export default function AdminPage() {
       setClaims(data || [])
     } catch (e) {
       console.error('loadClaims error:', e)
-      showError('Claims ရယူရာတွင် အမှားရှိသည်: ' + e.message)
+      showError('ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်းများ ရယူရာတွင် အမှားရှိသည်: ' + e.message)
     }
     setClaimsLoading(false)
   }
@@ -210,7 +222,7 @@ export default function AdminPage() {
 
   async function handleClaimDecision(claim, approve) {
     const verb = approve ? 'အတည်ပြု' : 'ပယ်ချ'
-    if (!(await confirmDialog(`"${claim.listing?.name_mm || claim.listing?.name || 'လုပ်ငန်း'}" ၏ Claim ကို ${verb}မည်လား?${approve ? ' (Claimant ကို +30 points ရပြီး လုပ်ငန်းပိုင်ရှင် ဖြစ်သွားမည်)' : ''}`))) return
+    if (!(await confirmDialog(`"${claim.listing?.name_mm || claim.listing?.name || 'လုပ်ငန်း'}" ၏ ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်းကို ${verb}မည်လား?${approve ? ' (တောင်းဆိုသူကို +30 အမှတ် ရပြီး လုပ်ငန်းပိုင်ရှင် ဖြစ်သွားမည်)' : ''}`))) return
     setClaimBusy(claim.id)
     try {
       if (approve) {
@@ -223,7 +235,7 @@ export default function AdminPage() {
           .maybeSingle()
         if (listingErr) throw listingErr
         if (listing?.owner_id) {
-          showError('ဤလုပ်ငန်းတွင် ပိုင်ရှင် ရှိနေပြီးဖြစ်သည် — Claim အတည်ပြု၍ မရပါ')
+          showError('ဤလုပ်ငန်းတွင် ပိုင်ရှင် ရှိနေပြီးဖြစ်သည် — ပိုင်ဆိုင်ကြောင်း အတည်ပြု၍ မရပါ')
           setClaimBusy(null)
           return
         }
@@ -238,7 +250,7 @@ export default function AdminPage() {
         .select('id')
       if (error) throw error
       if (!decided || decided.length === 0) {
-        showError('ဤ Claim ကို အခြား Admin မှ ဆုံးဖြတ်ပြီးဖြစ်သည်')
+        showError('ဤ ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်းကို အခြား Admin မှ ဆုံးဖြတ်ပြီးဖြစ်သည်')
         loadClaims()
         loadPendingClaimCount()
         setClaimBusy(null)
@@ -266,12 +278,12 @@ export default function AdminPage() {
         name: claim.listing?.name_mm || claim.listing?.name,
         after: { status: approve ? 'approved' : 'rejected' },
       }).then(ok => { if (!ok) console.warn('Audit log failed for claim decision') })
-      showSuccess(approve ? '✓ Claim အတည်ပြုပြီးပါပြီ (+30 points)' : 'Claim ပယ်ချပြီးပါပြီ')
+      showSuccess(approve ? '✓ ပိုင်ဆိုင်ကြောင်း အတည်ပြုပြီးပါပြီ (+30 အမှတ်)' : 'ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်း ပယ်ချပြီးပါပြီ')
       loadClaims()
       loadPendingClaimCount()
       loadDashboardStats()
     } catch (e) {
-      showError('Claim ' + verb + 'ရာတွင် အမှားရှိသည်: ' + e.message)
+      showError('ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်း ' + verb + 'ရာတွင် အမှားရှိသည်: ' + e.message)
     }
     setClaimBusy(null)
   }
@@ -338,6 +350,22 @@ export default function AdminPage() {
       showError(`Error: ${e.message}`)
       loadUsers()
     }
+  }
+
+  // Donation permission (Admin-granted, per moderator): only Admins
+  // may grant/revoke it. Calls the SECURITY DEFINER RPC
+  // set_donation_permission (supabase-migration-9.5.sql, Track E) —
+  // the client never writes profiles.can_manage_donations directly.
+  async function handleDonationPermission(mod, allowed) {
+    setDonationBusy(mod.id)
+    const { error } = await supabase.rpc('set_donation_permission', { p_user_id: mod.id, p_allowed: allowed })
+    setDonationBusy(null)
+    if (error) {
+      showError('အလှူငွေ ခွင့်ပြုချက် ပြောင်းမရပါ: ' + error.message)
+      return
+    }
+    setUsersList(prev => prev.map(u => u.id === mod.id ? { ...u, can_manage_donations: allowed } : u))
+    showSuccess(allowed ? '✓ အလှူငွေ ပြင်ခွင့် ပေးပြီးပါပြီ' : 'အလှူငွေ ပြင်ခွင့် ရုပ်သိမ်းပြီးပါပြီ')
   }
 
   async function loadQuickLinks() {
@@ -413,7 +441,7 @@ export default function AdminPage() {
   }
 
   async function handleDelete(id) {
-    if (!(await confirmDialog('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။'))) return
+    if (!(await confirmDialog('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။', { danger: true }))) return
     setDeleting(id)
     try {
       // Delete the listing FIRST, then clean up linked rows: the old
@@ -495,7 +523,7 @@ export default function AdminPage() {
   }
 
   async function handleDeleteLink(id) {
-    if (!(await confirmDialog('ဖျက်မှာသေချာပြီလား?'))) return
+    if (!(await confirmDialog('ဖျက်မှာသေချာပြီလား?', { danger: true }))) return
     try {
       const { error } = await supabase.from('quick_links').delete().eq('id', id)
       if (error) throw error
@@ -539,30 +567,43 @@ export default function AdminPage() {
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
             <ArrowLeft size={18} className="text-white" />
           </button>
-          <h1 className="font-display font-bold text-lg text-white">Admin Panel</h1>
+          <h1 className="font-display font-bold text-lg text-white">စီမံခန့်ခွဲမှု</h1>
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => setTab('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/40'}`}>
+          <button onClick={() => setTab('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <LayoutDashboard size={14} /> Dashboard
           </button>
-          <button onClick={() => setTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'users' ? 'bg-pink-600 text-white' : 'bg-white/5 text-white/40'}`}>
+          <button onClick={() => setTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'users' ? 'bg-pink-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <UserCog size={14} /> Users
           </button>
-          <button onClick={() => setTab('listings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/40'}`}>
+          <button onClick={() => setTab('listings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <List size={14} /> Listings
           </button>
-          <button onClick={() => setTab('claims')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'claims' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white/40'}`}>
-            <BadgeCheck size={14} /> Claims
+          <button onClick={() => setTab('claims')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'claims' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white/60'}`}>
+            <BadgeCheck size={14} /> ပိုင်ဆိုင်ကြောင်း
             {pendingClaims > 0 && tab !== 'claims' && (
               <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">{pendingClaims}</span>
             )}
           </button>
-          <button onClick={() => setTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/40'}`}>
+          <button onClick={() => setTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <FolderTree size={14} /> Categories
           </button>
-          <button onClick={() => setTab('quicklinks')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/40'}`}>
+          <button onClick={() => setTab('quicklinks')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <LinkIcon size={14} /> Quick Links
+          </button>
+        </div>
+
+        {/* Admin tools — Reports / Bulk Import / Settings (G3) */}
+        <div className="flex gap-2 pb-2">
+          <button onClick={() => navigate('/admin/reports')} className="flex-1 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors whitespace-nowrap">
+            🚩 Reports
+          </button>
+          <button onClick={() => navigate('/admin/bulk-import')} className="flex-1 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors whitespace-nowrap">
+            📥 Bulk Import
+          </button>
+          <button onClick={() => navigate('/admin/settings')} className="flex-1 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors whitespace-nowrap">
+            ⚙️ Settings
           </button>
         </div>
       </div>
@@ -579,7 +620,7 @@ export default function AdminPage() {
           </div>
 
           {statsLoading ? (
-            <div className="text-center py-8 text-white/30">Loading stats...</div>
+            <div className="text-center py-8 text-white/60">Loading stats...</div>
           ) : (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -591,7 +632,7 @@ export default function AdminPage() {
               <div className="grid grid-cols-3 gap-2">
                 <StatCard title="Admins" value={dashboardStats.usersByRole.admin} icon={Users} color="text-purple-400" size="small" />
                 <StatCard title="Moderators" value={dashboardStats.usersByRole.moderator} icon={Users} color="text-indigo-400" size="small" />
-                <StatCard title="Members" value={dashboardStats.usersByRole.member} icon={Users} color="text-white/40" size="small" />
+                <StatCard title="Members" value={dashboardStats.usersByRole.member} icon={Users} color="text-white/60" size="small" />
               </div>
               <div className="mt-4">
                 <h3 className="text-sm font-semibold text-white/70 mb-2">📋 Listings</h3>
@@ -629,9 +670,9 @@ export default function AdminPage() {
 
           <div className="space-y-2">
             {loading ? (
-              <p className="text-white/30 text-center py-8">Loading users...</p>
+              <p className="text-white/60 text-center py-8">Loading users...</p>
             ) : filteredUsers.length === 0 ? (
-              <p className="text-white/30 text-center py-8 font-myanmar">User မတွေ့ပါ</p>
+              <p className="text-white/60 text-center py-8 font-myanmar">User မတွေ့ပါ</p>
             ) : (
               filteredUsers.map(u => (
                 <div key={u.id} className="bg-white/5 border border-white/8 rounded-2xl p-4 flex flex-col gap-3">
@@ -641,7 +682,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-white truncate">{u.full_name || 'Anonymous'}</p>
-                      <p className="text-[10px] text-white/40 truncate">Joined: {formatMyanmarDate(u.created_at, { year: true })}</p>
+                      <p className="text-[10px] text-white/60 truncate">Joined: {formatMyanmarDate(u.created_at, { year: true })}</p>
                     </div>
                     {u.role === 'super_admin' && (
                       <span className="text-[9px] font-bold px-2 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 flex-shrink-0">👑 Super Admin</span>
@@ -673,6 +714,24 @@ export default function AdminPage() {
                       <option value="super_admin">Super Admin</option>
                     </select>
                   </div>
+
+                  {/* Donation permission — Admin-granted, moderators only */}
+                  {isAdmin && u.role === 'moderator' && (
+                    <div className="flex items-center justify-between border-t border-white/5 pt-3">
+                      <span className="text-xs text-white/50 font-myanmar">အလှူငွေ ပြင်ခွင့်:</span>
+                      <button
+                        onClick={() => handleDonationPermission(u, !u.can_manage_donations)}
+                        disabled={donationBusy === u.id}
+                        className={`flex items-center gap-2 text-xs font-bold disabled:opacity-50 ${u.can_manage_donations ? 'text-green-400' : 'text-white/60'}`}
+                        title={u.can_manage_donations ? 'အလှူငွေ ပြင်ခွင့် ပေးထားသည် — နှိပ်လျှင် ရုပ်သိမ်းမည်' : 'အလှူငွေ ပြင်ခွင့် မပေးထားပါ — နှိပ်လျှင် ပေးမည်'}
+                      >
+                        {u.can_manage_donations ? '✓ ခွင့်ပြုထားသည်' : '○ ခွင့်မပြုပါ'}
+                        <span className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${u.can_manage_donations ? 'bg-green-500' : 'bg-white/15'}`}>
+                          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${u.can_manage_donations ? 'left-[22px]' : 'left-0.5'}`} />
+                        </span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
             )}
@@ -683,9 +742,9 @@ export default function AdminPage() {
       {tab === 'claims' && (
         <div className="px-4 space-y-2 animate-fade-in">
           {claimsLoading ? (
-            <p className="text-white/30 text-center py-8">Loading claims...</p>
+            <p className="text-white/60 text-center py-8">Loading claims...</p>
           ) : claims.length === 0 ? (
-            <p className="text-white/30 text-center py-8 font-myanmar">စစ်ဆေးဆဲ Claim မရှိပါ</p>
+            <p className="text-white/60 text-center py-8 font-myanmar">စစ်ဆေးဆဲ ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်း မရှိပါ</p>
           ) : (
             claims.map(claim => (
               <div key={claim.id} className="bg-white/5 border border-white/8 rounded-2xl p-4 space-y-2">
@@ -693,11 +752,11 @@ export default function AdminPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-white truncate">{claim.listing?.name_mm || claim.listing?.name || '—'}</p>
                     <p className="text-[11px] text-white/50 font-myanmar mt-0.5">
-                      Claim တင်သူ: {claim.claimant?.full_name || claim.claimant?.nickname || '—'}
+                      တောင်းဆိုသူ: {claim.claimant?.full_name || claim.claimant?.nickname || '—'}
                       {claim.contact_phone ? ` • ${claim.contact_phone}` : ''}
                     </p>
-                    {claim.note && <p className="text-xs text-white/40 font-myanmar mt-1">💬 {claim.note}</p>}
-                    <p className="text-[10px] text-white/30 mt-1">{formatMyanmarDate(claim.created_at, { year: true })}</p>
+                    {claim.note && <p className="text-xs text-white/60 font-myanmar mt-1">💬 {claim.note}</p>}
+                    <p className="text-[10px] text-white/60 mt-1">{formatMyanmarDate(claim.created_at, { year: true })}</p>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-amber-500/20 border-amber-500/30 text-amber-400 flex-shrink-0">PENDING</span>
                 </div>
@@ -707,7 +766,7 @@ export default function AdminPage() {
                     disabled={claimBusy === claim.id}
                     className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"
                   >
-                    <Check size={12} /> {claimBusy === claim.id ? '...' : 'APPROVE (+30 pts)'}
+                    <Check size={12} /> {claimBusy === claim.id ? '...' : 'APPROVE (+30 အမှတ်)'}
                   </button>
                   <button
                     onClick={() => handleClaimDecision(claim, false)}
@@ -758,7 +817,7 @@ export default function AdminPage() {
                   }
                   e.target.value = '';
                 }}
-                className="input-dark text-xs w-full font-myanmar bg-white/5 border border-white/20"
+                className="input-dark w-full font-myanmar bg-white/5 border border-white/20"
                 style={{ backgroundColor: '#1a0030' }}
               >
                 {PRESET_LINKS.map(p => <option key={p.url || 'none'} value={p.url}>{p.label}</option>)}
@@ -766,17 +825,17 @@ export default function AdminPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-2 border-t border-white/5 pt-3">
-              <input value={linkForm.title} onChange={e => setLinkForm({...linkForm, title: e.target.value})} placeholder="Title (EN)" className="input-dark text-xs" />
-              <input value={linkForm.title_mm} onChange={e => setLinkForm({...linkForm, title_mm: e.target.value})} placeholder="Title (MM)" className="input-dark text-xs font-myanmar" />
-              <input value={linkForm.subtitle} onChange={e => setLinkForm({...linkForm, subtitle: e.target.value})} placeholder="Subtitle" className="input-dark text-xs" />
+              <input value={linkForm.title} onChange={e => setLinkForm({...linkForm, title: e.target.value})} placeholder="Title (EN)" className="input-dark" />
+              <input value={linkForm.title_mm} onChange={e => setLinkForm({...linkForm, title_mm: e.target.value})} placeholder="Title (MM)" className="input-dark font-myanmar" />
+              <input value={linkForm.subtitle} onChange={e => setLinkForm({...linkForm, subtitle: e.target.value})} placeholder="Subtitle" className="input-dark" />
               <div className="flex gap-2">
-                <input value={linkForm.icon} onChange={e => setLinkForm({...linkForm, icon: e.target.value})} placeholder="Icon" className="input-dark text-xs w-12 text-center" />
-                <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="URL" className="input-dark text-xs flex-1" />
+                <input value={linkForm.icon} onChange={e => setLinkForm({...linkForm, icon: e.target.value})} placeholder="Icon" className="input-dark w-12 text-center" />
+                <input value={linkForm.url} onChange={e => setLinkForm({...linkForm, url: e.target.value})} placeholder="URL" className="input-dark flex-1" />
               </div>
-              <input value={linkForm.css_classes} onChange={e => setLinkForm({...linkForm, css_classes: e.target.value})} placeholder="CSS classes" className="input-dark text-xs col-span-2" />
+              <input value={linkForm.css_classes} onChange={e => setLinkForm({...linkForm, css_classes: e.target.value})} placeholder="CSS classes" className="input-dark col-span-2" />
               <div className="flex items-center gap-2 col-span-2">
-                <label className="text-xs text-white/40">Sort Order:</label>
-                <input type="number" value={linkForm.sort_order} onChange={e => setLinkForm({...linkForm, sort_order: e.target.value})} className="input-dark text-xs w-16 text-center" />
+                <label className="text-xs text-white/60">Sort Order:</label>
+                <input type="number" value={linkForm.sort_order} onChange={e => setLinkForm({...linkForm, sort_order: e.target.value})} className="input-dark w-16 text-center" />
                 <label className="flex items-center gap-2 text-xs text-white/60 ml-4 cursor-pointer">
                   <input type="checkbox" checked={linkForm.is_active} onChange={e => setLinkForm({...linkForm, is_active: e.target.checked})} className="w-4 h-4" />
                   Active
@@ -799,9 +858,9 @@ export default function AdminPage() {
 
           <div className="space-y-2">
             {linkLoading ? (
-              <p className="text-xs text-white/30 text-center py-4">Loading...</p>
+              <p className="text-xs text-white/60 text-center py-4">Loading...</p>
             ) : quickLinks.length === 0 ? (
-              <p className="text-xs text-white/30 text-center py-4">Link များ မရှိသေးပါ</p>
+              <p className="text-xs text-white/60 text-center py-4">Link များ မရှိသေးပါ</p>
             ) : (
               quickLinks.map(link => (
                 <div key={link.id} className={`p-3 rounded-2xl flex items-center justify-between border transition-all ${link.is_active ? 'bg-white/5 border-white/10' : 'bg-white/5 border-white/10 opacity-50'}`}>
@@ -809,15 +868,15 @@ export default function AdminPage() {
                     <span className="text-2xl">{link.icon}</span>
                     <div>
                       <p className="text-sm font-bold text-white">{link.title_mm || link.title}</p>
-                      <p className="text-[10px] text-white/40">{link.url}</p>
+                      <p className="text-[10px] text-white/60">{link.url}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] bg-black/30 px-2 py-1 rounded-lg text-white/30 mr-2">Sort: {link.sort_order}</span>
+                    <span className="text-[10px] bg-black/30 px-2 py-1 rounded-lg text-white/60 mr-2">Sort: {link.sort_order}</span>
                     <button onClick={() => { setEditingLink(link.id); setLinkForm(link) }} className="w-8 h-8 flex items-center justify-center bg-blue-500/20 text-blue-400 rounded-xl hover:bg-blue-500/30">
                       <Pencil size={12} />
                     </button>
-                    <button onClick={() => handleDeleteLink(link.id)} className="w-8 h-8 flex items-center justify-center bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500/30">
+                    <button onClick={() => handleDeleteLink(link.id)} className="w-8 h-8 flex items-center justify-center btn-danger rounded-xl">
                       <Trash2 size={12} />
                     </button>
                   </div>
@@ -836,12 +895,12 @@ export default function AdminPage() {
                 className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors ${
                   listingFilter === val
                     ? 'bg-blue-600/30 border-blue-400/40 text-blue-200'
-                    : 'bg-white/5 border-white/10 text-white/40'
+                    : 'bg-white/5 border-white/10 text-white/60'
                 }`}>
                 {label}
-                {val === 'pending' && data.filter(d => d.status === 'pending').length > 0 && listingFilter !== 'pending' && (
+                {val === 'pending' && pendingListingsCount > 0 && listingFilter !== 'pending' && (
                   <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">
-                    {data.filter(d => d.status === 'pending').length}
+                    {pendingListingsCount}
                   </span>
                 )}
               </button>
@@ -850,22 +909,29 @@ export default function AdminPage() {
 
           <div className="px-4 space-y-2">
             {loading ? (
-              <p className="text-white/30 text-center py-8">Loading...</p>
+              <div className="space-y-2">
+                {[1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />)}
+              </div>
             ) : data.length === 0 ? (
-              <p className="text-white/30 text-center py-8">No listings found</p>
+              <p className="text-white/60 text-center py-8">No listings found</p>
             ) : (
               data.map(item => (
                 <div key={item.id} className="bg-white/5 border border-white/8 rounded-2xl p-4">
                   {editingId === item.id ? (
                     <div className="space-y-3">
-                      <input value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Name" />
-                      <input value={editForm.name_mm || ''} onChange={e => setEditForm({...editForm, name_mm: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm font-myanmar" placeholder="Name (Myanmar)" />
-                      <textarea value={editForm.description || ''} onChange={e => setEditForm({...editForm, description: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Description" rows="3" />
-                      <input value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Address" />
-                      <input value={editForm.phone_1 || ''} onChange={e => setEditForm({...editForm, phone_1: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white text-sm" placeholder="Phone" />
+                      <input value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white" placeholder="Name" />
+                      <input value={editForm.name_mm || ''} onChange={e => setEditForm({...editForm, name_mm: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white font-myanmar" placeholder="Name (Myanmar)" />
+                      <textarea value={editForm.description || ''} onChange={e => setEditForm({...editForm, description: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white" placeholder="Description" rows="3" />
+                      <textarea value={editForm.description_mm || ''} onChange={e => setEditForm({...editForm, description_mm: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white font-myanmar" placeholder="ဖော်ပြချက် (မြန်မာ)" rows="3" />
+                      <input value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white" placeholder="Address" />
+                      <div className="flex gap-2">
+                        <input value={editForm.city || ''} onChange={e => setEditForm({...editForm, city: e.target.value})} className="flex-1 min-w-0 bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white font-myanmar" placeholder="မြို့" />
+                        <input value={editForm.township || ''} onChange={e => setEditForm({...editForm, township: e.target.value})} className="flex-1 min-w-0 bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white font-myanmar" placeholder="မြို့နယ်" />
+                      </div>
+                      <input value={editForm.phone_1 || ''} onChange={e => setEditForm({...editForm, phone_1: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white" placeholder="Phone" />
                       <div className="flex gap-2">
                         <button onClick={() => handleSaveEdit(item.id)} disabled={editSaving} className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><Save size={14} /> {editSaving ? '...' : 'SAVE'}</button>
-                        <button onClick={() => setEditingId(null)} disabled={editSaving} className="flex-1 px-3 py-2 bg-white/8 text-white/40 rounded-lg text-xs font-bold disabled:opacity-50">CANCEL</button>
+                        <button onClick={() => setEditingId(null)} disabled={editSaving} className="flex-1 px-3 py-2 bg-white/8 text-white/60 rounded-lg text-xs font-bold disabled:opacity-50">CANCEL</button>
                       </div>
                     </div>
                   ) : (
@@ -873,9 +939,9 @@ export default function AdminPage() {
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-white truncate">{item.name_mm || item.name}</p>
-                          <p className="text-[10px] text-white/40">{item.category?.name_mm || item.category?.name} • {item.city}</p>
-                          <p className="text-[10px] text-white/30 mt-0.5">{item.address}</p>
-                          {item.submitter && <p className="text-[9px] text-white/20 mt-0.5">တင်သွင်းသူ: {item.submitter.full_name}</p>}
+                          <p className="text-[10px] text-white/60">{item.category?.name_mm || item.category?.name} • {item.city}</p>
+                          <p className="text-[10px] text-white/60 mt-0.5">{item.address}</p>
+                          {item.submitter && <p className="text-[9px] text-white/60 mt-0.5">တင်သွင်းသူ: {item.submitter.full_name}</p>}
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border flex-shrink-0 ${
                           item.status === 'approved' ? 'bg-green-500/20 border-green-500/30 text-green-400' :
@@ -887,30 +953,30 @@ export default function AdminPage() {
                       {reports[item.id] > 0 && (
                         <div className="mb-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-between">
                           <span className="text-[10px] text-red-400 font-bold flex items-center gap-1"><AlertCircle size={12} /> {reports[item.id]} Reports</span>
-                          <button onClick={() => setShowReports(showReports === item.id ? null : item.id)} className="text-[9px] text-red-400 hover:text-red-300">
-                            {showReports === item.id ? 'ပိတ်မည်' : 'ကြည့်မည်'}
+                          <button onClick={() => navigate('/admin/reports')} className="text-[9px] text-red-400 hover:text-red-300">
+                            ကြည့်မည်
                           </button>
                         </div>
                       )}
 
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
                         {item.status !== 'approved' && (
-                          <button onClick={() => handleApprove(item.id)} disabled={listingBusy === item.id} className="flex-1 min-w-[70px] px-3 py-1.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                          <button onClick={() => handleApprove(item.id)} disabled={listingBusy === item.id} className="flex-1 min-w-[70px] px-3 py-2.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                             <Check size={12} /> {listingBusy === item.id ? '...' : 'APPROVE 🍒'}
                           </button>
                         )}
                         {item.status === 'approved' && (
-                          <button onClick={() => handleSuspend(item.id)} disabled={listingBusy === item.id} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                          <button onClick={() => handleSuspend(item.id)} disabled={listingBusy === item.id} className="flex-1 min-w-[70px] px-3 py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                             <X size={12} /> {listingBusy === item.id ? '...' : 'SUSPEND'}
                           </button>
                         )}
-                        <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-1.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                        <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-2.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
                           <Pencil size={12} /> EDIT
                         </button>
-                        <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex-1 min-w-[70px] px-3 py-1.5 bg-red-600/30 border border-red-600/40 text-red-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                        <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex-1 min-w-[70px] px-3 py-2.5 btn-danger rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Trash2 size={12} /> {deleting === item.id ? '...' : 'DELETE'}
                         </button>
-                        <button onClick={() => navigate(`/directory/${item.id}`)} className="flex-1 min-w-[55px] px-3 py-1.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                        <button onClick={() => navigate(`/directory/${item.id}`)} className="flex-1 min-w-[55px] px-3 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
                           <Eye size={12} /> VIEW
                         </button>
                       </div>
@@ -932,7 +998,7 @@ function StatCard({ title, value, icon: Icon, color, pulse = false, size = 'norm
     <div className="card-dark p-3 rounded-2xl border border-white/5">
       <div className="flex items-center justify-between">
         <div>
-          <p className={`${size === 'small' ? 'text-[9px]' : 'text-[10px]'} text-white/40 uppercase tracking-wider font-bold`}>{title}</p>
+          <p className={`${size === 'small' ? 'text-[9px]' : 'text-[10px]'} text-white/60 uppercase tracking-wider font-bold`}>{title}</p>
           <p className={`font-display font-bold ${size === 'small' ? 'text-lg' : 'text-xl'} text-white`}>{value.toLocaleString()}</p>
         </div>
         <Icon size={size === 'small' ? 16 : 20} className={`${color} ${pulse ? 'animate-pulse' : ''}`} />

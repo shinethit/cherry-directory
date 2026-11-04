@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, MapPin, Plus, X, Minus, Info, Search, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -21,7 +21,7 @@ function Field({ label, children, required, optional }) {
       <label className="block text-xs text-white/50 mb-1.5">
         {label}
         {required && <span className="text-red-400 ml-1">*</span>}
-        {optional && <span className="text-white/25 font-normal ml-1">(optional)</span>}
+        {optional && <span className="text-white/60 font-normal ml-1">(optional)</span>}
       </label>
       {children}
     </div>
@@ -37,7 +37,7 @@ function SectionHeader({ num, title, subtitle }) {
         </span>
         <div className="min-w-0">
           <p className="text-sm font-display font-bold text-white font-myanmar leading-tight">{title}</p>
-          {subtitle && <p className="text-[10px] text-white/30 font-myanmar mt-0.5">{subtitle}</p>}
+          {subtitle && <p className="text-[10px] text-white/60 font-myanmar mt-0.5">{subtitle}</p>}
         </div>
       </div>
     </div>
@@ -82,6 +82,13 @@ export default function SubmitListingPage() {
   const [menuImageLoading, setMenuImageLoading] = useState(false)
   const [menuError, setMenuError] = useState('')
   const [dupError, setDupError] = useState(null)
+  // B22: bypass once the user confirms the listing is genuinely different.
+  // A ref (not state) so the banner button can set it and submit in one tap.
+  const dupBypassRef = useRef(false)
+  // B2: inline error + scroll target when required fields are missing.
+  const [submitError, setSubmitError] = useState('')
+  const nameInputRef = useRef(null)
+  const catSelectRef = useRef(null)
 
   useEffect(() => {
     supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
@@ -202,7 +209,7 @@ export default function SubmitListingPage() {
     closeMenuForm()
   }
   const deleteMenuItem = async (id) => {
-    if (await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this item?')) setMenuItems(prev => prev.filter(i => i.id !== id))
+    if (await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this item?', { danger: true })) setMenuItems(prev => prev.filter(i => i.id !== id))
   }
 
   // Escape PostgREST .or() special characters so a name containing , ( ) %
@@ -291,14 +298,19 @@ export default function SubmitListingPage() {
   async function handleSubmit(e) {
     if (e) e.preventDefault()
     if ((!form.name && !form.name_mm) || !form.category_id) {
-      // Was a silent return — the user saw nothing and the form just sat there.
-      showError(
-        !form.name && !form.name_mm
-          ? (lang === 'mm' ? 'လုပ်ငန်းအမည် (မြန်မာ သို့မဟုတ် English) ထည့်ပါ' : 'Please enter the business name')
-          : (lang === 'mm' ? 'အမျိုးအစား ရွေးပါ' : 'Please choose a category')
-      )
+      // B2: never silently sit there — show a red inline error and scroll
+      // to the missing field so the user sees what is needed.
+      const msg = !form.name && !form.name_mm
+        ? (lang === 'mm' ? 'လုပ်ငန်းအမည် (မြန်မာ သို့မဟုတ် English) ထည့်ပါ' : 'Please enter the business name')
+        : (lang === 'mm' ? 'အမျိုးအစား ရွေးပါ' : 'Please choose a category')
+      setSubmitError(msg)
+      showError(msg)
+      const target = (!form.name && !form.name_mm) ? nameInputRef.current : catSelectRef.current
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target?.focus({ preventScroll: true })
       return
     }
+    setSubmitError('')
 
     // Pre-submit validation (honest Burmese errors; Myanmar-only names pass).
     const validation = validateListing({
@@ -311,11 +323,14 @@ export default function SubmitListingPage() {
       longitude: form.longitude ? parseFloat(form.longitude) : null,
     })
     if (!validation.isValid) {
+      setSubmitError(validation.errors.join(' '))
       showError(validation.errors.join(' '))
       return
     }
 
-    const isDup = await checkDuplicates();
+    // B22: skip the duplicate block once the user confirmed this is a
+    // genuinely different business (same name / branch phone).
+    const isDup = dupBypassRef.current ? false : await checkDuplicates();
     if (isDup) return; // တူနေရင် တင်ခွင့်မပြု
 
     setDupError(null);
@@ -435,20 +450,28 @@ export default function SubmitListingPage() {
         <button
           type="submit"
           form="submit-listing-form"
-          disabled={!canSubmit}
+          disabled={submitting}
           className={
             'flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-display font-bold transition-all ' +
-            (canSubmit
-              ? 'bg-brand-600 text-white hover:bg-brand-500 shadow-md shadow-brand-900/40'
-              : 'bg-white/8 text-white/30 cursor-not-allowed')
+            (submitting
+              ? 'bg-white/8 text-white/60 cursor-not-allowed'
+              : 'btn-primary shadow-md shadow-brand-900/40')
           }
         >
           {submitting
             ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
             : <Check size={14} />}
-          {submitting ? '' : (lang === 'mm' ? 'သိမ်း' : 'Save')}
+          {submitting ? '' : (lang === 'mm' ? 'သိမ်းမည်' : 'Save')}
         </button>
       </div>
+
+      {/* B2: the Save buttons are never disabled for missing fields — the
+          reason is shown here instead, so the user always knows what is missing. */}
+      {!canSubmit && !submitting && (
+        <p className="mx-4 mt-3 text-xs text-red-400 font-myanmar">
+          {lang === 'mm' ? 'အမည် နှင့် အမျိုးအစား လိုအပ်သည်' : 'Name and category are required'}
+        </p>
+      )}
 
       {!isLoggedIn && (
         <div className="mx-4 mt-4 mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl flex items-start gap-2">
@@ -472,12 +495,17 @@ export default function SubmitListingPage() {
               {dupError.name_mm || dupError.name}
               {dupError.phone_1 ? ` • ${dupError.phone_1}` : ''}
             </p>
-            <p className="text-[11px] text-white/40 font-myanmar mt-1">
+            <p className="text-[11px] text-white/60 font-myanmar mt-1">
               {lang === 'mm' ? 'အချက်အလက် မှားနေရင် ပြင်ပြီး ထပ်တင်ပါ — တူတဲ့လုပ်ငန်း ရှိပြီးသားဆို ထပ်တင်စရာ မလိုပါ' : 'If the details are wrong, correct them and resubmit — no need to submit a duplicate.'}
             </p>
-            <button type="button" onClick={() => setDupError(null)} className="text-[11px] text-red-300 underline mt-1">
-              {lang === 'mm' ? 'ပိတ်မည်' : 'Dismiss'}
-            </button>
+            <div className="flex items-center gap-3 mt-2">
+              <button type="button" onClick={() => { dupBypassRef.current = true; setDupError(null); handleSubmit(); }} className="text-[11px] font-bold text-brand-300 underline">
+                {lang === 'mm' ? 'ဒါက မတူသော လုပ်ငန်းပါ — ဆက်တင်မည်' : 'This is a different business — continue'}
+              </button>
+              <button type="button" onClick={() => setDupError(null)} className="text-[11px] text-red-300 underline">
+                {lang === 'mm' ? 'ပိတ်မည်' : 'Dismiss'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -485,22 +513,23 @@ export default function SubmitListingPage() {
       <form id="submit-listing-form" onSubmit={handleSubmit} className="px-4 pt-4 space-y-4">
 
         {/* Logo + Cover */}
+        <p className="text-xs text-white/60 font-myanmar -mb-1">ပုံများ (optional)</p>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-white/50 mb-2">{t('logo_label')}</label>
+            <label className="block text-xs text-white/50 mb-2">{t('logo_label')} (optional)</label>
             {logo ? (
               <div className="relative h-24">
-                <img src={logo} alt="" className="w-full h-full rounded-2xl object-contain bg-white/5" />
-                <button type="button" onClick={() => setLogo(null)} className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-[10px]">✕</button>
+                <img src={logo} alt={form.name_mm || form.name || 'Logo'} className="w-full h-full rounded-2xl object-contain bg-white/5" />
+                <button type="button" onClick={() => setLogo(null)} className="absolute -top-2 -right-2 w-5 h-5 btn-danger rounded-full flex items-center justify-center text-white text-[10px]">✕</button>
               </div>
             ) : <ImageUploader onUpload={handleLogoUpload} loading={logoUploading} label={t('upload_logo')} />}
           </div>
           <div>
-            <label className="block text-xs text-white/50 mb-2">Cover ပုံ</label>
+            <label className="block text-xs text-white/50 mb-2">Cover ပုံ (optional)</label>
             {coverImg ? (
               <div className="relative h-24">
-                <img src={coverImg} alt="" className="w-full h-full rounded-2xl object-cover" />
-                <button type="button" onClick={() => setCoverImg(null)} className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-[10px]">✕</button>
+                <img src={coverImg} alt={form.name_mm || form.name || 'Cover'} className="w-full h-full rounded-2xl object-cover" />
+                <button type="button" onClick={() => setCoverImg(null)} className="absolute -top-2 -right-2 w-5 h-5 btn-danger rounded-full flex items-center justify-center text-white text-[10px]">✕</button>
               </div>
             ) : <ImageUploader onUpload={handleCoverUpload} loading={coverUploading} label="Cover တင်ရန်" />}
           </div>
@@ -512,6 +541,7 @@ export default function SubmitListingPage() {
         <Field label={t('name_mm_label')} required>
           <input
             type="text"
+            ref={nameInputRef}
             value={form.name_mm}
             onChange={e => setFormField('name_mm', e.target.value)}
             className="input-dark font-myanmar"
@@ -538,7 +568,7 @@ export default function SubmitListingPage() {
                 type="text"
                 value={catSearch}
                 onChange={e => setCatSearch(e.target.value)}
-                className="input-dark pl-9 text-sm w-full"
+                className="input-dark pl-9 w-full"
                 placeholder={lang === 'mm' ? 'Category ရှာရန်...' : 'Search category...'}
               />
               {catSearch && (
@@ -551,6 +581,7 @@ export default function SubmitListingPage() {
 
           <div className="flex gap-2">
             <select
+              ref={catSelectRef}
               value={form.category_id}
               onChange={e => setFormField('category_id', e.target.value)}
               className="select-dark flex-1"
@@ -587,7 +618,7 @@ export default function SubmitListingPage() {
                 <Plus size={16} />
               </button>
             ) : (
-              <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center text-white/30 cursor-not-allowed" title={lang === 'mm' ? 'Category အသစ်ထည့်ရန် Admin/Moderator သာ ခွင့်ပြုသည်' : 'Only Admin/Moderator can add a category'}>
+              <div className="w-10 h-10 flex-shrink-0 rounded-xl bg-white/8 border border-white/12 flex items-center justify-center text-white/60 cursor-not-allowed" title={lang === 'mm' ? 'Category အသစ်ထည့်ရန် Admin/Moderator သာ ခွင့်ပြုသည်' : 'Only Admin/Moderator can add a category'}>
                 <span className="text-[10px]">🔒</span>
               </div>
             )}
@@ -599,12 +630,44 @@ export default function SubmitListingPage() {
           )}
         </Field>
 
+        {/* B19: business type belongs with the basic info, not Location. */}
+        <Field label={lang === 'mm' ? 'လုပ်ငန်းအမျိုးအစား' : 'Business type'}>
+          <div className="grid grid-cols-3 gap-2">
+            {BUSINESS_TYPES.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setFormField('business_type', opt.value)}
+                className={
+                  'p-2.5 rounded-xl border text-center transition-colors ' +
+                  (form.business_type === opt.value
+                    ? 'bg-brand-600/50 border-brand-400/60 text-brand-200'
+                    : 'bg-white/5 border-white/10 text-white/50')
+                }
+              >
+                <p className="text-lg leading-none mb-1">{opt.emoji}</p>
+                <p className="text-xs font-semibold leading-tight">{opt.label}</p>
+                <p className="text-[9px] text-white/60 mt-0.5 leading-tight">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
+        </Field>
+
         <Field label={t('desc_label')} optional>
           <textarea
             value={form.description_mm}
             onChange={e => setFormField('description_mm', e.target.value)}
             className="input-dark font-myanmar resize-none h-20"
             placeholder={t('desc_placeholder')}
+          />
+        </Field>
+
+        <Field label={lang === 'mm' ? 'ဖော်ပြချက် (English)' : 'Description (English)'} optional>
+          <textarea
+            value={form.description}
+            onChange={e => setFormField('description', e.target.value)}
+            className="input-dark resize-none h-20"
+            placeholder="Description in English (optional)"
           />
         </Field>
 
@@ -623,7 +686,7 @@ export default function SubmitListingPage() {
                 placeholder={'ဖုန်း ' + (idx + 1) + ' (09xxxxxxxxx)'}
               />
               {form.phones.length > 1 && (
-                <button type="button" onClick={() => removePhone(idx)} className="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500/20 transition-colors">
+                <button type="button" onClick={() => removePhone(idx)} className="w-10 h-10 rounded-xl btn-danger flex items-center justify-center transition-colors">
                   <Minus size={16} />
                 </button>
               )}
@@ -647,28 +710,6 @@ export default function SubmitListingPage() {
 
         {/* ③ တည်နေရာ */}
         <SectionHeader num="3" title={lang === 'mm' ? 'တည်နေရာ' : 'Location'} subtitle={lang === 'mm' ? 'လိပ်စာ၊ မြို့၊ GPS' : 'Address & map'} />
-
-        <Field label={lang === 'mm' ? 'လုပ်ငန်းအမျိုးအစား' : 'Business type'}>
-          <div className="grid grid-cols-3 gap-2">
-            {BUSINESS_TYPES.map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setFormField('business_type', opt.value)}
-                className={
-                  'p-2.5 rounded-xl border text-center transition-colors ' +
-                  (form.business_type === opt.value
-                    ? 'bg-brand-600/50 border-brand-400/60 text-brand-200'
-                    : 'bg-white/5 border-white/10 text-white/50')
-                }
-              >
-                <p className="text-lg leading-none mb-1">{opt.emoji}</p>
-                <p className="text-xs font-semibold leading-tight">{opt.label}</p>
-                <p className="text-[9px] text-white/40 mt-0.5 leading-tight">{opt.desc}</p>
-              </button>
-            ))}
-          </div>
-        </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('city_label')}>
@@ -713,12 +754,12 @@ export default function SubmitListingPage() {
         {(form.latitude || form.longitude) && (
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="block text-[10px] text-white/40 mb-1">Latitude</label>
-              <input type="text" value={form.latitude} onChange={e => setFormField('latitude', e.target.value)} className="input-dark text-xs" placeholder="16.xxxxxx" />
+              <label className="block text-[10px] text-white/60 mb-1">Latitude</label>
+              <input type="text" value={form.latitude} onChange={e => setFormField('latitude', e.target.value)} className="input-dark" placeholder="16.xxxxxx" />
             </div>
             <div className="flex-1">
-              <label className="block text-[10px] text-white/40 mb-1">Longitude</label>
-              <input type="text" value={form.longitude} onChange={e => setFormField('longitude', e.target.value)} className="input-dark text-xs" placeholder="97.xxxxxx" />
+              <label className="block text-[10px] text-white/60 mb-1">Longitude</label>
+              <input type="text" value={form.longitude} onChange={e => setFormField('longitude', e.target.value)} className="input-dark" placeholder="97.xxxxxx" />
             </div>
           </div>
         )}
@@ -728,7 +769,7 @@ export default function SubmitListingPage() {
         <BusinessHoursEditor value={form.hours} onChange={h => setFormField('hours', h)} lang={lang} />
 
         {/* ⑤ မီနူး */}
-        <SectionHeader num="5" title={lang === 'mm' ? 'မီနူး / ဝန်ဆောင်မှုများ' : 'Menu / Services'} subtitle={lang === 'mm' ? 'Optional — စားသောက်ဆိုင်၊ ဆိုင်များအတွက်' : 'Optional — for shops/restaurants'} />
+        <SectionHeader num="5" title={lang === 'mm' ? 'မီနူး / ဝန်ဆောင်မှုများ (မဖြစ်မနေ မဟုတ်)' : 'Menu / Services (Optional)'} subtitle={lang === 'mm' ? 'Optional — စားသောက်ဆိုင်၊ ဆိုင်များအတွက်' : 'Optional — for shops/restaurants'} />
 
         <button
           type="button"
@@ -739,7 +780,7 @@ export default function SubmitListingPage() {
         </button>
 
         {menuItems.length === 0 ? (
-          <div className="text-center py-3 text-white/30 text-xs font-myanmar">
+          <div className="text-center py-3 text-white/60 text-xs font-myanmar">
             {lang === 'mm' ? 'မီနူးစာရင်း မရှိသေးပါ' : 'No menu items yet'}
           </div>
         ) : (
@@ -766,8 +807,8 @@ export default function SubmitListingPage() {
                     )}
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
-                    <button type="button" onClick={() => openMenuForm(item)} className="p-1.5 text-white/40 hover:text-white transition-colors">✏️</button>
-                    <button type="button" onClick={() => deleteMenuItem(item.id)} className="p-1.5 text-red-400/70 hover:text-red-400 transition-colors">🗑️</button>
+                    <button type="button" onClick={() => openMenuForm(item)} aria-label="ပြင်မည်" className="p-2.5 text-white/60 hover:text-white transition-colors">✏️</button>
+                    <button type="button" onClick={() => deleteMenuItem(item.id)} aria-label="ဖျက်မည်" className="p-2.5 text-red-400/70 hover:text-red-400 transition-colors">🗑️</button>
                   </div>
                 </div>
               </div>
@@ -775,10 +816,15 @@ export default function SubmitListingPage() {
           </div>
         )}
 
-        {/* Inline Submit (bottom of form) */}
+        {/* Inline Submit (bottom of form) — never disabled for missing
+            fields (B2): tapping it scrolls to the missing field and shows
+            the red inline error above. */}
+        {submitError && (
+          <p className="text-xs text-red-400 font-myanmar text-center -mb-1">{submitError}</p>
+        )}
         <button
           type="submit"
-          disabled={!canSubmit}
+          disabled={submitting}
           className="btn-primary w-full mt-4 disabled:opacity-50"
         >
           {submitting ? (
@@ -789,7 +835,7 @@ export default function SubmitListingPage() {
           ) : t('submit_btn')}
         </button>
 
-        <p className="text-[11px] text-white/30 text-center font-myanmar pb-2">{t('submit_notice')}</p>
+        <p className="text-[11px] text-white/60 text-center font-myanmar pb-2">{t('submit_notice')}</p>
       </form>
 
       {/* Quick category modal */}
@@ -808,7 +854,7 @@ export default function SubmitListingPage() {
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-24">
             <div>
               <label className="block text-xs text-white/50 mb-1.5">Category အမည် (မြန်မာ) *</label>
-              <input autoFocus value={quickCat.name_mm}
+              <input value={quickCat.name_mm}
                 onChange={e => setQuickCat(q => ({...q, name_mm: e.target.value}))}
                 className="input-dark font-myanmar" placeholder="ဥပမာ: Freelance, အဝတ်လျှော်, Construction" />
             </div>
@@ -834,8 +880,8 @@ export default function SubmitListingPage() {
       {/* Menu Item Modal */}
       {menuFormOpen && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4 pt-safe">
-          <div className="bg-[#140020] rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto border border-white/10">
-            <div className="sticky top-0 bg-[#140020] p-4 border-b border-white/10 flex justify-between items-center">
+          <div className="bg-[#1a0030] rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto border border-white/10">
+            <div className="sticky top-0 bg-[#1a0030] p-4 border-b border-white/10 flex justify-between items-center">
               <h3 className="font-display font-bold text-white">
                 {editingMenuItem
                   ? (lang === 'mm' ? 'မီနူးပြင်မည်' : 'Edit Menu Item')
@@ -858,7 +904,7 @@ export default function SubmitListingPage() {
                 <label className="block text-xs text-white/50 mb-1.5">
                   {lang === 'mm' ? 'ဈေးနှုန်း (ကျပ်)' : 'Price (Ks)'}
                 </label>
-                <input type="text" value={menuForm.price}
+                <input type="number" inputMode="decimal" value={menuForm.price}
                   onChange={e => setMenuForm(prev => ({ ...prev, price: e.target.value }))}
                   className="input-dark w-full" placeholder="2000" />
               </div>

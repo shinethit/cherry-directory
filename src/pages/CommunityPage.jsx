@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
@@ -47,7 +47,7 @@ const GROUPS = [
     descEn: 'Connect & help community',
     color: 'from-violet-600/20 to-violet-700/5',
     border: 'border-violet-500/30',
-    defaultOpen: false,
+    defaultOpen: true,
     features: [
       { path: '/chat',       icon: '💬', mm: 'Public Chat',      en: 'Public Chat',    descMm: 'အများပြည်သူ ဆွေးနွေးခန်း', descEn: 'Public chat room' },
       { path: '/lost-found', icon: '🔍', mm: 'ပျောက်ဆုံးပစ္စည်း', en: 'Lost & Found',  descMm: 'ပျောက်ဆုံး/တွေ့ရှိ', descEn: 'Lost & found items' },
@@ -112,7 +112,7 @@ export default function CommunityPage() {
         <h1 className="font-display font-bold text-xl text-white">
           🏘️ {lang === 'mm' ? 'Community' : 'Community'}
         </h1>
-        <p className="text-xs text-white/40 mt-0.5 font-myanmar">
+        <p className="text-xs text-white/60 mt-0.5 font-myanmar">
           {lang === 'mm' ? `${config.app_city || 'မြို့'} Community Features` : `${config.app_city || ''} community tools`}
         </p>
       </div>
@@ -138,13 +138,10 @@ export default function CommunityPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className="text-[10px] text-white/40 bg-white/8 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] text-white/60 bg-white/8 px-2 py-0.5 rounded-full">
                     {group.features.length}
                   </span>
-                  {isOpen
-                    ? <ChevronUp size={18} className="text-white/50" />
-                    : <ChevronDown size={18} className="text-white/50" />
-                  }
+                  <ChevronDown size={18} className={`text-white/50 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                 </div>
               </button>
 
@@ -155,18 +152,18 @@ export default function CommunityPage() {
                     <button
                       key={f.path}
                       onClick={() => navigate(f.path)}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/8 transition-colors text-left"
+                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/8 transition-colors text-left min-h-[60px]"
                     >
                       <span className="text-2xl flex-shrink-0">{f.icon}</span>
                       <div className="flex-1 min-w-0">
                         <p className="font-display font-semibold text-sm text-white">
                           {lang === 'mm' ? f.mm : f.en}
                         </p>
-                        <p className="text-[10px] text-white/50 mt-0.5 font-myanmar">
+                        <p className="text-[10px] text-white/50 mt-0.5 font-myanmar line-clamp-3">
                           {lang === 'mm' ? f.descMm : f.descEn}
                         </p>
                       </div>
-                      <span className="text-white/20 flex-shrink-0">→</span>
+                      <span className="text-white/60 text-lg flex-shrink-0">→</span>
                     </button>
                   ))}
                 </div>
@@ -178,7 +175,7 @@ export default function CommunityPage() {
 
       {/* Footer note */}
       <div className="px-4 mt-6">
-        <p className="text-[10px] text-white/25 text-center font-myanmar">
+        <p className="text-[10px] text-white/60 text-center font-myanmar">
           💡 {lang === 'mm' ? 'Group ကို နှိပ်ပြီး Feature များ ကြည့်နိုင်သည်' : 'Tap a group to view features'}
         </p>
       </div>

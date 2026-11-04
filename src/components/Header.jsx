@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Info  } from 'lucide-react'
+import { ArrowLeft, Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Info, Siren, LayoutGrid, Upload, BarChart3 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useUnreadNotificationCount, useNotificationSubscription } from '../hooks/useNotifications'
 import { safeGet, safeSet } from '../lib/safeStorage'
+import { APP_VERSION } from '../lib/appVersion'
 // Main navigation pages — no back button needed
 const MAIN_NAV_PATHS = ['/', '/directory', '/community', '/calendar', '/profile']
 
@@ -45,7 +46,7 @@ export default function Header() {
   // The version is marked seen ONLY when the user dismisses the modal, never on a timer.
   // (A-F7: retry-every-launch until seen is deliberate — no change.)
   useEffect(() => {
-    const CURRENT_VERSION = '9.4';
+    const CURRENT_VERSION = APP_VERSION;
     const lastSeen = safeGet('cherry_last_seen_version');
     if (lastSeen === CURRENT_VERSION) return;
     let timer;
@@ -66,9 +67,15 @@ export default function Header() {
     return () => clearTimeout(timer);
   }, []);
 
+  // A18: backdrop click closes WITHOUT marking read — only the X button
+  // (closeChangelog) marks the version seen. Auto-open itself is unchanged.
+  function dismissChangelog() {
+    setShowChangelog(false);
+  }
+
   function closeChangelog() {
     setShowChangelog(false);
-    safeSet('cherry_last_seen_version', '9.4');
+    safeSet('cherry_last_seen_version', APP_VERSION);
   }
 
   function handleBack() {
@@ -87,21 +94,22 @@ export default function Header() {
   }
 
   const menuItems = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/directory', label: 'Directory', icon: Search },
-    { path: '/calendar', label: 'Calendar', icon: Calendar },
+    { path: '/', label: 'ပင်မ', icon: Home },
+    { path: '/directory', label: 'လမ်းညွှန်', icon: Search },
+    { path: '/calendar', label: 'ပြက္ခဒိန်', icon: Calendar },
     { path: '/community', label: 'Community', icon: Users },
-    { path: '/chat', label: 'Chat', icon: MessageCircle },
-    { path: '/saved', label: 'Saved', icon: Bookmark },
-    { path: '/leaderboard', label: 'Leaderboard', icon: Trophy },
+    { path: '/emergency', label: 'အရေးပေါ် 🆘', icon: Siren },
+    { path: '/chat', label: 'စကားပြောခန်း', icon: MessageCircle },
+    { path: '/saved', label: 'သိမ်းထားသော', icon: Bookmark },
+    { path: '/leaderboard', label: 'အမှတ်စာရင်း', icon: Trophy },
   ]
 
   const adminItems = [
     { path: '/admin', label: 'Admin Panel', icon: Shield },
-    { path: '/admin/categories', label: 'Categories', icon: Settings },
-    { path: '/admin/bulk-import', label: 'Bulk Import', icon: Settings },
-    { path: '/admin/settings', label: 'App Settings', icon: Settings },
-    { path: '/admin/reports', label: 'Reports', icon: Settings },
+    { path: '/admin/categories', label: 'အမျိုးအစားများ', icon: LayoutGrid },
+    { path: '/admin/bulk-import', label: 'အစုလိုက် တင်သွင်းခြင်း', icon: Upload },
+    { path: '/admin/settings', label: 'App ဆက်တင်များ', icon: Settings },
+    { path: '/admin/reports', label: 'အစီရင်ခံစာများ', icon: BarChart3 },
   ]
 
   return (
@@ -120,10 +128,11 @@ export default function Header() {
             {showBack && (
               <button
                 onClick={handleBack}
-                className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all"
-                aria-label="Back"
+                className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all"
+                aria-label="နောက်သို့"
+                title="နောက်သို့"
               >
-                <ArrowLeft size={16} className="text-white" />
+                <ArrowLeft size={18} className="text-white" />
               </button>
             )}
             <button
@@ -142,30 +151,32 @@ export default function Header() {
                 }}
               />
             </div>
-            <div className="hidden sm:block">
+            <div className="block">
               <p className="font-display font-bold text-sm text-white leading-tight">
                 {config.app_name || 'Cherry Directory'}
               </p>
-              <p className="text-[9px] text-white/40 font-myanmar">{config.app_city || 'တောင်ကြီးမြို့'}</p>
+              <p className="text-[9px] text-white/60 font-myanmar">{config.app_city || 'တောင်ကြီးမြို့'}</p>
             </div>
           </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
                         <button
               onClick={() => navigate('/search')}
-              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
-              aria-label="Search"
+              className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
+              aria-label="ရှာဖွေမည်"
+              title="ရှာဖွေမည်"
             >
-              <Search size={14} />
+              <Search size={16} />
             </button>
 
                         <button
               onClick={() => navigate('/notifications')}
-              className="relative w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
-              aria-label="Notifications"
+              className="relative w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
+              aria-label="အသိပေးချက်များ"
+              title="အသိပေးချက်များ"
             >
-              <Bell size={14} />
+              <Bell size={16} />
               {unreadCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
                   {unreadCount > 99 ? '99+' : unreadCount}
@@ -176,24 +187,29 @@ export default function Header() {
 
             <button
               onClick={toggleLang}
-              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90"
+              className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90"
+              aria-label="ဘာသာစကား ပြောင်းမည်"
+              title="🌐 ဘာသာစကား ပြောင်းမည်"
             >
               {lang === 'mm' ? 'EN' : 'မြန်မာ'}
             </button>
 
             <button
               onClick={() => setShowChangelog(true)}
-              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-brand-300 transition-colors"
-              title="Change Log"
+              className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-brand-300 transition-colors"
+              aria-label="ဗားရှင်း မှတ်တမ်း"
+              title="ဗားရှင်း မှတ်တမ်း"
             >
-              <Info size={14} />
+              <Info size={16} />
             </button>
 
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="w-8 h-8 rounded-lg bg-white/8 flex items-center justify-center"
+              className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center"
+              aria-label="မီနူး"
+              title="မီနူး"
             >
-              {menuOpen ? <X size={18} className="text-white" /> : <Menu size={18} className="text-white" />}
+              {menuOpen ? <X size={20} className="text-white" /> : <Menu size={20} className="text-white" />}
             </button>
           </div>
         </div>
@@ -218,7 +234,7 @@ export default function Header() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{profile.full_name || 'User'}</p>
-                  <p className="text-[10px] text-white/40">
+                  <p className="text-[10px] text-white/60">
                     {profile.role === 'super_admin' ? 'Super Admin' : profile.role === 'admin' ? 'Admin' : profile.role === 'moderator' ? 'Moderator' : 'Member'}
                   </p>
                 </div>
@@ -269,11 +285,11 @@ export default function Header() {
             <div className="pt-2 mt-2 border-t border-white/8">
               <Link to="/about" className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/8 transition-colors" onClick={() => setMenuOpen(false)}>
                 <span className="text-white/50 text-sm">🍒</span>
-                <span className="text-sm text-white/60">About</span>
+                <span className="text-sm text-white/60">အကြောင်း</span>
               </Link>
               <Link to="/help" className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/8 transition-colors" onClick={() => setMenuOpen(false)}>
                 <span className="text-white/50 text-sm">❓</span>
-                <span className="text-sm text-white/60">How to Use</span>
+                <span className="text-sm text-white/60">သုံးစွဲနည်း</span>
               </Link>
               <Link to="/privacy" className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/8 transition-colors" onClick={() => setMenuOpen(false)}>
                 <span className="text-white/50 text-sm">🔒</span>
@@ -285,8 +301,8 @@ export default function Header() {
               </Link>
             </div>
 
-            <p className="text-[9px] text-white/20 text-center py-4">
-              {config.app_name} v9.4 • {config.app_city}
+            <p className="text-[9px] text-white/60 text-center py-4">
+              {config.app_name} v{APP_VERSION} • {config.app_city}
             </p>
           </div>
         </div>
@@ -294,12 +310,12 @@ export default function Header() {
 
       {/* Change Log Modal */}
       {showChangelog && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pt-safe bg-black/80 backdrop-blur-md" onClick={closeChangelog}>
-          <div className="w-full max-w-sm bg-[#140020] border border-white/10 rounded-3xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#140020] z-10">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pt-safe bg-black/80 backdrop-blur-md" onClick={dismissChangelog}>
+          <div className="w-full max-w-sm bg-[#1a0030] border border-white/10 rounded-3xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#1a0030] z-10">
               <div>
                 <h3 className="font-display font-bold text-white text-base">Change Log</h3>
-                <p className="text-[10px] text-white/40 font-myanmar">Version 9.4</p>
+                <p className="text-[10px] text-white/60 font-myanmar">Version {APP_VERSION}</p>
               </div>
               <button onClick={closeChangelog} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50 hover:text-white">
                 <X size={16} />
@@ -307,6 +323,7 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
+                { v: '9.5', date: '2026-11-04', items: ['UI/UX စစ်ဆေးချက် ၂၂၀ + လုပ်ဆောင်ချက် bug ၁၈ ခု အားလုံး ပြင်ဆင်ခြင်း', 'Guest ဖုန်းနံပါတ် အပြည့်အစုံ ခေါ်ဆိုနိုင်ခြင်း လုံခြုံရေး ပြင်ဆင်ခြင်း', 'အရေးပေါ် 🆘 ခလုတ် Home + Menu တွင် ထည့်ခြင်း', 'ခလုတ်/စာသား ဖတ်ရလွယ်အောင် ပြင်ဆင်ခြင်း (disabled/focus/16px/မှိန်သော စာသား)', 'ဝေါဟာရ မြန်မာလို တစ်မျိုးတည်း ဖြစ်အောင် ပြင်ဆင်ခြင်း', 'အလှူငွေ collected_amount — Admin + Admin ခွင့်ပြုထားသော Moderator သာ ပြင်နိုင်ခြင်း', 'My Reviews စာမျက်နှာ + 404 စာမျက်နှာ အသစ်'] },
                 { v: '9.4', date: '2026-11-03', items: ['Lost & Found စာမျက်နှာတွင် ပိုနေသော `}` ဖြုတ်ခြင်း', 'push script ဗားရှင်းစာသား ဟောင်းနေခြင်း ပြင်ဆင်ခြင်း'] },
                 { v: '9.3', date: '2026-11-03', items: ['"ပြင်ဆင်နေသည်..." ရပ်နေသော ပြဿနာ ပြင်ဆင်ခြင်း', 'Home/Directory ဒေတာ တင်တာ timeout + retry', 'Points အတု ပြင်ဆင်ခြင်း + Chat အမှတ် RPC', 'Report/Claim/Jobs/Fuel ပြင်ဆင်မှုများ', 'Version နံပါတ် ၂ လုံးတွဲ (9.3) သို့ ပြောင်းခြင်း'] },
                 { v: '9.2', date: '2026-11-03', items: ['Version History ကို အစအဆုံး ပြန်ရေးခြင်း (ဖေဖော်ဝါရီ ၁၆ ကစ)', 'ရက်စွဲ မှားနေတာများ ပြင်ခြင်း', 'အထောက်အထား မရှိသော ပြောဆိုချက်များ ဖြုတ်ခြင်း'] },
@@ -322,7 +339,7 @@ export default function Header() {
                 <div key={i} className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="badge bg-brand-600/30 text-brand-300 font-bold border border-brand-400/30">v{rel.v}</span>
-                    <span className="text-[10px] text-white/30">{rel.date}</span>
+                    <span className="text-[10px] text-white/60">{rel.date}</span>
                   </div>
                   <ul className="space-y-1 pl-4">
                     {rel.items.map((item, j) => (

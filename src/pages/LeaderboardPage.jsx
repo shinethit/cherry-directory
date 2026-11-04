@@ -12,7 +12,7 @@ import { getTierProgress, POINT_ACTIONS } from '../lib/tiers'
 // ── Constants ─────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'points',   labelMm: 'Points',   labelEn: 'Points',   icon: Trophy },
+  { id: 'points',   labelMm: 'အမှတ်',   labelEn: 'Points',   icon: Trophy },
   { id: 'reviews',  labelMm: 'Reviews',  labelEn: 'Reviews',  icon: Star },
   { id: 'listings', labelMm: 'လုပ်ငန်း',   labelEn: 'Listings', icon: Building2 },
 ]
@@ -47,7 +47,7 @@ function periodLabel(id, lang) {
 
 function ptsUnit(tab, period, lang) {
   const suffix = period !== 'all' ? (lang === 'mm' ? '/ကာလ' : '') : ''
-  if (tab === 'points')   return `pts${suffix}`
+  if (tab === 'points')   return lang === 'mm' ? `မှတ်${suffix}` : `pts${suffix}`
   if (tab === 'reviews')  return lang === 'mm' ? 'review' : 'reviews'
   return lang === 'mm' ? 'လုပ်ငန်း' : 'listings'
 }
@@ -61,13 +61,15 @@ function OnlineDot({ lastSeen }) {
 // ── Podium ────────────────────────────────────────────────────
 function Podium({ users, tab, lang }) {
   const navigate = useNavigate()
-  if (users.length < 3) return null
+  // E5 (v9.5): render the podium with however many users exist (1–2
+  // places) instead of blanking the whole page below 3 users.
+  if (users.length === 0) return null
 
   const slots = [
     { u: users[1], rank: 2, h: 'h-16', size: 56, emoji: '🥈', textCol: 'text-white/70', border: 'border-white/20' },
     { u: users[0], rank: 1, h: 'h-24', size: 72, emoji: '🥇', textCol: 'text-gold-400',  border: 'border-gold-500/50', crown: true },
     { u: users[2], rank: 3, h: 'h-10', size: 52, emoji: '🥉', textCol: 'text-amber-500/70', border: 'border-amber-700/35' },
-  ]
+  ].filter(s => s.u)
 
   const val = u => tab === 'points' ? u.points : tab === 'reviews' ? u.total_reviews : u.total_listings
 
@@ -117,7 +119,7 @@ function UserRow({ user, rank, tab, lang, period }) {
       {/* Rank */}
       {rank <= 3
         ? <span className="text-xl w-8 text-center flex-shrink-0">{'🥇🥈🥉'[rank - 1]}</span>
-        : <span className="w-8 h-8 rounded-full bg-white/8 flex items-center justify-center font-display font-bold text-sm text-white/40 flex-shrink-0">{rank}</span>
+        : <span className="w-8 h-8 rounded-full bg-white/8 flex items-center justify-center font-display font-bold text-sm text-white/60 flex-shrink-0">{rank}</span>
       }
 
       {/* Avatar */}
@@ -149,7 +151,7 @@ function UserRow({ user, rank, tab, lang, period }) {
         <p className="text-[10px] mt-0.5">
           {isOnline(user.last_seen)
             ? <span className="text-green-400">● Online</span>
-            : <span className="text-white/25">{timeAgo(user.last_seen, lang)}</span>
+            : <span className="text-white/60">{timeAgo(user.last_seen, lang)}</span>
           }
         </p>
       </div>
@@ -159,7 +161,7 @@ function UserRow({ user, rank, tab, lang, period }) {
         <p className={`font-display font-bold text-base ${rank === 1 ? 'text-gold-400' : rank <= 3 ? 'text-white/80' : 'text-white/55'}`}>
           {(val || 0).toLocaleString()}
         </p>
-        <p className="text-[9px] text-white/30">{unit}</p>
+        <p className="text-[11px] text-white/50">{unit}</p>
       </div>
     </div>
   )
@@ -262,7 +264,7 @@ export default function LeaderboardPage() {
           <Trophy size={22} className="text-gold-400 flex-shrink-0" />
           <h1 className="font-display font-bold text-xl text-white">Top Contributors</h1>
         </div>
-        <p className="text-xs text-white/40 font-myanmar">{periodLabel(period, lang)}</p>
+        <p className="text-xs text-white/60 font-myanmar">{periodLabel(period, lang)}</p>
       </div>
 
       {/* ── Period dropdown ── */}
@@ -276,7 +278,7 @@ export default function LeaderboardPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
@@ -302,8 +304,8 @@ export default function LeaderboardPage() {
             }
             return (
               <>
-                <div className="flex items-center justify-between text-[9px] text-white/40 mb-1 font-myanmar">
-                  <span>{lang === 'mm' ? `${prog.pointsToNext} pts ကျန် → ${prog.next.mm}` : `${prog.pointsToNext} pts → ${prog.next.en}`}</span>
+                <div className="flex items-center justify-between text-[9px] text-white/60 mb-1 font-myanmar">
+                  <span>{lang === 'mm' ? `${prog.pointsToNext} မှတ် ကျန် → ${prog.next.mm}` : `${prog.pointsToNext} pts → ${prog.next.en}`}</span>
                   <span>{prog.percent}%</span>
                 </div>
                 <div className="h-1.5 rounded-full bg-black/30 overflow-hidden">
@@ -329,7 +331,7 @@ export default function LeaderboardPage() {
               </option>
             ))}
           </select>
-          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
+          <svg className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 pointer-events-none" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
       </div>
 
@@ -341,10 +343,10 @@ export default function LeaderboardPage() {
           ? (
             <div className="flex flex-col items-center py-14 text-center px-6">
               <Medal size={44} className="text-white/15 mb-3" />
-              <p className="font-display font-semibold text-white/40">
+              <p className="font-display font-semibold text-white/60">
                 {lang === 'mm' ? 'Leaderboard ရယူမရပါ' : 'Could not load leaderboard'}
               </p>
-              <p className="text-xs text-white/25 mt-1 font-myanmar">{loadError}</p>
+              <p className="text-xs text-white/60 mt-1 font-myanmar">{loadError}</p>
               <button
                 onClick={() => setRetryKey(k => k + 1)}
                 className="mt-4 px-4 py-2 rounded-xl bg-brand-600/30 border border-brand-400/40 text-brand-200 text-xs font-bold hover:bg-brand-600/40 transition-colors"
@@ -357,32 +359,41 @@ export default function LeaderboardPage() {
           ? (
             <div className="flex flex-col items-center py-14 text-center px-6">
               <Medal size={44} className="text-white/15 mb-3" />
-              <p className="font-display font-semibold text-white/40">
+              <p className="font-display font-semibold text-white/60">
                 {lang === 'mm' ? 'Activity မရှိသေးပါ' : 'No activity yet'}
               </p>
-              <p className="text-xs text-white/25 mt-1 font-myanmar">
+              <p className="text-xs text-white/60 mt-1 font-myanmar">
                 {lang === 'mm'
-                  ? 'Review ရေး၊ လုပ်ငန်း တင်ပြ၊ Chat လုပ်ပြီး Points ရယူပါ'
+                  ? 'Review ရေး၊ လုပ်ငန်း တင်ပြ၊ Chat လုပ်ပြီး အမှတ် ရယူပါ'
                   : 'Write reviews, submit listings, or chat to earn points'}
               </p>
               <button
                 onClick={() => navigate('/points')}
                 className="mt-4 px-4 py-2 rounded-xl bg-brand-600/30 border border-brand-400/40 text-brand-200 text-xs font-bold hover:bg-brand-600/40 transition-colors"
               >
-                ✨ {lang === 'mm' ? 'Points လမ်းညွှန် ကြည့်မည်' : 'View Points Guide'}
+                ✨ {lang === 'mm' ? 'အမှတ် လမ်းညွှန် ကြည့်မည်' : 'View Points Guide'}
               </button>
             </div>
           )
-          : users.slice(3).map((u, i) => (
-            <UserRow key={u.id} user={u} rank={i + 4} tab={tab} lang={lang} period={period} />
-          ))
+          : (
+            <>
+              {/* E15 (v9.5): the podium holds ranks 1–3, so this list
+                  starts at rank 4 — labelled, never silently dropped. */}
+              {users.length > 3 && (
+                <p className="text-[11px] text-white/60 font-myanmar px-1">{lang === 'mm' ? 'အဆင့် ၄ မှ စ၍' : 'From rank 4'}</p>
+              )}
+              {users.slice(3).map((u, i) => (
+                <UserRow key={u.id} user={u} rank={i + 4} tab={tab} lang={lang} period={period} />
+              ))}
+            </>
+          )
         }
       </div>
 
       {/* ── Points guide ── */}
       <div className="mx-4 mt-6 card-dark rounded-2xl p-4">
         <p className="text-xs font-display font-bold text-white/50 uppercase tracking-wider mb-3">
-          {lang === 'mm' ? 'Points ဘယ်လိုရမလဲ' : 'How to earn points'}
+          {lang === 'mm' ? 'အမှတ် ဘယ်လိုရမလဲ' : 'How to earn points'}
         </p>
         <div className="space-y-2.5">
           {/* Shared with PointsGuidePage — same POINT_ACTIONS constant,
@@ -405,7 +416,7 @@ export default function LeaderboardPage() {
             { id: '6month', mm: '"၆ လ" ranking — နောက်ဆုံး ၁၈၀ ရက်',               en: '6 Months — rolling last 180 days' },
             { id: 'year',   mm: '"ဒီနှစ်" ranking — ဇန်နဝါရီ ၁ ရက်မှ reset',      en: 'Year — resets on January 1st' },
           ].map(p => (
-            <p key={p.id} className="text-[9px] text-white/25 font-myanmar">
+            <p key={p.id} className="text-[9px] text-white/60 font-myanmar">
               💡 {lang === 'mm' ? p.mm : p.en}
             </p>
           ))}
@@ -416,7 +427,7 @@ export default function LeaderboardPage() {
           onClick={() => navigate('/points')}
           className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-gold-500/15 border border-gold-500/30 text-gold-400 text-xs font-bold hover:bg-gold-500/25 transition-colors"
         >
-          ✨ {lang === 'mm' ? 'Points လမ်းညွှန် အပြည့်အစုံ' : 'Full Points Guide'}
+          ✨ {lang === 'mm' ? 'အမှတ် လမ်းညွှန် အပြည့်အစုံ' : 'Full Points Guide'}
         </button>
       </div>
 

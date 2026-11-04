@@ -24,6 +24,9 @@
 
   * { -webkit-tap-highlight-color: transparent; }
 
+  /* S3: keyboard users must see where focus is. */
+  :focus-visible { outline: 2px solid #a200e6; outline-offset: 2px; }
+
   body {
     font-family: 'Noto Sans Myanmar', 'Pyidaungsu', 'DM Sans', sans-serif;
     background: #0d0015;
@@ -81,6 +84,24 @@
   }
   .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
   .btn-primary:active { transform: translateY(0); filter: brightness(0.95); }
+  .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* S7/H5: solid red destructive button, same shape as .btn-primary.
+     No padding here on purpose: callers keep their own size classes
+     (w-7 h-7 icon buttons and py-2.5 full buttons alike). */
+  .btn-danger {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .btn-danger:hover { filter: brightness(1.1); }
+  .btn-danger:active { filter: brightness(0.95); }
+  .btn-danger:disabled { opacity: 0.45; cursor: not-allowed; }
 
   .btn-ghost {
     background: transparent;
@@ -105,7 +126,7 @@
     outline: none;
     transition: border-color 0.2s;
   }
-  .input-dark::placeholder { color: rgba(255,255,255,0.3); }
+  .input-dark::placeholder { color: rgba(255,255,255,0.5); }
   .input-dark:focus { border-color: rgba(162, 0, 230, 0.6); box-shadow: 0 0 0 3px rgba(162,0,230,0.1); }
 
   select.input-dark {
@@ -131,7 +152,7 @@
     padding: 0.625rem 2.5rem 0.625rem 1rem;
     outline: none;
     font-family: 'Pyidaungsu', 'DM Sans', sans-serif;
-    font-size: 0.875rem;
+    font-size: 16px; /* S4: iOS Safari zooms on focus below 16px */
     transition: border-color 0.2s;
   }
   .select-dark:focus { border-color: rgba(162, 0, 230, 0.6); box-shadow: 0 0 0 3px rgba(162,0,230,0.1); }
@@ -276,8 +297,13 @@
   height: 12px;
 }
 .badge-verified-owner.badge-sm .badge-text {
-  font-size: 8px;
+  font-size: 10px;
 }
+
+/* S6: badges never render below 10px */
+.badge { font-size: 11px; }
+.badge-featured { font-size: 10px; }
+.badge-verified-owner .badge-text { font-size: 10px; }
 
 .badge-featured {
   display: inline-flex;
@@ -382,6 +408,8 @@ html:not(.dark) .text-white\/25 { color: rgba(0,0,0,0.35) !important; }
 html:not(.dark) .text-white\/20 { color: rgba(0,0,0,0.3) !important; }
 
 /* PRIMARY BUTTONS always keep white text */
+html:not(.dark) .btn-danger,
+html:not(.dark) .btn-danger *,
 html:not(.dark) .btn-primary,
 html:not(.dark) .btn-primary *,
 html:not(.dark) .btn-primary [class*="text-"] {

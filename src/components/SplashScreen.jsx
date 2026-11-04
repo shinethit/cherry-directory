@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
 import { showError } from '../lib/toast';
+import { APP_VERSION } from '../lib/appVersion';
 
 export default function SplashScreen({ onConsent }) {
   const [agreed, setAgreed] = useState(false);
@@ -44,22 +45,22 @@ export default function SplashScreen({ onConsent }) {
             တိုက်ရိုက်တင်ပြသော ပလက်ဖောင်းဖြစ်ပါသည်။
           </p>
           <p className="text-xs text-white/40">
-            Version 9.4 • Since 2026 • by Shine Thit
+            Version {APP_VERSION} • Since 2026 • by Shine Thit
           </p>
         </div>
 
-        {/* Disclaimer Box (from PrivacyPage) */}
-        <div className="bg-amber-500/15 border-2 border-red-500/60 rounded-2xl p-4 text-left">
+        {/* Disclaimer Box (from PrivacyPage) — calm single amber style */}
+        <div className="bg-amber-500/10 border border-amber-500/40 rounded-2xl p-4 text-left">
           <div className="flex gap-3">
-            <span className="text-3xl text-red-500 animate-pulse">⚠️</span>
+            <span className="text-2xl text-amber-400 flex-shrink-0">⚠️</span>
             <div>
-              <p className="text-red-400 font-bold text-sm mb-1 font-myanmar">သတိပြုရန် အရေးကြီး</p>
-              <p className="text-amber-300 text-xs leading-relaxed font-myanmar">
+              <p className="text-amber-300 font-bold text-sm mb-1 font-myanmar">သတိပြုရန်</p>
+              <p className="text-amber-200/90 text-xs leading-relaxed font-myanmar">
                 ဤ Application အတွင်းရှိ Data များသည် Public မှ တိုက်ရိုက်လာသော Data များဖြစ်ပြီး 
                 Application ဖန်တီးသူနှင့် သက်ဆိုင်ခြင်းမရှိပါ။
                 အဆက်အသွယ်များ၊ ဖုန်းများကို မိမိတို့ဘာသာ ချင့်ချိန်သုံးစွဲကြပါရန်။
               </p>
-              <p className="text-red-400/80 text-[10px] mt-2 font-myanmar">
+              <p className="text-amber-200/70 text-[10px] mt-2 font-myanmar">
                 ⚡ Community မှ တင်ပြသော အချက်အလက်များဖြစ်သဖြင့် တိကျမှုကို အာမခံနိုင်မည် မဟုတ်ပါ။
               </p>
             </div>
@@ -77,7 +78,7 @@ export default function SplashScreen({ onConsent }) {
         </button>
 
         {/* Version note */}
-        <p className="text-[10px] text-white/20 mt-4">သင်၏ အချက်အလက်များကို Privacy Policy နှင့် Terms of Service အရ ကာကွယ်ထားပါသည်။</p>
+        <p className="text-[10px] text-white/50 mt-4">သင်၏ အချက်အလက်များကို Privacy Policy နှင့် Terms of Service အရ ကာကွယ်ထားပါသည်။</p>
       </div>
     </div>
   );

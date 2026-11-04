@@ -69,3 +69,32 @@ describe('maskPhone', () => {
     expect(maskPhone(null, false)).toBe('')
   })
 })
+
+describe('guest gating (S2/FB-1) — guests get NO working tel:/WhatsApp link', () => {
+  it('toTelHref returns null when not allowed', () => {
+    expect(toTelHref('09771234567', false)).toBeNull()
+    expect(toTelHref('၀၉၇၇၁၂၃၄၅၆၇', false)).toBeNull()
+  })
+
+  it('toTelHref still returns a working link when allowed', () => {
+    expect(toTelHref('09771234567', true)).toBe('tel:+959771234567')
+  })
+
+  it('toTelHref defaults to allowed (public numbers keep working)', () => {
+    expect(toTelHref('09771234567')).toBe('tel:+959771234567')
+  })
+
+  it('toWaHref returns null when not allowed', () => {
+    expect(toWaHref('09771234567', '', false)).toBeNull()
+    expect(toWaHref('09771234567', 'hello', false)).toBeNull()
+  })
+
+  it('toWaHref still returns a working link when allowed', () => {
+    expect(toWaHref('09771234567', '', true)).toBe('https://wa.me/959771234567')
+    expect(toWaHref('09771234567', 'hello', true)).toBe('https://wa.me/959771234567?text=hello')
+  })
+
+  it('toWaHref defaults to allowed', () => {
+    expect(toWaHref('09771234567')).toBe('https://wa.me/959771234567')
+  })
+})

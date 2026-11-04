@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { showSuccess, showError } from '../lib/toast'
 import { translateAuthError } from './LoginPage'
+import { goBackOrHome } from '../lib/navigation'
 
 export default function ResetPasswordPage() {
   const navigate = useNavigate()
@@ -15,32 +16,43 @@ export default function ResetPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
+  const [showPass, setShowPass] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  // Set true after a successful password change: the success message
+  // stays on the page for 3 seconds before navigating home (F6).
+  const [changed, setChanged] = useState(false)
   // Recovery mode: Supabase puts the recovery session in the URL hash
   // (#access_token=...&type=recovery) after the user clicks the email link.
   const [isRecovery, setIsRecovery] = useState(false)
 
-  // Recovery detection (H-24): do NOT rely on window.location.hash.
-  // supabase.js sets detectSessionInUrl: true, so the client may parse
-  // and consume the #access_token=...&type=recovery hash before this
-  // component mounts, leaving isRecovery false and the user stuck on the
-  // "send link" form. Instead derive recovery mode from the auth event
-  // the client fires when it processes a recovery session, plus a
-  // getSession() check (a session exists by the time a recovery link
-  // lands here). The hash read stays only as a belt-and-braces fallback
-  // for clients that have not consumed it yet.
+  // Recovery detection (FB-14): recovery mode comes ONLY from the
+  // recovery signal itself — the URL hash (#access_token=...&type=recovery)
+  // or the PASSWORD_RECOVERY event the client fires for it. A plain
+  // getSession() success must NOT imply recovery: a normally signed-in
+  // user visiting this page would otherwise land on the "set new
+  // password" form. NOTE: the client clears the hash when it consumes
+  // it at boot (auth-js _getSessionFromURL sets window.location.hash
+  // = ''), so the hash check alone is unreliable — the event
+  // subscription below is the live signal (it fires after a network
+  // round-trip, by which time this component has mounted).
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.slice(1))
-    if (hash.get('type') === 'recovery' || hash.get('access_token')) {
+    if (hash.get('type') === 'recovery') {
       setIsRecovery(true)
     }
-    supabase.auth.getSession().then(({ data }) => {
-      if (data?.session) setIsRecovery(true)
-    })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') setIsRecovery(true)
     })
     return () => subscription.unsubscribe()
   }, [])
+
+  // After a successful change, show the success message on the page
+  // for 3 seconds before navigating home (F6).
+  useEffect(() => {
+    if (!changed) return
+    const t = setTimeout(() => navigate('/'), 3000)
+    return () => clearTimeout(t)
+  }, [changed, navigate])
 
   async function handleSendLink(e) {
     e.preventDefault()
@@ -79,7 +91,7 @@ export default function ResetPasswordPage() {
       const { error } = await supabase.auth.updateUser({ password })
       if (error) throw error
       showSuccess('စကားဝှက် ပြောင်းလဲပြီးပါပြီ')
-      navigate('/')
+      setChanged(true)
     } catch (err) {
       setError(translateAuthError(err))
     }
@@ -89,7 +101,7 @@ export default function ResetPasswordPage() {
   return (
     <div className="min-h-[80dvh] flex flex-col">
       <div className="px-4 py-3">
-        <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
+        <button onClick={() => goBackOrHome(navigate, '/login')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
           <ArrowLeft size={18} className="text-white" />
         </button>
       </div>
@@ -99,38 +111,58 @@ export default function ResetPasswordPage() {
           <h2 className="font-display font-bold text-2xl text-white">
             {isRecovery ? 'စကားဝှက် အသစ် သတ်မှတ်မည်' : 'စကားဝှက် မေ့သွားလား?'}
           </h2>
-          <p className="text-white/40 text-sm mt-1 font-myanmar">
+          <p className="text-white/60 text-sm mt-1 font-myanmar">
             {isRecovery
               ? 'စကားဝှက် အသစ် ရိုက်ထည့်ပါ'
               : 'အီးမေးလ် ထည့်ပါ — ပြန်လည်သတ်မှတ်ရန် လင့်ခ် ပို့ပေးပါမည်'}
           </p>
         </div>
 
-        {isRecovery ? (
+        {changed ? (
+          <div className="space-y-3">
+            <div className="bg-green-500/15 border border-green-500/30 rounded-xl px-4 py-4 text-center">
+              <p className="text-sm text-green-300 font-myanmar">✓ စကားဝှက် ပြောင်းလဲပြီးပါပြီ</p>
+              <p className="text-xs text-white/60 font-myanmar mt-2">ခဏအကြာ Home သို့ ပြန်သွားမည်</p>
+            </div>
+            <button type="button" onClick={() => navigate('/')} className="btn-primary w-full">
+              Home သို့ သွားမည်
+            </button>
+          </div>
+        ) : isRecovery ? (
           <form onSubmit={handleSetPassword} className="space-y-3">
             <div>
               <label className="block text-xs text-white/50 mb-1.5">စကားဝှက် အသစ်</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={6}
-                className="input-dark"
-              />
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                  className="input-dark pr-10"
+                />
+                <button type="button" onClick={() => setShowPass(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
             <div>
               <label className="block text-xs text-white/50 mb-1.5">စကားဝှက် အသစ် (ထပ်ရိုက်)</label>
-              <input
-                type="password"
-                value={confirm}
-                onChange={e => setConfirm(e.target.value)}
-                placeholder="••••••••"
-                required
-                minLength={6}
-                className="input-dark"
-              />
+              <div className="relative">
+                <input
+                  type={showConfirm ? 'text' : 'password'}
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  minLength={6}
+                  className="input-dark pr-10"
+                />
+                <button type="button" onClick={() => setShowConfirm(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                  {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
             {error && <div className="bg-red-500/15 border border-red-500/30 rounded-xl px-3 py-2.5 text-sm text-red-300 font-myanmar">{error}</div>}
             <button type="submit" disabled={loading} className="btn-primary w-full mt-2">
@@ -143,7 +175,7 @@ export default function ResetPasswordPage() {
               <p className="text-sm text-green-300 font-myanmar">
                 လင့်ခ် ပို့ပြီးပါပြီ — <span className="font-semibold">{email}</span> ကို စစ်ဆေးပြီး လင့်ခ်ကို နှိပ်ပါ
               </p>
-              <p className="text-xs text-white/40 font-myanmar mt-2">မေးလ် မရောက်ပါက Spam folder ကို စစ်ကြည့်ပါ</p>
+              <p className="text-xs text-white/60 font-myanmar mt-2">မေးလ် မရောက်ပါက Spam folder ကို စစ်ကြည့်ပါ</p>
             </div>
             <button
               type="button"

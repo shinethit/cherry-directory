@@ -59,7 +59,7 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
   const handleContact = () => {
     if (!isLoggedIn) return
     if (post.phone) {
-      window.location.href = toTelHref(post.phone)
+      window.location.href = toTelHref(post.phone, isLoggedIn)
     } else if (post.user_id) {
       navigate(`/profile/${post.user_id}`)
     }
@@ -71,7 +71,7 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
         <div className="rounded-xl overflow-hidden -mx-0">
           <img
             src={post.images[0]}
-            alt=""
+            alt={post.title_mm || post.title}
             loading="lazy"
             onError={e => { e.currentTarget.style.display = 'none' }}
             className="w-full h-36 object-cover"
@@ -92,7 +92,7 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
           </div>
           <h3 className="font-display font-semibold text-sm text-white">{post.title_mm || post.title}</h3>
           {post.location_mm && (
-            <div className="flex items-center gap-1 mt-1 text-white/40">
+            <div className="flex items-center gap-1 mt-1 text-white/60">
               <MapPin size={10} />
               <span className="text-[10px] font-myanmar">{post.location_mm}</span>
             </div>
@@ -103,7 +103,7 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
                 <span className="text-gold-400 font-mono">{Number(post.price_monthly).toLocaleString()} Ks/လ</span>
               )}
               {post.price_deposit && (
-                <span className="text-white/40 font-mono">အပေ {Number(post.price_deposit).toLocaleString()} Ks</span>
+                <span className="text-white/60 font-mono">အပေ {Number(post.price_deposit).toLocaleString()} Ks</span>
               )}
             </div>
           )}
@@ -118,7 +118,7 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
               {post.images?.length > 1 && (
                 <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
                   {post.images.slice(1).map((img, i) => (
-                    <img key={i} src={img} alt="" loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10 flex-shrink-0" />
+                    <img key={i} src={img} alt={post.title_mm || post.title || 'ပုံ'} loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10 flex-shrink-0" />
                   ))}
                 </div>
               )}
@@ -141,15 +141,15 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
                 <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{post.phone}
               </button>
             ) : (
-              <span className="flex items-center gap-1 text-[10px] text-green-400/70">
-                <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.phone, false)}
-              </span>
+              <button onClick={() => navigate('/login')} className="flex items-center gap-1 text-[10px] text-green-400/70 hover:text-green-400">
+                <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.phone, false)} · {lang === 'mm' ? 'Login ဝင်မှ ဖုန်းခေါ်နိုင်မည်' : 'Login to call'}
+              </button>
             )
           )}
           {!post.phone && post.contact_name && (
-            <span className="text-[10px] text-white/40 font-myanmar">{post.contact_name}</span>
+            <span className="text-[10px] text-white/60 font-myanmar">{post.contact_name}</span>
           )}
-          <span className="text-[9px] text-white/30">{timeAgo(post.created_at, lang)}</span>
+          <span className="text-[9px] text-white/60">{timeAgo(post.created_at, lang)}</span>
           <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-brand-300 hover:text-brand-200">
             {expanded ? (lang === 'mm' ? '▲ ချုံ့မည်' : '▲ Less') : (lang === 'mm' ? '▼ အသေးစိတ်' : '▼ Details')}
           </button>
@@ -167,8 +167,8 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
                 </button>
               </>
             )}
-            <button onClick={() => onDelete(post.id)} className="w-6 h-6 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20">
-              <Trash2 size={11} className="text-red-400" />
+            <button onClick={() => onDelete(post.id)} className="w-6 h-6 rounded-lg btn-danger flex items-center justify-center">
+              <Trash2 size={11} className="text-white" />
             </button>
           </div>
         )}
@@ -213,7 +213,7 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
 
   if (!isLoggedIn) return (
     <div className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/70 pt-safe">
-      <div className="w-full max-w-lg bg-[#140020] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
+      <div className="w-full max-w-lg bg-[#1a0030] border border-white/10 rounded-t-3xl p-6 pb-24 text-center">
         <p className="text-white font-myanmar mb-4">တင်ရန် Login လိုအပ်သည်</p>
         <button onClick={() => navigate('/login')} className="btn-primary w-full">Login ဝင်မည်</button>
         <button onClick={onClose} className="btn-ghost w-full mt-2">Cancel</button>
@@ -280,8 +280,8 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
           <div className="flex gap-2">
             {POST_TYPES.filter(t => t.id !== 'all').map(t => (
               <button key={t.id} onClick={() => set('post_type', t.id)}
-                className={`flex-1 py-2.5 rounded-xl text-sm font-display font-bold border transition-all ${form.post_type === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>
-                {t.icon} {lang === 'mm' ? t.mm : t.en}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-display font-bold border transition-all ${form.post_type === t.id ? 'bg-brand-600/60 border-2 border-brand-400 text-brand-200 ring-2 ring-brand-400/30' : 'bg-white/5 border-white/10 text-white/50'}`}>
+                {form.post_type === t.id ? '✓ ' : ''}{t.icon} {lang === 'mm' ? t.mm : t.en}
               </button>
             ))}
           </div>
@@ -299,7 +299,7 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
           </div>
         </div>
 
-        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input autoFocus value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: အိမ်အခန်း ငှားမည်" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: အိမ်အခန်း ငှားမည်" /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ဖော်ပြချက်' : 'Description'}</label><textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-20" placeholder="အိမ်အခန်း အကျယ်အဝန်း၊ ပါဝင်ပစ္စည်း၊ သတ်မှတ်ချက်များ..." /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'နေရာ' : 'Location'}</label><input value={form.location_mm} onChange={e => set('location_mm', e.target.value)} className="input-dark font-myanmar" placeholder="ရပ်ကွက်၊ လမ်း..." /></div>
         
@@ -318,8 +318,8 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
           <div className="flex gap-2 flex-wrap">
             {images.map((url, i) => (
               <div key={i} className="relative w-16 h-16">
-                <img src={url} alt="" className="w-full h-full object-cover rounded-xl border border-white/10" />
-                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full text-white text-[10px]">✕</button>
+                <img src={url} alt={form.title_mm || 'ပုံ'} className="w-full h-full object-cover rounded-xl border border-white/10" />
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 btn-danger rounded-full text-white text-[10px]">✕</button>
               </div>
             ))}
             {images.length < 5 && <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />}
@@ -346,7 +346,7 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 pt-safe" onClick={onClose}>
-      <div className="bg-[#140020] rounded-2xl p-5 w-64 border border-white/10" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#1a0030] rounded-2xl p-5 w-64 border border-white/10" onClick={e => e.stopPropagation()}>
         <p className="text-white text-sm font-display font-bold mb-3">Status ပြောင်းမည်</p>
         <div className="space-y-2">
           {Object.entries(STATUSES).map(([key, val]) => (
@@ -416,7 +416,7 @@ export default function RentPage() {
   }, [propertyFilter, postTypeFilter, statusFilter, page])
 
   async function deletePost(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('rentals').delete().eq('id', id)
     if (error) { showError(error.message); return }
     load()
@@ -427,7 +427,7 @@ export default function RentPage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🏠 {lang === 'mm' ? 'အိမ်/အခန်း ငှားရမ်းခြင်း' : 'Rentals'}</h1>
-          <p className="text-xs text-white/40 mt-0.5 font-myanmar">{lang === 'mm' ? 'အိမ်ရှင်/အိမ်ငှား ချိတ်ဆက်ရေး' : 'Connect landlords & tenants'}</p>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? 'အိမ်ရှင်/အိမ်ငှား ချိတ်ဆက်ရေး' : 'Connect landlords & tenants'}</p>
         </div>
         <button onClick={() => { setEditTarget(null); setShowForm(true) }} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5"><Plus size={14} /> {lang === 'mm' ? 'တင်မည်' : 'Post'}</button>
       </div>
@@ -436,18 +436,18 @@ export default function RentPage() {
       <div className="px-4 space-y-2 mb-4">
         <div className="flex gap-2">
           <div className="relative flex-1">
-            <select value={propertyFilter} onChange={e => { setPropertyFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+            <select value={propertyFilter} onChange={e => { setPropertyFilter(e.target.value); setPage(0) }} className="select-dark">
               {RENT_TYPES.map(t => <option key={t.id} value={t.id}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>)}
             </select>
           </div>
           <div className="relative flex-1">
-            <select value={postTypeFilter} onChange={e => { setPostTypeFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+            <select value={postTypeFilter} onChange={e => { setPostTypeFilter(e.target.value); setPage(0) }} className="select-dark">
               {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.icon} {lang === 'mm' ? t.mm : t.en}</option>)}
             </select>
           </div>
         </div>
         <div className="relative">
-          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} className="select-dark text-xs">
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(0) }} className="select-dark">
             <option value="all">📋 {lang === 'mm' ? 'အားလုံး' : 'All Status'}</option>
             {Object.entries(STATUSES).map(([key, val]) => (
               <option key={key} value={key}>{val.icon} {lang === 'mm' ? val.mm : val.en}</option>
@@ -467,7 +467,7 @@ export default function RentPage() {
          posts.length === 0 ? (
            <div className="flex flex-col items-center py-14 text-center">
              <span className="text-4xl mb-3">🏠</span>
-             <p className="text-white/40 font-display font-semibold">{lang === 'mm' ? 'အိမ်/အခန်း စာရင်း မရှိသေး' : 'No listings yet'}</p>
+             <p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'အိမ်/အခန်း စာရင်း မရှိသေး' : 'No listings yet'}</p>
            </div>
          ) :
          posts.map(p => (
