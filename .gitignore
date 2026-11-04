@@ -11,6 +11,7 @@ supabase-*.sql
 !supabase-migration-9.3.sql
 !supabase-migration-9.5.sql
 !supabase-migration-9.6.sql
+!supabase-migration-9.12.sql
 # Test files
 public/test.html
 # Environment

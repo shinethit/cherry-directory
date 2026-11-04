@@ -11,6 +11,7 @@ import Header from './components/Header'
 import AnnouncementBanner from './components/AnnouncementBanner'
 import OnboardingGuide from './components/OnboardingGuide'
 import { ConfirmProvider } from './components/ConfirmModal'
+import { logVisit } from './lib/visitTracking'
 
 // ── Lazy pages — default exports ─────────────────────────────
 // H-28: lazy() has no timeout and no retry — a hung or failed chunk fetch
@@ -72,6 +73,7 @@ const NewsEditPage        = lazyWithRetry(() => import('./pages/NewsEditPage'))
 const RentPage            = lazyWithRetry(() => import('./pages/RentPage'))
 const TutoringPage        = lazyWithRetry(() => import('./pages/TutoringPage'))
 const AdminReportsPage    = lazyWithRetry(() => import('./pages/AdminReportsPage'))
+const VisitorsPage       = lazyWithRetry(() => import('./pages/VisitorsPage'))
 const FuelPage            = lazyWithRetry(() => import('./pages/FuelPage'))
 
 // ── Named exports — wrapped ──────────────────────────────────
@@ -182,6 +184,13 @@ function AppRoutes() {
   const { loading } = useAuth()
   const [timeoutExceeded, setTimeoutExceeded] = useState(false)
 
+  // v9.12: log one visit per browser session (once only — logVisit guards
+  // on sessionStorage). Fire-and-forget and never throws; a missing table
+  // (migration not run yet) or blocked network fails silently.
+  useEffect(() => {
+    try { logVisit() } catch { /* never break boot */ }
+  }, [])
+
   // H-28: preload the HomePage chunk on boot so the landing route rarely
   // suspends at all; idle-time so it never competes with first paint.
   useEffect(() => {
@@ -274,6 +283,7 @@ function AppRoutes() {
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/help" element={<HelpPage />} />
+          <Route path="/visitors" element={<VisitorsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </TimedSuspense>
