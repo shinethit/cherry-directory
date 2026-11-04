@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { X, Download } from 'lucide-react'
 import { safeGet, safeSet } from '../lib/safeStorage'
+import { subscribeUpdateToastVisible } from '../lib/floatingBanners'
 import {
   setInstallPrompt,
   clearInstallPrompt,
@@ -17,6 +18,10 @@ export default function PWAInstallBanner() {
   const [installing, setInstalling] = useState(false)
   const [isIOS, setIsIOS]       = useState(false)
   const [isIOSGuide, setIsIOSGuide] = useState(false)
+  // v9.14 (F-1): at most one floating banner — hide while the update
+  // toast is visible; the toast always wins.
+  const [updateToastVisible, setUpdateToastVisible] = useState(false)
+  useEffect(() => subscribeUpdateToastVisible(setUpdateToastVisible), [])
 
   useEffect(() => {
     if (safeGet(DISMISSED_KEY)) return
@@ -70,6 +75,11 @@ export default function PWAInstallBanner() {
   }
 
   if (!show) return null
+
+  // v9.14 (F-1): the update toast always wins — render nothing (banner
+  // or iOS guide) while it is visible; this component's own state is
+  // untouched, so it reappears once the toast hides.
+  if (updateToastVisible) return null
 
   if (isIOSGuide) return (
     <div className="fixed inset-0 z-[9999] flex items-end justify-center p-4 bg-black/60 backdrop-blur-sm pt-safe" onClick={() => setIsIOSGuide(false)}>

@@ -101,8 +101,8 @@ export default function VisitorsPage() {
             { labelMm: 'ဒီအပတ်', labelEn: 'This week', value: stats?.week },
             { labelMm: 'ဒီလ', labelEn: 'This month', value: stats?.month },
           ].map((s) => (
-            <div key={s.labelEn} className="card-dark rounded-xl p-2.5 text-center">
-              <p className="font-display font-bold text-base text-white leading-none">{show(s.value)}</p>
+            <div key={s.labelEn} className="card-dark rounded-xl p-2.5 text-center min-w-0">
+              <p className="font-display font-bold text-base text-white leading-none truncate">{show(s.value)}</p>
               <p className="text-[9px] text-white/50 font-myanmar mt-1">{lang === 'mm' ? s.labelMm : s.labelEn}</p>
             </div>
           ))}
@@ -123,7 +123,7 @@ export default function VisitorsPage() {
                   className="w-full rounded-t bg-brand-500/80"
                   style={{ height: `${maxDay > 0 ? Math.max(d.count > 0 ? 4 : 0, (d.count / maxDay) * 64) : 0}px` }}
                 />
-                <span className="text-[8px] text-white/40 leading-none">{d.date.slice(5)}</span>
+                <span className="text-[8px] text-white/40 leading-none">{d.date.slice(8)}</span>
               </div>
             ))}
           </div>

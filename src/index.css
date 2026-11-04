@@ -9,7 +9,7 @@
 
 /* iOS safe-area + global header height (below fixed Header) */
 :root {
-  --header-h: calc(4rem + env(safe-area-inset-top));
+  --header-h: calc(4.25rem + env(safe-area-inset-top));
 }
 @tailwind base;
 @tailwind components;
@@ -27,12 +27,17 @@
   /* S3: keyboard users must see where focus is. */
   :focus-visible { outline: 2px solid #a200e6; outline-offset: 2px; }
 
+  /* v9.14: overflow-x: clip (not hidden) on html AND body — clip does
+     not create a scroll container, so sticky children keep working. */
+  html, body {
+    overflow-x: clip;
+  }
+
   body {
     font-family: 'Noto Sans Myanmar', 'Pyidaungsu', 'DM Sans', sans-serif;
     background: #0d0015;
     color: #f0e6ff;
     min-height: 100dvh;
-    overflow-x: hidden;
   }
 
   h1, h2, h3, .font-display {
@@ -358,8 +363,9 @@ html:not(.dark) header {
   background: rgba(255, 255, 255, 0.94) !important;
 }
 
-/* Bottom nav */
-html:not(.dark) nav.glass {
+/* Bottom nav — v9.14: nav no longer uses .glass (solid bg now), so the
+   light-mode override targets nav directly. Value unchanged (94%). */
+html:not(.dark) nav {
   background: rgba(255, 255, 255, 0.94) !important;
   border-color: rgba(0, 0, 0, 0.08) !important;
 }
@@ -502,8 +508,8 @@ html:not(.dark) .btn-ghost {
   height: auto;
 }
 
-/* Bottom nav — slightly slimmer */
-nav.glass > div > div {
+/* Bottom nav — slightly slimmer (v9.14: nav no longer uses .glass) */
+nav > div > div {
   padding-top: 0.4rem;
   padding-bottom: 0.4rem;
 }

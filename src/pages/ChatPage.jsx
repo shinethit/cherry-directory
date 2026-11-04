@@ -45,7 +45,7 @@ function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap, lang })
           </span>
         )}
         {msg.reply_to && (
-          <div className={`text-[10px] text-white/60 mb-1 px-2 py-1 rounded-lg border-l-2 border-brand-400 bg-white/5 max-w-full ${isMe ? 'self-end' : ''}`}>
+          <div className={`text-[10px] text-white/60 mb-1 px-2 py-1 rounded-lg border-l-2 border-brand-400 bg-white/5 max-w-full break-words ${isMe ? 'self-end' : ''}`}>
             {quoted ? (
               <>↩ <span className="text-brand-300 font-semibold">{quoted.user?.full_name || quoted.guest_name || 'Guest'}</span>: <span className="line-clamp-2">{quoted.content}</span></>
             ) : (
@@ -54,7 +54,7 @@ function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap, lang })
           </div>
         )}
         <div className={isMe ? 'bubble-me' : 'bubble-other'}>
-          <p className="text-sm text-white font-myanmar leading-relaxed">{msg.content}</p>
+          <p className="text-sm text-white font-myanmar leading-relaxed break-words">{msg.content}</p>
         </div>
         <div className="flex items-center gap-2 mt-1">
           <span className="text-[9px] text-white/60">
@@ -569,9 +569,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-[calc(100dvh-var(--header-h)-5rem)]">
       {/* Room tabs header */}
-      <div className="sticky top-0 z-10 bg-[#140020] border-b border-white/8">
+      <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/8">
         <div className="flex items-center justify-between px-4 py-2">
           <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1">
             {rooms.map(room => (
@@ -620,16 +620,16 @@ export default function ChatPage() {
       {/* Reply indicator */}
       {replyTo && (
         <div className="mx-4 mb-2 px-3 py-2 bg-brand-700/30 border border-brand-500/30 rounded-xl flex items-center justify-between">
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] text-brand-300">↩ Replying to {replyTo.user?.full_name || replyTo.guest_name}</p>
             <p className="text-xs text-white/60 truncate">{replyTo.content}</p>
           </div>
-          <button onClick={() => setReplyTo(null)} className="text-white/40 hover:text-white ml-2"><X size={14} /></button>
+          <button onClick={() => setReplyTo(null)} className="text-white/40 hover:text-white ml-2 flex-shrink-0"><X size={14} /></button>
         </div>
       )}
 
       {/* Input area */}
-      <div className="px-4 pt-3 pb-4 border-t border-white/8" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="px-4 pt-3 pb-4 border-t border-white/8 sticky bottom-[5rem] bg-[#140020]" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         {!isLoggedIn && guestName && (
           <p className="text-[10px] text-white/60 mb-1.5">
             Guest: {guestName} •{' '}

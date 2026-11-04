@@ -596,7 +596,7 @@ export default function AdminPage() {
 
   return (
     <div className="pb-8">
-      <div className="px-4 pt-4 pb-2 border-b border-white/10 mb-4 sticky top-0 bg-[#140020] z-50">
+      <div className="px-4 pt-4 pb-2 border-b border-white/10 mb-4 sticky top-[var(--header-h)] bg-[#140020] z-50">
         <div className="flex items-center gap-3 mb-4">
           <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
             <ArrowLeft size={18} className="text-white" />

@@ -48,8 +48,8 @@ function ReviewRow({ r, listingId, onDeleted }) {
         <div className="w-8 h-8 rounded-full bg-brand-700 flex items-center justify-center text-sm font-bold text-white">
           {r.user?.full_name?.[0] || '?'}
         </div>
-        <div>
-          <p className="text-xs font-semibold text-white">{r.user?.full_name || 'Anonymous'}</p>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-white truncate">{r.user?.full_name || 'Anonymous'}</p>
           <StarRating rating={r.rating} size={11} />
         </div>
         <span className="ml-auto text-[10px] text-white/60">{formatMyanmarDate(r.created_at, { year: true })}</span>
@@ -369,9 +369,9 @@ export default function ListingDetailPage() {
                 <img src={getOptimizedUrl(listing.logo_url, { width: 120 })} alt={listing.name_mm || listing.name} className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none' }} />
               </div>
             )}
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="flex items-start gap-2 flex-wrap">
-                <h1 className="font-display font-bold text-xl text-white">{displayName}</h1>
+                <h1 className="font-display font-bold text-xl text-white break-words">{displayName}</h1>
               </div>
               {listing.name_mm && lang === 'en' && <p className="text-sm text-white/50 font-myanmar">{listing.name_mm}</p>}
 
@@ -419,7 +419,7 @@ export default function ListingDetailPage() {
 
         {(listing.description_mm || listing.description) && (
           <div className="card-dark p-4 rounded-2xl">
-            <p className={`text-sm text-white/70 font-myanmar leading-relaxed ${descExpanded ? '' : 'line-clamp-4'}`}>
+            <p className={`text-sm text-white/70 font-myanmar leading-relaxed break-words ${descExpanded ? '' : 'line-clamp-4'}`}>
               {lang === 'mm' ? (listing.description_mm || listing.description) : (listing.description || listing.description_mm)}
             </p>
             {((lang === 'mm' ? (listing.description_mm || listing.description) : (listing.description || listing.description_mm)) || '').length > 200 && (

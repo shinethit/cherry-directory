@@ -13,6 +13,7 @@ import { yangonToday, formatMyanmarDateTime, mmtParts, MY_MONTHS } from '../lib/
 import { safeGet, safeSet } from '../lib/safeStorage';
 import { loadPartial, createAutoRetryGuard } from '../lib/loadPartial';
 import { formatPeakHour, devicePercentages } from '../lib/visitTracking';
+import { subscribeUpdateToastVisible } from '../lib/floatingBanners';
 import { showError } from '../lib/toast';
 
 // How long the main Home queries may run before the page stops waiting
@@ -37,6 +38,10 @@ export default function HomePage() {
   const { lang } = useLang();
   const { isLoggedIn, user } = useAuth();
   const { installable, installApp } = usePWA()
+  // v9.14 (F-1): at most one floating banner — the install pill hides
+  // while the update toast is visible; the toast always wins.
+  const [updateToastVisible, setUpdateToastVisible] = useState(false)
+  useEffect(() => subscribeUpdateToastVisible(setUpdateToastVisible), [])
 
   // V2: after 5 s of loading, show a progress hint so the user knows the
   // app is still working instead of staring at skeletons in silence.
@@ -311,12 +316,16 @@ export default function HomePage() {
         if (alive) setVisitStatsLoading(false)
       }
     }
+    // v9.14 (F-8b): one-time re-fetch ~5 s after mount so the user's own
+    // visit (recorded on this load) appears in the Hero strip without a
+    // reload. Fires at most once per mount — never a loop.
+    const refetchTimer = setTimeout(() => { if (alive) load() }, 5000)
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(load, { timeout: 2000 })
-      return () => { alive = false; window.cancelIdleCallback(id) }
+      return () => { alive = false; window.cancelIdleCallback(id); clearTimeout(refetchTimer) }
     }
     const t = setTimeout(load, 500)
-    return () => { alive = false; clearTimeout(t) }
+    return () => { alive = false; clearTimeout(t); clearTimeout(refetchTimer) }
   }, [])
 
   const loadFavorites = useCallback(async () => {
@@ -989,8 +998,10 @@ export default function HomePage() {
       </div>
 
       {/* PWA Install Button — A4: parked above both banners (install banner
-          sits at bottom-[164px], update prompt at bottom-[88px]). */}
-      {installable && (
+          sits at bottom-[164px], update prompt at bottom-[132px] since
+          v9.14). Hidden while the update toast is visible (F-1) — at most
+          one floating banner at a time. */}
+      {installable && !updateToastVisible && (
         <button
           onClick={installApp}
           className="fixed bottom-[240px] right-4 z-50 bg-brand-600 text-white px-4 py-2.5 min-h-[44px] rounded-full shadow-lg flex items-center gap-2 animate-pulse hover:bg-brand-500 transition-all"

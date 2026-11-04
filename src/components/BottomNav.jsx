@@ -20,7 +20,10 @@ export default function BottomNav() {
 
   return (
     <>
-      {/* Floating Add Button */}
+      {/* Floating Add Button — v9.14: hidden on /chat (the composer lives
+          there; the button covered it). BottomNav already reads the route
+          via useLocation for active states. */}
+      {location.pathname !== '/chat' && (
       <NavLink
         to="/submit"
         aria-label="လုပ်ငန်း တင်မည်"
@@ -30,6 +33,7 @@ export default function BottomNav() {
         <PlusCircle size={22} className="text-white flex-shrink-0" />
         <span className="text-xs font-bold text-white">တင်မည်</span>
       </NavLink>
+      )}
 
       {/* Admin Floating Button */}
       {(isAdmin || isModerator) && (
@@ -44,9 +48,11 @@ export default function BottomNav() {
         </NavLink>
       )}
 
-      {/* Bottom Navigation Bar – responsive */}
+      {/* Bottom Navigation Bar – v9.14: sticky (last child of the App
+          flex column) + solid bg-[#140020] instead of fixed 95% glass,
+          so content never shows through and the bar can't jump. */}
       <nav
-        className="fixed bottom-0 left-0 right-0 z-40 glass border-t border-white/8"
+        className="sticky bottom-0 z-40 bg-[#140020] border-t border-white/8"
         style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom))' }}
       >
         <div className="max-w-md mx-auto">
@@ -62,7 +68,7 @@ export default function BottomNav() {
                     to={item.path}
                     className="relative -top-4"
                   >
-                    <div className={`flex flex-col items-center gap-0.5 py-2 px-4 rounded-2xl border-b-2 transition-all duration-200 ${
+                    <div className={`flex flex-col items-center gap-0.5 py-2 px-3 rounded-2xl border-b-2 transition-all duration-200 ${
                       active
                         ? 'text-brand-300 bg-brand-600/30 shadow-lg shadow-brand-900/30 border-brand-400'
                         : 'text-white/60 hover:text-white/80 border-transparent'
@@ -79,7 +85,7 @@ export default function BottomNav() {
                   key={item.path}
                   to={item.path}
                   className={({ isActive }) =>
-                    `flex flex-col items-center gap-0.5 py-2 px-3 rounded-2xl border-b-2 transition-all duration-200 ${
+                    `flex flex-col items-center gap-0.5 py-2 px-2 rounded-2xl border-b-2 transition-all duration-200 ${
                       active
                         ? 'text-brand-300 bg-brand-600/20 border-brand-400'
                         : 'text-white/60 hover:text-white/80 border-transparent'

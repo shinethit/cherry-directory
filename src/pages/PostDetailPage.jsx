@@ -261,7 +261,7 @@ export default function PostDetailPage() {
 
         {/* Content */}
         <div className="prose prose-invert max-w-none">
-          <p className="text-sm text-white/75 font-myanmar leading-relaxed whitespace-pre-wrap">{post.content_mm || post.content}</p>
+          <p className="text-sm text-white/75 font-myanmar leading-relaxed whitespace-pre-wrap break-words">{post.content_mm || post.content}</p>
         </div>
 
         {/* Additional images with lightbox */}

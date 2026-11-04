@@ -159,7 +159,7 @@ export default function EventFormPage() {
   return (
     <div className="pb-10">
       {/* Sticky header */}
-      <div className="flex items-center justify-between px-4 py-3 glass sticky top-[var(--header-h)] z-40 border-b border-white/8">
+      <div className="flex items-center justify-between px-4 py-3 bg-[#140020] sticky top-[var(--header-h)] z-40 border-b border-white/8">
         <div className="flex items-center gap-3">
           <button onClick={goBack} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center" aria-label="Back">
             <ArrowLeft size={18} className="text-white" />

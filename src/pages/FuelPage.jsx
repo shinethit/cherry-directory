@@ -383,8 +383,8 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                             ? [...form.fuel_type_names, ft.name]
                             : form.fuel_type_names.filter(n => n !== ft.name)
                           set('fuel_type_names', val)
-                        }} className="w-4 h-4" />
-                      <span className="text-xs text-white/70">{ft.icon} {ft.name_mm}</span>
+                        }} className="w-4 h-4 flex-shrink-0" />
+                      <span className="text-xs text-white/70 min-w-0 flex-1 truncate">{ft.icon} {ft.name_mm}</span>
                     </label>
                   ))}
                 </div>
@@ -437,8 +437,8 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                                     const cur = editData.fuel_type_names || []
                                     const val = e.target.checked ? [...cur, ft.name] : cur.filter(n => n !== ft.name)
                                     setE('fuel_type_names', val)
-                                  }} className="w-4 h-4" />
-                                <span className="text-xs text-white/70">{ft.icon} {ft.name_mm}</span>
+                                  }} className="w-4 h-4 flex-shrink-0" />
+                                <span className="text-xs text-white/70 min-w-0 flex-1 truncate">{ft.icon} {ft.name_mm}</span>
                               </label>
                             ))}
                           </div>
@@ -456,9 +456,9 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                       </div>
                     ) : (
                       <div className="flex items-start justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-white font-myanmar">{s.name_mm || s.name}</p>
-                          <p className="text-[10px] text-white/60">{s.address} • {s.township}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-white font-myanmar truncate">{s.name_mm || s.name}</p>
+                          <p className="text-[10px] text-white/60 truncate">{s.address} • {s.township}</p>
                           <div className="flex gap-1 mt-1.5 flex-wrap">
                             {(s.fuel_type_names || []).map(name => {
                               const ft = allFuelTypes.find(f => f.name === name)
@@ -473,7 +473,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-1 ml-2">
+                        <div className="flex gap-1 ml-2 flex-shrink-0">
                           <button onClick={() => { setEditId(s.id); setEditData({ ...s, fuel_type_names: s.fuel_type_names || [] }) }}
                             className="w-7 h-7 bg-blue-500/10 text-blue-400 rounded-lg flex items-center justify-center">
                             <Pencil size={12} />

@@ -292,7 +292,7 @@ function TutoringForm({ onClose, onSuccess, lang, editPost }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto pt-safe">
-      <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
+      <div className="flex items-center justify-between px-4 py-3 bg-[#140020] border-b border-white/8 sticky top-0 z-40">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
         <h2 className="font-display font-bold text-base text-white">{editPost ? (lang === 'mm' ? 'ပြင်ဆင်မည်' : 'Edit') : (lang === 'mm' ? 'ဆရာ/သင်တန်း တင်မည်' : 'Post Tutoring')}</h2>
         <button onClick={submit} disabled={submitting || (!form.title_mm && !form.title)} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : (lang === 'mm' ? 'တင်မည်' : 'Post')}</button>

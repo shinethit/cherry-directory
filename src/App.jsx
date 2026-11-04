@@ -151,10 +151,15 @@ function RequireAdmin({ children }) {
 }
 
 // H-28: Suspense fallback with a timeout — if a lazy chunk still hasn't
-// loaded after 10 s, escalate from the spinner to an error screen with
-// Retry. The timer resets on every navigation and is cancelled as soon as
-// the chunk actually renders (SuspenseLoaded mounts only then).
-const CHUNK_TIMEOUT_MS = 10000
+// loaded after 30 s (v9.14: was 10 s — slow mobile data needs the headroom),
+// auto-reload ONCE (sessionStorage guard, set before reloading, so a
+// persistently failing chunk can never loop) and only then escalate to an
+// error screen with Retry. The timer resets on every navigation and is
+// cancelled as soon as the chunk actually renders (SuspenseLoaded mounts
+// only then).
+const CHUNK_TIMEOUT_MS = 30000
+// Set before the one auto-reload; cleared on every successful chunk load.
+const CHUNK_RELOAD_KEY = 'cherry_chunk_reloaded'
 
 function SuspenseLoaded({ onLoaded }) {
   useEffect(() => { onLoaded() }, [onLoaded])
@@ -168,13 +173,27 @@ function TimedSuspense({ children }) {
   useEffect(() => {
     loadedRef.current = false
     setTimedOut(false)
-    const t = setTimeout(() => { if (!loadedRef.current) setTimedOut(true) }, CHUNK_TIMEOUT_MS)
+    const t = setTimeout(() => {
+      if (loadedRef.current) return
+      // v9.14: chunk stall — reload once, guarded so it can't loop.
+      try {
+        if (!sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+          sessionStorage.setItem(CHUNK_RELOAD_KEY, '1')
+          window.location.reload()
+          return
+        }
+      } catch { /* storage unavailable — fall through to error screen */ }
+      setTimedOut(true)
+    }, CHUNK_TIMEOUT_MS)
     return () => clearTimeout(t)
   }, [pathname])
   if (timedOut) return <ErrorScreen onRetry={() => window.location.reload()} variant="chunk" />
   return (
     <Suspense fallback={<LoadingSpinner />}>
-      <SuspenseLoaded onLoaded={() => { loadedRef.current = true }} />
+      <SuspenseLoaded onLoaded={() => {
+        loadedRef.current = true
+        try { sessionStorage.removeItem(CHUNK_RELOAD_KEY) } catch { /* ignore */ }
+      }} />
       {children}
     </Suspense>
   )
@@ -193,8 +212,14 @@ function AppRoutes() {
 
   // H-28: preload the HomePage chunk on boot so the landing route rarely
   // suspends at all; idle-time so it never competes with first paint.
+  // v9.14: also preload ListingDetail + Menu — the two chunks users most
+  // often open next (same fire-and-forget pattern, safe to skip on error).
   useEffect(() => {
-    const preload = () => { import('./pages/HomePage').catch(() => {}) }
+    const preload = () => {
+      import('./pages/HomePage').catch(() => {})
+      import('./pages/ListingDetailPage').catch(() => {})
+      import('./pages/MenuPage').catch(() => {})
+    }
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(preload, { timeout: 3000 })
       return () => window.cancelIdleCallback(id)
@@ -219,13 +244,20 @@ function AppRoutes() {
   if (timeoutExceeded) return <ErrorScreen onRetry={() => window.location.reload()} variant="auth" />
 
   return (
+    // v9.14: flex column + min-h-dvh so BottomNav is sticky (last in-flow
+    // child) instead of fixed — no vertical jump, no height mismatch.
+    // The <main> is flex-1 with pb-32: 128px clearance between the last
+    // page content and the nav, covering the fixed floating buttons
+    // (bottom 80px + 48px tall = 80–128px band). Root padding would land
+    // BELOW the sticky nav, so the clearance lives on <main>, not root.
     <div
-      className="min-h-dvh bg-gradient-to-b from-[#0d0015] to-[#1a0030] dark:from-[#0d0015] dark:to-[#1a0030] pb-20"
-      style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top))' }}
+      className="flex min-h-dvh flex-col bg-gradient-to-b from-[#0d0015] to-[#1a0030] dark:from-[#0d0015] dark:to-[#1a0030]"
+      style={{ paddingTop: 'calc(4.25rem + env(safe-area-inset-top))' }}
     >
       <Header />
       <AnnouncementBanner />
       <ScrollToTop />
+      <main className="flex-1 pb-32">
       <TimedSuspense>
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -287,8 +319,9 @@ function AppRoutes() {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </TimedSuspense>
-      <BottomNav />
+      </main>
       <OnboardingGuide />
+      <BottomNav />
     </div>
   )
 }

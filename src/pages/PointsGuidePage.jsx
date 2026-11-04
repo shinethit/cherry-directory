@@ -89,9 +89,9 @@ export default function PointsGuidePage() {
               <div className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center flex-shrink-0">
                 <Icon size={15} className="text-brand-300" />
               </div>
-              <p className="flex-1 text-xs text-white/70 font-myanmar">{lang === 'mm' ? mm : en}</p>
+              <p className="flex-1 min-w-0 text-xs text-white/70 font-myanmar">{lang === 'mm' ? mm : en}</p>
               <span className="font-mono font-bold text-sm text-green-400">+{points}</span>
-              <span className="text-[11px] font-bold text-brand-300 whitespace-nowrap">{lang === 'mm' ? ACTION_LINKS[i]?.mm : ACTION_LINKS[i]?.en}</span>
+              <span className="text-[11px] font-bold text-brand-300">{lang === 'mm' ? ACTION_LINKS[i]?.mm : ACTION_LINKS[i]?.en}</span>
             </button>
           ))}
         </div>

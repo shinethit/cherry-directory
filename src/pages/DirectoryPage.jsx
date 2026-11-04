@@ -642,9 +642,15 @@ export default function DirectoryPage() {
           </h1>
         </div>
 
-        {/* B8: search + filters collapse away on scroll down, return on scroll up */}
-        {!headerCollapsed && (
-        <>
+        {/* B8: search + filters collapse away on scroll down, return on scroll up.
+            Animated collapse (grid-rows) — the rows stay mounted so the header
+            height animates instead of jumping ~110px when the rows unmount. */}
+        <div
+          className={`grid transition-all duration-300 ease-in-out ${headerCollapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}
+          style={headerCollapsed ? { marginTop: 0 } : undefined}
+        >
+        <div className="overflow-hidden min-h-0">
+        <div className="space-y-3">
         {/* Search input with debounce */}
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
@@ -721,8 +727,9 @@ export default function DirectoryPage() {
             </button>
           )}
         </div>
-        </>
-        )}
+        </div>
+        </div>
+        </div>
       </div>
 
       {/* Results count */}

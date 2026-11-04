@@ -82,7 +82,7 @@ export function ListingCard({ listing, compact = false }) {
           </button>
         </div>
 
-        <div className="flex items-center gap-3 mt-1.5">
+        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
           {listing.rating_avg > 0 && (
             <div className="flex items-center gap-1">
               <StarRating rating={listing.rating_avg} size={11} />

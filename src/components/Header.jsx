@@ -23,17 +23,8 @@ export default function Header() {
   useNotificationSubscription()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
-  const [scrolled, setScrolled] = useState(false)
   // Show back button on all pages except main nav pages
   const showBack = !MAIN_NAV_PATHS.includes(location.pathname)
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 10)
-    }
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
 
   
 
@@ -111,21 +102,18 @@ export default function Header() {
 
   return (
     <>
-      {/* Header – no extra spacer inside; uses safe area and a minimal padding */}
+      {/* Header – v9.14: always solid bg-[#0d0015] (was transparent, then
+          only 80% opaque when scrolled — content showed through). */}
       <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-          scrolled
-            ? 'bg-[#0a0018]/80 backdrop-blur-md border-b border-white/10'
-            : 'bg-transparent'
-        }`}
+        className="fixed top-0 left-0 right-0 z-50 bg-[#0d0015] border-b border-white/10"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
         <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {showBack && (
               <button
                 onClick={handleBack}
-                className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all"
+                className="w-11 h-11 shrink-0 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/15 active:scale-95 transition-all"
                 aria-label="နောက်သို့"
                 title="နောက်သို့"
               >
@@ -134,9 +122,9 @@ export default function Header() {
             )}
             <button
               onClick={() => navigate('/')}
-              className="flex items-center gap-2"
+              className="flex items-center gap-2 min-w-0"
             >
-            <div className="w-8 h-8 rounded-xl overflow-hidden bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
+            <div className="w-8 h-8 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
               <img 
                 src="/logo.png" 
                 alt="Cherry Directory Logo" 
@@ -148,19 +136,19 @@ export default function Header() {
                 }}
               />
             </div>
-            <div className="block">
-              <p className="font-display font-bold text-sm text-white leading-tight">
+            <div className="block min-w-0">
+              <p className="font-display font-bold text-sm text-white leading-tight truncate">
                 {config.app_name || 'Cherry Directory'}
               </p>
-              <p className="text-[9px] text-white/60 font-myanmar">{config.app_city || 'တောင်ကြီးမြို့'}</p>
+              <p className="text-[9px] text-white/60 font-myanmar truncate">{config.app_city || 'တောင်ကြီးမြို့'}</p>
             </div>
           </button>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 shrink-0">
                         <button
               onClick={() => navigate('/search')}
-              className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
+              className="w-11 h-11 shrink-0 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
               aria-label="ရှာဖွေမည်"
               title="ရှာဖွေမည်"
             >
@@ -169,7 +157,7 @@ export default function Header() {
 
                         <button
               onClick={() => navigate('/notifications')}
-              className="relative w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
+              className="relative w-11 h-11 shrink-0 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-white/90 transition-colors"
               aria-label="အသိပေးချက်များ"
               title="အသိပေးချက်များ"
             >
@@ -184,16 +172,18 @@ export default function Header() {
 
             <button
               onClick={toggleLang}
-              className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90"
+              className="w-11 h-11 shrink-0 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90"
               aria-label="ဘာသာစကား ပြောင်းမည်"
               title="🌐 ဘာသာစကား ပြောင်းမည်"
             >
               {lang === 'mm' ? 'EN' : 'မြန်မာ'}
             </button>
 
+            {/* v9.14: hidden on small screens so the title + buttons fit at
+                390px — the Change Log still auto-opens on a new version. */}
             <button
               onClick={() => setShowChangelog(true)}
-              className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center text-white/60 hover:text-brand-300 transition-colors"
+              className="w-11 h-11 shrink-0 rounded-lg bg-white/8 hidden sm:flex items-center justify-center text-white/60 hover:text-brand-300 transition-colors"
               aria-label="ဗားရှင်း မှတ်တမ်း"
               title="ဗားရှင်း မှတ်တမ်း"
             >
@@ -202,7 +192,7 @@ export default function Header() {
 
             <button
               onClick={() => setMenuOpen(!menuOpen)}
-              className="w-11 h-11 rounded-lg bg-white/8 flex items-center justify-center"
+              className="w-11 h-11 shrink-0 rounded-lg bg-white/8 flex items-center justify-center"
               aria-label="မီနူး"
               title="မီနူး"
             >
@@ -316,6 +306,7 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
+                { v: '9.14', date: '2026-11-04', items: ['Update toast ပိတ်လို့ရ + နေရာ ပြင် + floating banner တစ်ကြိမ်တည်း တစ်ခု', 'အလျားလိုက် scroll ပျောက် — badge wrap + overflow-x clip', 'Header + Bottom Nav အကြည် မဟုတ်တော့ — အရောင်အပြည့်', 'Sticky header ပြင်ခြင်း (Chat tabs, Directory collapse, စာမျက်နှာ ~၁၄ ခု)', 'လာကြည့်သူ ရေတွက်မှု ပြင်ခြင်း — GRANT INSERT + stats refresh (SQL run ရမည်)', 'Chunk timeout 30 စက္ကန့် + တစ်ကြိမ် အလိုအလျောက် ပြန်တင်ခြင်း', 'Chat composer ပြင်ခြင်း', 'အောက်ခြေ နေရာ pb-32 — floating ခလုတ်တွေ စာသား မဖုံးတော့ပါ'] },
                 { v: '9.13', date: '2026-11-04', items: ['လာကြည့်သူ အကျဉ်းချုပ် Hero ထဲမှာ ပေါင်းထည့် — သီးသန့် Box ဖျက် (နေရာ သက်သာ)'] },
                 { v: '9.12', date: '2026-11-04', items: ['Hero မှာ လာကြည့်သူ အကျဉ်းချုပ် (နိုင်ငံ / Device / အကြည့်များဆုံးအချိန်) — Data အစစ်', 'လာကြည့်သူ Dashboard စာမျက်နှာ အသစ် (/visitors)', 'လာကြည့်သူ ရေတွက်မှု စတင် — နံပါတ်တွေ ၀ ကနေ စတက်မယ် (အတိတ်ကို ပြန်ဖြည့်မရပါ)'] },
                 { v: '9.11', date: '2026-11-04', items: ['Help မှာ "မှားနေတဲ့ လုပ်ငန်းကို ပြင်နည်း" အပိုင်း အသစ် (Edit က Account + ပိုင်ရှင် လိုတာ၊ Guest က Report လုပ်လို့ရတာ)'] },

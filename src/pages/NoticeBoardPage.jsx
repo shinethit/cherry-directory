@@ -58,9 +58,9 @@ function NoticeCard({ notice, lang, isMod, onDelete }) {
           </button>
         )}
       </div>
-      <h3 className="font-display font-semibold text-sm text-white">{lang === 'mm' ? (notice.title_mm || notice.title) : (notice.title || notice.title_mm)}</h3>
+      <h3 className="font-display font-semibold text-sm text-white break-words">{lang === 'mm' ? (notice.title_mm || notice.title) : (notice.title || notice.title_mm)}</h3>
       {(notice.content_mm || notice.content) && (
-        <p className="text-xs text-white/60 font-myanmar leading-relaxed">{lang === 'mm' ? (notice.content_mm || notice.content) : notice.content}</p>
+        <p className="text-xs text-white/60 font-myanmar leading-relaxed break-words">{lang === 'mm' ? (notice.content_mm || notice.content) : notice.content}</p>
       )}
       <div className="flex items-center gap-2 text-[9px] text-white/60">
         <span className="font-myanmar">{notice.poster_name || 'Community'}</span>

@@ -44,12 +44,12 @@ function PctBadge({ pct, label, lang }) {
   if (abs < 0.5) return <span className="flex items-center gap-0.5 text-white/60 text-[11px]"><Minus size={10} /> 0%</span>
   if (pct > 0) return (
     <span className="flex items-center gap-0.5 text-green-400 text-[11px] font-bold whitespace-nowrap" title={label}>
-      <TrendingUp size={10} /> +{abs.toFixed(1)}% {lang === 'mm' ? 'တက်သည်' : 'up'}
+      <TrendingUp size={10} /> +{abs.toFixed(1)}%
     </span>
   )
   return (
     <span className="flex items-center gap-0.5 text-red-400 text-[11px] font-bold whitespace-nowrap" title={label}>
-      <TrendingDown size={10} /> -{abs.toFixed(1)}% {lang === 'mm' ? 'ကျသည်' : 'down'}
+      <TrendingDown size={10} /> -{abs.toFixed(1)}%
     </span>
   )
 }

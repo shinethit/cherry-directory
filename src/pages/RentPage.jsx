@@ -109,12 +109,12 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
             </div>
           )}
           {post.description_mm && (
-            <p className="text-[10px] text-white/50 mt-1 font-myanmar line-clamp-2">{post.description_mm}</p>
+            <p className="text-[10px] text-white/50 mt-1 font-myanmar line-clamp-2 break-words">{post.description_mm}</p>
           )}
           {expanded && (
             <div className="space-y-2 pt-1 border-t border-white/6">
               {(post.description || (post.description_mm && post.description_mm !== post.description)) && post.description && (
-                <p className="text-xs text-white/60 leading-relaxed whitespace-pre-wrap">{post.description}</p>
+                <p className="text-xs text-white/60 leading-relaxed whitespace-pre-wrap break-words">{post.description}</p>
               )}
               {post.images?.length > 1 && (
                 <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">

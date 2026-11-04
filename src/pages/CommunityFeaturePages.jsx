@@ -378,7 +378,7 @@ export function DonationPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto pt-safe">
-          <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
+          <div className="flex items-center justify-between px-4 py-3 bg-[#140020] border-b border-white/8 sticky top-0 z-40">
             <button onClick={() => setShowForm(false)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
             <h2 className="font-display font-bold text-base text-white">{lang === 'mm' ? 'Campaign တင်မည်' : 'Create Campaign'}</h2>
             <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : (lang === 'mm' ? 'တင်မည်' : 'Post')}</button>
@@ -627,7 +627,7 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col bg-[#0d0015] overflow-y-auto pt-safe">
-      <div className="flex items-center justify-between px-4 py-3 glass border-b border-white/8 sticky top-0">
+      <div className="flex items-center justify-between px-4 py-3 bg-[#140020] border-b border-white/8 sticky top-0 z-40">
         <button onClick={onClose} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center"><ArrowLeft size={18} className="text-white" /></button>
         <h2 className="font-display font-bold text-base text-white">{editTarget ? (lang === 'mm' ? 'ပြင်ဆင်မည်' : 'Edit') : (lang === 'mm' ? 'ဝန်ဆောင်မှု တင်မည်' : 'Post Health Service')}</h2>
         <button onClick={submit} disabled={!form.title_mm || submitting} className="btn-primary text-xs px-4 py-2">{submitting ? '...' : (lang === 'mm' ? 'တင်မည်' : 'Post')}</button>
