@@ -1,6 +1,6 @@
 /* Cherry Directory — Service Worker v5 */
 
-const CACHE_VERSION = 'v10'
+const CACHE_VERSION = 'v11'
 const CACHE_NAME = 'cherry-directory-' + CACHE_VERSION
 
 function offlineFallback() {
@@ -38,6 +38,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
   if (!url.protocol.startsWith('http')) return
   if (url.hostname.includes('supabase.co')) return
+  // v9.9: same-origin Supabase proxy — API responses must never be SW-cached.
+  if (url.pathname.startsWith('/api/supabase')) return
   if (url.pathname.startsWith('/@')) return
   if (url.pathname.startsWith('/node_modules')) return
   if (url.searchParams.has('import')) return

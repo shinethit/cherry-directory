@@ -67,12 +67,9 @@ export default function Header() {
     return () => clearTimeout(timer);
   }, []);
 
-  // A18: backdrop click closes WITHOUT marking read — only the X button
-  // (closeChangelog) marks the version seen. Auto-open itself is unchanged.
-  function dismissChangelog() {
-    setShowChangelog(false);
-  }
-
+  // v9.9: the A18 backdrop-vs-X distinction is REMOVED (user complaint —
+  // tapping outside is the natural dismiss on mobile, and the popup kept
+  // reappearing on every launch). Any dismiss now marks the version seen.
   function closeChangelog() {
     setShowChangelog(false);
     safeSet('cherry_last_seen_version', APP_VERSION);
@@ -310,7 +307,7 @@ export default function Header() {
 
       {/* Change Log Modal */}
       {showChangelog && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pt-safe bg-black/80 backdrop-blur-md" onClick={dismissChangelog}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 pt-safe bg-black/80 backdrop-blur-md" onClick={closeChangelog}>
           <div className="w-full max-w-sm bg-[#1a0030] border border-white/10 rounded-3xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-white/8 sticky top-0 bg-[#1a0030] z-10">
               <div>
@@ -323,6 +320,7 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
+                { v: '9.9', date: '2026-11-04', items: ['Data ကို app ရဲ့ ကိုယ်ပိုင်လိပ်စာကနေ တစ်ဆင့် ယူခြင်း — VPN မပါဘဲ Data ရခြင်း (ISP က Supabase ပိတ်ထားတာကို ကျော်ခြင်း)', 'Change Log popup ကို အပြင်ဘက် နှိပ်ပြီး ပိတ်ရင်လည်း တစ်ကြိမ်ပြီးရင် နောက်မပေါ်တော့ခြင်း'] },
                 { v: '9.8', date: '2026-11-04', items: ['FuelPage ပိုနေသော } ဖြုတ်ခြင်း — build သတိပေးချက် ပျောက်ခြင်း', 'မလိုအပ်သော ဖိုင်များ တစ်ခါတည်း ရှင်းလင်းခြင်း (.bak + ဟောင်း script + ဟောင်း schema/guide)', 'နောင် fix script များ self-cleanup ပါမည်'] },
                 { v: '9.7', date: '2026-11-04', items: ['Home data တင်တာ 30 စက္ကန့် + ရသလောက် အရင်ပြ', 'Data တင်မရရင် တစ်ကြိမ် အလိုအလျောက် ပြန်ကြိုးစားခြင်း', 'စာမျက်နှာ ၃၀ မှာ တင်မှု ခံနိုင်ရည် ပြင်ခြင်း', 'အမှားစာသား အမှန်အတိုင်း ပြင်ခြင်း'] },
                 { v: '9.6', date: '2026-11-04', items: ['Chat အခန်း အမျိုးအစား ရွေးနိုင်ခြင်း (Group / Private)', 'ဘတ်စ်ကား ဆိုက်ရောက်ချိန် + operator ဖုန်းနံပါတ်', 'ကျန်းမာရေး ဖွင့်ချိန် + အထူးပြု', 'Chat reply/delete ခလုတ်များ 44px', 'History gallery ✕ ခလုတ် 44px', 'ဆီဆိုင် Admin form တွင် ဖုန်း / ဖွင့်ချိန် / မှတ်ချက် ရိုက်ထည့်နိုင်ခြင်း', 'ဆီ live-status + queue report ဖယ်ရှားခြင်း — ဆိုင်လမ်းညွှန်သာ ဆက်ထား', 'လျှပ်စစ် အခြေအနေ category + report ညွှန်ကြားချက် ဖယ်ရှားခြင်း — အရေးပေါ် ဆက်သွယ်ရန် ဖုန်းများ ဆက်ထား', 'Supabase migration supabase-migration-9.6.sql'] },
