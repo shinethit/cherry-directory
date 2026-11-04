@@ -20,7 +20,7 @@ const PRESET_LINKS = [
   { url: '/chat', label: '💬 Public Chat (ပြောဆိုရေး)', icon: '💬', title: 'Public Chat', title_mm: 'Public Chat', subtitle: 'ပြောဆိုရေး', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: '/submit', label: '➕ လုပ်ငန်းထည့်မည် (Submit Listing)', icon: '➕', title: 'Submit Listing', title_mm: 'လုပ်ငန်းထည့်မည်', subtitle: 'Submit Listing', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: '/emergency', label: '🆘 အရေးပေါ် (Emergency)', icon: '🆘', title: 'Emergency', title_mm: 'အရေးပေါ်', subtitle: 'Emergency', css: 'bg-gradient-to-br from-red-600/25 to-red-700/10 border border-red-500/30 text-white hover:border-red-500/50' },
-  { url: '/fuel', label: '⛽ ဓာတ်ဆီအခြေအနေ (Fuel Status)', icon: '⛽', title: 'Fuel Status', title_mm: 'ဓာတ်ဆီအခြေအနေ', subtitle: 'ဆီရ/မရ', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
+  { url: '/fuel', label: '⛽ ဓာတ်ဆီဆိုင်များ (Fuel Stations)', icon: '⛽', title: 'Fuel Stations', title_mm: 'ဓာတ်ဆီဆိုင်များ', subtitle: 'ဓာတ်ဆီဆိုင်များ', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: '/news', label: '📰 သတင်းနှင့် ဖြစ်ရပ်များ (News & Events)', icon: '📰', title: 'News & Events', title_mm: 'သတင်းများ', subtitle: 'နောက်ဆုံးရသတင်း', css: 'bg-white/5 border-white/10 text-white hover:bg-white/8' },
   { url: 'custom', label: '🔗 အခြားလင့်ခ် ကိုယ်တိုင်ထည့်မည် (Custom URL)' }
 ]

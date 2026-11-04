@@ -59,11 +59,11 @@ function ChatBubble({ msg, isMe, onReply, onDelete, canDelete, replyMap, lang })
           <span className="text-[9px] text-white/60">
             {formatMMTTime(msg.created_at, lang)}
           </span>
-          <button onClick={() => onReply(msg)} className="text-xs text-white/60 hover:text-brand-300 transition-colors flex items-center gap-0.5 px-2 py-2 min-h-[36px]">
+          <button onClick={() => onReply(msg)} className="text-xs text-white/60 hover:text-brand-300 transition-colors flex items-center justify-center gap-0.5 px-3 py-3 min-h-[44px] min-w-[44px]">
             <Reply size={12} /> Reply
           </button>
           {canDelete && (
-            <button onClick={() => onDelete(msg.id)} className="text-xs text-red-400/70 hover:text-red-400 transition-colors flex items-center gap-0.5 px-2 py-2 min-h-[36px]">
+            <button onClick={() => onDelete(msg.id)} className="text-xs text-red-400/70 hover:text-red-400 transition-colors flex items-center justify-center gap-0.5 px-3 py-3 min-h-[44px] min-w-[44px]">
               <Trash2 size={12} /> Delete
             </button>
           )}
@@ -123,6 +123,7 @@ export default function ChatPage() {
   const [showRoomManager, setShowRoomManager] = useState(false)
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomDesc, setNewRoomDesc] = useState('')
+  const [newRoomType, setNewRoomType] = useState('group')
   const [editingRoom, setEditingRoom] = useState(null)
   const [roomError, setRoomError] = useState('')
   const [roomsError, setRoomsError] = useState(false)
@@ -364,11 +365,13 @@ export default function ChatPage() {
       const { error } = await supabase.from('chat_rooms').insert({
         name: newRoomName.trim(),
         description: newRoomDesc.trim() || null,
+        type: newRoomType,
         is_active: true,
       })
       if (error) throw error
       setNewRoomName('')
       setNewRoomDesc('')
+      setNewRoomType('group')
       setRoomError('')
       await loadRooms()
     } catch (err) {
@@ -446,6 +449,28 @@ export default function ChatPage() {
                   onChange={e => setNewRoomDesc(e.target.value)}
                   className="input-dark"
                 />
+                {/* Room type (D17): Group / Private — stored in chat_rooms.type */}
+                <div>
+                  <p className="text-xs text-white/50 mb-1.5">အခန်းအမျိုးအစား</p>
+                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="အခန်းအမျိုးအစား">
+                    <button
+                      type="button"
+                      onClick={() => setNewRoomType('group')}
+                      aria-pressed={newRoomType === 'group'}
+                      className={`min-h-[44px] rounded-xl text-sm font-semibold border transition-colors ${newRoomType === 'group' ? 'bg-brand-600/60 text-brand-200 border-brand-400/40' : 'text-white/50 border-white/10 hover:text-white/80'}`}
+                    >
+                      အဖွဲ့
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewRoomType('private')}
+                      aria-pressed={newRoomType === 'private'}
+                      className={`min-h-[44px] rounded-xl text-sm font-semibold border transition-colors ${newRoomType === 'private' ? 'bg-brand-600/60 text-brand-200 border-brand-400/40' : 'text-white/50 border-white/10 hover:text-white/80'}`}
+                    >
+                      တစ်ဦးချင်း
+                    </button>
+                  </div>
+                </div>
                 <button onClick={handleCreateRoom} className="w-full btn-primary text-sm py-3 min-h-[44px] flex items-center justify-center gap-1">
                   <Plus size={14} /> အခန်းသစ်ထည့်မည်
                 </button>
@@ -482,7 +507,12 @@ export default function ChatPage() {
                     ) : (
                       <div className="flex justify-between items-center">
                         <div className="flex-1">
-                          <p className="text-white font-semibold">{room.name}</p>
+                          <p className="text-white font-semibold flex items-center gap-2 flex-wrap">
+                            {room.name}
+                            <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-full bg-white/10 text-white/60">
+                              {room.type === 'private' ? 'တစ်ဦးချင်း' : 'အဖွဲ့'}
+                            </span>
+                          </p>
                           {room.description && <p className="text-xs text-white/50">{room.description}</p>}
                         </div>
                         <div className="flex items-center gap-1">

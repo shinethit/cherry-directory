@@ -33,7 +33,7 @@ const GROUPS = [
     defaultOpen: true,
     features: [
       { path: '/prices',  icon: '🛒', mm: 'ဈေးနှုန်းဘုတ်',    en: 'Market Prices',  descMm: 'ဆန်၊ ဆီ၊ ငါး ဈေးနှုန်း', descEn: 'Rice, oil, fish prices' },
-      { path: '/fuel',    icon: '⛽', mm: 'ဓာတ်ဆီအခြေအနေ',   en: 'Fuel Status',    descMm: 'ဆီရ/မရ အခြေအနေ', descEn: 'Fuel availability' },
+      { path: '/fuel',    icon: '⛽', mm: 'ဓာတ်ဆီဆိုင်များ',   en: 'Fuel Stations',  descMm: 'ဆီဆိုင်များ၏ လိပ်စာ နှင့် ဖုန်း', descEn: 'Station addresses and phone numbers' },
       { path: '/bus',     icon: '🚌', mm: 'ကားထွက်ချိန်',      en: 'Bus Schedule',   descMm: 'ကား ထွက်ချိန် Report', descEn: 'Bus departure times' },
       { path: '/notices', icon: '📢', mm: 'ကြေညာချက်များ',   en: 'Announcements',   descMm: 'ရပ်ကွက် ကြေညာချက်', descEn: 'Community notices' },
     ],

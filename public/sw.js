@@ -1,6 +1,6 @@
 /* Cherry Directory — Service Worker v5 */
 
-const CACHE_VERSION = 'v7'
+const CACHE_VERSION = 'v8'
 const CACHE_NAME = 'cherry-directory-' + CACHE_VERSION
 
 function offlineFallback() {

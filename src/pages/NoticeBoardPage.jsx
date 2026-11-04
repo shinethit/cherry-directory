@@ -13,13 +13,20 @@ const CATS = [
   { id: 'vaccination', mm: 'ဆေးထိုး',          en: 'Vaccination',   icon: '💉' },
   { id: 'cleanup',     mm: 'သန့်ရှင်းရေး',     en: 'Cleanup',       icon: '🧹' },
   { id: 'water',       mm: 'ရေပိတ်',           en: 'Water',         icon: '💧' },
-  { id: 'electricity', mm: 'လျှပ်စစ်',          en: 'Electricity',   icon: '⚡' },
   { id: 'traffic',     mm: 'ယာဉ်ကြောပိတ်',     en: 'Traffic',       icon: '🚧' },
   { id: 'community',   mm: 'ရပ်ကွက်',           en: 'Community',     icon: '🏘️' },
   { id: 'government',  mm: 'ထုတ်ပြန်ချက်',      en: 'Government',    icon: '🏛️' },
   { id: 'emergency',   mm: 'အရေးပေါ်',          en: 'Emergency',     icon: '🚨' },
   { id: 'other',       mm: 'အခြား',             en: 'Other',         icon: '📌' },
 ]
+
+// Removed categories (v9.6 — electricity status removed because statuses
+// didn't match reality): old posts keep their display label so they stay
+// visible under "All" instead of showing a blank badge. No posts deleted,
+// and 'electricity' can no longer be picked for new posts or as a filter.
+const LEGACY_CATS = {
+  electricity: { mm: 'လျှပ်စစ်', en: 'Electricity', icon: '⚡' },
+}
 
 function timeAgo(iso, lang) {
   const m = Math.floor((Date.now() - new Date(iso)) / 60000)
@@ -30,7 +37,7 @@ function timeAgo(iso, lang) {
 }
 
 function NoticeCard({ notice, lang, isMod, onDelete }) {
-  const cat = CATS.find(c => c.id === notice.category)
+  const cat = CATS.find(c => c.id === notice.category) || LEGACY_CATS[notice.category]
   const isUrgent = notice.is_urgent || notice.category === 'emergency'
   return (
     <div className={`card-dark rounded-2xl p-4 space-y-2 border-l-4 ${isUrgent ? 'border-l-red-500/70' : notice.is_pinned ? 'border-l-gold-500/60' : 'border-l-brand-500/40'}`}>

@@ -41,7 +41,7 @@ export default function SplashScreen({ onConsent }) {
         <div className="space-y-2 text-white/70 text-sm font-myanmar text-left">
           <p>
             Cherry Directory သည် ဒေသတွင်း လုပ်ငန်းများ၊ သတင်းများ၊ ဖြစ်ရပ်များ၊ 
-            လျှပ်စစ်အခြေအနေ၊ ဓာတ်ဆီရရှိမှု၊ ဈေးနှုန်းများကို Community မှ 
+            ဆီဆိုင်များ လမ်းညွှန်၊ ဈေးနှုန်းများကို Community မှ 
             တိုက်ရိုက်တင်ပြသော ပလက်ဖောင်းဖြစ်ပါသည်။
           </p>
           <p className="text-xs text-white/40">

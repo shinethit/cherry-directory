@@ -8,7 +8,6 @@ export const NOTIFICATION_TYPES = {
   LISTING_REJECTED: 'listing_rejected',
   NEW_REVIEW: 'new_review',
   REVIEW_APPROVED: 'review_approved',
-  FUEL_STATUS_UPDATE: 'fuel_status_update',
   NEW_MESSAGE: 'new_message',
   SYSTEM_ALERT: 'system_alert',
 };

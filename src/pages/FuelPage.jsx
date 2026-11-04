@@ -3,59 +3,33 @@ import { RefreshCw, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
-import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
 
-const STATUS_CFG = {
-  available:   { mm: 'ရနိုင်',   en: 'Available', color: 'text-green-400', bg: 'bg-green-500/15 border-green-500/25', dot: 'bg-green-500' },
-  limited:     { mm: 'အနည်းငယ်', en: 'Limited',   color: 'text-amber-400', bg: 'bg-amber-500/15 border-amber-500/25', dot: 'bg-amber-500' },
-  unavailable: { mm: 'မရ',       en: 'Unavailable',color: 'text-red-400',   bg: 'bg-red-500/15   border-red-500/25',   dot: 'bg-red-500'   },
-  unknown:     { mm: 'မသိ',      en: 'Unknown',    color: 'text-white/60',  bg: 'bg-white/5      border-white/8',       dot: 'bg-white/20'  },
-}
-
-function timeAgo(iso, lang) {
-  if (!iso) return lang === 'mm' ? 'မသိ' : 'Unknown'
-  const m = Math.floor((Date.now() - new Date(iso)) / 60000)
-  if (m < 1) return lang === 'mm' ? 'ယခုလေး' : 'just now'
-  if (m < 60) return `${m}${lang === 'mm' ? 'မိနစ်' : 'm'}`
-  return `${Math.floor(m/60)}${lang === 'mm' ? 'နာရီ' : 'h'}`
-}
-
-// ─── Station Card (unchanged except using props for update callbacks) ─────────
-function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
+// ─── Station Card ────────────────────────────────────────────────────────────
+function StationCard({ station, lang, allFuelTypes }) {
   const [expanded, setExpanded] = useState(false)
-  const [showQueueForm, setShowQueueForm] = useState(false)
-  const [qCars, setQCars] = useState('')
-  const [qBikes, setQBikes] = useState('')
-  const [queueSubmitting, setQueueSubmitting] = useState(false)
-  const [reportBusy, setReportBusy] = useState(null)
 
   const stationFuelNames = station.fuel_type_names || []
   const stationFuels = allFuelTypes.filter(ft => stationFuelNames.includes(ft.name))
-  const anyAvail = stationFuels.some(ft => (station.fuels || {})[ft.name]?.status === 'available')
 
   return (
-    <div className={`card-dark rounded-2xl overflow-hidden border ${anyAvail ? 'border-green-500/20' : 'border-white/6'}`}>
+    <div className="card-dark rounded-2xl overflow-hidden border border-white/6">
       <button className="w-full flex items-start gap-3 p-4 text-left" onClick={() => setExpanded(e => !e)}>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl ${anyAvail ? 'bg-green-500/15' : 'bg-white/5'}`}>
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl bg-white/5">
           ⛽
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-display font-semibold text-sm text-white truncate">{lang === 'mm' ? (station.name_mm || station.name) : station.name}</p>
           <p className="text-[10px] text-white/60 font-myanmar truncate">{station.address} • {station.township}</p>
           <div className="flex gap-1.5 mt-1.5 flex-wrap">
-            {stationFuels.map(ft => {
-              const row = (station.fuels || {})[ft.name]
-              const st  = STATUS_CFG[row?.status || 'unknown']
-              return (
-                <span key={ft.id} className="flex items-center gap-1 text-[9px] font-bold">
-                  <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
-                  <span className={st.color}>{ft.icon}</span>
-                </span>
-              )
-            })}
+            {stationFuels.map(ft => (
+              <span key={ft.id} className="flex items-center gap-1 text-[9px] text-white/60">
+                <span>{ft.icon}</span>
+                <span>{lang === 'mm' ? ft.name_mm : ft.name}</span>
+              </span>
+            ))}
             {stationFuels.length === 0 && (
               <span className="text-[9px] text-white/60">ဆီအမျိုးအစား မသတ်မှတ်ရ</span>
             )}
@@ -65,103 +39,35 @@ function StationCard({ station, lang, onReport, onQueueReport, allFuelTypes }) {
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 border-t border-white/6 pt-3">
-          {/* Fuel Types Status */}
-          <div className="space-y-3">
-            {stationFuels.length === 0 && (
+        <div className="px-4 pb-4 border-t border-white/6 pt-3 space-y-2">
+          {station.phone && (
+            <p className="text-xs text-white/70">
+              📞 <a href={`tel:${station.phone}`} className="text-brand-300">{station.phone}</a>
+            </p>
+          )}
+          {station.operating_hours && (
+            <p className="text-xs text-white/70">🕒 {station.operating_hours}</p>
+          )}
+          {station.notes && (
+            <p className="text-xs text-white/60 font-myanmar">{station.notes}</p>
+          )}
+          {/* Fuel types sold here */}
+          <div className="pt-1">
+            <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider font-myanmar mb-1.5">
+              {lang === 'mm' ? 'ရောင်းချသော ဆီအမျိုးအစားများ' : 'Fuel types sold'}
+            </p>
+            {stationFuels.length === 0 ? (
               <p className="text-xs text-white/60 text-center py-2">ဆီအမျိုးအစား မသတ်မှတ်ရသေး</p>
-            )}
-            {stationFuels.map(ft => {
-              const row = (station.fuels || {})[ft.name]
-              const st  = STATUS_CFG[row?.status || 'unknown']
-              return (
-                <div key={ft.id} className={`flex items-center gap-3 p-3 rounded-xl border ${st.bg}`}>
-                  <span className="text-lg flex-shrink-0">{ft.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-display font-semibold text-white">{lang === 'mm' ? ft.name_mm : ft.name}</p>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className={`text-[10px] font-bold ${st.color}`}>{lang === 'mm' ? st.mm : st.en}</span>
-                      {row?.reported_at && <span className="text-[11px] text-white/60">{timeAgo(row.reported_at, lang)}</span>}
-                    </div>
-                  </div>
-                  <div className="flex flex-row gap-1 flex-shrink-0">
-                    {['available','limited','unavailable'].map(s => (
-                      <button key={s} disabled={reportBusy === `${ft.id}:${s}`} onClick={async () => { if (reportBusy) return; setReportBusy(`${ft.id}:${s}`); try { await onReport(station.id, ft.id, s) } finally { setReportBusy(null) } }}
-                        className={`min-h-[36px] flex-1 text-xs font-bold px-2 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
-                          row?.status === s ? STATUS_CFG[s].bg + ' ' + STATUS_CFG[s].color : 'bg-white/5 border-white/10 text-white/60 hover:text-white/60'
-                        }`}>
-                        {s === 'available' ? (lang === 'mm' ? 'ရ' : 'Yes') :
-                         s === 'limited'   ? (lang === 'mm' ? 'နည်း' : 'Few') :
-                                             (lang === 'mm' ? 'မရ' : 'No')}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Queue Status Section */}
-          <div className="mt-4 p-3 rounded-xl bg-white/5 border border-white/10">
-            <div className="flex justify-between items-center mb-2">
-              <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider font-myanmar">
-                စောင့်ဆိုင်းနေသော ယာဉ်များ (ခန့်မှန်း)
-              </p>
-              {station.queue_updated_at && (
-                <span className="text-[11px] text-white/60">{timeAgo(station.queue_updated_at, lang)}</span>
-              )}
-            </div>
-            
-            <div className="flex gap-2 mb-3">
-              <div className="flex-1 bg-black/20 rounded-lg p-2 text-center border border-white/5">
-                <p className="text-xs text-white/60 mb-0.5">🚗 ကား</p>
-                <p className="text-sm font-bold text-white">
-                  {station.waiting_cars != null ? `~ ${station.waiting_cars} စီး` : '-'}
-                </p>
-              </div>
-              <div className="flex-1 bg-black/20 rounded-lg p-2 text-center border border-white/5">
-                <p className="text-xs text-white/60 mb-0.5">🛵 ဆိုင်ကယ်</p>
-                <p className="text-sm font-bold text-white">
-                  {station.waiting_motorcycles != null ? `~ ${station.waiting_motorcycles} စီး` : '-'}
-                </p>
-              </div>
-            </div>
-
-            {!showQueueForm ? (
-              <button onClick={() => setShowQueueForm(true)}
-                className="w-full py-2 bg-blue-500/10 text-blue-400 rounded-lg text-xs font-bold font-myanmar transition-colors hover:bg-blue-500/20">
-                + လူတန်းအခြေအနေ တင်ပြမည်
-              </button>
             ) : (
-              <div className="p-3 bg-black/30 rounded-xl border border-white/10 animate-fade-in">
-                <p className="text-[10px] text-white/60 mb-2 font-myanmar text-center">ခန့်မှန်း အရေအတွက်ကို ထည့်ပါ</p>
-                <div className="flex gap-2 mb-2">
-                  <input type="number" placeholder="ကား" value={qCars} onChange={e => setQCars(e.target.value)}
-                    className="input-dark flex-1 text-center font-bold" min="0" />
-                  <input type="number" placeholder="ဆိုင်ကယ်" value={qBikes} onChange={e => setQBikes(e.target.value)}
-                    className="input-dark flex-1 text-center font-bold" min="0" />
-                </div>
-                <div className="flex gap-2">
-                  <button disabled={queueSubmitting} onClick={async () => {
-                    if (queueSubmitting) return
-                    setQueueSubmitting(true)
-                    try { await onQueueReport(station.id, qCars, qBikes) } finally { setQueueSubmitting(false) }
-                    setShowQueueForm(false);
-                    setQCars('');
-                    setQBikes('');
-                  }}
-                    className="flex-1 py-2 bg-blue-500 text-white rounded-lg text-xs font-bold font-myanmar disabled:opacity-50">
-                    {queueSubmitting ? 'တင်နေသည်...' : 'အတည်ပြုမည်'}
-                  </button>
-                  <button onClick={() => setShowQueueForm(false)}
-                    className="px-3 py-2 bg-white/10 text-white/50 rounded-lg text-xs font-bold">
-                    ✕
-                  </button>
-                </div>
+              <div className="flex gap-1.5 flex-wrap">
+                {stationFuels.map(ft => (
+                  <span key={ft.id} className="text-[10px] px-2 py-1 rounded-full bg-white/5 border border-white/10 text-white/70">
+                    {ft.icon} {lang === 'mm' ? ft.name_mm : ft.name}
+                  </span>
+                ))}
               </div>
             )}
           </div>
-
         </div>
       )}
     </div>
@@ -446,6 +352,14 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                 <input value={form.address} onChange={e => set('address', e.target.value)}
                   placeholder="လိပ်စာ" className="input-dark" />
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={form.phone} onChange={e => set('phone', e.target.value)}
+                  placeholder="ဖုန်းနံပါတ်" type="tel" className="input-dark" />
+                <input value={form.operating_hours} onChange={e => set('operating_hours', e.target.value)}
+                  placeholder="ဖွင့်ချိန်" className="input-dark font-myanmar" />
+              </div>
+              <input value={form.notes} onChange={e => set('notes', e.target.value)}
+                placeholder="မှတ်ချက်" className="input-dark w-full font-myanmar" />
               <p className="text-[10px] text-white/60 font-bold uppercase mt-2">လောင်စာဆီ အမျိုးအစားများ</p>
               {allFuelTypes.length === 0 ? (
                 <p className="text-[10px] text-amber-400 py-1">
@@ -495,6 +409,14 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                           <input value={editData.address || ''} onChange={e => setE('address', e.target.value)}
                             className="input-dark" placeholder="လိပ်စာ" />
                         </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input value={editData.phone || ''} onChange={e => setE('phone', e.target.value)}
+                            className="input-dark" placeholder="ဖုန်းနံပါတ်" type="tel" />
+                          <input value={editData.operating_hours || ''} onChange={e => setE('operating_hours', e.target.value)}
+                            className="input-dark font-myanmar" placeholder="ဖွင့်ချိန်" />
+                        </div>
+                        <input value={editData.notes || ''} onChange={e => setE('notes', e.target.value)}
+                          className="input-dark w-full font-myanmar" placeholder="မှတ်ချက်" />
                         <p className="text-[10px] text-white/60 font-bold uppercase">ဆီအမျိုးအစားများ</p>
                         {allFuelTypes.length === 0 ? (
                           <p className="text-[10px] text-amber-400">⚠️ ဆီအမျိုးအစား tab မှ ဦးစွာထည့်ပါ</p>
@@ -575,14 +497,12 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
 export default function FuelPage() {
   const { lang }       = useLang()
   const { isModerator } = useAuth()
-  const config = useAppConfig()
-  useSEO({ title: 'Fuel Availability' })
+  useSEO({ title: 'Fuel Stations' })
 
   const [stations, setStations]         = useState([])
   const [allFuelTypes, setAllFuelTypes] = useState([])
   const [loading, setLoading]           = useState(true)
   const [showManage, setShowManage]     = useState(false)
-  const [toast, setToast]               = useState(null)
   const [loadError, setLoadError]       = useState(false)
 
   // Load initial data
@@ -595,25 +515,13 @@ export default function FuelPage() {
       if (ftErr) throw ftErr
       setAllFuelTypes(ftData || [])
 
-      // Load stations with their current status view
+      // Load stations
       const { data: stationsRaw, error: stErr } = await supabase
         .from('fuel_stations')
         .select('*')
         .eq('is_active', true)
         .order('sort_order')
       if (stErr) throw stErr
-
-      const { data: statusData, error: statusErr } = await supabase.from('current_fuel_status').select('*')
-      if (statusErr) throw statusErr
-
-      const statusMap = {}
-      for (const row of (statusData || [])) {
-        if (!statusMap[row.station_id]) statusMap[row.station_id] = {}
-        // BUG FIX: current_fuel_status keys rows by fuel type NAME
-        // (fuel_name); the card looks fuels up by ft.name. The old code
-        // keyed by fuel_id (uuid), so every status read as 'unknown'.
-        statusMap[row.station_id][row.fuel_name || row.fuel_id] = row
-      }
 
       const merged = (stationsRaw || []).map(s => ({
         id: s.id,
@@ -625,10 +533,6 @@ export default function FuelPage() {
         operating_hours: s.operating_hours,
         phone: s.phone,
         fuel_type_names: s.fuel_type_names || [],
-        fuels: statusMap[s.id] || {},
-        waiting_cars: s.waiting_cars,
-        waiting_motorcycles: s.waiting_motorcycles,
-        queue_updated_at: s.queue_updated_at
       }))
 
       setStations(merged)
@@ -638,78 +542,10 @@ export default function FuelPage() {
 
   useEffect(() => { load() }, [])
 
-  // Optimistic update for fuel status.
-  // fuelType is the fuel_types.id ('petrol92') — fuel_reports.fuel_type
-  // is an FK to fuel_types(id), so passing the display name ('Petrol 92')
-  // failed every report. Local state, however, is keyed by fuel NAME
-  // (current_fuel_status.fuel_name), so resolve the name for the
-  // optimistic update below.
-  async function handleReport(stationId, fuelType, status) {
-    const { data: { user } } = await supabase.auth.getUser()
-    // Insert report
-    const { error } = await supabase.from('fuel_reports').insert({
-      station_id: stationId, fuel_type: fuelType, status,
-      reporter_id: user?.id || null,
-    })
-    if (error) {
-      console.error(error)
-      setToast({ msg: 'Error: ' + error.message, type: 'error' })
-      setTimeout(() => setToast(null), 3000)
-      return
-    }
-
-    const fuelName = allFuelTypes.find(ft => ft.id === fuelType)?.name || fuelType
-    // Update local state optimistically
-    setStations(prevStations => prevStations.map(station => {
-      if (station.id !== stationId) return station
-      const updatedFuels = { ...station.fuels }
-      updatedFuels[fuelName] = {
-        ...updatedFuels[fuelName],
-        status,
-        reported_at: new Date().toISOString() // approximate
-      }
-      return { ...station, fuels: updatedFuels }
-    }))
-
-    setToast({ msg: 'Report တင်ပြီးပါပြီ ✓', type: 'ok' })
-    setTimeout(() => setToast(null), 3000)
-  }
-
-  // Optimistic update for queue — partial update only: a report for
-  // one vehicle type must never null the other type's count (FB-7).
-  async function handleQueueReport(stationId, cars, bikes) {
-    const c = cars === '' ? null : parseInt(cars, 10)
-    const b = bikes === '' ? null : parseInt(bikes, 10)
-
-    const updates = { queue_updated_at: new Date().toISOString() }
-    if (cars !== '') updates.waiting_cars = c
-    if (bikes !== '') updates.waiting_motorcycles = b
-    const { error } = await supabase.from('fuel_stations').update(updates).eq('id', stationId)
-
-    if (error) {
-      showError('Error updating queue: ' + error.message)
-      return
-    }
-
-    // Update local state — keep the untouched vehicle count as-is.
-    setStations(prevStations => prevStations.map(station => {
-      if (station.id !== stationId) return station
-      return {
-        ...station,
-        ...(cars !== '' ? { waiting_cars: c } : {}),
-        ...(bikes !== '' ? { waiting_motorcycles: b } : {}),
-        queue_updated_at: new Date().toISOString()
-      }
-    }))
-
-    setToast({ msg: 'လူတန်းအခြေအနေ တင်ပြီးပါပြီ ✓', type: 'ok' })
-    setTimeout(() => setToast(null), 3000)
-  }
-
   return (
     <div className="pb-36">
       <div className="px-4 pt-4 pb-3 flex items-center justify-between">
-        <h1 className="font-display font-bold text-xl text-white">⛽ Fuel Status</h1>
+        <h1 className="font-display font-bold text-xl text-white">{lang === 'mm' ? '⛽ ဓာတ်ဆီဆိုင်များ' : '⛽ Fuel Stations'}</h1>
         <button onClick={load} className="text-brand-300">
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
@@ -734,29 +570,26 @@ export default function FuelPage() {
       ) : (
         <div className="px-4 space-y-2">
           {stations.map(s => (
-            <StationCard 
-              key={s.id} 
-              station={s} 
-              lang={lang} 
-              onReport={handleReport} 
-              onQueueReport={handleQueueReport} 
-              allFuelTypes={allFuelTypes} 
+            <StationCard
+              key={s.id}
+              station={s}
+              lang={lang}
+              allFuelTypes={allFuelTypes}
             />
           ))}
         </div>
       )}
 
-      {/* How it works section */}
+      {/* About this page */}
       <div className="mx-4 mt-6 card-dark rounded-2xl p-4 bg-white/5 border border-white/8">
         <p className="text-xs font-display font-bold text-white/50 uppercase tracking-wider mb-3">
-          {lang === 'mm' ? 'ဘယ်လိုအလုပ်လုပ်သလဲ' : 'How it works'}
+          {lang === 'mm' ? 'ဤစာမျက်နှာအကြောင်း' : 'About this page'}
         </p>
         <div className="space-y-2">
           {[
-            { mm:'ဆီဆိုင်များတွင် ဆီရ/မရ အခြေအနေကို Report လုပ်ပါ',  en:'Report fuel availability at stations' },
-            { mm:'စောင့်ဆိုင်းနေရသော ကား/ဆိုင်ကယ် အရေအတွက်ကိုလည်း တင်ပြနိုင်သည်', en:'You can also report estimated vehicle queues' },
-            { mm:'နောက်ဆုံးတင်ထားသော Report ကို အခြေခံပြီး ပြသပါမည်', en:'Status is based on the most recent reports' },
-            { mm:'Guest အနေဖြင့်လည်း အလွယ်တကူ Report တင်ပြနိုင်သည်', en:'Guests can easily submit reports' },
+            { mm:'ဓာတ်ဆီဆိုင်များ၏ လိပ်စာ၊ မြို့နယ် နှင့် ဖုန်းနံပါတ်များကို ကြည့်နိုင်သည်',  en:'See station addresses, townships and phone numbers' },
+            { mm:'ဆိုင်ဖွင့်ချိန် နှင့် မှတ်ချက်များကို ကြည့်နိုင်သည်', en:'Check operating hours and notes' },
+            { mm:'ဆိုင်တစ်ခုစီတွင် ရောင်းချသော ဆီအမျိုးအစားများကို ကြည့်နိုင်သည်', en:'See which fuel types each station sells' },
           ].map((s, i) => (
             <div key={i} className="flex items-start gap-2.5">
               <span className="w-5 h-5 rounded-full bg-brand-600/40 text-brand-300 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{i+1}</span>
@@ -764,9 +597,6 @@ export default function FuelPage() {
             </div>
           ))}
         </div>
-        <p className="text-[9px] text-white/60 mt-3 font-myanmar border-t border-white/6 pt-3">
-          ⚠️ {lang === 'mm' ? 'ဤ Data သည် Community Report ဖြစ်ပြီး တိကျမှု 100% ကို မသေချာနိုင်' : 'Community data — accuracy not guaranteed'}
-        </p>
       </div>
 
       {showManage && (
@@ -779,14 +609,6 @@ export default function FuelPage() {
         />
       )}
 
-      {toast && (
-        <div className={`fixed bottom-28 left-4 right-4 z-[300] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl font-myanmar text-sm ${
-          toast.type === 'ok'   ? 'bg-green-500/20 border border-green-500/40 text-green-300' :
-          toast.type === 'error' ? 'bg-red-500/20 border border-red-500/40 text-red-300' :
-                                   'bg-amber-500/20 border border-amber-500/40 text-amber-300'
-        }`}>
-          {toast.type === 'ok' ? '✓' : toast.type === 'error' ? '⚠️' : 'ℹ️'} {toast.msg}
-        </div>
       )}
     </div>
   )

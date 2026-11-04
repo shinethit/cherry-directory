@@ -98,36 +98,6 @@ export const validateListing = (data) => {
 };
 
 /**
- * Validate fuel report data
- * @param {object} data - Fuel report data to validate
- * @returns {object} Validation result with errors array
- */
-export const validateFuelReport = (data) => {
-  const errors = [];
-
-  if (!data.station_id) {
-    errors.push('ဆီဆိုင် ရွေးချယ်ရန် လိုအပ်သည်။');
-  }
-
-  if (!data.fuel_type) {
-    errors.push('ဆီအမျိုးအစား ရွေးချယ်ရန် လိုအပ်သည်။');
-  }
-
-  if (!data.status || !['available', 'unavailable', 'limited'].includes(data.status)) {
-    errors.push('ဆီအခြေအနေ မှားမှားမှားနေသည်။');
-  }
-
-  if (data.price && data.price < 0) {
-    errors.push('စျေးနှုန်း အနုတ်မဖြစ်နိုင်ပါ။');
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-};
-
-/**
  * Validate review data
  * @param {object} data - Review data to validate
  * @returns {object} Validation result with errors array

@@ -33,11 +33,11 @@ const STEPS = [
     icon: '🏘️',
     mm: {
       title: 'Community Features များ',
-      desc: 'ဈေးနှုန်း၊ လျှပ်စစ်၊ ဓာတ်ဆီ စတဲ့ သတင်းအချက်အလက်များ',
+      desc: 'ဈေးနှုန်း၊ ဓာတ်ဆီ စတဲ့ သတင်းအချက်အလက်များ',
     },
     en: {
       title: 'Community Features',
-      desc: 'Prices, power, fuel and more — reported by community',
+      desc: 'Prices, fuel and more — reported by community',
     },
   },
   {

@@ -253,7 +253,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
           {coverUrl ? (
             <div className="relative h-32">
               <img src={coverUrl} alt={form.title_mm || form.title || 'Cover'} className="w-full h-full object-cover rounded-xl" />
-              <button onClick={() => setCoverUrl('')} className="absolute top-2 right-2 w-7 h-7 bg-black/60 rounded-lg flex items-center justify-center text-white text-xs">✕</button>
+              <button onClick={() => setCoverUrl('')} className="absolute top-2 right-2 w-11 h-11 bg-black/60 rounded-lg flex items-center justify-center text-white text-xs">✕</button>
             </div>
           ) : (
             <ImageUploader onUpload={handleCoverUpload} loading={coverLoading} label="Cover တင်ရန်" />
@@ -266,7 +266,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
             {images.map((url, i) => (
               <div key={i} className="relative w-20 h-20">
                 <GalleryImg src={url} className="w-full h-full object-cover rounded-xl" alt={form.title_mm || form.title || 'ပုံ'} />
-                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-7 h-7 btn-danger rounded-full text-white text-xs flex items-center justify-center">✕</button>
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-11 h-11 btn-danger rounded-full text-white text-xs flex items-center justify-center">✕</button>
               </div>
             ))}
             {images.length < 10 && <ImageUploader onUpload={handleImageUpload} loading={imgLoading} label="+" />}

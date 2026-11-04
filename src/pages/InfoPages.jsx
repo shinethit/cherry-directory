@@ -81,7 +81,7 @@ export function AboutPage() {
 
       <Section titleMm="Cherry Directory ဆိုသည်မှာ">
         <p>Cherry Directory သည် ဒေသတွင် နေထိုင်သော ပြည်သူများ၏ နေ့စဉ်ဘဝ လိုအပ်ချက်များကို ဖြည့်ဆည်းရန် ဖန်တီးထားသော Community Platform တစ်ခုဖြစ်ပါသည်။</p>
-        <p>လုပ်ငန်းရှာဖွေခြင်း၊ သတင်းများ ကြည့်ရှုခြင်း၊ ဖြစ်ရပ်များ ပါဝင်ဆင်နှဲခြင်းမှ စတင်ပြီး ဒေသတွင်း ဈေးနှုန်းများ၊ လျှပ်စစ်အခြေအနေ၊ ဓာတ်ဆီရရှိနိုင်မှု ကဲ့သို့သော Community-sourced Data တွေကိုပါ Real-time တွင် ကြည့်ရှုနိုင်ပါသည်။</p>
+        <p>လုပ်ငန်းရှာဖွေခြင်း၊ သတင်းများ ကြည့်ရှုခြင်း၊ ဖြစ်ရပ်များ ပါဝင်ဆင်နှဲခြင်းမှ စတင်ပြီး ဒေသတွင်း ဈေးနှုန်းများ၊ ဆီဆိုင်များ လမ်းညွှန် ကဲ့သို့သော Community-sourced Data တွေကိုပါ ကြည့်ရှုနိုင်ပါသည်။</p>
       </Section>
 
       <Section titleMm="ကျွန်ုပ်တို့၏ ရည်မှန်းချက်">
@@ -89,7 +89,7 @@ export function AboutPage() {
       </Section>
 
       <Section titleMm="အသုံးပြုနည်း အကျဉ်း">
-        <p>Home မှ လုပ်ငန်းများကို ရှာဖွေကြည့်ရှုနိုင်ပြီး ကြိုက်သော လုပ်ငန်းကို သိမ်းထားနိုင်ပါသည်။ Community တွင် ဈေးနှုန်း၊ လျှပ်စစ်နှင့် ဓာတ်ဆီ အခြေအနေများကို တင်ပြ၍ အခြားသူများနှင့် မျှဝေနိုင်ပြီး Calendar တွင် ရပ်ရွာပွဲများကို ကြည့်ရှုကာ RSVP လုပ်နိုင်ပါသည်။ အကောင့်ဖွင့်ထားသူများသည် မိမိလုပ်ငန်းကို Submit လုပ်ပြီး ပိုင်ရှင် Verify လုပ်နိုင်ပါသည်။</p>
+        <p>Home မှ လုပ်ငန်းများကို ရှာဖွေကြည့်ရှုနိုင်ပြီး ကြိုက်သော လုပ်ငန်းကို သိမ်းထားနိုင်ပါသည်။ Community တွင် ဈေးနှုန်းများကို တင်ပြ၍ အခြားသူများနှင့် မျှဝေနိုင်ပြီး Calendar တွင် ရပ်ရွာပွဲများကို ကြည့်ရှုကာ RSVP လုပ်နိုင်ပါသည်။ အကောင့်ဖွင့်ထားသူများသည် မိမိလုပ်ငန်းကို Submit လုပ်ပြီး ပိုင်ရှင် Verify လုပ်နိုင်ပါသည်။</p>
       </Section>
 
       <Section titleMm="ဆိုင်ပိုင်ရှင်များအတွက်">
@@ -97,7 +97,7 @@ export function AboutPage() {
       </Section>
 
       <Section titleMm="Community Contributors">
-        <p>ဈေးနှုန်းများ တင်ပြခြင်း၊ လျှပ်စစ်အခြေအနေ Report လုပ်ခြင်း၊ ဓာတ်ဆီ ရမရ အသိပေးခြင်း၊ Review ရေးသားခြင်းစသည်ဖြင့် Community ကို ပါဝင်ကူညီသော User တိုင်းကို အမှတ် နှင့် Top Contributor Badge ဖြင့် ချီးမြှင့်ပါသည်။</p>
+        <p>ဈေးနှုန်းများ တင်ပြခြင်း၊ Review ရေးသားခြင်းစသည်ဖြင့် Community ကို ပါဝင်ကူညီသော User တိုင်းကို အမှတ် နှင့် Top Contributor Badge ဖြင့် ချီးမြှင့်ပါသည်။</p>
       </Section>
 
       <div className="card-dark rounded-2xl p-4 text-center space-y-2">
@@ -128,7 +128,7 @@ export function PrivacyPage() {
             'Profile ထဲ ကိုယ်တိုင် ထည့်သွင်းသော Avatar၊ Bio',
             'လုပ်ငန်း Submit သောအခါ လုပ်ငန်းနှင့် ဆက်သွယ်ရေး အချက်အလက်',
             'App သုံးစွဲချိန် Last seen timestamp (Online status)',
-            'Community Reports: ဈေးနှုန်း၊ လျှပ်စစ်၊ ဓာတ်ဆီ Report data',
+            'Community Reports: ဈေးနှုန်း Report data',
             'Chat messages (Public chat room)',
           ].map((item, i) => (
             <li key={i} className="flex items-start gap-2 text-white/55">
@@ -210,7 +210,7 @@ export function TermsPage() {
             'ဒေသတွင်း လုပ်ငန်းများ ရှာဖွေကြည့်ရှုခြင်း',
             'မှန်ကန်သော လုပ်ငန်း Submit နှင့် Review ရေးခြင်း',
             'Community ကို အကျိုးဖြစ်ထွန်းစေသော Chat မျှဝေခြင်း',
-            'မှန်ကန်သော ဈေးနှုန်း၊ လျှပ်စစ်၊ ဓာတ်ဆီ Report တင်ပြခြင်း',
+            'မှန်ကန်သော ဈေးနှုန်း Report တင်ပြခြင်း',
           ].map((item, i) => <li key={i} className="flex items-start gap-2 text-white/55"><span className="text-green-400 flex-shrink-0 mt-0.5">✓</span><span>{item}</span></li>)}
         </ul>
       </Section>
@@ -233,7 +233,7 @@ export function TermsPage() {
       </Section>
 
       <Section titleMm="Community Data">
-        <p>ဈေးနှုန်း၊ လျှပ်စစ် Status၊ ဓာတ်ဆီ Report များသည် Community-contributed data ဖြစ်ပြီး တိကျမှုကို 100% အာမမခံနိုင်ပါ။ ဤ Data များကို Reference ထားရုံသာ သုံးပြီး အရေးကြီးသော ဆုံးဖြတ်ချက်များအတွက် တည်းဖြတ်၍ စစ်ဆေးရန် တိုက်တွန်းပါသည်။</p>
+        <p>ဈေးနှုန်း Report များသည် Community-contributed data ဖြစ်ပြီး တိကျမှုကို 100% အာမမခံနိုင်ပါ။ ဤ Data များကို Reference ထားရုံသာ သုံးပြီး အရေးကြီးသော ဆုံးဖြတ်ချက်များအတွက် တည်းဖြတ်၍ စစ်ဆေးရန် တိုက်တွန်းပါသည်။</p>
       </Section>
 
       <Section titleMm="Moderation">
@@ -292,16 +292,6 @@ export function HelpPage() {
         'Category filter ဖြင့် ကုန်ပစ္စည်း ရှာဖွေပါ',
         'ကုန်ပစ္စည်းဘေးရှိ + Button ကို နှိပ်ပါ',
         'ဈေးကွက်တွင် ကြည့်ရှုသော တကယ့် ဈေးနှုန်း ရိုက်ထည့်ပြီး Submit နှိပ်ပါ (Login မလိုဘဲ ရပါသည်)',
-      ],
-    },
-    {
-      icon: '⚡',
-      titleMm: 'လျှပ်စစ် Report လုပ်နည်း',
-      steps: [
-        'Community > လျှပ်စစ်အခြေအနေ ကို ဖွင့်ပါ',
-        'သင်၏ ရပ်ကွက် Card ကို ရှာပါ',
-        '"ဖြတ်သည်" သို့မဟုတ် "ပြန်ရ" button ကို နှိပ်ပါ',
-        '၅ မိနစ်တစ်ကြိမ်သာ Report တင်နိုင်ပါသည်',
       ],
     },
     {

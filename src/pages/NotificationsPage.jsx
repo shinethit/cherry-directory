@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Check, CheckCheck, Trash2, ArrowLeft, Star, Building2, Fuel, AlertCircle, MessageCircle } from 'lucide-react'
+import { Bell, Check, CheckCheck, Trash2, ArrowLeft, Star, Building2, AlertCircle, MessageCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
@@ -22,7 +22,6 @@ const TYPE_CFG = {
   listing_rejected:   { icon: Building2,     color: 'text-red-400',    bg: 'bg-red-500/15' },
   new_review:         { icon: Star,          color: 'text-gold-400',   bg: 'bg-gold-500/15' },
   review_approved:    { icon: Star,          color: 'text-gold-400',   bg: 'bg-gold-500/15' },
-  fuel_status_update: { icon: Fuel,          color: 'text-amber-400',  bg: 'bg-amber-500/15' },
   new_message:        { icon: MessageCircle, color: 'text-brand-300',  bg: 'bg-brand-600/15' },
   system_alert:       { icon: AlertCircle,   color: 'text-blue-400',   bg: 'bg-blue-500/15' },
 }
@@ -129,8 +128,6 @@ export default function NotificationsPage() {
       if (data.listing_id) navigate(`/directory/${data.listing_id}`)
     } else if (notif.type === 'new_review' || notif.type === 'review_approved') {
       if (data.listing_id) navigate(`/directory/${data.listing_id}`)
-    } else if (notif.type === 'fuel_status_update') {
-      navigate('/fuel')
     } else if (notif.type === 'new_message') {
       // F11: go straight to the conversation when the notification
       // carries a room id (passed via location state — there is no

@@ -11,6 +11,7 @@ import { uploadImage } from '../lib/cloudinary'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError, showSuccess } from '../lib/toast'
 import { yangonToday, mmtParts, formatMyanmarDate } from '../lib/myanmarDate'
+import { maskPhone, toTelHref } from '../lib/phoneMask'
 import ShareButton from '../components/ShareButton'
 
 // Short date in Myanmar time ("Jan 5, 2026" / "ဇန်နဝါရီ 5 ရက်၊ 2026") —
@@ -510,6 +511,10 @@ function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
         {service.start_time && <span>🕐 {service.start_time}{service.end_time ? `–${service.end_time}` : ''}</span>}
       </div>
 
+      {/* E17/E23 (v9.6): opening hours + specialty — shown only when set. */}
+      {service.opening_hours && <p className="text-xs text-white/60 font-myanmar">🕒 {lang === 'mm' ? 'ဖွင့်ချိန်' : 'Hours'}: {service.opening_hours}</p>}
+      {service.specialty && <p className="text-xs text-white/60 font-myanmar">⭐ {lang === 'mm' ? 'အထူးပြု' : 'Specialty'}: {service.specialty}</p>}
+
       <div className="flex gap-2 flex-wrap">
         {service.contact_phone && <a href={`tel:${service.contact_phone}`} className="flex items-center gap-1.5 min-h-9 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">📞 {lang === 'mm' ? 'ဖုန်းခေါ်မည်' : 'Call'} {service.contact_phone}</a>}
         {service.facebook && <a href={service.facebook} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400">FB Page →</a>}
@@ -525,6 +530,7 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
     type: 'free_clinic', title: '', title_mm: '', description_mm: '', organizer_mm: '',
     location_mm: '', contact_phone: '', contact_name: '', facebook: '',
     start_date: '', end_date: '', start_time: '', end_time: '',
+    opening_hours: '', specialty: '',
     blood_types_needed: [], is_urgent: false,
   })
   const [images, setImages] = useState([])
@@ -548,6 +554,8 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
         end_date: editTarget.end_date || '',
         start_time: editTarget.start_time || '',
         end_time: editTarget.end_time || '',
+        opening_hours: editTarget.opening_hours || '',
+        specialty: editTarget.specialty || '',
         blood_types_needed: editTarget.blood_types_needed || [],
         is_urgent: editTarget.is_urgent || false,
       })
@@ -645,6 +653,13 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
           </div>
         )}
         <div><label className="block text-xs text-white/50 mb-1.5">နေရာ</label><input value={form.location_mm} onChange={e => set('location_mm', e.target.value)} className="input-dark font-myanmar" /></div>
+        {/* E17/E23 (v9.6): opening hours + specialty. input-dark is 16px
+            (src/index.css) so no iOS focus zoom. Payload is ...form, so both
+            are included in insert and update automatically. */}
+        <div className="grid grid-cols-2 gap-3">
+          <div><label className="block text-[10px] text-white/60 mb-1">ဖွင့်ချိန်</label><input value={form.opening_hours} onChange={e => set('opening_hours', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: မနက် ၉ နာရီ – ည ၉ နာရီ" /></div>
+          <div><label className="block text-[10px] text-white/60 mb-1">အထူးပြု</label><input value={form.specialty} onChange={e => set('specialty', e.target.value)} className="input-dark font-myanmar" placeholder="ဥပမာ: အထွေထွေ / ကလေး / သွား" /></div>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div><label className="block text-[10px] text-white/60 mb-1">Start Date</label><input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} className="input-dark" /></div>
           <div><label className="block text-[10px] text-white/60 mb-1">End Date</label><input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} className="input-dark" /></div>
@@ -817,10 +832,9 @@ const SEAT_LABELS = {
   unknown: { mm: 'မသိရ',          en: 'Unknown',    color: 'text-white/60' },
 }
 
-// E2 (v9.5): bus_routes has duration_hours but NO arrival_time and NO
-// operator phone column — arrival is estimated from departure_time +
-// duration_hours. Operator phone stays unavailable (needs a
-// bus_routes.operator_phone column + data — schema decision).
+// E2 (v9.6): arrival is estimated from departure_time + duration_hours
+// (bus_routes has no arrival_time column). Operator phone comes from
+// bus_routes.operator_phone — guests see it masked, never as a tel: link.
 function arrivalEstimate(departureTime, durationHours) {
   if (!departureTime || durationHours == null) return null
   const [h, m] = String(departureTime).split(':').map(Number)
@@ -863,7 +877,7 @@ export function BusSchedulePage() {
     setLoadError(false)
     try {
       let q = supabase.from('bus_departures')
-        .select('*, bus_routes(from_city, to_city, operator, type, normal_fare, duration_hours)')
+        .select('*, bus_routes(from_city, to_city, operator, operator_phone, type, normal_fare, duration_hours)')
         .eq('departure_date', dateFilter)
         .order('departure_time', { ascending: true })
       if (routeFilter !== 'all') q = q.eq('route_id', routeFilter)
@@ -963,6 +977,10 @@ export function BusSchedulePage() {
          departures.map(s => {
            const seat = SEAT_LABELS[s.seats_available] || SEAT_LABELS.unknown
            const eta = arrivalEstimate(s.departure_time, s.bus_routes?.duration_hours)
+           // E2/E18 (v9.6): operator phone lives on the route. Guests get a
+           // masked number and NO tel: link (9.5 phoneMask rule).
+           const opPhone = s.bus_routes?.operator_phone
+           const opTel = opPhone && isLoggedIn ? toTelHref(opPhone, true) : null
            return (
              <div key={s.id} className="card-dark rounded-2xl p-4">
                <div className="flex items-start justify-between gap-2">
@@ -978,6 +996,11 @@ export function BusSchedulePage() {
                        : (s.bus_routes?.normal_fare ? <span className="text-xs text-white/60 font-mono">~{Number(s.bus_routes.normal_fare).toLocaleString()} Ks</span> : null)}
                    </div>
                    {s.notes && <p className="text-xs text-white/60 mt-1 font-myanmar">{s.notes}</p>}
+                   {opPhone && (opTel ? (
+                     <a href={opTel} className="inline-flex items-center gap-1.5 mt-1.5 min-h-9 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">📞 {maskPhone(opPhone, true)}</a>
+                   ) : (
+                     <span className="inline-flex items-center gap-1.5 mt-1.5 text-xs text-white/60">📞 {maskPhone(opPhone, false)} · {lang === 'mm' ? 'ဖုန်းခေါ်ရန် Login ဝင်ပါ' : 'Login to call'}</span>
+                   ))}
                  </div>
                  {isModerator && <button onClick={() => deleteSchedule(s.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center"><Trash2 size={14} /></button>}
                </div>
