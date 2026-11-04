@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Search, X, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import { escapePostgrestOr } from '../hooks/useListings'
@@ -155,7 +156,9 @@ export default function SearchPage() {
           query = query.eq(source.statusFilter.column, source.statusFilter.value)
         }
 
-        const { data, error } = await query
+        // 30 s per source (was none): one hung source query used to
+        // hold Promise.all forever, so the search spinner never cleared.
+        const { data, error } = await withTimeout(query, 30000, 'Search ' + source.id)
         if (!error && data) {
           newResults[source.id] = data
         } else {

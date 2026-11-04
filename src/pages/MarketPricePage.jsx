@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { TrendingUp, TrendingDown, Minus, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -266,10 +267,12 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
   const [editName, setEditName] = useState('')
 
   useEffect(() => {
-    supabase.from('markets').select('*').order('sort_order').then(({ data }) => {
+    // 30 s timeout (was none) + catch: a hung/failed query used to
+    // leave the modal spinner up forever.
+    withTimeout(supabase.from('markets').select('*').order('sort_order'), 30000, 'Markets').then(({ data }) => {
       setList(data || [])
       setLoading(false)
-    })
+    }).catch(() => setLoading(false))
   }, [])
 
   async function addMarket() {
@@ -582,17 +585,25 @@ export default function MarketPricePage() {
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(false)
-    const { data, error } = await supabase.from('current_prices').select('*')
-    if (error) { console.warn(error); setLoadError(true); setPrices([]); setLoading(false); return }
-    setPrices(data || [])
-    // "Updated … ago" comes from the data's own latest timestamp, never
-    // from page-load time.
-    const latest = (data || [])
-      .map(p => p.last_reported || p.updated_at)
-      .filter(Boolean)
-      .sort()
-      .pop()
-    setLast(latest ? new Date(latest) : null)
+    // 30 s timeout + try/catch (was a bare await): a hung or rejected
+    // query used to leave the page on skeletons forever with no retry.
+    try {
+      const { data, error } = await withTimeout(supabase.from('current_prices').select('*'), 30000, 'Market prices')
+      if (error) throw error
+      setPrices(data || [])
+      // "Updated … ago" comes from the data's own latest timestamp, never
+      // from page-load time.
+      const latest = (data || [])
+        .map(p => p.last_reported || p.updated_at)
+        .filter(Boolean)
+        .sort()
+        .pop()
+      setLast(latest ? new Date(latest) : null)
+    } catch (e) {
+      console.warn(e)
+      setLoadError(true)
+      setPrices([])
+    }
     setLoading(false)
     supabase.from('price_reports').select('*, item:price_items(name, name_en, icon, unit, unit_en), reporter:profiles(full_name, nickname)').order('reported_at', { ascending: false }).limit(8).then(({ data }) => setRecent(data || []))
   }, [])

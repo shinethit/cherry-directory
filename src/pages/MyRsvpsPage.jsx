@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, MapPin, CheckCircle, Star, Clock } from 'lucide-re
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useSEO } from '../hooks/useSEO'
 import { goBackOrHome } from '../lib/navigation'
 import { EmptyState } from '../components/UI'
@@ -37,10 +38,11 @@ export default function MyRsvpsPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const { data, error } = await supabase
+      // 30 s timeout (was none): a hung query left the list on skeletons forever.
+      const { data, error } = await withTimeout(supabase
         .from('event_rsvps')
         .select('status, post:posts(id, title, title_mm, cover_url, event_start, event_end, event_location, type, status)')
-        .eq('user_id', user.id)
+        .eq('user_id', user.id), 30000, 'My RSVPs')
       if (error) throw error
       // Keep RSVPs whose event is unpublished/withdrawn — show them as
       // "ပွဲဖျက်သိမ်းပြီး/မထုတ်ဝေတော့ပါ" instead of silently dropping them.

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { PostCard, Skeleton, EmptyState } from '../components/UI'
@@ -68,14 +69,21 @@ export default function NewsPage() {
         .limit(3)
       if (type) pinnedQuery = pinnedQuery.eq('type', type)
 
-      const [{ data: pinnedData, error: pinnedErr }, { data: postsData, error: postsErr }] = await Promise.all([
+      // 30 s timeout (was none) + allSettled: the posts list is core,
+      // pinned posts are not — one failed pinned query used to clear
+      // both lists and mark the whole page failed.
+      const [pinnedRes, postsRes] = await withTimeout(Promise.allSettled([
         pinnedQuery,
         postsQuery,
-      ])
-      if (pinnedErr || postsErr) throw (pinnedErr || postsErr)
-
-      setPinned(pinnedData || [])
-      setPosts(postsData || [])
+      ]), 30000, 'News')
+      if (postsRes.status === 'rejected' || postsRes.value?.error) throw (postsRes.status === 'rejected' ? postsRes.reason : postsRes.value.error)
+      if (pinnedRes.status === 'rejected' || pinnedRes.value?.error) {
+        console.warn(pinnedRes.status === 'rejected' ? pinnedRes.reason : pinnedRes.value.error)
+        setPinned([])
+      } else {
+        setPinned(pinnedRes.value.data || [])
+      }
+      setPosts(postsRes.value.data || [])
     } catch (e) { console.warn(e); setLoadError(true); setPinned([]); setPosts([]) }
     setLoading(false)
     setLoadingMore(false)

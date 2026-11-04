@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Plus, Trash2, ChevronDown, ChevronUp, Edit2, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
@@ -186,7 +187,9 @@ export default function MenuPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const { data: l, error } = await supabase.from('listings').select('id, name, name_mm, owner_id, submitted_by').eq('id', id).single()
+      // 30 s timeout (was none): a hung listing query left the page on
+      // skeletons forever with no retry.
+      const { data: l, error } = await withTimeout(supabase.from('listings').select('id, name, name_mm, owner_id, submitted_by').eq('id', id).single(), 30000, 'Menu listing')
       if (error && error.code !== 'PGRST116') throw error
       if (!l) { setLoadError('not-found'); setLoading(false); return }
       setListing(l)
@@ -205,13 +208,22 @@ export default function MenuPage() {
 
   async function loadMenu() {
     setMenuError(false)
-    const [{ data: cats, error: catErr }, { data: its, error: itemErr }] = await Promise.all([
-      supabase.from('menu_categories').select('*').eq('listing_id', id).order('sort_order'),
-      supabase.from('menu_items').select('*').eq('listing_id', id).order('sort_order'),
-    ])
-    if (catErr || itemErr) { setMenuError(true); showError('Menu တင်ရာတွင် အမှားဖြစ်သွားသည်'); return }
-    setMenuCategories(cats || [])
-    setItems(its || [])
+    // Menu is secondary to the listing itself: a failed/timed-out menu
+    // fetch used to throw into load() and mark the WHOLE page failed.
+    // It now only sets the menu error banner, with its own 30 s timeout.
+    try {
+      const [{ data: cats, error: catErr }, { data: its, error: itemErr }] = await withTimeout(Promise.all([
+        supabase.from('menu_categories').select('*').eq('listing_id', id).order('sort_order'),
+        supabase.from('menu_items').select('*').eq('listing_id', id).order('sort_order'),
+      ]), 30000, 'Menu items')
+      if (catErr || itemErr) { setMenuError(true); showError('Menu တင်ရာတွင် အမှားဖြစ်သွားသည်'); return }
+      setMenuCategories(cats || [])
+      setItems(its || [])
+    } catch (e) {
+      console.warn(e)
+      setMenuError(true)
+      showError('Menu တင်ရာတွင် အမှားဖြစ်သွားသည်')
+    }
   }
 
   async function addCategory() {

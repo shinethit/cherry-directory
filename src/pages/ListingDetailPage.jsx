@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Phone, MessageCircle, MapPin, Star, Send, CheckCircle, ExternalLink, Bookmark, BookmarkCheck, BadgeCheck, Edit3, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
@@ -133,34 +134,48 @@ export default function ListingDetailPage() {
       setNotFound(false)
       setLoadError(false)
       try {
-        const [{ data: l, error: lErr }, { data: r, error: rErr }] = await Promise.all([
+        // 30 s timeout (was none — a hung query left the skeletons up
+        // forever). allSettled: the listing is core, reviews are not —
+        // a failed reviews query used to blank the whole page.
+        const [lRes, rRes] = await withTimeout(Promise.allSettled([
           supabase.from('listings').select('*, category:categories(name, name_mm, icon), owner:profiles!owner_id(full_name, avatar_url)').eq('id', id).single(),
           supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(20),
-        ])
+        ]), 30000, 'Listing detail')
+        const l = lRes.status === 'fulfilled' ? lRes.value.data : null
+        const lErr = lRes.status === 'fulfilled' ? lRes.value.error : lRes.reason
         if (lErr && lErr.code !== 'PGRST116') { setLoadError(true); setLoading(false); return }
         if (!l) { setNotFound(true); setLoading(false); return }
+        const r = rRes.status === 'fulfilled' ? rRes.value.data : null
+        const rErr = rRes.status === 'fulfilled' ? rRes.value.error : rRes.reason
         if (rErr) { console.warn(rErr); showError('Review များ တင်မရပါ — ထပ်ကြိုးစားပါ') }
         setListing(l)
         setReviews(r || [])
+        // The listing is visible now — the checks below are secondary
+        // and must never hold the page on skeletons.
+        setLoading(false)
         // "View Menu & Prices" only when the listing actually has menu items.
-        const { count: menuCount, error: menuErr } = await supabase.from('menu_items').select('id', { count: 'exact', head: true }).eq('listing_id', id)
-        if (menuErr) { console.warn(menuErr); showError('Menu ရှိမရှိ စစ်မရပါ') }
-        setHasMenu((menuCount || 0) > 0)
+        try {
+          const { count: menuCount, error: menuErr } = await withTimeout(supabase.from('menu_items').select('id', { count: 'exact', head: true }).eq('listing_id', id), 30000, 'Listing menu check')
+          if (menuErr) { console.warn(menuErr); showError('Menu ရှိမရှိ စစ်မရပါ') }
+          else setHasMenu((menuCount || 0) > 0)
+        } catch (menuEx) { console.warn(menuEx); showError('Menu ရှိမရှိ စစ်မရပါ') }
         // View count: the direct UPDATE is owner-only under RLS, so it
         // silently never worked for guests (and raced for everyone).
         // The security-definer RPC increments atomically instead. If the
         // migration has not run yet the RPC is missing — log and carry on;
         // the page must never break over a view count.
         try {
-          const { error: viewErr } = await supabase.rpc('increment_listing_views', { p_listing_id: id })
+          const { error: viewErr } = await withTimeout(supabase.rpc('increment_listing_views', { p_listing_id: id }), 30000, 'Listing view count')
           if (viewErr) console.warn('increment_listing_views failed:', viewErr)
         } catch (viewEx) { console.warn('increment_listing_views failed:', viewEx) }
 
         if (profile) {
-          const [{ data: claim }, { data: vote }] = await Promise.all([
+          const [claimRes, voteRes] = await withTimeout(Promise.allSettled([
             supabase.from('listing_claims').select('status').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
             supabase.from('listing_votes').select('id').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
-          ])
+          ]), 30000, 'Listing claim/vote').catch(() => [null, null])
+          const claim = claimRes?.status === 'fulfilled' ? claimRes.value.data : null
+          const vote = voteRes?.status === 'fulfilled' ? voteRes.value.data : null
           if (claim) setClaimStatus(claim.status)
           setMyVote(!!vote)
         }

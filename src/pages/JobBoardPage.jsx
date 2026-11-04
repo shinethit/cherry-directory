@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Phone, MapPin, ArrowLeft, Trash2, Edit2, Clock, Briefcase, Users, CheckCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -423,7 +424,8 @@ export default function JobBoardPage() {
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
       if (statusFilter !== 'all') q = q.eq('status', statusFilter)
 
-      const { data, error } = await q
+      // 30 s timeout (was none): a hung query left the list on skeletons forever.
+      const { data, error } = await withTimeout(q, 30000, 'Jobs')
       if (error) throw error
       // Client-side expiry: schema sets expires_at +30d but nothing flips the status.
       const now = Date.now()

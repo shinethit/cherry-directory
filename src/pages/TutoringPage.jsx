@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Phone, BookOpen, Users, Clock, Calendar, ArrowLeft, Trash2, Edit2, CheckCircle, XCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -427,7 +428,8 @@ export default function TutoringPage() {
       if (gradeFilter !== 'all') q = q.eq('grade_level', gradeFilter)
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
       if (statusFilter !== 'all') q = q.eq('status', statusFilter)
-      const { data, error } = await q
+      // 30 s timeout (was none): a hung query left the list on skeletons forever.
+      const { data, error } = await withTimeout(q, 30000, 'Tutoring')
       if (error) throw error
       // No expiry concept in the tutoring schema; hide expired rows only if an
       // expires_at column ever exists (guarded so it is a no-op otherwise).

@@ -9,6 +9,7 @@ import { useSEO } from '../hooks/useSEO'
 import { timeAgo } from '../hooks/usePresence'
 import { uploadImage } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { showError } from '../lib/toast'
 import OfflineCachePanel from '../components/OfflineCachePanel'
 import TierBadge from '../components/TierBadge'
@@ -47,19 +48,26 @@ export default function ProfilePage() {
       setOtherLoading(true)
       setOtherError('')
       try {
-        const { data, error } = await supabase
+        // 30 s timeout (was none): a hung query left the public
+        // profile on skeletons forever — the finally below only runs
+        // once the query settles.
+        const { data, error } = await withTimeout(supabase
           .from('profiles')
           .select('id, full_name, nickname, bio, avatar_url, points, role, last_seen')
           .eq('id', profileId)
-          .single()
+          .single(), 30000, 'Profile')
         if (error) throw error
         if (!cancelled) setOtherProfile(data)
         // Review count + approved listings for the public profile (F9).
         // Best-effort: a failure here must not break the profile itself.
-        const [rc, lc] = await Promise.allSettled([
+        // 30 s timeout (was none): a hung count left the whole profile
+        // load hanging — the finally below only runs once this settles.
+        const counts = await withTimeout(Promise.allSettled([
           supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', profileId),
           supabase.from('listings').select('id, name, name_mm, address, address_mm, cover_url, logo_url').eq('submitted_by', profileId).eq('status', 'approved').order('created_at', { ascending: false }).limit(10),
-        ])
+        ]), 30000, 'Profile counts').catch(() => null)
+        const rc = counts?.[0] || { status: 'rejected' }
+        const lc = counts?.[1] || { status: 'rejected' }
         if (!cancelled) {
           if (rc.status === 'fulfilled') setOtherReviews(rc.value?.count || 0)
           if (lc.status === 'fulfilled') setOtherListings(lc.value?.data || [])
@@ -106,12 +114,21 @@ export default function ProfilePage() {
   async function loadStats() {
     if (!user) return
     setStatsError('')
-    const results = await Promise.allSettled([
-      supabase.from('listings').select('*', { count: 'exact', head: true }).eq('submitted_by', user.id),
-      supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-      supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-      supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-    ])
+    // 30 s timeout (was none): a hung count left the stats at 0 with
+    // no error and no retry affordance.
+    let results
+    try {
+      results = await withTimeout(Promise.allSettled([
+        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('submitted_by', user.id),
+        supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+      ]), 30000, 'Profile stats')
+    } catch (e) {
+      console.warn('Profile stats load failed:', e)
+      setStatsError('Stats အချို့ ရယူမရပါ')
+      return
+    }
     const countOf = (r) => (r.status === 'fulfilled' ? (r.value?.count || 0) : 0)
     setMyStats({
       listings: countOf(results[0]),

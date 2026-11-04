@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, MapPin, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
@@ -58,19 +59,19 @@ export default function EditListingPage() {
     setLoadError(false)
     setNotFound(false)
     try {
-      // A hung query used to spin the spinner forever with no retry.
-      let timeoutId = null
-      const timeout = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('load timed out')), 12000)
-      })
-      const [{ data: listing, error: listingErr }, { data: cats }] = await Promise.race([
-        Promise.all([
-          supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('id', id).single(),
-          supabase.from('categories').select('*').eq('type', 'directory').order('sort_order'),
-        ]),
-        timeout,
-      ])
-      if (timeoutId) clearTimeout(timeoutId)
+      // 30 s timeout (was 12 s): on slow mobile data 12 s was not
+      // enough and the whole form failed. allSettled: the listing is
+      // core, the category list is not — a slow/failed categories
+      // query must not block editing the listing itself.
+      const [listingRes, catsRes] = await withTimeout(Promise.allSettled([
+        supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('id', id).single(),
+        supabase.from('categories').select('*').eq('type', 'directory').order('sort_order'),
+      ]), 30000, 'Edit listing')
+      const { data: listing, error: listingErr } = listingRes.status === 'fulfilled'
+        ? listingRes.value
+        : { data: null, error: listingRes.reason }
+      const cats = catsRes.status === 'fulfilled' ? catsRes.value.data : null
+      if (catsRes.status !== 'fulfilled') console.warn('Edit listing categories failed:', catsRes.reason)
       // .single() reports "no rows" as error PGRST116 — that is
       // not-found, not a load failure (error screen + retry is wrong).
       if (listingErr?.code === 'PGRST116') { setNotFound(true); return }

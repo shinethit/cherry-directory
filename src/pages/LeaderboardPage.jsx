@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Trophy, Star, Building2, Medal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
@@ -196,12 +197,13 @@ export default function LeaderboardPage() {
       if (period === 'all') {
         // All-time: use profiles table directly (has accumulated totals)
         const allOrderCol = tab === 'points' ? 'points' : tab === 'reviews' ? 'total_reviews' : 'total_listings'
-        const res = await supabase
+        // 30 s timeout (was none): a hung query left the board on skeletons forever.
+        const res = await withTimeout(supabase
           .from('profiles')
           .select('id, full_name, nickname, avatar_url, role, points, total_reviews, total_listings, last_seen, is_online')
           .gt(allOrderCol, 0)
           .order(allOrderCol, { ascending: false })
-          .limit(100)
+          .limit(100), 30000, 'Leaderboard')
         // F-MED-8: the query error used to be ignored entirely.
         if (res.error) throw res.error
         data = (res.data || []).map(u => ({
@@ -213,12 +215,12 @@ export default function LeaderboardPage() {
         }))
       } else {
         // Period view: aggregate from ledger
-        const res = await supabase
+        const res = await withTimeout(supabase
           .from(periodCfg.view)
           .select('*')
           .gt(orderCol, 0)
           .order(orderCol, { ascending: false })
-          .limit(100)
+          .limit(100), 30000, 'Leaderboard')
         // F-MED-8: same — a failed view query must surface, not render
         // an empty board as if nobody had any activity.
         if (res.error) throw res.error

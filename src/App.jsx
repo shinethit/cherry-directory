@@ -287,10 +287,10 @@ function AppRoutes() {
 // failure, and neither is "cannot connect to server".
 function ErrorScreen({ onRetry, variant }) {
   const copy = variant === 'chunk'
-    ? { title: 'App တင်မရပါ', body: 'App ရဲ့ အစိတ်အပိုင်း တစ်ခုခု တင်မရပါ — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ။' }
+    ? { title: 'App တင်မရပါ', body: 'App ရဲ့ အစိတ်အပိုင်း တစ်ခုခု တင်မရပါ — ထပ်ကြိုးစားကြည့်ပါ။' }
     : variant === 'auth'
-      ? { title: 'အကောင့် တင်နေသည်…', body: 'အကောင့် ဖွင့်တာ ကြာနေသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ။' }
-      : { title: 'ချိတ်ဆက်၍ မရပါ', body: 'ဆာဗာသို့ ချိတ်ဆက်၍ မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။' }
+      ? { title: 'အကောင့် တင်နေသည်…', body: 'အကောင့် ဖွင့်တာ ကြာနေသည် — ထပ်ကြိုးစားကြည့်ပါ။' }
+      : { title: 'ချိတ်ဆက်၍ မရပါ', body: 'ဆာဗာသို့ ချိတ်ဆက်၍ မရပါ — ထပ်ကြိုးစားကြည့်ပါ။' }
   return (
     <div className="min-h-dvh bg-[#0d0015] flex items-center justify-center p-4">
       <div className="card-dark rounded-2xl p-6 max-w-md text-center border border-red-500/30">

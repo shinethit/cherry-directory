@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Phone, MapPin, CheckCircle, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -255,6 +256,7 @@ export default function LostFoundPage() {
 
   const [posts, setPosts]     = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [typeFilter, setTypeFilter] = useState('all')
   const [catFilter, setCatFilter]   = useState('all')
   const [statusFilter, setStatusFilter] = useState('active')
@@ -267,6 +269,7 @@ export default function LostFoundPage() {
 
   async function load() {
     setLoading(true)
+    setLoadError(false)
     try {
       const limit = (page + 1) * PAGE_SIZE
       let q = supabase.from('lost_found').select('*').order('is_urgent', { ascending: false }).order('reported_at', { ascending: false }).range(0, limit - 1)
@@ -280,14 +283,16 @@ export default function LostFoundPage() {
         const esc = escapePostgrestOr(term)
         q = q.or(['title', 'title_mm', 'description', 'description_mm', 'location', 'location_mm'].map(f => `${f}.ilike.%${esc}%`).join(','))
       }
-      const { data, error } = await q
+      // 30 s timeout (was none) + a real error state: a failed load used
+      // to render the empty "Post မရှိသေး" as if nothing was ever posted.
+      const { data, error } = await withTimeout(q, 30000, 'Lost & found')
       if (error) throw error
       // Client-side expiry: expires_at defaults to +30d but nothing flips
       // the status, so hide expired posts here.
       const now = Date.now()
       setPosts((data || []).filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now))
       setHasMore((data || []).length === limit)
-    } catch (e) { console.warn(e) }
+    } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
 
@@ -393,7 +398,12 @@ export default function LostFoundPage() {
       <div className="px-4 space-y-2 pb-24">
         {loading
           ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />)
-          : posts.length === 0 ? (
+          : loadError ? (
+            <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+              <p className="text-sm text-red-400 font-myanmar">Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
+              <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            </div>
+          ) : posts.length === 0 ? (
             <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">🔍</span><p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'Post မရှိသေး' : 'No posts yet'}</p></div>
           ) : (
             <>

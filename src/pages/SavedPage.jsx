@@ -4,6 +4,7 @@ import { Bookmark, Building2, Newspaper, MapPin, Plus, ArrowLeft } from 'lucide-
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useSEO } from '../hooks/useSEO'
 import { ListingCard, PostCard, EmptyState } from '../components/UI'
 import { PlaceCard, PlaceForm, CATEGORIES } from './SavedPlacesPage'
@@ -42,10 +43,11 @@ export default function SavedPage() {
     setLoadingBookmarks(true)
     setBookmarksError('')
     try {
-      const { data: bmarks, error: bmarksError } = await supabase
+      // 30 s timeout (was none): a hung query left the tab on skeletons forever.
+      const { data: bmarks, error: bmarksError } = await withTimeout(supabase
         .from('bookmarks')
         .select('target_id, target_type')
-        .eq('user_id', user.id)
+        .eq('user_id', user.id), 30000, 'Bookmarks')
       if (bmarksError) throw bmarksError
 
       if (!bmarks?.length) {
@@ -55,19 +57,23 @@ export default function SavedPage() {
       const listingIds = bmarks.filter(b => b.target_type === 'listing').map(b => b.target_id)
       const postIds = bmarks.filter(b => b.target_type === 'post').map(b => b.target_id)
 
-      const [{ data: lData, error: lError }, { data: pData, error: pError }] = await Promise.all([
+      // allSettled: a failed listings fetch used to discard the posts
+      // too (and vice versa) — each section now keeps its own result.
+      const [lRes, pRes] = await withTimeout(Promise.allSettled([
         listingIds.length
           ? supabase.from('listings').select('*, category:categories(name, name_mm, icon)').in('id', listingIds)
           : Promise.resolve({ data: [] }),
         postIds.length
           ? supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm)').in('id', postIds)
           : Promise.resolve({ data: [] }),
-      ])
-      if (lError) throw lError
-      if (pError) throw pError
-
-      setListings(lData || [])
-      setPosts(pData || [])
+      ]), 30000, 'Saved items')
+      const lOk = lRes.status === 'fulfilled' && !lRes.value.error
+      const pOk = pRes.status === 'fulfilled' && !pRes.value.error
+      if (!lOk) console.warn('Saved listings failed:', lRes.status === 'rejected' ? lRes.reason : lRes.value.error)
+      if (!pOk) console.warn('Saved posts failed:', pRes.status === 'rejected' ? pRes.reason : pRes.value.error)
+      if (!lOk || !pOk) setBookmarksError('သိမ်းထားသော အချို့ ရယူမရပါ')
+      setListings(lOk ? (lRes.value.data || []) : [])
+      setPosts(pOk ? (pRes.value.data || []) : [])
     } catch (err) {
       console.warn('Bookmarks load error:', err)
       setBookmarksError(err?.message || 'သိမ်းထားသောများ ရယူမရပါ')
@@ -81,11 +87,12 @@ export default function SavedPage() {
     setLoadingPlaces(true)
     setPlacesError('')
     try {
-      const { data, error } = await supabase
+      // 30 s timeout (was none): a hung query left the tab on skeletons forever.
+      const { data, error } = await withTimeout(supabase
         .from('saved_places')
         .select('*')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false }), 30000, 'Saved places')
       if (error) throw error
       setPlaces(data || [])
     } catch (e) {

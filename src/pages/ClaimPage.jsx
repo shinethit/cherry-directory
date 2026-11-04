@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, Clock, ShieldCheck } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
@@ -61,16 +62,18 @@ export default function ClaimPage() {
     if (!id) return
     setListingError('')
     try {
-      const { data, error } = await supabase
+      // 30 s timeout (was none): a hung query left the form rendering
+      // with no shop shown and no error at all.
+      const { data, error } = await withTimeout(supabase
         .from('listings')
         .select('id, name, name_mm, address, address_mm, cover_url, logo_url')
         .eq('id', id)
-        .maybeSingle()
+        .maybeSingle(), 30000, 'Claim listing')
       if (error) throw error
       if (!data) { setListingError('ဤလုပ်ငန်း မတွေ့တော့ပါ'); return }
       setListing(data)
     } catch {
-      setListingError('လုပ်ငန်း အချက်အလက် တင်မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ')
+      setListingError('လုပ်ငန်း အချက်အလက် တင်မရပါ — ပြန်ကြိုးစားမည်')
     }
   }
 

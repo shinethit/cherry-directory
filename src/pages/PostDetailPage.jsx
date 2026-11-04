@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Calendar, MapPin, Eye, CheckCircle, Star, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { ReactionBar, Skeleton } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { useAuth } from '../contexts/AuthContext'
@@ -120,7 +121,9 @@ export default function PostDetailPage() {
     setLoading(true)
     setNotFound(false)
     setLoadError(false)
-    supabase.from('posts').select('*, author:profiles(full_name, avatar_url), category:categories(name, name_mm, icon)').eq('id', id).single().then(({ data, error }) => {
+    // 30 s timeout (was none): a hung query left the page on skeletons
+    // forever with no retry — the .catch below only runs once it settles.
+    withTimeout(supabase.from('posts').select('*, author:profiles(full_name, avatar_url), category:categories(name, name_mm, icon)').eq('id', id).single(), 30000, 'Post').then(({ data, error }) => {
       if (error && error.code !== 'PGRST116') { setLoadError(true); setLoading(false); return }
       if (!data) { setNotFound(true); setLoading(false); return }
       setPost(data)

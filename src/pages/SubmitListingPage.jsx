@@ -391,7 +391,7 @@ export default function SubmitListingPage() {
       setDone(true)
     } catch (err) {
       console.error('Submit listing failed:', err)
-      showError(lang === 'mm' ? 'တင်မရပါ — အင်တာနက် စစ်ပြီး ထပ်ကြိုးစားပါ' : 'Could not submit — please check your connection and try again')
+      showError(lang === 'mm' ? 'တင်ရာတွင် အမှားဖြစ်သွားသည် — ပြန်ကြိုးစားမည်' : 'Could not submit — please check your connection and try again')
     } finally {
       setSubmitting(false)
     }

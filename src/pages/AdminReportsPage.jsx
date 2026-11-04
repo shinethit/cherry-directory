@@ -4,6 +4,7 @@ import { ArrowLeft, Flag, CheckCircle, XCircle, Clock, ExternalLink } from 'luci
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useSEO } from '../hooks/useSEO'
 import { showError, showSuccess } from '../lib/toast'
 import { formatMyanmarDate } from '../lib/myanmarDate'
@@ -48,22 +49,27 @@ export default function AdminReportsPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const { data, error } = await supabase
+      // 30 s timeout (was none): a hung query left the list on skeletons forever.
+      const { data, error } = await withTimeout(supabase
         .from('reports')
         .select('*, reporter:profiles!reporter_id(full_name, nickname)')
         .eq('status', tab)
         .order('created_at', { ascending: sortOrder === 'old' })
-        .limit(limit)
+        .limit(limit), 30000, 'Reports')
       if (error) throw error
 
       const listingIds = (data || []).filter(r => r.target_type === 'listing').map(r => r.target_id)
       let listingMap = {}
       if (listingIds.length) {
-        const { data: listings } = await supabase
-          .from('listings')
-          .select('id, name, name_mm')
-          .in('id', listingIds)
-        listingMap = Object.fromEntries((listings || []).map(l => [l.id, l]))
+        // Target names are secondary: a failed lookup must not fail
+        // the whole report list (it used to throw into the same catch).
+        try {
+          const { data: listings } = await withTimeout(supabase
+            .from('listings')
+            .select('id, name, name_mm')
+            .in('id', listingIds), 30000, 'Report targets')
+          listingMap = Object.fromEntries((listings || []).map(l => [l.id, l]))
+        } catch (nameErr) { console.warn('Report target names failed:', nameErr) }
       }
 
       setItems((data || []).map(r => ({ ...r, _target: listingMap[r.target_id] || null })))

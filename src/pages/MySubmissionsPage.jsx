@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Edit3, Eye, Trash2, Clock, CheckCircle, XCircle, Alert
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useSEO } from '../hooks/useSEO'
 import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
@@ -33,11 +34,12 @@ export default function MySubmissionsPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const { data, error } = await supabase
+      // 30 s timeout (was none): a hung query left the list on skeletons forever.
+      const { data, error } = await withTimeout(supabase
         .from('listings')
         .select('id, name, name_mm, status, cover_url, logo_url, is_verified, is_featured, view_count, rating_avg, rating_count, category:categories(icon, name, name_mm), created_at, updated_at')
         .eq('submitted_by', user.id)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false }), 30000, 'My submissions')
       if (error) throw error
       setItems(data || [])
     } catch (e) {

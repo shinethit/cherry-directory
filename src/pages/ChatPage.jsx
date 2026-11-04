@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Send, Reply, X, Trash2, Plus, Pencil, Settings } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { usePoints } from '../hooks/usePoints'
@@ -133,10 +134,12 @@ export default function ChatPage() {
     setRoomsError(false)
     try {
       // chat_rooms has no sort_order column — order by created_at.
-      const { data, error } = await supabase
+      // 30 s timeout (was none): a hung query left the room list
+      // empty with no error and no retry.
+      const { data, error } = await withTimeout(supabase
         .from('chat_rooms')
         .select('*')
-        .order('created_at', { ascending: true })
+        .order('created_at', { ascending: true }), 30000, 'Chat rooms')
       if (error) throw error
       setRooms(data || [])
       // F11: honour the notification's roomId on first load; otherwise
@@ -168,12 +171,14 @@ export default function ChatPage() {
     // (oldest-first order + limit(100) used to return the oldest 100).
     const loadMessages = async () => {
       try {
-        const { data, error } = await supabase
+        // 30 s timeout (was none): a hung query left the room showing
+        // no messages with no error; realtime still delivers new ones.
+        const { data, error } = await withTimeout(supabase
           .from('chat_messages')
           .select('*, user:profiles(full_name, avatar_url)')
           .eq('room_id', activeRoom.id)
           .order('created_at', { ascending: false })
-          .limit(100)
+          .limit(100), 30000, 'Chat messages')
         if (error) throw error
         const rows = (data || []).reverse()
         if (isSubscribed) {

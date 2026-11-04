@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, ArrowLeft, AlertTriangle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
@@ -156,21 +157,24 @@ export default function NoticeBoardPage() {
     try {
     let q = supabase.from('notices').select('*').eq('status', 'approved').order('is_pinned', { ascending: false }).order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(50)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
-    const { data, error } = await q
+    // 30 s timeout (was none): a hung query left the skeletons up forever.
+    const { data, error } = await withTimeout(q, 30000, 'Notices')
     if (error) throw error
     // Client-side expiry: expires_at defaults to +14d but nothing enforces it.
     const now = Date.now()
     setNotices((data || []).filter(n => !n.expires_at || new Date(n.expires_at).getTime() >= now))
+    setLoading(false)
     if (isModerator) {
-      // A pending-count failure must not mark the notice list as failed.
+      // A pending-count failure must not mark the notice list as failed —
+      // and it must not gate the list either: it runs after the notices
+      // are already visible, with its own timeout.
       try {
-        const { count, error: countError } = await supabase.from('notices').select('*', { count: 'exact', head: true }).eq('status', 'pending')
+        const { count, error: countError } = await withTimeout(supabase.from('notices').select('*', { count: 'exact', head: true }).eq('status', 'pending'), 30000, 'Pending notices')
         if (countError) throw countError
         setPendingCount(count || 0)
       } catch (countErr) { console.warn(countErr) }
     }
-    } catch (e) { console.warn(e); setLoadError(true); setNotices([]) }
-    setLoading(false)
+    } catch (e) { console.warn(e); setLoadError(true); setNotices([]); setLoading(false) }
   }
 
   async function loadPending() {
@@ -238,7 +242,7 @@ export default function NoticeBoardPage() {
 
       <div className="px-4 space-y-2 pb-24">
         {loading ? [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl shimmer" />) :
-         loadError ? <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30"><p className="text-sm text-red-400 font-myanmar">{lang === 'mm' ? 'တင်မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ' : 'Failed to load — check your connection and retry'}</p><button onClick={load} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button></div> :
+         loadError ? <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30"><p className="text-sm text-red-400 font-myanmar">{lang === 'mm' ? 'Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်' : 'Could not load yet — please retry'}</p><button onClick={load} className="btn-primary text-xs px-4 py-2">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button></div> :
          notices.length === 0 ? <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">📋</span><p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'ကြေညာချက် မရှိသေး' : 'No notices yet'}</p></div> :
          notices.map(n => <NoticeCard key={n.id} notice={n} lang={lang} isMod={isModerator} onDelete={deleteNotice} />)}
       </div>

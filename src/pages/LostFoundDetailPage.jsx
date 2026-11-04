@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Phone, MapPin, CheckCircle, AlertTriangle, Pencil, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { Skeleton } from '../components/UI'
@@ -49,16 +50,24 @@ export default function LostFoundDetailPage() {
   async function loadPost() {
     setLoading(true)
     setLoadError('')
-    const { data, error } = await supabase.from('lost_found').select('*').eq('id', id).single()
-    if (error) {
-      setLoadError(error.message)
-      setPost(null)
-    } else {
-      setPost(data)
-      setEditForm(data)
-      if (data?.images?.length) {
-        setLightboxImages(data.images.map(src => ({ src })))
+    // 30 s timeout + try/catch (was a bare await): a hung or rejected
+    // query left the page on skeletons forever with no retry.
+    try {
+      const { data, error } = await withTimeout(supabase.from('lost_found').select('*').eq('id', id).single(), 30000, 'Lost & found post')
+      if (error) {
+        setLoadError(error.message)
+        setPost(null)
+      } else {
+        setPost(data)
+        setEditForm(data)
+        if (data?.images?.length) {
+          setLightboxImages(data.images.map(src => ({ src })))
+        }
       }
+    } catch (e) {
+      console.warn(e)
+      setLoadError('တင်မရပါ — ပြန်ကြိုးစားမည်')
+      setPost(null)
     }
     setLoading(false)
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'   // ✅ Added
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -167,7 +168,8 @@ export function DonationPage() {
     try {
       let q = supabase.from('donations').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(donLimit)
       if (catFilter !== 'all') q = q.eq('category', catFilter)
-      const { data, error } = await q
+      // 30 s timeout (was none): a hung query left the skeletons up forever.
+      const { data, error } = await withTimeout(q, 30000, 'Donations')
       if (error) throw error
       setItems(data || [])
     } catch (e) { console.warn(e); setLoadError(true) }
@@ -712,7 +714,8 @@ export function HealthServicePage() {
     try {
       let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(healthLimit)
       if (typeFilter !== 'all') q = q.eq('type', typeFilter)
-      const { data, error } = await q
+      // 30 s timeout (was none): a hung query left the skeletons up forever.
+      const { data, error } = await withTimeout(q, 30000, 'Health services')
       if (error) throw error
       setItems(data || [])
     } catch (e) { console.warn(e); setLoadError(true) }
@@ -881,7 +884,8 @@ export function BusSchedulePage() {
         .eq('departure_date', dateFilter)
         .order('departure_time', { ascending: true })
       if (routeFilter !== 'all') q = q.eq('route_id', routeFilter)
-      const { data, error } = await q
+      // 30 s timeout (was none): a hung query left the skeletons up forever.
+      const { data, error } = await withTimeout(q, 30000, 'Bus departures')
       if (error) throw error
       setDepartures(data || [])
     } catch (e) { console.warn(e); setLoadError(true) }
@@ -1151,7 +1155,8 @@ export function ToursPage() {
         q = q.eq('type', typeFilter)
       }
 
-      const { data, error } = await q
+      // 30 s timeout (was none): a hung query left the skeletons up forever.
+      const { data, error } = await withTimeout(q, 30000, 'Tour packages')
       if (error) throw error
       setTours(data || [])
     } catch (e) {

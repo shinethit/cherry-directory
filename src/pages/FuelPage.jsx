@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { RefreshCw, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
@@ -88,8 +89,11 @@ function FuelTypesTab({ onChanged }) {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('fuel_types').select('*').order('sort_order')
-    setList(data || [])
+    // 30 s timeout (was none): a hung query left the modal spinner up forever.
+    try {
+      const { data } = await withTimeout(supabase.from('fuel_types').select('*').order('sort_order'), 30000, 'Fuel types')
+      setList(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
@@ -254,8 +258,11 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('fuel_stations').select('*').order('sort_order')
-    setList(data || [])
+    // 30 s timeout (was none): a hung query left the modal spinner up forever.
+    try {
+      const { data } = await withTimeout(supabase.from('fuel_stations').select('*').order('sort_order'), 30000, 'Fuel stations')
+      setList(data || [])
+    } catch (e) { console.warn(e) }
     setLoading(false)
   }
 
@@ -510,18 +517,17 @@ export default function FuelPage() {
     setLoading(true)
     setLoadError(false)
     try {
-      // Load fuel types
-      const { data: ftData, error: ftErr } = await supabase.from('fuel_types').select('*').order('sort_order')
-      if (ftErr) throw ftErr
-      setAllFuelTypes(ftData || [])
-
-      // Load stations
-      const { data: stationsRaw, error: stErr } = await supabase
-        .from('fuel_stations')
-        .select('*')
-        .eq('is_active', true)
-        .order('sort_order')
-      if (stErr) throw stErr
+      // allSettled + 30 s timeout (was two sequential awaits with no
+      // timeout): a failed/slow fuel-types query used to blank the
+      // station list too, and a hung query left skeletons up forever.
+      const [ftRes, stRes] = await withTimeout(Promise.allSettled([
+        supabase.from('fuel_types').select('*').order('sort_order'),
+        supabase.from('fuel_stations').select('*').eq('is_active', true).order('sort_order'),
+      ]), 30000, 'Fuel stations')
+      if (ftRes.status === 'fulfilled' && !ftRes.value.error) setAllFuelTypes(ftRes.value.data || [])
+      else console.warn('Fuel types failed:', ftRes.status === 'rejected' ? ftRes.reason : ftRes.value.error)
+      if (stRes.status === 'rejected' || stRes.value?.error) throw (stRes.status === 'rejected' ? stRes.reason : stRes.value.error)
+      const stationsRaw = stRes.value.data
 
       const merged = (stationsRaw || []).map(s => ({
         id: s.id,

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Phone, Plus, Pencil, Trash2, X, Save, Clock, DollarSign } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -256,11 +257,12 @@ export default function EmergencyPage() {
     setLoading(true)
     setLoadError(false)
     try {
-    const { data, error } = await supabase
+    // 30 s timeout (was none): a hung query left the skeletons up forever.
+    const { data, error } = await withTimeout(supabase
       .from('emergency_contacts')
       .select('*')
       .eq('is_active', true)
-      .order('sort_order')
+      .order('sort_order'), 30000, 'Emergency contacts')
     if (error) throw error
     setContacts(data || [])
     } catch (e) { console.warn(e); setLoadError(true) }

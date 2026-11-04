@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Calendar, MapPin, Users, BookOpen, Plus, Edit2, Trash2, Clock, CheckCircle, Search, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -299,30 +300,46 @@ export function HistoryDetailPage() {
       setLoading(true)
       setLoadError('')
       // Drafts must not be readable by direct URL.
-      const { data, error } = await supabase.from('history').select('*').eq('id', id).eq('status', 'published').single()
-      if (cancelled) return
-      if (error) {
-        // Never show the raw Supabase error to the user: 'not_found'
-        // for a missing post, 'load_failed' for anything else.
-        setLoadError(error.code === 'PGRST116' ? 'not_found' : 'load_failed')
-        setPost(null)
+      // 30 s timeout + try/catch (was a bare await): a hung or rejected
+      // query left the page on skeletons forever with no retry.
+      let postData = null
+      try {
+        const { data, error } = await withTimeout(supabase.from('history').select('*').eq('id', id).eq('status', 'published').single(), 30000, 'History post')
+        if (cancelled) return
+        if (error) {
+          // Never show the raw Supabase error to the user: 'not_found'
+          // for a missing post, 'load_failed' for anything else.
+          setLoadError(error.code === 'PGRST116' ? 'not_found' : 'load_failed')
+          setPost(null)
+          setLoading(false)
+          return
+        }
+        postData = data
+        setPost(data)
         setLoading(false)
+      } catch (e) {
+        console.warn(e)
+        if (!cancelled) {
+          setLoadError('load_failed')
+          setPost(null)
+          setLoading(false)
+        }
         return
       }
-      setPost(data)
-      setLoading(false)
 
       // Fetch related posts (same category, excluding this one)
-      if (data?.category) {
-        const { data: rel } = await supabase
-          .from('history')
-          .select('id, title, title_mm, category, cover_url, event_date, created_at')
-          .eq('category', data.category)
-          .eq('status', 'published')
-          .neq('id', id)
-          .order('created_at', { ascending: false })
-          .limit(4)
-        if (!cancelled) setRelated(rel || [])
+      if (postData?.category) {
+        try {
+          const { data: rel } = await withTimeout(supabase
+            .from('history')
+            .select('id, title, title_mm, category, cover_url, event_date, created_at')
+            .eq('category', postData.category)
+            .eq('status', 'published')
+            .neq('id', id)
+            .order('created_at', { ascending: false })
+            .limit(4), 30000, 'History related')
+          if (!cancelled) setRelated(rel || [])
+        } catch (relErr) { console.warn(relErr) }
       }
     }
     load()
@@ -342,7 +359,7 @@ export function HistoryDetailPage() {
       <p className="text-sm text-red-400 font-myanmar">
         {loadError === 'not_found'
           ? (lang === 'mm' ? 'မတွေ့ပါ' : 'Not found')
-          : (lang === 'mm' ? 'တင်မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ' : 'Failed to load — check your connection and try again')}
+          : (lang === 'mm' ? 'Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်' : 'Could not load yet — please retry')}
       </p>
       {loadError === 'load_failed' && (
         <div>
@@ -523,7 +540,8 @@ export default function HistoryPage() {
         q = q.or(`title.ilike.${term},title_mm.ilike.${term},excerpt_mm.ilike.${term},content_mm.ilike.${term}`)
       }
 
-      const { data, error } = await q
+      // 30 s timeout (was none): a hung query left the list on skeletons forever.
+      const { data, error } = await withTimeout(q, 30000, 'History')
 
       if (error) {
         console.error('History load error:', error)
@@ -643,7 +661,7 @@ export default function HistoryPage() {
         ) : loadError ? (
           <div className="flex flex-col items-center py-14 text-center">
             <span className="text-4xl mb-3">⚠️</span>
-            <p className="text-red-400 font-display font-semibold">{lang === 'mm' ? 'တင်မရပါ — အင်တာနက် စစ်ဆေးပြီး ပြန်ကြိုးစားပါ' : 'Failed to load — check your connection and try again'}</p>
+            <p className="text-red-400 font-display font-semibold">{lang === 'mm' ? 'Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်' : 'Could not load yet — please retry'}</p>
             <button onClick={load} className="btn-primary text-xs px-4 py-2 mt-3">{lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}</button>
           </div>
         ) : posts.length === 0 ? (

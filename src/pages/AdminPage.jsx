@@ -7,6 +7,7 @@ import {
   EyeOff, Calendar, Megaphone, Shield, BadgeCheck, Lock
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import CategoryManagerPage from './CategoryManagerPage'
 import { confirmDialog } from '../lib/confirmDialog'
 import { useAuth } from '../contexts/AuthContext'
@@ -89,31 +90,41 @@ export default function AdminPage() {
       else if (listingFilter === 'pending')   query = query.eq('status', 'pending')
       else query = query.neq('status', 'suspended')
 
-      const { data: rows, error } = await query
+      // 30 s timeout (was none): a hung listings query left the admin
+      // table on skeletons forever.
+      const { data: rows, error } = await withTimeout(query, 30000, 'Admin listings')
       if (error) throw error
       setData(rows || [])
+      // The rows are visible now. The badge/report counts below are
+      // secondary: each has its own timeout and must never gate the
+      // list (a hung count query used to hold loading=true).
+      setLoading(false)
 
       // Pending badge count (G7) — counted from ALL listings, never
       // from the filtered list above.
-      const { count: pendingCount } = await supabase
-        .from('listings')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending')
-      setPendingListingsCount(pendingCount || 0)
+      try {
+        const { count: pendingCount } = await withTimeout(supabase
+          .from('listings')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'pending'), 30000, 'Admin pending count')
+        setPendingListingsCount(pendingCount || 0)
+      } catch (countErr) { console.warn('Pending count failed:', countErr) }
 
       if (rows) {
         // One query for all report counts (was N+1 sequential
         // per-listing count queries) — tally client-side.
-        const { data: repRows } = await supabase
-          .from('listing_reports')
-          .select('listing_id')
-          .in('listing_id', rows.map(r => r.id))
-        const reportCounts = {}
-        rows.forEach(r => { reportCounts[r.id] = 0 })
-        ;(repRows || []).forEach(rr => {
-          if (rr.listing_id in reportCounts) reportCounts[rr.listing_id]++
-        })
-        setReports(reportCounts)
+        try {
+          const { data: repRows } = await withTimeout(supabase
+            .from('listing_reports')
+            .select('listing_id')
+            .in('listing_id', rows.map(r => r.id)), 30000, 'Admin report counts')
+          const reportCounts = {}
+          rows.forEach(r => { reportCounts[r.id] = 0 })
+          ;(repRows || []).forEach(rr => {
+            if (rr.listing_id in reportCounts) reportCounts[rr.listing_id]++
+          })
+          setReports(reportCounts)
+        } catch (repErr) { console.warn('Report counts failed:', repErr) }
       }
     } catch (e) {
       console.error('loadListings error:', e)
@@ -134,32 +145,53 @@ export default function AdminPage() {
       const seven = new Date(Date.UTC(yy, mm - 1, dd - 7))
       const sevenDaysAgo = seven.toISOString().slice(0, 10) + 'T00:00:00+06:30'
 
-      const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
-      const { count: newToday } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr)
-      const { count: newLast7Days } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo)
-
-      // Server-side counts per role (was: download every profile row
-      // and count client-side — wrong past 1,000 users). "member" is
-      // every non-null role that is neither admin nor moderator, which
-      // is exactly what the old client-side tally computed.
-      const { count: adminCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin')
-      const { count: moderatorCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'moderator')
-      const { count: nonNullRoleCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).not('role', 'is', null)
+      // Parallel + allSettled + one 30 s timeout (was 13 sequential
+      // awaits with no timeout): on slow mobile data the sequence
+      // could take far longer than any single query, and one hung
+      // count held the stats spinner forever. One failed count now
+      // reads 0 instead of blanking every stat.
+      const countQueries = [
+        supabase.from('profiles').select('*', { count: 'exact', head: true }),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo),
+        // Server-side counts per role (was: download every profile row
+        // and count client-side — wrong past 1,000 users). "member" is
+        // every non-null role that is neither admin nor moderator, which
+        // is exactly what the old client-side tally computed.
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'moderator'),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).not('role', 'is', null),
+        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'suspended'),
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'news'),
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'event'),
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'announcement'),
+        supabase.from('reviews').select('*', { count: 'exact', head: true }),
+      ]
+      const countResults = await withTimeout(Promise.allSettled(countQueries), 30000, 'Dashboard stats')
+      const c = (i) => (countResults[i].status === 'fulfilled' ? (countResults[i].value?.count || 0) : 0)
+      const totalUsers = c(0)
+      const newToday = c(1)
+      const newLast7Days = c(2)
+      const adminCount = c(3)
+      const moderatorCount = c(4)
+      const nonNullRoleCount = c(5)
       const usersByRole = {
         admin: adminCount || 0,
         moderator: moderatorCount || 0,
         member: Math.max(0, (nonNullRoleCount || 0) - (adminCount || 0) - (moderatorCount || 0)),
       }
 
-      const { count: approvedListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved')
-      const { count: pendingListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'pending')
-      const { count: suspendedListings } = await supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'suspended')
+      const approvedListings = c(6)
+      const pendingListings = c(7)
+      const suspendedListings = c(8)
 
-      const { count: newsPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'news')
-      const { count: eventPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'event')
-      const { count: announcementPosts } = await supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'announcement')
+      const newsPosts = c(9)
+      const eventPosts = c(10)
+      const announcementPosts = c(11)
 
-      const { count: totalReviews } = await supabase.from('reviews').select('*', { count: 'exact', head: true })
+      const totalReviews = c(12)
 
       setDashboardStats({
         totalUsers: totalUsers || 0,
@@ -185,7 +217,8 @@ export default function AdminPage() {
   async function loadUsers() {
     setLoading(true)
     try {
-      const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
+      // 30 s timeout (was none): a hung query left the users table on skeletons forever.
+      const { data, error } = await withTimeout(supabase.from('profiles').select('*').order('created_at', { ascending: false }), 30000, 'Admin users')
       if (error) throw error
       setUsersList(data || [])
     } catch (e) {
@@ -198,11 +231,12 @@ export default function AdminPage() {
   async function loadClaims() {
     setClaimsLoading(true)
     try {
-      const { data, error } = await supabase
+      // 30 s timeout (was none): a hung query left the claims list on skeletons forever.
+      const { data, error } = await withTimeout(supabase
         .from('listing_claims')
         .select('*, listing:listings(name, name_mm), claimant:profiles!user_id(full_name, nickname)')
         .eq('status', 'pending')
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false }), 30000, 'Admin claims')
       if (error) throw error
       setClaims(data || [])
     } catch (e) {

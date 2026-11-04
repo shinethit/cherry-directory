@@ -13,6 +13,7 @@ import {
 } from '../lib/notificationService'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
+import { withTimeout } from '../lib/withTimeout'
 import { formatMyanmarDate } from '../lib/myanmarDate'
 import { goBackOrHome } from '../lib/navigation'
 
@@ -58,7 +59,8 @@ export default function NotificationsPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const data = await getUserNotifications(user.id, 50)
+      // 30 s timeout (was none): a hung query left the list on skeletons forever.
+      const data = await withTimeout(getUserNotifications(user.id, 50), 30000, 'Notifications')
       setNotifications(data || [])
     } catch (err) {
       console.warn('Load notifications error:', err)

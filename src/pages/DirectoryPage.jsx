@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { Search, X, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
@@ -22,6 +23,7 @@ export default function DirectoryPage() {
   const [subcategories, setSubcategories] = useState([])
   const [selectedSubcategory, setSelectedSubcategory] = useState(null)
   const [subcategoryLoading, setSubcategoryLoading] = useState(false)
+  const [subcategoryError, setSubcategoryError] = useState(false)
   
   // Level 3: Listings
   const [listings, setListings] = useState([])
@@ -36,7 +38,7 @@ export default function DirectoryPage() {
   // Monotonic id: a late response from an old filter/page is ignored so it
   // can never mix listings across filters/pages.
   const requestIdRef = useRef(0)
-  const LOAD_TIMEOUT_MS = 12000
+  const LOAD_TIMEOUT_MS = 30000
   const PAGE_SIZE = 20
   
   // Direct listings state
@@ -145,12 +147,13 @@ export default function DirectoryPage() {
 
     async function directNavigate() {
       try {
-        // Fetch the target category with full info
-        const { data: target } = await supabase
+        // Fetch the target category with full info (30 s timeout: a
+        // hung fetch used to leave the ?cat= spinner up forever).
+        const { data: target } = await withTimeout(supabase
           .from('categories')
           .select('*')
           .eq('id', urlCatId)
-          .single()
+          .single(), 30000, 'Directory direct link')
 
         if (!target) return
 
@@ -163,10 +166,10 @@ export default function DirectoryPage() {
           setPage(0)
         } else {
           // Top-level → check if it has children
-          const { count } = await supabase
+          const { count } = await withTimeout(supabase
             .from('categories')
             .select('*', { count: 'exact', head: true })
-            .eq('parent_id', target.id)
+            .eq('parent_id', target.id), 30000, 'Directory direct link')
 
           setSelectedCategory(target)
 
@@ -198,31 +201,39 @@ export default function DirectoryPage() {
     setCategoryLoading(true)
     setCategoryError(false)
     try {
-      const { data, error } = await supabase
+      // 30 s timeout (was none): on slow mobile data a hung query used
+      // to leave the category skeletons up forever with no retry.
+      const { data, error } = await withTimeout(supabase
         .from('categories')
         .select('*')
         .eq('type', 'directory')
         .eq('is_active', true)
         .is('parent_id', null)
-        .order('sort_order')
+        .order('sort_order'), 30000, 'Directory categories')
       if (error) throw error
       // One shared category-tree fetch, then one count query per top-level
-      // category (was two queries per category).
-      const { data: allCats } = await supabase
+      // category (was two queries per category). The tree fetch is
+      // best-effort: if it fails, counts fall back to direct listings
+      // only instead of blanking the whole category list.
+      const { data: allCats } = await withTimeout(supabase
         .from('categories')
         .select('id, parent_id')
         .eq('type', 'directory')
-        .eq('is_active', true)
-      const categoriesWithCount = await Promise.all(
+        .eq('is_active', true), 30000, 'Directory category tree').catch(() => ({ data: [] }))
+      // allSettled: one slow/failed count must not blank every category.
+      const countResults = await Promise.allSettled(
         (data || []).map(async (cat) => {
           const ids = collectDescendantIds(allCats || [], cat.id)
-          const { count } = await supabase
+          const { count } = await withTimeout(supabase
             .from('listings')
             .select('*', { count: 'exact', head: true })
             .in('category_id', ids)
-            .eq('status', 'approved')
+            .eq('status', 'approved'), 30000, 'Directory category count')
           return { ...cat, listing_count: count || 0 }
         })
+      )
+      const categoriesWithCount = countResults.map((r, i) =>
+        r.status === 'fulfilled' ? r.value : { ...(data || [])[i], listing_count: 0 }
       )
       setCategories(categoriesWithCount)
     } catch (e) {
@@ -233,41 +244,46 @@ export default function DirectoryPage() {
     setCategoryLoading(false)
   }
 
-  // Load subcategories with counts
   async function loadSubcategories(categoryId) {
     setSubcategoryLoading(true)
+    setSubcategoryError(false)
     // Don't clear listings if we already have a subcategory selected (direct nav)
     if (!selectedSubcategory) setListings([])
     try {
-      const { data } = await supabase
+      const { data } = await withTimeout(supabase
         .from('categories')
         .select('*')
         .eq('type', 'directory')
         .eq('is_active', true)
         .eq('parent_id', categoryId)
-        .order('sort_order')
+        .order('sort_order'), 30000, 'Directory subcategories')
 
       // Counts include 3rd-level listings: count the subcategory AND all
       // of its descendants, not just listings filed directly under it.
-      const { data: allCats } = await supabase
+      // The tree fetch is best-effort (see loadCategories).
+      const { data: allCats } = await withTimeout(supabase
         .from('categories')
         .select('id, parent_id')
         .eq('type', 'directory')
-        .eq('is_active', true)
-      const subcatsWithCount = await Promise.all(
+        .eq('is_active', true), 30000, 'Directory category tree').catch(() => ({ data: [] }))
+      const countResults = await Promise.allSettled(
         (data || []).map(async (sub) => {
           const ids = collectDescendantIds(allCats || [], sub.id)
-          const { count } = await supabase
+          const { count } = await withTimeout(supabase
             .from('listings')
             .select('*', { count: 'exact', head: true })
             .in('category_id', ids)
-            .eq('status', 'approved')
+            .eq('status', 'approved'), 30000, 'Directory subcategory count')
           return { ...sub, listing_count: count || 0 }
         })
       )
+      const subcatsWithCount = countResults.map((r, i) =>
+        r.status === 'fulfilled' ? r.value : { ...(data || [])[i], listing_count: 0 }
+      )
       setSubcategories(subcatsWithCount)
-    } catch (e) { 
-      console.warn('loadSubcategories error:', e) 
+    } catch (e) {
+      console.warn('loadSubcategories error:', e)
+      setSubcategoryError(true)
     }
     setSubcategoryLoading(false)
   }
@@ -544,6 +560,11 @@ export default function DirectoryPage() {
         <div className="px-4 py-4 space-y-2 pb-24">
           {subcategoryLoading ? (
             [1,2,3,4].map(n => <Skeleton key={n} className="h-16 rounded-2xl" />)
+          ) : subcategoryError ? (
+            <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+              <p className="text-sm text-red-400 font-myanmar">Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
+              <button onClick={() => loadSubcategories(selectedCategory.id)} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            </div>
           ) : (
             <>
               {hasDirectListings && (

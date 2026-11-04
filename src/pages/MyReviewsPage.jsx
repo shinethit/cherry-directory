@@ -4,6 +4,7 @@ import { ArrowLeft, Trash2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useSEO } from '../hooks/useSEO'
 import { goBackOrHome } from '../lib/navigation'
 import { EmptyState, StarRating } from '../components/UI'
@@ -30,11 +31,13 @@ export default function MyReviewsPage() {
     setLoadError(false)
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      // 30 s timeout (was none): a hung query left the skeletons up
+      // forever — the finally below only runs once the query settles.
+      const { data, error } = await withTimeout(supabase
         .from('reviews')
         .select('*, listing:listings(name, name_mm)')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: false }), 30000, 'My reviews')
       if (error) throw error
       setItems(data || [])
     } catch (err) {

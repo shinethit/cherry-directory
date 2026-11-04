@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, MapPin, Clock, CheckCircle, Star, Plus, Edit3, LayoutGrid, List } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -272,6 +273,7 @@ export default function CalendarPage() {
   const [events, setEvents]       = useState([])      // all events for this month
   const [upcoming, setUpcoming]   = useState([])      // next 5 upcoming
   const [loading, setLoading]     = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [viewMode, setViewMode]     = useState('month')
   const [eventCats, setEventCats]   = useState([])
   const [selEventCat, setSelEventCat] = useState(null)
@@ -289,6 +291,7 @@ export default function CalendarPage() {
   // "Event မရှိ" for adjacent-month days.
   const loadEvents = useCallback(async () => {
     setLoading(true)
+    setLoadError(false)
     const from = new Date(viewYear, viewMonth - 1, 1).toISOString()
     const to   = new Date(viewYear, viewMonth + 2, 1).toISOString()
 
@@ -296,26 +299,36 @@ export default function CalendarPage() {
     // month ends AND (starts in the month OR ends in/after it) — the old
     // gte/lt on event_start alone dropped multi-day events that started
     // in the previous month. posts DOES have event_end (schema).
-    const { data, error } = await supabase
-      .from('posts')
-      .select('id, title, title_mm, cover_url, event_start, event_end, event_location, type, status, author_id, category_id')
-      .eq('type', 'event')
-      .eq('status', 'published')
-      .lt('event_start', to)
-      .or(`event_start.gte.${from},event_end.gte.${from}`)
-      .order('event_start')
-
-    if (error) { console.warn(error); setEvents([]); setEventCats([]); setLoading(false); return }
-    setEvents(data || [])
-    // Populate the category filter from the events actually loaded.
-    const catIds = [...new Set((data || []).map(e => e.category_id).filter(Boolean))]
-    if (catIds.length > 0) {
-      const { data: cats } = await supabase.from('categories').select('id, name, name_mm, icon').in('id', catIds)
-      setEventCats(cats || [])
-    } else {
-      setEventCats([])
+    // 30 s timeout (was none): a hung query used to leave the calendar
+    // on "တင်နေသည်..." forever and then show a false "Event မရှိ".
+    try {
+      const { data, error } = await withTimeout(supabase
+        .from('posts')
+        .select('id, title, title_mm, cover_url, event_start, event_end, event_location, type, status, author_id, category_id')
+        .eq('type', 'event')
+        .eq('status', 'published')
+        .lt('event_start', to)
+        .or(`event_start.gte.${from},event_end.gte.${from}`)
+        .order('event_start'), 30000, 'Calendar events')
+      if (error) throw error
+      setEvents(data || [])
+      setLoading(false)
+      // Populate the category filter from the events actually loaded.
+      // Secondary: a slow/failed category lookup must never gate the
+      // calendar — the events are already visible by now.
+      const catIds = [...new Set((data || []).map(e => e.category_id).filter(Boolean))]
+      if (catIds.length > 0) {
+        try {
+          const { data: cats } = await withTimeout(supabase.from('categories').select('id, name, name_mm, icon').in('id', catIds), 30000, 'Calendar event categories')
+          setEventCats(cats || [])
+        } catch (catErr) { console.warn(catErr) }
+      } else {
+        setEventCats([])
+      }
+    } catch (e) {
+      console.warn(e)
+      setEvents([]); setEventCats([]); setLoadError(true); setLoading(false)
     }
-    setLoading(false)
   }, [viewYear, viewMonth])
 
   // Load upcoming events (next 10 from today)
@@ -523,6 +536,16 @@ export default function CalendarPage() {
             {lang === 'mm' ? 'တင်နေသည်...' : 'Loading...'}
           </div>
         )}
+
+        {/* Load failed — never show a false "Event မရှိ" for a failed load. */}
+        {loadError && !loading && (
+          <div className="px-4 mt-3">
+            <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+              <p className="text-sm text-red-400 font-myanmar">Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
+              <button onClick={loadEvents} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Week view ── */}
@@ -590,7 +613,7 @@ export default function CalendarPage() {
       )}
 
       {/* Empty full month state */}
-      {!loading && events.length === 0 && upcoming.length === 0 && (
+      {!loading && !loadError && events.length === 0 && upcoming.length === 0 && (
         <div className="flex flex-col items-center py-14 text-center px-8">
           <span className="text-5xl mb-4">📅</span>
           <p className="font-display font-semibold text-white/50">

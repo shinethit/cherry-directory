@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, CalendarDays, RefreshCw, Home, User, Briefcase, GraduationCap, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -11,12 +11,14 @@ import ShareButton from '../components/ShareButton';
 import { usePWA } from '../hooks/usePWA'
 import { yangonToday, formatMyanmarDateTime, mmtParts, MY_MONTHS } from '../lib/myanmarDate';
 import { safeGet, safeSet } from '../lib/safeStorage';
-import { withTimeout, TimeoutError } from '../lib/withTimeout';
+import { loadPartial, createAutoRetryGuard } from '../lib/loadPartial';
 import { showError } from '../lib/toast';
 
-// How long the main Home queries may run before the page gives up and
-// shows a retry instead of skeletons forever (C-2, V2: 10 s, not 15 s).
-const LOAD_TIMEOUT_MS = 10000;
+// How long the main Home queries may run before the page stops waiting
+// (v9.7: 30 s, was 10 s — slow mobile data needs the headroom). 30 s is
+// the ceiling, not the target: results are applied as they arrive, and on
+// timeout whatever arrived stays rendered instead of a blank page.
+export const LOAD_TIMEOUT_MS = 30000;
 
 // Helper: country code → full name
 
@@ -65,6 +67,13 @@ export default function HomePage() {
   const [dataError, setDataError] = useState(false);
   const [sectionErrors, setSectionErrors] = useState({});
   const [loadTimedOut, setLoadTimedOut] = useState(false);
+  // v9.7: one automatic retry after a timed-out load (2 s delay), then stop.
+  const [autoRetrying, setAutoRetrying] = useState(false);
+  const autoRetryGuardRef = useRef(createAutoRetryGuard());
+  const autoRetryTimerRef = useRef(null);
+  // v9.7: attempt id — a late arrival from an older attempt must never
+  // overwrite a newer attempt's state (auto-retry overlaps the first run).
+  const loadAttemptRef = useRef(0);
   const [recentFavorites, setRecentFavorites] = useState([]);
 
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
@@ -95,12 +104,20 @@ export default function HomePage() {
 
 
 
+  // v9.7: never let a pending auto-retry timer fire after unmount.
+  useEffect(() => () => {
+    if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current);
+  }, []);
+
   // --- Main data loading (listings, posts, categories, quick links) ---
-  // 10 s timeout (C-2, V2): a hung query can no longer freeze Home as
-  // skeletons forever — on timeout the banner + retry appear. Offline
+  // 30 s timeout (v9.7, was 10 s): results stream in as they resolve —
+  // a slow/failed query can no longer blank the whole page. On timeout
+  // whatever arrived stays rendered, pending sections are marked failed,
+  // and one auto-retry fires if a core section is still missing. Offline
   // (B-M3): skip Supabase entirely, clear loading, show the offline notice.
   // Only core sections (posts / featured / categories) set dataError (B-M1).
   const loadData = useCallback(async () => {
+    const attempt = ++loadAttemptRef.current;
     // Offline: don't fire 7 queries that can only fail.
     if (!navigator.onLine) {
       setLoading(false);
@@ -115,8 +132,46 @@ export default function HomePage() {
     setSectionErrors({});
     setSlowLoad(false);
     const slowTimer = setTimeout(() => setSlowLoad(true), 5000);
+    // Per-section streaming apply: each query's result is written to state
+    // as soon as it resolves, so fast sections render while slow ones wait.
+    const sectionNames = ['posts', 'featured', 'categories', 'listingsCount', 'events', 'quickLinks', 'postsCount'];
+    const failed = {};
+    const applySection = (i, r) => {
+      // Ignore late arrivals from an older attempt (see loadAttemptRef).
+      if (attempt !== loadAttemptRef.current) return;
+      const name = sectionNames[i];
+      const failedThis = r.status === 'rejected' || r.value?.error;
+      if (failedThis) failed[name] = true;
+      else delete failed[name];
+      setSectionErrors({ ...failed });
+      // Only core sections fail the whole page; the rest render empty.
+      setDataError(['posts', 'featured', 'categories'].some(k => failed[k]));
+      if (failedThis) {
+        // A failed count is null ("—"), never a misleading "0" (A3).
+        if (i === 3) setStats(prev => ({ ...prev, listings: null }));
+        if (i === 6) setStats(prev => ({ ...prev, posts: null }));
+        return;
+      }
+      if (r.status !== 'fulfilled') return;
+      const data = r.value.data;
+      switch (i) {
+        case 0: setPosts(data || []); break;
+        case 1: setFeatured(data || []); break;
+        case 2: {
+          const all = data || [];
+          setAllCategories(all);
+          setHomeCategories(all.filter(c => !c.parent_id));
+          break;
+        }
+        case 3: setStats(prev => ({ ...prev, listings: r.value.count ?? 0 })); break;
+        case 4: setUpcomingEvents(data || []); break;
+        case 5: setQuickLinks(data || []); break;
+        case 6: setStats(prev => ({ ...prev, posts: r.value.count ?? 0 })); break;
+        default: break;
+      }
+    };
     try {
-      const results = await withTimeout(Promise.allSettled([
+      const { results, timedOut } = await loadPartial([
         supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
         supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
         supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
@@ -124,39 +179,44 @@ export default function HomePage() {
         supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
         supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order'),
         supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'published')
-      ]), LOAD_TIMEOUT_MS, 'Home data');
+      ], LOAD_TIMEOUT_MS, applySection);
 
-      const sectionNames = ['posts', 'featured', 'categories', 'listingsCount', 'events', 'quickLinks', 'postsCount'];
-      const failed = {};
+      if (attempt !== loadAttemptRef.current) return;
+      // Sections still pending at the timeout are marked failed so they
+      // show their own empty/failed state, never skeletons forever.
       results.forEach((r, i) => {
-        if (r.status === 'rejected' || r.value?.error) failed[sectionNames[i]] = true;
+        if (r.status === 'pending') {
+          failed[sectionNames[i]] = true;
+          if (i === 3) setStats(prev => ({ ...prev, listings: null }));
+          if (i === 6) setStats(prev => ({ ...prev, posts: null }));
+        }
       });
-      setSectionErrors(failed);
-      // Only core sections fail the whole page; the rest render empty.
-      const coreFailed = ['posts', 'featured', 'categories'].some(k => failed[k]);
-      setDataError(coreFailed);
-      setPosts(results[0]?.status === 'fulfilled' ? results[0].value.data || [] : []);
-      setFeatured(results[1]?.status === 'fulfilled' ? results[1].value.data || [] : []);
-      const all = results[2]?.status === 'fulfilled' ? results[2].value.data || [] : [];
-      setAllCategories(all);
-      setHomeCategories(all.filter(c => !c.parent_id));
-      setStats({
-        listings: failed.listingsCount ? null : (results[3]?.value?.count ?? 0),
-        posts: failed.postsCount ? null : (results[6]?.value?.count ?? 0),
-      });
-      setUpcomingEvents(results[4]?.status === 'fulfilled' ? results[4].value.data || [] : []);
-      setQuickLinks(results[5]?.status === 'fulfilled' ? results[5].value.data || [] : []);
-    } catch (err) {
-      console.error('Data load error:', err);
-      setDataError(true);
-      // V2: the error banner below is the only notice — no duplicate toast.
-      if (err instanceof TimeoutError) {
-        setLoadTimedOut(true);
+      setSectionErrors({ ...failed });
+      setDataError(['posts', 'featured', 'categories'].some(k => failed[k]));
+      setLoadTimedOut(timedOut);
+      // Auto-retry once (2 s delay) if the load timed out with a core
+      // section still missing; the guard guarantees it never loops.
+      if (timedOut) {
+        const coreMissing = [0, 1, 2].some(i => results[i].status !== 'fulfilled' || results[i].value?.error);
+        if (coreMissing && autoRetryGuardRef.current.shouldRetry()) {
+          setAutoRetrying(true);
+          autoRetryTimerRef.current = setTimeout(() => {
+            setAutoRetrying(false);
+            loadData();
+          }, 2000);
+        }
       }
+    } catch (err) {
+      // loadPartial never rejects on timeout; this is only for an
+      // unexpected failure of the loader itself.
+      console.error('Data load error:', err);
+      if (attempt === loadAttemptRef.current) setDataError(true);
     } finally {
       clearTimeout(slowTimer);
-      setSlowLoad(false);
-      setLoading(false);
+      if (attempt === loadAttemptRef.current) {
+        setSlowLoad(false);
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -167,8 +227,10 @@ export default function HomePage() {
   }, [consentGiven, loadData]);
 
   // --- Community stats (silent fail) ---
-  // Same 10 s timeout as the main load (H-4): the loading flag is cleared
-  // in finally, so the six cells can never show '...' forever.
+  // Same 30 s timeout as the main load (v9.7, was 10 s): each count is
+  // applied as it resolves, so one slow count can no longer blank all six
+  // — pending counts become "—" at the timeout instead. No auto-retry
+  // here (non-core section; a manual refresh re-runs it).
   const loadCommunityStats = useCallback(async () => {
     setCommunityStatsLoading(true);
     try {
@@ -186,31 +248,28 @@ export default function HomePage() {
         }
       }
 
-      // 6 counts in parallel (was 6 sequential awaits).
-      const [rentAvailable, rentSeekers, tutorOffers, tutorRequests, jobOpenings, jobSeekers] = await withTimeout(Promise.all([
+      // 6 counts in parallel (was 6 sequential awaits), each applied as
+      // soon as it resolves.
+      const setters = [setRentListingsCount, setRentSeekersCount, setTutorOffersCount, setTutorRequestsCount, setJobOpeningsCount, setJobSeekersCount];
+      const { results } = await loadPartial([
         count('rentals', q => q.eq('post_type', 'owner')),
         count('rentals', q => q.eq('post_type', 'tenant')),
         count('tutoring', q => q.eq('post_type', 'tutor')),
         count('tutoring', q => q.eq('post_type', 'student')),
         count('jobs', q => q.eq('post_type', 'employer')),
         count('jobs', q => q.eq('post_type', 'jobseeker')),
-      ]), LOAD_TIMEOUT_MS, 'Community stats')
+      ], LOAD_TIMEOUT_MS, (i, outcome) => {
+        if (outcome.status === 'fulfilled') setters[i](outcome.value);
+      });
 
-      setRentListingsCount(rentAvailable)
-      setRentSeekersCount(rentSeekers)
-      setTutorOffersCount(tutorOffers)
-      setTutorRequestsCount(tutorRequests)
-      setJobOpeningsCount(jobOpenings)
-      setJobSeekersCount(jobSeekers)
+      // Counts still pending (or rejected) at the timeout show "—".
+      results.forEach((r, i) => {
+        if (r.status !== 'fulfilled') setters[i](null);
+      });
     } catch (e) {
-      // Timeout or other failure: show "—", not the previous (or zero) counts.
+      // Unexpected loader failure: keep the previous counts, don't blank
+      // all six (v9.7 — the old catch nulled every count on any failure).
       console.warn('Community stats load failed:', e)
-      setRentListingsCount(null)
-      setRentSeekersCount(null)
-      setTutorOffersCount(null)
-      setTutorRequestsCount(null)
-      setJobOpeningsCount(null)
-      setJobSeekersCount(null)
     } finally {
       setCommunityStatsLoading(false)
     }
@@ -261,6 +320,12 @@ export default function HomePage() {
   }, [consentGiven, loadFavorites]);
 
   const handleRefresh = () => {
+    // Manual retry: cancel any pending auto-retry and reset its guard so
+    // this retry can auto-retry once again if it also times out (v9.7).
+    if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current);
+    autoRetryTimerRef.current = null;
+    autoRetryGuardRef.current.reset();
+    setAutoRetrying(false);
     loadData();
     loadCommunityStats();
     loadFavorites();
@@ -328,11 +393,21 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Data error banner — shown when a core query fails or the load times out */}
-      {dataError && !loading && (
+      {/* Data error banner — shown when a core query fails or the load times out.
+          v9.7: never tells an online user to "check internet" — slowness is
+          not no-internet (the offline notice above already covers that). */}
+      {dataError && !loading && !autoRetrying && (
         <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
-          <p className="text-sm text-red-400 font-myanmar">{loadTimedOut ? 'Data တင်တာ အချိန်ကုန်သွားသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ' : 'Data တင်ရာတွင် အမှားဖြစ်သွားသည် — အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ'}</p>
+          <p className="text-sm text-red-400 font-myanmar">Data အချို့ တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
           <button onClick={handleRefresh} className="btn-primary text-sm px-6 py-3 min-h-[44px]">ပြန်ကြိုးစားမည်</button>
+        </div>
+      )}
+
+      {/* v9.7: auto-retry in progress — honest in-progress notice while the
+          single automatic retry is pending/running. */}
+      {autoRetrying && !loading && (
+        <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-amber-500/30">
+          <p className="text-sm text-amber-400 font-myanmar">Data တင်တာ ကြာနေသည် — ထပ်ကြိုးစားနေသည်</p>
         </div>
       )}
 
