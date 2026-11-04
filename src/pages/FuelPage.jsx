@@ -615,7 +615,6 @@ export default function FuelPage() {
         />
       )}
 
-      )}
     </div>
   )
 }
