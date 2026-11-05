@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Plus, Phone, MapPin, CheckCircle, AlertTriangle, ArrowLeft } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, realtimeEnabled } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -312,6 +312,9 @@ export default function LostFoundPage() {
   const loadRef = useRef(load)
   loadRef.current = load
   useEffect(() => {
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // the list is loaded on mount; skip the channel.
+    if (!realtimeEnabled) return
     const ch = supabase.channel('lost-found-live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lost_found' }, () => loadRef.current())
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lost_found' }, () => loadRef.current())

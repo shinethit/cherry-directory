@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Calendar, MapPin, Users, BookOpen, Plus, Edit2, Trash2, Clock, CheckCircle, Search, X } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, realtimeEnabled } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -576,6 +576,9 @@ export default function HistoryPage() {
   const loadRef = useRef(load)
   loadRef.current = load
   useEffect(() => {
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // the list is loaded by the effect above; skip the channel.
+    if (!realtimeEnabled) return
     const channel = supabase
       .channel('history-live')
       .on('postgres_changes', {

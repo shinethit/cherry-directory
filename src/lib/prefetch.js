@@ -232,7 +232,7 @@ export async function runPrefetch({ force = false } = {}) {
         const data = queryClient.getQueryData(task.key)
         recordItem({ key: task.key.join('/'), label: task.label, count: countOf(data), status: 'ok' })
       } catch (err) {
-        console.warn('[prefetch] failed:', task.label, err)
+        console.warn('[prefetch] failed:', task.label, err?.message || err)
         recordItem({ key: task.key.join('/'), label: task.label, count: 0, status: 'error' })
       }
     }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Send, Reply, X, Trash2, Plus, Pencil, Settings } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, realtimeEnabled } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -149,7 +149,7 @@ export default function ChatPage() {
       if (target) setActiveRoom(target)
       else if (data?.length && !activeRoom) setActiveRoom(data[0])
     } catch (err) {
-      console.error('loadRooms error:', err)
+      console.error('loadRooms error:', err?.message || err)
       setRoomsError(true)
       showError('Rooms ရယူရာတွင် အမှားရှိသည်: ' + err.message)
     }
@@ -197,10 +197,18 @@ export default function ChatPage() {
           }
         }
       } catch (err) {
-        console.error('loadMessages error:', err)
+        console.error('loadMessages error:', err?.message || err)
       }
     }
     loadMessages()
+
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // poll every 20 s while the room is open so new messages still
+    // arrive, instead of a WebSocket reconnect storm.
+    if (!realtimeEnabled) {
+      const t = setInterval(() => { if (isSubscribed) loadMessages() }, 20000)
+      return () => { isSubscribed = false; clearInterval(t) }
+    }
 
     // Realtime subscription
     channel = supabase
@@ -214,7 +222,6 @@ export default function ChatPage() {
           filter: `room_id=eq.${activeRoom.id}`,
         },
         async (payload) => {
-          console.log('INSERT payload:', payload)
           // Fetch the newly inserted message with user details
           const { data: newMsg, error } = await supabase
             .from('chat_messages')
@@ -243,15 +250,13 @@ export default function ChatPage() {
           filter: `room_id=eq.${activeRoom.id}`,
         },
         (payload) => {
-          console.log('DELETE payload:', payload)
           if (isSubscribed) {
             setMessages(prev => prev.filter(m => m.id !== payload.old.id))
           }
         }
       )
       .subscribe((status, err) => {
-        if (err) console.error('Subscription error:', err)
-        else console.log('Subscription status:', status)
+        if (err) console.error('Subscription error:', err?.message || err)
       })
 
     return () => {

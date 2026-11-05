@@ -12,9 +12,10 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('=== ERROR BOUNDARY CAUGHT ===')
-    console.error('Error:', error)
-    console.error('Error Info:', errorInfo)
+    // v9.18: one console line (message only) — this is a real crash, so
+    // the log stays, but the full object + component stack used to dump
+    // three long lines. Sentry below still gets the full detail.
+    console.error('ERROR BOUNDARY CAUGHT:', error?.message || error)
     // Report to Sentry when it was initialized (initErrorTracking
     // with VITE_SENTRY_DSN); captureException is a no-op otherwise.
     Sentry.captureException(error, { extra: { componentStack: errorInfo?.componentStack } })

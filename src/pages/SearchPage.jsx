@@ -14,8 +14,18 @@ const SEARCH_SOURCES = [
     label: { mm: 'လုပ်ငန်းများ', en: 'Businesses' },
     icon: '🏢',
     table: 'listings',
-    select: 'id, name, name_mm, address_mm, city, icon:category_id',
-    searchFields: ['name', 'name_mm', 'description', 'description_mm', 'address', 'address_mm', 'phone_1', 'phone_2', 'phone_3', 'phone_4', 'phone_5'],
+    // v9.18 (Fix A): the old select used `icon:category_id` — not a
+    // valid PostgREST embed (the codebase pattern is
+    // `category:categories(icon)`) — and the old searchFields listed
+    // phone_3/4/5, which no schema file ever created on listings.
+    // Either one 400s the whole listings query, so the Businesses
+    // section always returned []. Both are removed: nothing reads
+    // item.icon (ResultRow renders the static source emoji), and
+    // phone search works on the two columns that exist. Matching is
+    // ilike substring, case-insensitive — "upper" matches both
+    // "upper" and "Upper House".
+    select: 'id, name, name_mm, address_mm, city',
+    searchFields: ['name', 'name_mm', 'description', 'description_mm', 'address', 'address_mm', 'phone_1', 'phone_2'],
     routePrefix: '/directory/',
     statusFilter: { column: 'status', value: 'approved' },
   },
@@ -110,6 +120,9 @@ export default function SearchPage() {
   const [searchError, setSearchError] = useState(false)
   // Request guard: a slow earlier keystroke must never overwrite newer results.
   const searchTokenRef = useRef(0)
+  // v9.18: abort the previous search's requests when a new one starts —
+  // the 400 ms debounce alone still fires 9 parallel requests per pause.
+  const searchAbortRef = useRef(null)
 
   useSEO({ title: lang === 'mm' ? 'ရှာဖွေရန်' : 'Search' })
 
@@ -130,6 +143,12 @@ export default function SearchPage() {
 
   async function runSearch(q) {
     const token = ++searchTokenRef.current
+    // v9.18: cancel the previous search's requests — the debounce fires
+    // one search per pause, and the superseded ones must not hit the
+    // network (they used to 400 in the console on every keystroke).
+    if (searchAbortRef.current) searchAbortRef.current.abort()
+    const controller = new AbortController()
+    searchAbortRef.current = controller
     setLoading(true)
     setSearched(true)
     setSearchError(false)
@@ -139,17 +158,24 @@ export default function SearchPage() {
     // Run all searches in parallel
     const promises = SEARCH_SOURCES.map(async (source) => {
       try {
-        // Build OR filter for search fields (escaped: raw `,`/`(`/`)`/`%` break it)
-        const esc = escapePostgrestOr(q)
-        const orFilter = source.searchFields
-          .map(field => `${field}.ilike.%${esc}%`)
-          .join(',')
-
+        // Build OR filters for search fields (escaped: raw `,`/`(`/`)`/`%` break it).
+        // v9.18: split multi-word queries — every word must match
+        // somewhere (each word gets its own OR group; successive .or()
+        // calls AND together). "upper house" now finds "Upper House";
+        // a single word behaves exactly as before.
         let query = supabase
           .from(source.table)
           .select(source.select)
-          .or(orFilter)
+          .abortSignal(controller.signal)
           .limit(8)
+
+        for (const word of q.trim().split(/\s+/)) {
+          const esc = escapePostgrestOr(word)
+          const orFilter = source.searchFields
+            .map(field => `${field}.ilike.%${esc}%`)
+            .join(',')
+          query = query.or(orFilter)
+        }
 
         // Add status filter if defined
         if (source.statusFilter) {
@@ -166,6 +192,12 @@ export default function SearchPage() {
           newResults[source.id] = []
         }
       } catch (e) {
+        // v9.18: an aborted (superseded) request is not an error — a
+        // newer search is already running, so do not set hadError.
+        if (e?.name === 'AbortError' || controller.signal.aborted) {
+          newResults[source.id] = []
+          return
+        }
         hadError = true
         newResults[source.id] = []
       }

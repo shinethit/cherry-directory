@@ -26,7 +26,10 @@ export const initErrorTracking = (dsn) => {
  * @param {object} extra - Extra information
  */
 export const logError = (error, context = '', extra = {}) => {
-  console.error(`[${context}]`, error);
+  // v9.18: message only in the console — the full object (with its stack
+  // trace) used to spam the console on every handled failure (bookmark /
+  // review / notification). Sentry still gets the full object below.
+  console.error(`[${context}]`, error?.message || error);
 
   Sentry.captureException(error, {
     tags: {

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { showError } from '../lib/toast'
+import { safeGet, safeSet, safeRemove } from '../lib/safeStorage'
 
 const AuthContext = createContext(null)
 
@@ -10,6 +11,13 @@ const AuthContext = createContext(null)
 // they are dropped here before the Supabase call (C-14 — a signed-in user
 // must not be able to escalate their own role or forge points).
 const SAFE_PROFILE_KEYS = ['full_name', 'nickname', 'bio', 'avatar_url']
+
+// v9.18: the last good profile, cached so a failed fetch does not blank
+// the app (role/name/admin gates keep working from cache). Staleness
+// trade-off: a revoked role still shows until the next successful fetch —
+// the server still enforces RLS on every data query, so this only
+// affects what the UI renders, never what the server returns.
+const PROFILE_CACHE_KEY = 'cherry-directory-profile'
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -22,42 +30,89 @@ export function AuthProvider({ children }) {
   const [profileError, setProfileError] = useState('')
   const initialized = useRef(false)
   const profileInFlight = useRef(0)
+  // v9.18: dedupes the double fetch at boot — loadSession() and the
+  // onAuthStateChange INITIAL_SESSION event fired the same query twice,
+  // so one stall produced two timeouts and two identical toasts.
+  const pendingProfile = useRef(null) // { userId, promise } while in flight
 
-  async function fetchProfile(userId) {
+  async function fetchProfileOnce(userId) {
+    // v9.17 (Issue 2b): 10 s timeout — the profiles select used to hang
+    // forever on a stalled connection, leaving profileLoading true and
+    // the app stuck on Loading after switching back from another app.
+    // On timeout/failure profileLoading still goes false (finally) so
+    // the app proceeds and the existing retry UI handles the rest.
+    const { data, error } = await withTimeout(supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single(), 10000, 'Profile')
+
+    if (error) throw error
+    if (!data) throw new Error('Profile row not found')
+    return data
+  }
+
+  async function doFetchProfile(userId) {
     profileInFlight.current += 1
     setProfileLoading(true)
     setProfileError('')
     try {
-      // v9.17 (Issue 2b): 10 s timeout — the profiles select used to hang
-      // forever on a stalled connection, leaving profileLoading true and
-      // the app stuck on Loading after switching back from another app.
-      // On timeout/failure profileLoading still goes false (finally) so
-      // the app proceeds and the existing retry UI handles the rest.
-      const { data, error } = await withTimeout(supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single(), 10000, 'Profile')
-
-      if (error) throw error
-      if (!data) throw new Error('Profile row not found')
+      let data
+      try {
+        data = await fetchProfileOnce(userId)
+      } catch (firstErr) {
+        // v9.18: one quiet retry before ever telling the user — a
+        // transient stall (slow proxy / mobile data) then self-heals
+        // with no toast at all.
+        data = await fetchProfileOnce(userId)
+      }
       setProfile(data)
       setProfileError('')
+      safeSet(PROFILE_CACHE_KEY, JSON.stringify(data))
       return true
     } catch (err) {
       // A missing/failed profile row is NOT silent: without it the user
       // loses role/points/name, and an admin can be permanently locked
-      // out. Surface it so the UI can offer Retry (H-3 / I-M1).
+      // out. Surface it so the UI can offer Retry (H-3 / I-M1) — unless
+      // a cached profile exists, in which case restore it quietly and
+      // let the next successful fetch refresh it.
       // S11 (v9.17): fixed Myanmar string — never toast raw DB English.
-      console.warn('fetchProfile failed:', err)
-      setProfileError('Profile ရယူမရပါ — ထပ်ကြိုးစားပါ')
-      showError('Profile ရယူမရပါ — ထပ်ကြိုးစားပါ')
+      let restored = false
+      try {
+        const raw = safeGet(PROFILE_CACHE_KEY)
+        if (raw) {
+          const cached = JSON.parse(raw)
+          if (cached && cached.id === userId) { setProfile(cached); restored = true }
+        }
+      } catch { /* corrupt cache — fall through to the error path */ }
+      if (!restored) {
+        console.warn('fetchProfile failed:', err?.message || err)
+        setProfileError('Profile ရယူမရပါ — ထပ်ကြိုးစားပါ')
+        showError('Profile ရယူမရပါ — ထပ်ကြိုးစားပါ')
+      }
       return false
     } finally {
       profileInFlight.current -= 1
       if (profileInFlight.current <= 0) {
         profileInFlight.current = 0
         setProfileLoading(false)
+      }
+    }
+  }
+
+  async function fetchProfile(userId) {
+    // Dedupe: if the same user's fetch is already in flight, await that
+    // one instead of firing a second identical query (and a second toast).
+    if (pendingProfile.current && pendingProfile.current.userId === userId) {
+      return pendingProfile.current.promise
+    }
+    const promise = doFetchProfile(userId)
+    pendingProfile.current = { userId, promise }
+    try {
+      return await promise
+    } finally {
+      if (pendingProfile.current && pendingProfile.current.promise === promise) {
+        pendingProfile.current = null
       }
     }
   }
@@ -89,7 +144,7 @@ export function AuthProvider({ children }) {
         const { data: { session }, error } = await supabase.auth.getSession()
 
         if (error) {
-          console.warn('[Auth] getSession error:', error)
+          console.warn('[Auth] getSession error:', error?.message || error)
           setLoadingFalse()
           return
         }
@@ -102,15 +157,18 @@ export function AuthProvider({ children }) {
         }
         setLoadingFalse()
       } catch (err) {
-        console.warn('[Auth] Initialization error:', err)
+        console.warn('[Auth] Initialization error:', err?.message || err)
         setLoadingFalse()
       }
     }
 
     loadSession()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return
+      // v9.18: loadSession() above already fetched the profile for the
+      // initial session — skip this event or the fetch runs twice.
+      if (event === 'INITIAL_SESSION') return
 
       if (session?.user) {
         setUser(session.user)
@@ -176,13 +234,14 @@ export function AuthProvider({ children }) {
     // Callers show the error and stay put on failure.
     const { error } = await supabase.auth.signOut()
     if (error) {
-      console.error('Sign out error:', error)
+      console.error('Sign out error:', error?.message || error)
       return { error }
     }
     setUser(null)
     setProfile(null)
     setProfileError('')
     setProfileLoading(false)
+    safeRemove(PROFILE_CACHE_KEY)
     return { error: null }
   }
 
@@ -209,6 +268,7 @@ export function AuthProvider({ children }) {
     if (error) throw error
     if (!data) throw new Error('Profile update failed — no row updated')
     setProfile(data)
+    safeSet(PROFILE_CACHE_KEY, JSON.stringify(data))
     return data
   }
 

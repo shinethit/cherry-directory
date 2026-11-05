@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, realtimeEnabled } from './supabase';
 
 /**
  * Notification types
@@ -30,7 +30,7 @@ export const getUserNotifications = async (userId, limit = 20) => {
 
     return data;
   } catch (error) {
-    console.error('Failed to fetch notifications:', error);
+    console.warn('Failed to fetch notifications:', error?.message || error);
     throw error;
   }
 };
@@ -53,7 +53,7 @@ export const markNotificationAsRead = async (notificationId) => {
 
     return data;
   } catch (error) {
-    console.error('Failed to mark notification as read:', error);
+    console.warn('Failed to mark notification as read:', error?.message || error);
     throw error;
   }
 };
@@ -73,7 +73,7 @@ export const markAllNotificationsAsRead = async (userId) => {
       throw error;
     }
   } catch (error) {
-    console.error('Failed to mark all notifications as read:', error);
+    console.warn('Failed to mark all notifications as read:', error?.message || error);
     throw error;
   }
 };
@@ -92,15 +92,19 @@ export const deleteNotification = async (notificationId) => {
       throw error;
     }
   } catch (error) {
-    console.error('Failed to delete notification:', error);
+    console.warn('Failed to delete notification:', error?.message || error);
     throw error;
   }
 };
 
 /**
- * Subscribe to real-time notifications
+ * Subscribe to real-time notifications.
+ * v9.18: no-op when realtime is off (proxied origin — see supabase.js);
+ * the caller gets a dummy subscription whose unsubscribe() does nothing,
+ * so the unread badge falls back to its refetchInterval instead.
  */
 export const subscribeToNotifications = (userId, callback) => {
+  if (!realtimeEnabled) return { unsubscribe() {} }
   const subscription = supabase
     .channel(`notifications:${userId}`)
     .on(

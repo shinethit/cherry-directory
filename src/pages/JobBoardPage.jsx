@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Phone, MapPin, ArrowLeft, Trash2, Edit2, Clock, Briefcase, Users, CheckCircle, Search } from 'lucide-react'
 import { escapePostgrestOr } from '../hooks/useListings'
-import { supabase } from '../lib/supabase'
+import { supabase, realtimeEnabled } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -471,6 +471,9 @@ export default function JobBoardPage() {
 
   useEffect(() => {
     load()
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // load() above already fetched the data; skip the channel.
+    if (!realtimeEnabled) return
     const channel = supabase
       .channel('jobs-live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'jobs' }, () => load(true))

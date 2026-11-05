@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, realtimeEnabled } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -52,6 +52,10 @@ export const useUnreadNotificationCount = () => {
     },
     enabled: !!user,
     staleTime: 1000 * 60, // 1 minute
+    // v9.18: with realtime off (proxied origin) the badge never gets a
+    // push — refetch the count every 60 s instead. With realtime on, the
+    // subscription invalidates the query, so no timer is needed.
+    refetchInterval: realtimeEnabled ? false : 60000,
   });
 
   return data ?? 0;

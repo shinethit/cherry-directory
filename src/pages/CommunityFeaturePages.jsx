@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'   // ✅ Added
-import { supabase } from '../lib/supabase'
+import { supabase, realtimeEnabled } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -190,6 +190,9 @@ export function DonationPage() {
 
   useEffect(() => {
     load()
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // load() above already fetched the data; skip the channel.
+    if (!realtimeEnabled) return
     const channel = supabase
       .channel('donations-live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'donations' }, load)
@@ -774,6 +777,9 @@ export function HealthServicePage() {
 
   useEffect(() => {
     load()
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // load() above already fetched the data; skip the channel.
+    if (!realtimeEnabled) return
     const channel = supabase
       .channel('health-live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'health_services' }, load)
@@ -950,6 +956,9 @@ export function BusSchedulePage() {
 
   useEffect(() => {
     load()
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // load() above already fetched the data; skip the channel.
+    if (!realtimeEnabled) return
     const channel = supabase
       .channel('bus-live')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bus_departures' }, load)
@@ -1242,6 +1251,9 @@ export function ToursPage() {
 
   // Realtime subscription for tours
   useEffect(() => {
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // the list is loaded by the effect above; skip the channel.
+    if (!realtimeEnabled) return
     const channel = supabase
       .channel('tours-live')
       .on('postgres_changes',

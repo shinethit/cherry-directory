@@ -1,6 +1,6 @@
 /* Cherry Directory — Service Worker v5 */
 
-const CACHE_VERSION = 'v11'
+const CACHE_VERSION = 'v12'
 const CACHE_NAME = 'cherry-directory-' + CACHE_VERSION
 
 function offlineFallback() {
@@ -10,6 +10,20 @@ function offlineFallback() {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   })
 }
+
+// v9.18: precache the app shell at install — the navigation fallback
+// below used to look up /index.html, but nothing ever put it in the
+// cache, so a flaky first visit to e.g. /search?q=upper fell through to
+// the synthetic 503. Now the shell is cached on install, so the SPA
+// boots and shows its own retry UI instead of a bare 503.
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((c) => c.add('/index.html'))
+      .catch(() => {})
+  )
+})
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
@@ -63,6 +77,14 @@ self.addEventListener('fetch', (event) => {
         .catch(async () => {
           const cached = await caches.match(request).catch(() => null)
           if (cached) return cached
+          // v9.18: the exact search URL (with ?q=…) is only cached if it
+          // was visited before — also try the same path without the
+          // query, the home shell, and the precached /index.html, so a
+          // flaky first visit still boots the SPA instead of a bare 503.
+          const noSearch = await caches.match(request, { ignoreSearch: true }).catch(() => null)
+          if (noSearch) return noSearch
+          const home = await caches.match('/').catch(() => null)
+          if (home) return home
           const fallback = await caches.match('/index.html').catch(() => null)
           if (fallback) return fallback
           return offlineFallback()

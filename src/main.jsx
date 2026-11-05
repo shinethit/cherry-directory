@@ -28,9 +28,6 @@ const persister = createSyncStoragePersister({
 // Sentry stays completely off unless VITE_SENTRY_DSN is set (Vercel env var).
 initErrorTracking(import.meta.env.VITE_SENTRY_DSN)
 
-console.log('=== APP STARTING ===')
-console.log('Environment:', import.meta.env.MODE)
-
 // NOTE (C-L1): the service worker is registered exactly once, in
 // useServiceWorker.js (single registration point, with the dev-mode guard).
 // The duplicate registration that used to live here — including its

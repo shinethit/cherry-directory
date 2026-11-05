@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, TrendingDown, Minus, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
-import { supabase } from '../lib/supabase'
+import { supabase, realtimeEnabled } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { fetchMarketPrices } from '../lib/prefetch'
 import { useAuth } from '../contexts/AuthContext'
@@ -628,6 +628,10 @@ export default function MarketPricePage() {
   }, [marketData, marketQueryLoading, marketQueryError])
 
   useEffect(() => {
+    // v9.18: realtime is off on the proxied origin (see supabase.js) —
+    // prices load via useQuery; skip the channel so the Live pill falls
+    // back to showing the last-update time instead of reconnecting.
+    if (!realtimeEnabled) return
     channelRef.current = supabase.channel('prices-live')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'price_reports' }, () => refetchPrices())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'price_items' }, () => refetchPrices())
