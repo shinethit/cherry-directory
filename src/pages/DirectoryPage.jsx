@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Search, X, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
+import { fetchCategories } from '../lib/prefetch'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
@@ -32,12 +34,10 @@ export default function DirectoryPage() {
   const [page, setPage] = useState(0)
   const [listingsError, setListingsError] = useState(false)
   const [categoryError, setCategoryError] = useState(false)
-  // Pagination is driven ONLY by the effect below (see loadListings).
+  // Pagination is driven ONLY by the effect below (see listings query).
   const pageRef = useRef(0)
   const lastFilterKeyRef = useRef('')
-  // Monotonic id: a late response from an old filter/page is ignored so it
-  // can never mix listings across filters/pages.
-  const requestIdRef = useRef(0)
+  const appliedKeyRef = useRef('')
   const LOAD_TIMEOUT_MS = 30000
   const PAGE_SIZE = 20
   
@@ -86,6 +86,19 @@ export default function DirectoryPage() {
     }
   }, [searchInput])
 
+  // Persist city/verified in the URL (?city= / ?verified=) like ?q=, so
+  // Back keeps them (NICE v9.17).
+  useEffect(() => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (city !== 'All') next.set('city', city)
+      else next.delete('city')
+      if (verifiedOnly) next.set('verified', 'true')
+      else next.delete('verified')
+      return next
+    }, { replace: true })
+  }, [city, verifiedOnly])
+
   // B8: collapse the listings-level header on scroll down, restore on scroll up.
   useEffect(() => {
     function onScroll() { setHeaderCollapsed(window.scrollY > 140) }
@@ -127,10 +140,20 @@ export default function DirectoryPage() {
   const processedUrlRef = useRef(null)
   const categoriesLoadedRef = useRef(false)
 
-  // Load top-level categories with counts
+  // Load top-level categories with counts — Issue 4c (v9.17): useQuery
+  // ['categories'] (same fetcher as the prefetch runner), so the
+  // category list renders from cache instantly on revisit under VPN.
+  // S17: a failed count is listing_count null (not 0) — the button stays
+  // enabled and the badge shows '–' instead of 'မရှိသေး'.
+  const { data: categoriesData, isLoading: categoryQueryLoading, isFetching: categoryQueryFetching, isError: categoryQueryError, refetch: refetchCategories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+  })
   useEffect(() => {
-    loadCategories()
-  }, [])
+    if (categoriesData) setCategories(categoriesData)
+    setCategoryLoading(categoryQueryLoading || categoryQueryFetching)
+    setCategoryError(categoryQueryError)
+  }, [categoriesData, categoryQueryLoading, categoryQueryFetching, categoryQueryError])
 
   // Track when categories are loaded
   useEffect(() => {
@@ -197,53 +220,6 @@ export default function DirectoryPage() {
     directNavigate()
   }, [urlCatId, categories.length])
 
-  async function loadCategories() {
-    setCategoryLoading(true)
-    setCategoryError(false)
-    try {
-      // 30 s timeout (was none): on slow mobile data a hung query used
-      // to leave the category skeletons up forever with no retry.
-      const { data, error } = await withTimeout(supabase
-        .from('categories')
-        .select('*')
-        .eq('type', 'directory')
-        .eq('is_active', true)
-        .is('parent_id', null)
-        .order('sort_order'), 30000, 'Directory categories')
-      if (error) throw error
-      // One shared category-tree fetch, then one count query per top-level
-      // category (was two queries per category). The tree fetch is
-      // best-effort: if it fails, counts fall back to direct listings
-      // only instead of blanking the whole category list.
-      const { data: allCats } = await withTimeout(supabase
-        .from('categories')
-        .select('id, parent_id')
-        .eq('type', 'directory')
-        .eq('is_active', true), 30000, 'Directory category tree').catch(() => ({ data: [] }))
-      // allSettled: one slow/failed count must not blank every category.
-      const countResults = await Promise.allSettled(
-        (data || []).map(async (cat) => {
-          const ids = collectDescendantIds(allCats || [], cat.id)
-          const { count } = await withTimeout(supabase
-            .from('listings')
-            .select('*', { count: 'exact', head: true })
-            .in('category_id', ids)
-            .eq('status', 'approved'), 30000, 'Directory category count')
-          return { ...cat, listing_count: count || 0 }
-        })
-      )
-      const categoriesWithCount = countResults.map((r, i) =>
-        r.status === 'fulfilled' ? r.value : { ...(data || [])[i], listing_count: 0 }
-      )
-      setCategories(categoriesWithCount)
-    } catch (e) {
-      console.warn('loadCategories error:', e)
-      setCategoryError(true)
-      setCategories([])
-    }
-    setCategoryLoading(false)
-  }
-
   async function loadSubcategories(categoryId) {
     setSubcategoryLoading(true)
     setSubcategoryError(false)
@@ -260,7 +236,7 @@ export default function DirectoryPage() {
 
       // Counts include 3rd-level listings: count the subcategory AND all
       // of its descendants, not just listings filed directly under it.
-      // The tree fetch is best-effort (see loadCategories).
+      // The tree fetch is best-effort (see fetchCategories in src/lib/prefetch.js).
       const { data: allCats } = await withTimeout(supabase
         .from('categories')
         .select('id, parent_id')
@@ -320,83 +296,89 @@ export default function DirectoryPage() {
     }
   }, [selectedCategory])
 
-  // Load listings when subcategory is selected or filters change.
-  // Pagination is driven ONLY by this effect: the "Load more" button only
-  // bumps pageRef/page. The old code also called loadListings(false) from the
-  // button with a stale `page` closure, so it re-fetched page 0 (reset).
-  useEffect(() => {
-    if (selectedSubcategory) {
-      loadListings()
-    } else {
-      setListings([])
-      setTotal(0)
-    }
-  }, [selectedSubcategory, city, verifiedOnly, q, page, sort])
-
-  const loadListings = useCallback(async () => {
-    if (!selectedSubcategory) return
-    // A changed subcategory/city/verified/search/sort is a fresh query (page 0);
-    // an unchanged filter with page > 0 is an append.
-    const filterKey = `${selectedSubcategory.id}|${city}|${verifiedOnly}|${q}|${sort}`
-    const reset = filterKey !== lastFilterKeyRef.current || pageRef.current === 0
-    if (reset) {
-      lastFilterKeyRef.current = filterKey
-      pageRef.current = 0
-      // NOTE: do NOT call setPage(0) here. It re-triggers this effect and
-      // runs the same page-0 query twice when page > 0. pageRef is the
-      // fetch truth; `page` state only triggers the effect from Load more.
-    }
-    const currentPage = pageRef.current
-    const myId = ++requestIdRef.current
-    setListingsLoading(true)
-    setListingsError(false)
-    let timeoutId = null
-    try {
-      const esc = escapePostgrestOr(q.trim())
+  // Listings — Issue 4c (v9.17): useQuery ['listings','directory', ...].
+  // One query per (subcategory, filters, page); the apply effect below
+  // replaces on page 0 / filter change and appends on Load more.
+  // A stale page (superseded by a filter change that reset page to 0)
+  // is dropped by the page guard in the apply effect — the old
+  // requestIdRef machinery is no longer needed.
+  const filterKey = selectedSubcategory ? `${selectedSubcategory.id}|${city}|${verifiedOnly}|${q}|${sort}` : ''
+  const { data: listingsData, isLoading: listingsQueryLoading, isFetching: listingsQueryFetching, isError: listingsQueryError, refetch: refetchListings } = useQuery({
+    queryKey: ['listings', 'directory', selectedSubcategory?.id, city, verifiedOnly, q, sort, page],
+    queryFn: async ({ queryKey: [, , subId, cityF, verifiedF, qF, sortF, pageF] }) => {
+      const esc = escapePostgrestOr(qF.trim())
       let query = supabase
         .from('listings')
         .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
         .eq('status', 'approved')
-        .eq('category_id', selectedSubcategory.id)
+        .eq('category_id', subId)
 
       // B7: sort chosen by the user — rating (default), newest, or name.
-      if (sort === 'newest') query = query.order('created_at', { ascending: false })
-      else if (sort === 'name') query = query.order('name', { ascending: true })
+      if (sortF === 'newest') query = query.order('created_at', { ascending: false })
+      else if (sortF === 'name') query = query.order('name', { ascending: true })
       else query = query.order('rating_avg', { ascending: false, nullsFirst: false }).order('name', { ascending: true })
-      query = query.range(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE - 1)
+      query = query.range(pageF * PAGE_SIZE, (pageF + 1) * PAGE_SIZE - 1)
 
-      if (q.trim()) query = query.or(`name.ilike.%${esc}%,name_mm.ilike.%${esc}%,description.ilike.%${esc}%,description_mm.ilike.%${esc}%`)
-      if (city !== 'All') query = query.eq('city', city)
-      if (verifiedOnly) query = query.eq('is_verified', true)
+      if (qF.trim()) query = query.or(`name.ilike.%${esc}%,name_mm.ilike.%${esc}%,description.ilike.%${esc}%,description_mm.ilike.%${esc}%`)
+      if (cityF !== 'All') query = query.eq('city', cityF)
+      if (verifiedF) query = query.eq('is_verified', true)
 
       // A hung query used to spin the skeletons forever with no retry.
-      // Race it against a timeout so the error banner + retry appear.
-      const timeout = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('loadListings timed out')), LOAD_TIMEOUT_MS)
-      })
-      const { data, count, error } = await Promise.race([query, timeout])
-      if (timeoutId) clearTimeout(timeoutId)
+      const { data, count, error } = await withTimeout(query, LOAD_TIMEOUT_MS, 'Directory listings')
       if (error) throw error
-      // Superseded by a newer filter/page request — drop it silently.
-      if (myId !== requestIdRef.current) return
+      return { rows: data || [], total: count || 0, page: pageF, filterKey: `${subId}|${cityF}|${verifiedF}|${qF}|${sortF}` }
+    },
+    enabled: !!selectedSubcategory,
+  })
 
-      if (reset) setListings(data || [])
-      else setListings(prev => {
+  // Apply query results: page 0 (or a new filter) replaces, later pages
+  // append. The page guard drops a stale page fetched before a filter
+  // change reset page to 0; appliedKeyRef dedupes StrictMode double-run.
+  useEffect(() => {
+    if (!listingsData) return
+    if (listingsData.page !== page) return
+    const key = listingsData.filterKey + '|p' + listingsData.page
+    if (appliedKeyRef.current === key) return
+    appliedKeyRef.current = key
+    if (listingsData.page === 0 || lastFilterKeyRef.current !== listingsData.filterKey) {
+      lastFilterKeyRef.current = listingsData.filterKey
+      setListings(listingsData.rows)
+    } else {
+      setListings(prev => {
         const seen = new Set(prev.map(l => l.id))
-        return [...prev, ...(data || []).filter(l => !seen.has(l.id))]
+        return [...prev, ...listingsData.rows.filter(l => !seen.has(l.id))]
       })
-      setTotal(count || 0)
-    } catch (e) {
-      if (timeoutId) clearTimeout(timeoutId)
-      // A late failure from a superseded request must not clobber the
-      // current request's state.
-      if (myId !== requestIdRef.current) return
-      console.warn('loadListings error:', e)
-      setListingsError(true)
-      if (reset) setListings([])
     }
-    if (myId === requestIdRef.current) setListingsLoading(false)
-  }, [selectedSubcategory, city, verifiedOnly, q, sort])
+    setTotal(listingsData.total)
+  }, [listingsData, page])
+
+  useEffect(() => {
+    setListingsLoading(listingsQueryLoading || listingsQueryFetching)
+    setListingsError(listingsQueryError)
+  }, [listingsQueryLoading, listingsQueryFetching, listingsQueryError])
+
+  // A filter change resets to page 0 — otherwise the query would fetch
+  // page N of the new filter and the list would start mid-way.
+  const filterKeyStateRef = useRef('')
+  useEffect(() => {
+    if (!selectedSubcategory) return
+    if (filterKeyStateRef.current && filterKeyStateRef.current !== filterKey) {
+      pageRef.current = 0
+      setPage(0)
+    }
+    filterKeyStateRef.current = filterKey
+  }, [filterKey, selectedSubcategory])
+
+  // Clear the list when no subcategory is selected.
+  useEffect(() => {
+    if (!selectedSubcategory) {
+      setListings([])
+      setTotal(0)
+      appliedKeyRef.current = ''
+      lastFilterKeyRef.current = ''
+    }
+  }, [selectedSubcategory])
+
 
   function handleCategorySelect(cat) {
     setSelectedCategory(cat)
@@ -504,7 +486,7 @@ export default function DirectoryPage() {
           ) : categoryError ? (
             <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
               <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
-              <button onClick={loadCategories} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+              <button onClick={() => refetchCategories()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
             </div>
           ) : categories.length === 0 ? (
             <EmptyState icon="📂" title="Category မရှိသေး" message="မရှိသေးပါ" />
@@ -527,7 +509,9 @@ export default function DirectoryPage() {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                   <span className="bg-brand-600/30 px-2 py-1 rounded-full text-xs font-bold text-brand-300 whitespace-nowrap">
-                    {cat.listing_count === 0 ? 'မရှိသေး' : `${cat.listing_count} လုပ်ငန်း`}
+                    {/* S17 (v9.17): a failed count (null) shows '–' and the
+                        button stays enabled — null is not zero. */}
+                    {cat.listing_count == null ? '–' : cat.listing_count === 0 ? 'မရှိသေး' : `${cat.listing_count} လုပ်ငန်း`}
                   </span>
                   <ChevronRight size={18} className="text-white/30 flex-shrink-0" />
                 </div>
@@ -606,7 +590,7 @@ export default function DirectoryPage() {
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                     <span className="bg-brand-600/30 px-2 py-1 rounded-full text-xs font-bold text-brand-300 whitespace-nowrap">
-                      {sub.listing_count === 0 ? 'မရှိသေး' : `${sub.listing_count} လုပ်ငန်း`}
+                      {sub.listing_count == null ? '–' : sub.listing_count === 0 ? 'မရှိသေး' : `${sub.listing_count} လုပ်ငန်း`}
                     </span>
                     <ChevronRight size={18} className="text-white/30 flex-shrink-0" />
                   </div>
@@ -744,7 +728,7 @@ export default function DirectoryPage() {
         {listingsError && (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်{listings.length > 0 ? ' — အဟောင်းများကို ပြထားသည်' : ''}</p>
-            <button onClick={() => loadListings()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            <button onClick={() => refetchListings()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
           </div>
         )}
         {listingsLoading && listings.length === 0

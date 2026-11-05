@@ -21,6 +21,8 @@ export default function ResetPasswordPage() {
   // Set true after a successful password change: the success message
   // stays on the page for 3 seconds before navigating home (F6).
   const [changed, setChanged] = useState(false)
+  // S13 (v9.17): resend cooldown — 60 s after each send, with a countdown.
+  const [cooldown, setCooldown] = useState(0)
   // Recovery mode: Supabase puts the recovery session in the URL hash
   // (#access_token=...&type=recovery) after the user clicks the email link.
   const [isRecovery, setIsRecovery] = useState(false)
@@ -37,7 +39,10 @@ export default function ResetPasswordPage() {
   // round-trip, by which time this component has mounted).
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.slice(1))
-    if (hash.get('type') === 'recovery') {
+    // M5 (v9.17): the reset email now lands on ?recovery=1 (AuthContext
+    // redirectTo) — treat that as recovery on mount, before the hash or
+    // the PASSWORD_RECOVERY event arrives. The event stays as backup.
+    if (hash.get('type') === 'recovery' || new URLSearchParams(window.location.search).get('recovery') === '1') {
       setIsRecovery(true)
     }
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
@@ -54,14 +59,23 @@ export default function ResetPasswordPage() {
     return () => clearTimeout(t)
   }, [changed, navigate])
 
+  // S13 (v9.17): tick the resend cooldown down once a second.
+  useEffect(() => {
+    if (cooldown <= 0) return
+    const t = setTimeout(() => setCooldown(c => c - 1), 1000)
+    return () => clearTimeout(t)
+  }, [cooldown])
+
   async function handleSendLink(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
       // Single redirectTo source: AuthContext.resetPasswordForEmail (F-LOW-1).
-      await resetPasswordForEmail(email)
+      // S1 (v9.17): trim + lowercase the email before sending.
+      await resetPasswordForEmail(email.trim().toLowerCase())
       setSent(true)
+      setCooldown(60)
       showSuccess('စကားဝှက် ပြန်လည်သတ်မှတ်ရန် လင့်ခ် ပို့ပြီးပါပြီ — အီးမေးလ်ကို စစ်ဆေးပါ')
     } catch (err) {
       setError(translateAuthError(err))
@@ -180,10 +194,10 @@ export default function ResetPasswordPage() {
             <button
               type="button"
               onClick={handleSendLink}
-              disabled={loading}
+              disabled={loading || cooldown > 0}
               className="btn-ghost w-full text-sm"
             >
-              {loading ? 'ပို့နေသည်...' : 'လင့်ခ် ထပ်ပို့မည်'}
+              {loading ? 'ပို့နေသည်...' : cooldown > 0 ? `လင့်ခ် ထပ်ပို့မည် (${cooldown}s)` : 'လင့်ခ် ထပ်ပို့မည်'}
             </button>
             <button
               type="button"

@@ -33,7 +33,7 @@ const BLANK = {
 export default function NewsEditPage() {
   const { id } = useParams()          // undefined = create, uuid = edit
   const navigate = useNavigate()
-  const { user, isAdmin, isModerator, isLoggedIn } = useAuth()
+  const { user, isAdmin, isModerator, isLoggedIn, loading: authLoading } = useAuth()
   const { lang } = useLang()
   const { log } = useAuditLog()
   useSEO({ title: id ? 'Edit News' : 'Create News' })
@@ -49,6 +49,9 @@ export default function NewsEditPage() {
   const [checked, setChecked] = useState(false)
 
   useEffect(() => {
+    // M2 (v9.17): wait for auth to load — redirecting before it is known
+    // would bounce a legitimate admin/mod to /login (EventFormPage guard).
+    if (authLoading) return
     supabase
       .from('categories')
       .select('*')
@@ -83,7 +86,7 @@ export default function NewsEditPage() {
       setCanEdit(allowed)
       setChecked(true)
     }
-  }, [id, user, isAdmin, isModerator, navigate])
+  }, [id, user, isAdmin, isModerator, isLoggedIn, authLoading, navigate])
 
   async function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
@@ -102,6 +105,10 @@ export default function NewsEditPage() {
   async function handleSave(e) {
     e.preventDefault()
     if (!form.title && !form.title_mm) return
+    // N19 (v9.17): a title-only post warns before saving with no content.
+    if (!form.content?.trim() && !form.content_mm?.trim()) {
+      if (!(await confirmDialog(lang === 'mm' ? 'အကြောင်းအရာ မပါဘဲ တင်မည်လား?' : 'Post with no content?'))) return
+    }
     setSaving(true)
 
     const payload = {

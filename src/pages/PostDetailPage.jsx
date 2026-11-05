@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Calendar, MapPin, Eye, CheckCircle, Star, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { ReactionBar, Skeleton } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { useAuth } from '../contexts/AuthContext'
+import { useLang } from '../contexts/LangContext'
 import ShareButton from '../components/ShareButton'
 import { getCountdown } from '../lib/countdown'
 import { goBackOrHome } from '../lib/navigation'
@@ -22,7 +23,9 @@ import { formatMyanmarDate, formatMyanmarDateTime } from '../lib/myanmarDate'
 // relied on here).
 function RsvpSection({ postId }) {
   const { isLoggedIn, user } = useAuth()
+  const { lang } = useLang()
   const navigate = useNavigate()
+  const location = useLocation()
   const [status, setStatus] = useState(null)
   const [counts, setCounts] = useState({ going: 0, interested: 0 })
   const [loading, setLoading] = useState(false)
@@ -44,7 +47,7 @@ function RsvpSection({ postId }) {
   }, [postId, user])
 
   async function rsvp(newStatus) {
-    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ RSVP လုပ်နိုင်မည်'); navigate('/login'); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ RSVP လုပ်နိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
     setLoading(true)
     if (status === newStatus) {
       const { error } = await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
@@ -67,7 +70,7 @@ function RsvpSection({ postId }) {
   return (
     <div className="card-dark p-4 rounded-2xl space-y-3">
       <p className="text-xs text-white/60 font-display font-semibold uppercase tracking-wider">
-        တက်ရောက်မည်လား?
+        {lang === 'mm' ? 'တက်ရောက်မည်လား?' : 'Will you attend?'}
       </p>
       <div className="flex gap-2 flex-wrap">
         <button
@@ -123,11 +126,19 @@ export default function PostDetailPage() {
     setLoadError(false)
     // 30 s timeout (was none): a hung query left the page on skeletons
     // forever with no retry — the .catch below only runs once it settles.
-    withTimeout(supabase.from('posts').select('*, author:profiles(full_name, avatar_url), category:categories(name, name_mm, icon)').eq('id', id).single(), 30000, 'Post').then(({ data, error }) => {
+    withTimeout(supabase.from('posts').select('*, author:profiles(full_name, avatar_url), category:categories(name, name_mm, icon)').eq('id', id).eq('status', 'published').single(), 30000, 'Post').then(({ data, error }) => {
       if (error && error.code !== 'PGRST116') { setLoadError(true); setLoading(false); return }
       if (!data) { setNotFound(true); setLoading(false); return }
       setPost(data)
-      supabase.from('posts').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id)
+      // S9 (v9.17): count a view at most once per post per session
+      // (fire-and-forget; a concurrent lost-update can still occur).
+      try {
+        const key = 'viewed-post-' + id
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, '1')
+          supabase.from('posts').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id)
+        }
+      } catch { /* storage unavailable — skip counting, never block render */ }
       setLoading(false)
     }).catch(() => { setLoadError(true); setLoading(false) })
   }, [id])

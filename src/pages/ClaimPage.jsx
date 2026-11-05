@@ -8,13 +8,15 @@ import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
 import { showError, showSuccess } from '../lib/toast'
 import { getThumbnailUrl } from '../lib/cloudinary'
+import { validatePhone, toLatinDigits } from '../lib/validation'
+import { displayName } from '../lib/displayName'
 import { goBackOrHome } from '../lib/navigation'
 
 // F1: which shop is being claimed — name + address + thumbnail, shown
 // at the top of the form so the user never claims the wrong shop.
 function ListingSummary({ listing, lang }) {
   if (!listing) return null
-  const name = lang === 'mm' ? (listing.name_mm || listing.name) : listing.name
+  const name = displayName(listing, lang)
   const address = lang === 'mm' ? (listing.address_mm || listing.address) : (listing.address || listing.address_mm)
   const thumb = listing.cover_url || listing.logo_url
   return (
@@ -66,7 +68,7 @@ export default function ClaimPage() {
       // with no shop shown and no error at all.
       const { data, error } = await withTimeout(supabase
         .from('listings')
-        .select('id, name, name_mm, address, address_mm, cover_url, logo_url')
+        .select('id, name, name_mm, address, address_mm, cover_url, logo_url, owner_id, is_verified, status')
         .eq('id', id)
         .maybeSingle(), 30000, 'Claim listing')
       if (error) throw error
@@ -133,6 +135,9 @@ export default function ClaimPage() {
   async function handleSubmit(e) {
     e.preventDefault()
     if (!phone.trim()) { setError('ဖုန်းနံပါတ် ထည့်ပါ'); return }
+    // S7 (v9.17): validate + store Latin digits (same error as Submit).
+    if (!validatePhone(phone)) { setError('ဖုန်းနံပါတ် မှားမှားမှားနေသည်။'); return }
+    const phoneDigits = toLatinDigits(phone)
     if (!user) { setError('အကောင့်အချက်အလက် ရယူနေသည် — ပြန်ဝင်ပါ'); return }
     setSubmitting(true)
     setError('')
@@ -178,9 +183,8 @@ export default function ClaimPage() {
         .update({
           status: 'pending',
           reviewed_by: null,
-          contact_phone: phone,
+          contact_phone: phoneDigits,
           note: note || null,
-          created_at: now,
           updated_at: now,
         })
         .eq('id', existing.id)
@@ -200,7 +204,7 @@ export default function ClaimPage() {
     const { error: insertError } = await supabase.from('listing_claims').insert({
       listing_id: id,
       user_id: user.id,
-      contact_phone: phone,
+      contact_phone: phoneDigits,
       note: note,
       status: 'pending',
     })
@@ -223,6 +227,73 @@ export default function ClaimPage() {
       <h2 className="font-display font-bold text-2xl text-white mb-2">{t('claim_sent')}</h2>
       <p className="text-white/50 font-myanmar mb-6">{t('claim_note')}</p>
       <button onClick={() => navigate(`/directory/${id}`)} className="btn-primary">ပြန်သွားမည်</button>
+    </div>
+  )
+
+  // S9 (v9.17): not claimable — not approved yet, or already owned/verified.
+  if (listing && (listing.status !== 'approved' || listing.is_verified || listing.owner_id)) return (
+    <div className="pb-8">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <button onClick={() => goBackOrHome(navigate, `/directory/${id}`)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+          <ArrowLeft size={18} className="text-white" />
+        </button>
+        <h1 className="font-display font-bold text-lg text-white">{t('claim_title')}</h1>
+      </div>
+      <div className="px-4 space-y-5">
+        <ListingSummary listing={listing} lang={lang} />
+        <div className="card-dark p-5 rounded-2xl space-y-3 border border-amber-500/30">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+              <ShieldCheck size={20} className="text-amber-300" />
+            </div>
+            <div>
+              <h3 className="font-display font-semibold text-white text-sm">{listing.status !== 'approved' ? 'ဤလုပ်ငန်း အတည်ပြုမရသေးပါ' : 'ဤလုပ်ငန်း ပိုင်ဆိုင်ကြောင်း အတည်ပြုပြီးဖြစ်သည်'}</h3>
+              <p className="text-xs text-white/50 mt-1 font-myanmar leading-relaxed">
+                {listing.status !== 'approved'
+                  ? 'Admin မှ အတည်ပြုပြီးမှ ပိုင်ဆိုင်ကြောင်း တောင်းဆိုနိုင်မည်။'
+                  : 'ပိုင်ဆိုင်ကြောင်း တောင်းဆို၍ မရတော့ပါ။'}
+              </p>
+            </div>
+          </div>
+          <button onClick={() => navigate(`/directory/${id}`)} className="btn-ghost w-full">
+            ပြန်သွားမည်
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  // S8 (v9.17): pending/approved claims show a status card, not the form
+  // (same shape as the rejected branch below).
+  if ((existingClaim?.status === 'pending' || existingClaim?.status === 'approved') && !done) return (
+    <div className="pb-8">
+      <div className="flex items-center gap-3 px-4 py-3">
+        <button onClick={() => goBackOrHome(navigate, `/directory/${id}`)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+          <ArrowLeft size={18} className="text-white" />
+        </button>
+        <h1 className="font-display font-bold text-lg text-white">{t('claim_title')}</h1>
+      </div>
+      <div className="px-4 space-y-5">
+        <ListingSummary listing={listing} lang={lang} />
+        <div className="card-dark p-5 rounded-2xl space-y-3 border border-brand-500/30">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-600/30 flex items-center justify-center flex-shrink-0">
+              <ShieldCheck size={20} className="text-brand-300" />
+            </div>
+            <div>
+              <h3 className="font-display font-semibold text-white text-sm">{existingClaim.status === 'pending' ? 'ပိုင်ဆိုင်ကြောင်း တောင်းဆိုခြင်း စစ်ဆေးဆဲ' : 'ပိုင်ဆိုင်ကြောင်း အတည်ပြုပြီးဖြစ်သည်'}</h3>
+              <p className="text-xs text-white/50 mt-1 font-myanmar leading-relaxed">
+                {existingClaim.status === 'pending'
+                  ? 'Admin မှ စစ်ဆေးနေပါသည် — ၁-၂ ရက်အတွင်း အကြောင်းပြန်မည်။'
+                  : 'ဤလုပ်ငန်း၏ ပိုင်ဆိုင်ကြောင်း အတည်ပြုပြီးဖြစ်သည်။'}
+              </p>
+            </div>
+          </div>
+          <button onClick={() => navigate(`/directory/${id}`)} className="btn-ghost w-full">
+            ပြန်သွားမည်
+          </button>
+        </div>
+      </div>
     </div>
   )
 

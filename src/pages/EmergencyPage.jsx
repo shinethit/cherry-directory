@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Phone, Plus, Pencil, Trash2, X, Save, Clock, DollarSign } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { withTimeout } from '../lib/withTimeout'
+import { fetchEmergencyContacts } from '../lib/prefetch'
+import { validatePhone } from '../lib/validation'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -65,13 +67,13 @@ function ContactCard({ contact, lang, isMod, onEdit, onDelete }) {
               )}
               {contact.address_mm || contact.address ? (
                 <span className="text-[9px] text-white/60 font-myanmar">
-                  📍 {lang === 'mm' ? (contact.address_mm || contact.address) : contact.address}
+                  📍 {lang === 'mm' ? (contact.address_mm || contact.address) : (contact.address || contact.address_mm)}
                 </span>
               ) : null}
             </div>
             {(contact.note_mm || contact.note) && (
               <p className="text-[10px] text-white/50 mt-1 font-myanmar">
-                {lang === 'mm' ? (contact.note_mm || contact.note) : contact.note}
+                {lang === 'mm' ? (contact.note_mm || contact.note) : (contact.note || contact.note_mm)}
               </p>
             )}
           </div>
@@ -129,6 +131,11 @@ function ContactForm({ initial, onClose, onSaved, lang }) {
   async function save() {
     if (!form.name_mm && !form.name) return
     if (!form.phone_1) return
+    // S19 (v9.17): validate phone format on save (digits / 09… / 081…).
+    const badPhone = !validatePhone(form.phone_1)
+      || (form.phone_2 && !validatePhone(form.phone_2))
+      || (form.phone_3 && !validatePhone(form.phone_3))
+    if (badPhone) { showError(lang === 'mm' ? 'ဖုန်းနံပါတ် မှန်ကန်စွာ ထည့်ပါ' : 'Enter a valid phone number'); return }
     setSaving(true)
     const payload = { ...form, updated_at: new Date().toISOString() }
     const { error } = initial?.id
@@ -253,29 +260,25 @@ export default function EmergencyPage() {
   const [showForm, setShowForm]    = useState(false)
   const [loadError, setLoadError]  = useState(false)
 
-  async function load() {
-    setLoading(true)
-    setLoadError(false)
-    try {
-    // 30 s timeout (was none): a hung query left the skeletons up forever.
-    const { data, error } = await withTimeout(supabase
-      .from('emergency_contacts')
-      .select('*')
-      .eq('is_active', true)
-      .order('sort_order'), 30000, 'Emergency contacts')
-    if (error) throw error
-    setContacts(data || [])
-    } catch (e) { console.warn(e); setLoadError(true) }
-    setLoading(false)
-  }
+  // Issue 4c (v9.17): useQuery ['emergency-contacts'] (same fetcher as
+  // the prefetch runner), so the list renders from cache instantly on
+  // revisit under VPN.
+  const { data: contactsData, isLoading: contactsQueryLoading, isFetching: contactsQueryFetching, isError: contactsQueryError, refetch: refetchContacts } = useQuery({
+    queryKey: ['emergency-contacts'],
+    queryFn: fetchEmergencyContacts,
+  })
+  useEffect(() => {
+    if (contactsData) setContacts(contactsData)
+    setLoading(contactsQueryLoading || contactsQueryFetching)
+    setLoadError(contactsQueryError)
+  }, [contactsData, contactsQueryLoading, contactsQueryFetching, contactsQueryError])
 
-  useEffect(() => { load() }, [])
 
   async function handleDelete(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this contact?', { danger: true }))) return
     const { error } = await supabase.from('emergency_contacts').update({ is_active: false }).eq('id', id)
     if (error) { showError(error.message); return }
-    load()
+    refetchContacts()
   }
 
   const filtered = catFilter === 'all'
@@ -390,7 +393,7 @@ export default function EmergencyPage() {
         ) : loadError ? (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
-            <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            <button onClick={() => refetchContacts()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
           </div>
         ) : grouped.length === 0 ? (
           <div className="flex flex-col items-center py-14 text-center">
@@ -437,7 +440,7 @@ export default function EmergencyPage() {
           initial={editTarget}
           lang={lang}
           onClose={() => { setShowForm(false); setEditTarget(null) }}
-          onSaved={() => { setShowForm(false); setEditTarget(null); load() }}
+          onSaved={() => { setShowForm(false); setEditTarget(null); refetchContacts() }}
         />
       )}
     </div>

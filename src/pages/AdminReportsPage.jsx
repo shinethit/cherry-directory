@@ -9,6 +9,7 @@ import { useSEO } from '../hooks/useSEO'
 import { showError, showSuccess } from '../lib/toast'
 import { formatMyanmarDate } from '../lib/myanmarDate'
 import { confirmDialog } from '../lib/confirmDialog'
+import { useAuditLog } from '../hooks/useAuditLog'
 
 const STATUS_META = {
   pending:   { mm: 'စစ်ဆေးဆဲ',  en: 'Pending',   cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30',  icon: Clock },
@@ -26,12 +27,14 @@ const REASON_LABEL = {
 }
 
 export default function AdminReportsPage() {
+  const { log } = useAuditLog() // S14 (v9.17)
   const navigate = useNavigate()
   const { user, isAdmin, isModerator, loading: authLoading } = useAuth()
   const { lang } = useLang()
   useSEO({ title: 'Reports' })
 
   const [items, setItems] = useState([])
+  const [totalCount, setTotalCount] = useState(null) // S16 (v9.17): tab total from a head count, not the loaded page
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [tab, setTab] = useState('pending')
@@ -50,6 +53,15 @@ export default function AdminReportsPage() {
     setLoadError('')
     try {
       // 30 s timeout (was none): a hung query left the list on skeletons forever.
+      // S16 (v9.17): the header total is the tab's full count, not the
+      // loaded page length. A failed count falls back to the page length.
+      try {
+        const { count } = await withTimeout(supabase
+          .from('reports')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', tab), 30000, 'Reports count')
+        setTotalCount(count ?? null)
+      } catch (countErr) { console.warn('Reports count failed:', countErr); setTotalCount(null) }
       const { data, error } = await withTimeout(supabase
         .from('reports')
         .select('*, reporter:profiles!reporter_id(full_name, nickname)')
@@ -102,14 +114,26 @@ export default function AdminReportsPage() {
           return
         }
       }
-      const { error } = await supabase
+      // N11 (v9.17): only a still-pending report can be decided — two
+      // admins deciding at once must not both succeed.
+      const { data: updated, error } = await supabase
         .from('reports')
         .update({ status, reviewed_at: new Date().toISOString(), reviewed_by: user?.id || null })
         .eq('id', report.id)
+        .eq('status', 'pending')
+        .select('id')
       if (error) {
         showError('Report အပ်ဒိတ်လုပ်ရာတွင် အမှားရှိသည်: ' + error.message)
         return
       }
+      if (!updated || updated.length === 0) {
+        showError('ဤ Report ကို အခြား Admin မှ ဆုံးဖြတ်ပြီးဖြစ်သည်')
+        load()
+        return
+      }
+      // S14 (v9.17): review/dismiss decisions are audit-logged.
+      log({ action: status === 'reviewed' ? 'review_report' : 'dismiss_report', table: 'reports', id: report.id, name: report._target?.name_mm || report._target?.name || report.target_id, before: { status: 'pending' }, after: { status } })
+        .then(ok => { if (!ok) console.warn('Audit log failed for report decision') })
       showSuccess(status === 'reviewed' ? '✓ ဖြေရှင်းပြီးပါပြီ' : 'Report ပယ်ချပြီးပါပြီ')
       setItems(prev => prev.filter(r => r.id !== report.id))
     } finally {
@@ -154,7 +178,7 @@ export default function AdminReportsPage() {
               🚩 {lang === 'mm' ? 'Report များ' : 'Reports'}
             </h1>
             <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
-              {lang === 'mm' ? items.length + ' ခု' : items.length + ' items'}
+              {lang === 'mm' ? (totalCount ?? items.length) + ' ခု' : (totalCount ?? items.length) + ' items'}
             </p>
           </div>
         </div>
@@ -249,6 +273,14 @@ export default function AdminReportsPage() {
                   {r.target_type === 'listing' && (
                     <button
                       onClick={() => navigate('/directory/' + r.target_id)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-brand-300 bg-brand-600/10 rounded-xl hover:bg-brand-600/20 transition-colors"
+                    >
+                      <ExternalLink size={11} /> {lang === 'mm' ? 'ကြည့်' : 'View'}
+                    </button>
+                  )}
+                  {r.target_type === 'lost_found' && (
+                    <button
+                      onClick={() => navigate('/lost-found/' + r.target_id)}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs text-brand-300 bg-brand-600/10 rounded-xl hover:bg-brand-600/20 transition-colors"
                     >
                       <ExternalLink size={11} /> {lang === 'mm' ? 'ကြည့်' : 'View'}

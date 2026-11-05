@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Trophy, Star, Building2, Medal } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
@@ -47,8 +48,12 @@ function periodLabel(id, lang) {
 }
 
 function ptsUnit(tab, period, lang) {
-  const suffix = period !== 'all' ? (lang === 'mm' ? '/ကာလ' : '') : ''
-  if (tab === 'points')   return lang === 'mm' ? `မှတ်${suffix}` : `pts${suffix}`
+  // Issue 3e (v9.17): never a bare ambiguous number — the 'all' value
+  // IS the total, so label it as such.
+  if (tab === 'points') {
+    if (period === 'all') return lang === 'mm' ? 'စုစုပေါင်း မှတ်' : 'total pts'
+    return lang === 'mm' ? 'မှတ်/ကာလ' : 'pts'
+  }
   if (tab === 'reviews')  return lang === 'mm' ? 'review' : 'reviews'
   return lang === 'mm' ? 'လုပ်ငန်း' : 'listings'
 }
@@ -60,7 +65,7 @@ function OnlineDot({ lastSeen }) {
 }
 
 // ── Podium ────────────────────────────────────────────────────
-function Podium({ users, tab, lang }) {
+function Podium({ users, tab, lang, period }) {
   const navigate = useNavigate()
   // E5 (v9.5): render the podium with however many users exist (1–2
   // places) instead of blanking the whole page below 3 users.
@@ -78,7 +83,7 @@ function Podium({ users, tab, lang }) {
     <div className="px-4 mb-2">
       <div className="flex items-end justify-center gap-3 pt-4 pb-1">
         {slots.map(({ u, rank, h, size, emoji, textCol, border, crown }) => (
-          <div key={rank} onClick={() => navigate(`/profile/${u.id}`)} className="flex flex-col items-center gap-1.5 cursor-pointer">
+          <div key={rank} onClick={() => navigate(`/profile/${u.id}`)} className="flex flex-col items-center gap-1.5 cursor-pointer" tabIndex={0} role="button" onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/profile/${u.id}`) } }}>
             <div className="relative" style={{ width: size, height: size }}>
               {crown && <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-xl z-10">👑</div>}
               <div className={`w-full h-full rounded-2xl overflow-hidden border-2 ${border} bg-brand-800 flex items-center justify-center`}>
@@ -93,7 +98,16 @@ function Podium({ users, tab, lang }) {
             <p className={`text-[10px] font-display font-semibold text-center max-w-[64px] truncate ${textCol}`}>
               {u.nickname ? `@${u.nickname}` : u.full_name}
             </p>
-            <TierBadge points={u.points || 0} size="xs" lang={lang} />
+            <TierBadge points={u.all_time_points ?? u.points ?? 0} size="xs" lang={lang} />
+            {/* Issue 3e (v9.17): the podium number is the period figure —
+                show the all-time total next to it (or label it total). */}
+            {tab === 'points' && (
+              <p className="text-[9px] text-white/40 text-center">
+                {period === 'all'
+                  ? (lang === 'mm' ? 'စုစုပေါင်း မှတ်' : 'total pts')
+                  : (lang === 'mm' ? `စုစုပေါင်း: ${(u.all_time_points ?? 0).toLocaleString()} မှတ်` : `All time: ${(u.all_time_points ?? 0).toLocaleString()} pts`)}
+              </p>
+            )}
             <div className={`${h} w-20 rounded-t-xl flex items-center justify-center border ${border} ${rank === 1 ? 'bg-gradient-to-b from-gold-500/15 to-transparent' : 'bg-white/4'}`}>
               <p className={`font-display font-bold text-sm ${textCol}`}>{(val(u) || 0).toLocaleString()}</p>
             </div>
@@ -113,6 +127,9 @@ function UserRow({ user, rank, tab, lang, period }) {
   return (
     <div
       onClick={() => navigate(`/profile/${user.id}`)}
+      tabIndex={0}
+      role="button"
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/profile/${user.id}`) } }}
       className={`flex items-center gap-3 p-3 rounded-2xl border transition-all cursor-pointer hover:border-white/15 ${
         rank <= 3 ? RANK_GLOW[rank - 1] : 'border-white/6 bg-white/3'
       }`}
@@ -147,7 +164,10 @@ function UserRow({ user, rank, tab, lang, period }) {
                 : 'bg-brand-600/20 text-brand-300 border-brand-400/20'
             }`}>{user.role}</span>
           )}
-          <TierBadge points={user.points || 0} size="xs" lang={lang} />
+          {/* M1 (v9.17): tiers are LIFETIME — use all_time_points (the
+              migration adds it to the period views; falls back to the
+              period score until the migration runs). N2: showLabel. */}
+          <TierBadge points={user.all_time_points ?? user.points ?? 0} size="xs" lang={lang} showLabel />
         </div>
         <p className="text-[10px] mt-0.5">
           {isOnline(user.last_seen)
@@ -163,6 +183,11 @@ function UserRow({ user, rank, tab, lang, period }) {
           {(val || 0).toLocaleString()}
         </p>
         <p className="text-[11px] text-white/50">{unit}</p>
+        {/* Issue 3e (v9.17): the row number is the period figure — show
+            the all-time total next to it, never one ambiguous number. */}
+        {tab === 'points' && period !== 'all' && (
+          <p className="text-[10px] text-white/40">{lang === 'mm' ? `စုစုပေါင်း: ${(user.all_time_points ?? 0).toLocaleString()} မှတ်` : `All time: ${(user.all_time_points ?? 0).toLocaleString()} pts`}</p>
+        )}
       </div>
     </div>
   )
@@ -177,19 +202,12 @@ export default function LeaderboardPage() {
 
   const [tab, setTab]     = useState('points')
   const [period, setPeriod] = useState('month')
-  const [users, setUsers]   = useState([])
-  const [myRank, setMyRank] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState('')
-  const [retryKey, setRetryKey] = useState(0)
-  const pillRef = useRef(null)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setLoadError('')
-      try {
+  // Issue 4c (v9.17): useQuery — cached, so the board renders instantly
+  // on revisit under VPN. The prefetch runner warms ['leaderboard','month'].
+  const { data: users = [], isLoading: loading, isError: loadFailed, error: loadErrObj, refetch: refetchBoard } = useQuery({
+    queryKey: ['leaderboard', period, tab],
+    queryFn: async () => {
       const periodCfg = PERIODS.find(p => p.id === period)
       const orderCol  = tab === 'points' ? 'period_points' : tab === 'reviews' ? 'period_reviews' : 'period_listings'
 
@@ -203,6 +221,7 @@ export default function LeaderboardPage() {
           .select('id, full_name, nickname, avatar_url, role, points, total_reviews, total_listings, last_seen, is_online')
           .gt(allOrderCol, 0)
           .order(allOrderCol, { ascending: false })
+          .order('id', { ascending: true })
           .limit(100), 30000, 'Leaderboard')
         // F-MED-8: the query error used to be ignored entirely.
         if (res.error) throw res.error
@@ -212,6 +231,7 @@ export default function LeaderboardPage() {
           period_points:   u.points,
           period_reviews:  u.total_reviews,
           period_listings: u.total_listings,
+          all_time_points: u.points,
         }))
       } else {
         // Period view: aggregate from ledger
@@ -220,6 +240,9 @@ export default function LeaderboardPage() {
           .select('*')
           .gt(orderCol, 0)
           .order(orderCol, { ascending: false })
+          // S4 (v9.17): deterministic tiebreak — equal scores used to
+          // shuffle on every load.
+          .order('id', { ascending: true })
           .limit(100), 30000, 'Leaderboard')
         // F-MED-8: same — a failed view query must surface, not render
         // an empty board as if nobody had any activity.
@@ -228,32 +251,41 @@ export default function LeaderboardPage() {
       }
 
       // Normalize for UserRow: always expose .points / .total_reviews / .total_listings
-      const normalized = data.map(u => ({
+      return data.map(u => ({
         ...u,
         points:         u.period_points   ?? u.points         ?? 0,
         total_reviews:  u.period_reviews  ?? u.total_reviews  ?? 0,
         total_listings: u.period_listings ?? u.total_listings ?? 0,
       }))
+    },
+  })
+  const loadError = loadFailed ? (loadErrObj?.message || 'Leaderboard ရယူမရပါ') : ''
 
-      if (!cancelled) {
-        setUsers(normalized)
-        if (me) {
-          const idx = normalized.findIndex(u => u.id === me.id)
-          setMyRank(idx >= 0 ? idx + 1 : null)
-        }
+  const myIdx = me ? users.findIndex(u => u.id === me.id) : -1
+  const myRank = myIdx >= 0 ? myIdx + 1 : null
+  const myRow = myIdx >= 0 ? users[myIdx] : null
+
+  // S7 (v9.17): when the user is not in the top 100, count past their
+  // own score and show the real rank instead of hiding the banner.
+  const { data: rankBeyond = null } = useQuery({
+    queryKey: ['leaderboard-rank', period, tab, me?.id],
+    queryFn: async () => {
+      const orderCol = tab === 'points' ? 'period_points' : tab === 'reviews' ? 'period_reviews' : 'period_listings'
+      const allOrderCol = tab === 'points' ? 'points' : tab === 'reviews' ? 'total_reviews' : 'total_listings'
+      let myScore = 0
+      if (period === 'all') {
+        myScore = tab === 'points' ? (profile?.points || 0) : tab === 'reviews' ? (profile?.total_reviews || 0) : (profile?.total_listings || 0)
+        const { count } = await withTimeout(supabase.from('profiles').select('*', { count: 'exact', head: true }).gt(allOrderCol, myScore), 30000, 'Leaderboard rank')
+        return { rank: (count || 0) + 1, score: myScore }
       }
-      } catch (e) {
-        console.warn(e)
-        if (!cancelled) {
-          setLoadError(e?.message || 'Leaderboard ရယူမရပါ')
-          setUsers([])
-        }
-      }
-      if (!cancelled) setLoading(false)
-    }
-    load()
-    return () => { cancelled = true }
-  }, [tab, period, me, retryKey])
+      const periodCfg = PERIODS.find(p => p.id === period)
+      const { data: mine } = await withTimeout(supabase.from(periodCfg.view).select(orderCol).eq('id', me.id).maybeSingle(), 30000, 'Leaderboard rank')
+      myScore = mine?.[orderCol] || 0
+      const { count } = await withTimeout(supabase.from(periodCfg.view).select('*', { count: 'exact', head: true }).gt(orderCol, myScore), 30000, 'Leaderboard rank')
+      return { rank: (count || 0) + 1, score: myScore }
+    },
+    enabled: !!me && !loading && myRank === null,
+  })
 
   const currentPeriod = PERIODS.find(p => p.id === period)
 
@@ -285,16 +317,26 @@ export default function LeaderboardPage() {
       </div>
 
       {/* ── My rank banner (if logged in and ranked) ── */}
-      {myRank && !loading && profile && (
+      {(myRank || rankBeyond) && !loading && profile && (
         <div className="mx-4 mb-3 px-3 py-2.5 rounded-2xl bg-brand-600/15 border border-brand-400/25">
           <div className="flex items-center gap-2.5 mb-2">
             <Trophy size={14} className="text-brand-300 flex-shrink-0" />
             <p className="text-xs text-white/70 flex-1 font-myanmar">
               {lang === 'mm' ? 'သင်၏ rank' : 'Your rank'}:
-              <span className="font-display font-bold text-brand-300 ml-1">#{myRank}</span>
+              <span className="font-display font-bold text-brand-300 ml-1">#{myRank || rankBeyond?.rank}</span>
             </p>
             <TierBadge points={profile.points || 0} size="xs" lang={lang} />
           </div>
+          {/* Issue 3d (v9.17): period points next to ALL-TIME points, so
+              the profile (all-time) and the board (period) agree in one view. */}
+          <p className="text-[10px] text-white/60 font-myanmar mb-2">
+            {lang === 'mm'
+              ? `ဒီကာလ: ${(myRow?.points ?? rankBeyond?.score ?? 0).toLocaleString()} မှတ် • စုစုပေါင်း: ${(profile.points || 0).toLocaleString()} မှတ်`
+              : `This period: ${(myRow?.points ?? rankBeyond?.score ?? 0).toLocaleString()} pts • All time: ${(profile.points || 0).toLocaleString()} pts`}
+          </p>
+          {rankBeyond && !myRank && rankBeyond.rank > 100 && (
+            <p className="text-[10px] text-white/60 font-myanmar mb-2">Top 100 ထဲ မပါသေးပါ</p>
+          )}
           {(() => {
             const prog = getTierProgress(profile.points || 0)
             if (!prog.next) {
@@ -320,7 +362,7 @@ export default function LeaderboardPage() {
       )}
 
       {/* ── Podium (top 3) ── */}
-      {!loading && <Podium users={users} tab={tab} lang={lang} />}
+      {!loading && <Podium users={users} tab={tab} lang={lang} period={period} />}
 
       {/* ── Category tabs dropdown ── */}
       <div className="px-4 mb-4">
@@ -350,7 +392,7 @@ export default function LeaderboardPage() {
               </p>
               <p className="text-xs text-white/60 mt-1 font-myanmar">{loadError}</p>
               <button
-                onClick={() => setRetryKey(k => k + 1)}
+                onClick={() => refetchBoard()}
                 className="mt-4 px-4 py-2 rounded-xl bg-brand-600/30 border border-brand-400/40 text-brand-200 text-xs font-bold hover:bg-brand-600/40 transition-colors"
               >
                 {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
@@ -415,7 +457,7 @@ export default function LeaderboardPage() {
         <div className="mt-3 pt-3 border-t border-white/8 space-y-1">
           {[
             { id: 'month',  mm: '"ဒီလ" ranking — လတိုင်း ၁ ရက်နေ့ reset',          en: 'Monthly — resets on the 1st each month' },
-            { id: '6month', mm: '"၆ လ" ranking — နောက်ဆုံး ၁၈၀ ရက်',               en: '6 Months — rolling last 180 days' },
+            { id: '6month', mm: '"နောက်ဆုံး ၆ လ" ranking — နောက်ဆုံး ၁၈၀ ရက်',               en: '6 Months — rolling last 180 days' },
             { id: 'year',   mm: '"ဒီနှစ်" ranking — ဇန်နဝါရီ ၁ ရက်မှ reset',      en: 'Year — resets on January 1st' },
           ].map(p => (
             <p key={p.id} className="text-[9px] text-white/60 font-myanmar">

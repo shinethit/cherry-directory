@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Calendar, MapPin, CheckCircle, Star, Clock } from 'lucide-react'
+import { ArrowLeft, Calendar, MapPin, CheckCircle, Star, Clock, XCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
@@ -12,19 +12,19 @@ import { getOptimizedUrl } from '../lib/cloudinary'
 import { getCountdown } from '../lib/countdown'
 import { formatMyanmarDateTime } from '../lib/myanmarDate'
 import { confirmDialog } from '../lib/confirmDialog'
-import { showError } from '../lib/toast'
+import { showError, showSuccess } from '../lib/toast'
 
 // RSVP status → honest label (never collapse a real status into "Interested").
 const RSVP_STATUS = {
   going:       { mm: 'တက်မည်',        en: 'Going',       cls: 'bg-green-500/15 text-green-400 border-green-500/30', icon: CheckCircle },
   interested:  { mm: 'စိတ်ဝင်စား',     en: 'Interested',  cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30', icon: Star },
-  not_going:   { mm: 'မတက်ပါ',        en: 'Not going',   cls: 'bg-white/10 text-white/50 border-white/15',        icon: Clock },
+  not_going:   { mm: 'မတက်ပါ',        en: 'Not going',   cls: 'bg-white/10 text-white/50 border-white/15',        icon: XCircle },
   maybe:       { mm: 'မသေချာသေး',     en: 'Maybe',       cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30', icon: Star },
 }
 
 export default function MyRsvpsPage() {
   const navigate = useNavigate()
-  const { user, isLoggedIn } = useAuth()
+  const { user, isLoggedIn, refreshProfile } = useAuth()
   const { lang } = useLang()
   useSEO({ title: lang === 'mm' ? 'တက်မည့် ဖြစ်ရပ်များ' : 'My RSVPs' })
 
@@ -71,6 +71,9 @@ export default function MyRsvpsPage() {
       console.error('Cancel RSVP failed:', error)
       showError(error.message || (lang === 'mm' ? 'RSVP ပယ်ဖျက်မရပါ — ထပ်ကြိုးစားပါ' : 'Could not cancel RSVP — please try again'))
       setItems(prev)
+    } else {
+      showSuccess(lang === 'mm' ? 'RSVP ပယ်ဖျက်ပြီးပါပြီ' : 'RSVP cancelled')
+      refreshProfile()
     }
   }
 
@@ -126,7 +129,7 @@ export default function MyRsvpsPage() {
             </h1>
             <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
               {/* F13: on error the count is unknown — show "—", never "0 ခု". */}
-              {loadError ? '—' : lang === 'mm' ? items.length + ' ခု' : items.length + ' events'}
+              {loadError ? '—' : lang === 'mm' ? list.length + ' ခု' : list.length + ' events'}
             </p>
           </div>
         </div>
@@ -190,7 +193,7 @@ export default function MyRsvpsPage() {
             const RsvpIcon = rsvpMeta.icon
             return (
               <div key={ev.id} className={'card-dark rounded-2xl overflow-hidden ' + (isPast || isUnpublished ? 'opacity-60' : '')}>
-                <div onClick={() => navigate('/news/' + ev.id)} className="flex gap-3 p-3 cursor-pointer">
+                <div onClick={() => navigate('/news/' + ev.id)} tabIndex={0} role="button" onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/news/' + ev.id) } }} className="flex gap-3 p-3 cursor-pointer">
                   <div className="w-16 h-16 rounded-xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
                     {cover ? (
                       <img src={cover} alt="" className="w-full h-full object-cover" loading="lazy" />
@@ -229,7 +232,7 @@ export default function MyRsvpsPage() {
                     )}
                   </div>
                 </div>
-                {!isPast && (
+                {!isPast && !isUnpublished && (
                   <div className="border-t border-white/8">
                     <button
                       onClick={() => cancelRsvp(ev.id)}

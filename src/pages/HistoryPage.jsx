@@ -12,6 +12,8 @@ import { ImageUploader } from '../components/UI'
 import { Skeleton } from '../components/UI'
 import ShareButton from '../components/ShareButton'
 import { confirmDialog } from '../lib/confirmDialog'
+import { escapePostgrestOr } from '../hooks/useListings'
+import { goBackOrHome } from '../lib/navigation'
 import { showError } from '../lib/toast'
 import { formatMyanmarDate } from '../lib/myanmarDate'
 
@@ -185,7 +187,8 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
       title: form.title || form.title_mm,
       cover_url: coverUrl || null,
       images,
-      author_id: user?.id,
+      // S13 (v9.17): preserve the original author on edit (NewsEditPage).
+      author_id: editPost ? editPost.author_id || user?.id : user?.id,
       author_name: form.author_name || profile?.full_name || profile?.nickname,
       status: 'published',
     }
@@ -383,7 +386,7 @@ export function HistoryDetailPage() {
   return (
     <div className="pb-8">
       <div className="flex items-center gap-3 px-4 py-3">
-        <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+        <button onClick={() => goBackOrHome(navigate, '/history')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
           <ArrowLeft size={18} className="text-white" />
         </button>
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -506,6 +509,8 @@ export default function HistoryPage() {
   useSEO({ title: lang === 'mm' ? 'ဒေသဆိုင်ရာ သမိုင်းကြောင်းများ' : 'Local History' })
 
   const [posts, setPosts] = useState([])
+  const [pageSize, setPageSize] = useState(30)
+  const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [catFilter, setCatFilter] = useState('all')
@@ -536,9 +541,14 @@ export default function HistoryPage() {
       }
 
       if (debouncedSearch.trim()) {
-        const term = `%${debouncedSearch.trim()}%`
+        // S29 (v9.17): escape PostgREST special chars (%, _, ,, (, ))
+        // or a search term with them breaks the .or() filter.
+        const term = `%${escapePostgrestOr(debouncedSearch.trim())}%`
         q = q.or(`title.ilike.${term},title_mm.ilike.${term},excerpt_mm.ilike.${term},content_mm.ilike.${term}`)
       }
+
+      // S28 (v9.17): cap at 30 + load-more (was unbounded).
+      q = q.limit(pageSize + 1)
 
       // 30 s timeout (was none): a hung query left the list on skeletons forever.
       const { data, error } = await withTimeout(q, 30000, 'History')
@@ -547,14 +557,16 @@ export default function HistoryPage() {
         console.error('History load error:', error)
         setLoadError(error.message)
       } else {
-        setPosts(data || [])
+        const rows = data || []
+        setPosts(rows.slice(0, pageSize))
+        setHasMore(rows.length > pageSize)
       }
     } catch (e) {
       console.error('History load exception:', e)
       setLoadError(e.message || 'Failed to load history')
     }
     setLoading(false)
-  }, [catFilter, debouncedSearch])
+  }, [catFilter, debouncedSearch, pageSize])
 
   useEffect(() => {
     load()
@@ -681,6 +693,14 @@ export default function HistoryPage() {
               onDelete={deletePost}
             />
           ))
+        )}
+        {!loading && !loadError && hasMore && (
+          <button
+            onClick={() => setPageSize(s => s + 30)}
+            className="btn-primary w-full text-sm px-4 py-3"
+          >
+            {lang === 'mm' ? 'ထပ်တင်ရန်' : 'Load more'}
+          </button>
         )}
       </div>
 

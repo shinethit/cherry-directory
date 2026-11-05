@@ -100,10 +100,22 @@ describe('visit tracking wiring (v9.12)', () => {
     expect(libSrc).toContain("sessionStorage.setItem(VISIT_FLAG, '1')")
   })
 
-  it('geo lookup goes direct to ipwho.is (never through the proxy) with a 3 s timeout', () => {
+  it('geo lookup goes direct to ipwho.is (never through the proxy), bound to 1.2 s', () => {
     expect(libSrc).toContain("fetch('https://ipwho.is/'")
     expect(libSrc).not.toMatch(/fetch\('\/api\/supabase/)
-    expect(libSrc).toContain('3000')
+    expect(libSrc).toContain('1200')
+    expect(libSrc).not.toContain('3000')
+  })
+
+  it('session flag is set only after a successful insert (S37)', () => {
+    // The flag set must sit after the insert success, not before the
+    // async work — a failed insert retries next session.
+    const setIdx = libSrc.indexOf("sessionStorage.setItem(VISIT_FLAG, '1')")
+    const insertIdx = libSrc.indexOf(".from('site_visits').insert(")
+    expect(setIdx).toBeGreaterThan(insertIdx)
+    expect(setIdx).toBeGreaterThan(0)
+    // In-memory guard survives StrictMode double-mount.
+    expect(libSrc).toContain('inFlightPages')
   })
 
   it('stores no IP, user-agent string, identifier or name', () => {

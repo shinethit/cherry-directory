@@ -3,12 +3,14 @@ import {
   validateReview,
   validateListing,
   validatePhone,
+  validateUrl,
   toLatinDigits,
   normalizePhone,
 } from './validation'
 
 // validation.js is pure (no Supabase import) — no mocking needed.
-// sanitizeInput touches `document`, so it is deliberately not tested here.
+// sanitizeInput / validateAndSanitizeListing were deleted in v9.17
+// (zero consumers) — nothing dead left to test here.
 
 describe('validateReview', () => {
   it('accepts a valid review', () => {
@@ -76,6 +78,48 @@ describe('validateListing (fixed: name_mm-only + Myanmar digits)', () => {
     expect(validateListing({ name_mm: 'ဆိုင်', category_id: 'c', latitude: 100 }).isValid).toBe(false)
     expect(validateListing({ name_mm: 'ဆိုင်', category_id: 'c', longitude: 200 }).isValid).toBe(false)
     expect(validateListing({ name_mm: 'ဆိုင်', category_id: 'c', latitude: 20.78, longitude: 97.03 }).isValid).toBe(true)
+  })
+})
+
+describe('v9.17: M1 non-finite coordinates', () => {
+  it('rejects NaN / Infinity latitude and longitude', () => {
+    const base = { name_mm: 'ဆိုင်', category_id: 'c' }
+    expect(validateListing({ ...base, latitude: NaN }).isValid).toBe(false)
+    expect(validateListing({ ...base, longitude: NaN }).isValid).toBe(false)
+    expect(validateListing({ ...base, latitude: Infinity }).isValid).toBe(false)
+    expect(validateListing({ ...base, latitude: 'abc' }).isValid).toBe(false)
+    expect(validateListing({ ...base, latitude: 20.78, longitude: 97.03 }).isValid).toBe(true)
+    expect(validateListing({ ...base }).isValid).toBe(true)
+  })
+})
+
+describe('v9.17: M2 phone needs real digits', () => {
+  it('rejects digit-less strings', () => {
+    expect(validatePhone('-------')).toBe(false)
+    expect(validatePhone('   ')).toBe(false)
+    expect(validatePhone('')).toBe(false)
+    expect(validatePhone('abc')).toBe(false)
+  })
+
+  it('accepts valid Myanmar numbers (Latin + Myanmar digits)', () => {
+    expect(validatePhone('09123456789')).toBe(true)
+    expect(validatePhone('၀၉၁၂၃၄၅၆၇၈၉')).toBe(true)
+    expect(validatePhone('+95 9 123 456 789')).toBe(true)
+    expect(validatePhone('081-123-456')).toBe(true)
+  })
+})
+
+describe('v9.17: S21 URL scheme', () => {
+  it('rejects javascript: and other non-http(s) schemes', () => {
+    expect(validateUrl('javascript:alert(1)')).toBe(false)
+    expect(validateUrl('data:text/html,<h1>x</h1>')).toBe(false)
+    expect(validateUrl('ftp://example.com')).toBe(false)
+    expect(validateUrl('not-a-url')).toBe(false)
+  })
+
+  it('accepts http/https URLs', () => {
+    expect(validateUrl('https://example.com')).toBe(true)
+    expect(validateUrl('http://example.com/page?q=1')).toBe(true)
   })
 })
 

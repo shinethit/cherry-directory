@@ -53,6 +53,8 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [filter, setFilter] = useState('all') // 'all' | 'unread'
+  const [pageSize, setPageSize] = useState(50)
+  const [hasMore, setHasMore] = useState(false)
 
   const load = useCallback(async () => {
     if (!user) { setLoading(false); return }
@@ -60,8 +62,11 @@ export default function NotificationsPage() {
     setLoadError('')
     try {
       // 30 s timeout (was none): a hung query left the list on skeletons forever.
-      const data = await withTimeout(getUserNotifications(user.id, 50), 30000, 'Notifications')
-      setNotifications(data || [])
+      // S32 (v9.17): fetch one extra row — Load more shows only if it exists.
+      const data = await withTimeout(getUserNotifications(user.id, pageSize + 1), 30000, 'Notifications')
+      const rows = data || []
+      setNotifications(rows.slice(0, pageSize))
+      setHasMore(rows.length > pageSize)
     } catch (err) {
       console.warn('Load notifications error:', err)
       // F12: never render the raw Supabase English message — store a
@@ -70,7 +75,7 @@ export default function NotificationsPage() {
       setNotifications([])
     }
     setLoading(false)
-  }, [user])
+  }, [user, pageSize])
 
   useEffect(() => { load() }, [load])
 
@@ -268,6 +273,14 @@ export default function NotificationsPage() {
             />
           ))
         )}
+        {!loading && !loadError && hasMore && filter === 'all' && (
+          <button
+            onClick={() => setPageSize(s => s + 50)}
+            className="btn-primary w-full text-sm px-4 py-3"
+          >
+            {lang === 'mm' ? 'ထပ်တင်ရန်' : 'Load more'}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -288,7 +301,7 @@ function NotificationRow({ notif, lang, onOpen, onDelete }) {
     >
       {/* Unread indicator */}
       {!notif.is_read && (
-        <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-brand-400 animate-pulse" />
+        <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-brand-400 animate-pulse pointer-events-none" />
       )}
 
       {/* Icon */}

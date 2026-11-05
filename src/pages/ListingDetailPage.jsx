@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Phone, MessageCircle, MapPin, Star, Send, CheckCircle, ExternalLink, Bookmark, BookmarkCheck, BadgeCheck, Edit3, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -14,7 +14,8 @@ import { getOptimizedUrl } from '../lib/cloudinary'
 import { showError, showSuccess } from '../lib/toast'
 import { confirmDialog } from '../lib/confirmDialog'
 import { useDeleteReview, useCreateReview } from '../hooks/useReviews'
-import { maskPhone, toTelHref, toWaHref } from '../lib/phoneMask'
+import { maskPhone, toTelHref, toWaHref, toIntlDigits } from '../lib/phoneMask'
+import { displayName as listingDisplayName } from '../lib/displayName'
 import { formatMyanmarDate } from '../lib/myanmarDate'
 import Lightbox from '../components/Lightbox'
 import ShareButton from '../components/ShareButton'
@@ -100,6 +101,8 @@ export default function ListingDetailPage() {
   const [reviews, setReviews] = useState([])
   const [myRating, setMyRating] = useState(0)
   const [myComment, setMyComment] = useState('')
+  // S4 (v9.17): the current user's own review, for prefill + update.
+  const [myReview, setMyReview] = useState(null)
   const [activeImg, setActiveImg] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [claimStatus, setClaimStatus] = useState(null)
@@ -120,8 +123,12 @@ export default function ListingDetailPage() {
   const [reviewLimit, setReviewLimit] = useState(20)
   const [loadingMoreReviews, setLoadingMoreReviews] = useState(false)
 
+  // S6 (v9.17): the view-count RPC must fire once per listing id — the
+  // old effect re-ran on every profile change and re-incremented.
+  const viewCountedRef = useRef(null)
+
   useSEO({
-    title: listing ? (lang === 'mm' ? listing.name_mm || listing.name : listing.name) : 'Business',
+    title: listing ? listingDisplayName(listing, lang) : 'Business',
     description: listing?.description_mm || listing?.description,
     url: `/directory/${id}`,
     image: listing?.cover_url || listing?.logo_url,
@@ -150,6 +157,19 @@ export default function ListingDetailPage() {
         if (rErr) { console.warn(rErr); showError('Review များ တင်မရပါ — ထပ်ကြိုးစားပါ') }
         setListing(l)
         setReviews(r || [])
+        // S4 (v9.17): prefill the form from the current user's own
+        // review, so returning to edit it shows the old values and the
+        // button can read "Update review".
+        const mine = (r || []).find(x => x.user_id === profile?.id)
+        if (mine) {
+          setMyReview(mine)
+          setMyRating(mine.rating || 0)
+          setMyComment(mine.comment || '')
+        } else {
+          setMyReview(null)
+          setMyRating(0)
+          setMyComment('')
+        }
         // The listing is visible now — the checks below are secondary
         // and must never hold the page on skeletons.
         setLoading(false)
@@ -164,26 +184,41 @@ export default function ListingDetailPage() {
         // The security-definer RPC increments atomically instead. If the
         // migration has not run yet the RPC is missing — log and carry on;
         // the page must never break over a view count.
-        try {
-          const { error: viewErr } = await withTimeout(supabase.rpc('increment_listing_views', { p_listing_id: id }), 30000, 'Listing view count')
-          if (viewErr) console.warn('increment_listing_views failed:', viewErr)
-        } catch (viewEx) { console.warn('increment_listing_views failed:', viewEx) }
-
-        if (profile) {
-          const [claimRes, voteRes] = await withTimeout(Promise.allSettled([
-            supabase.from('listing_claims').select('status').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
-            supabase.from('listing_votes').select('id').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
-          ]), 30000, 'Listing claim/vote').catch(() => [null, null])
-          const claim = claimRes?.status === 'fulfilled' ? claimRes.value.data : null
-          const vote = voteRes?.status === 'fulfilled' ? voteRes.value.data : null
-          if (claim) setClaimStatus(claim.status)
-          setMyVote(!!vote)
+        // S6 (v9.17): fire once per id — this effect re-runs when the
+        // profile arrives, and each re-run used to count another view.
+        if (viewCountedRef.current !== id) {
+          viewCountedRef.current = id
+          try {
+            const { error: viewErr } = await withTimeout(supabase.rpc('increment_listing_views', { p_listing_id: id }), 30000, 'Listing view count')
+            if (viewErr) console.warn('increment_listing_views failed:', viewErr)
+          } catch (viewEx) { console.warn('increment_listing_views failed:', viewEx) }
         }
       } catch (e) { console.warn(e); setLoadError(true) }
       finally { setLoading(false) }
     }
     load()
   }, [id, profile])
+
+  // S6 (v9.17): claim/vote load in a separate effect keyed on
+  // profile?.id — a profile refresh must not re-fetch the listing or
+  // re-count the view above.
+  useEffect(() => {
+    if (!profile) return
+    let cancelled = false
+    async function loadClaimVote() {
+      const [claimRes, voteRes] = await withTimeout(Promise.allSettled([
+        supabase.from('listing_claims').select('status').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
+        supabase.from('listing_votes').select('id').eq('listing_id', id).eq('user_id', profile.id).maybeSingle(),
+      ]), 30000, 'Listing claim/vote').catch(() => [null, null])
+      if (cancelled) return
+      const claim = claimRes?.status === 'fulfilled' ? claimRes.value.data : null
+      const vote = voteRes?.status === 'fulfilled' ? voteRes.value.data : null
+      if (claim) setClaimStatus(claim.status)
+      setMyVote(!!vote)
+    }
+    loadClaimVote()
+    return () => { cancelled = true }
+  }, [id, profile?.id])
 
   async function toggleVote() {
     if (!isLoggedIn || voteLoading) return
@@ -211,12 +246,19 @@ export default function ListingDetailPage() {
     if (!user) { showError('အကောင့်ဝင်မှ Review ရေးနိုင်မည်'); return }
     setSubmitting(true)
     try {
-      await createReview.mutateAsync({ rating: myRating, comment: myComment })
+      // S4 (v9.17): a blank comment on UPDATE must not wipe the old one
+      // — the upsert would store '' over it. Keep the old comment.
+      const commentToSend = myComment.trim() ? myComment : (myReview?.comment || '')
+      await createReview.mutateAsync({ rating: myRating, comment: commentToSend })
       const { data, error: refetchErr } = await supabase.from('reviews').select('*, user:profiles(full_name, avatar_url)').eq('listing_id', id).order('created_at', { ascending: false }).limit(reviewLimit)
       if (refetchErr) { console.warn(refetchErr); showError('Review တင်ပြီးပါပြီ — စာရင်း ပြန်တင်မရပါ') }
-      else setReviews(data || [])
-      // Clear only on success — a failed submit keeps the user's text.
-      setMyComment(''); setMyRating(0)
+      else {
+        setReviews(data || [])
+        // Re-prefill from the saved row (the form stays in "update" mode
+        // instead of blanking out).
+        const mine = (data || []).find(x => x.user_id === user?.id)
+        if (mine) { setMyReview(mine); setMyRating(mine.rating || 0); setMyComment(mine.comment || '') }
+      }
     } catch (err) {
       showError(err?.message || 'Review တင်မရပါ — ထပ်ကြိုးစားပါ')
     } finally {
@@ -300,10 +342,15 @@ export default function ListingDetailPage() {
 
   if (!listing) return null
 
-  const fbUrl = listing.facebook && (listing.facebook.startsWith('http://') || listing.facebook.startsWith('https://')) ? listing.facebook : null
-  const allImages = [listing.cover_url, listing.logo_url, ...(listing.images || [])].filter(Boolean)
+  const fbUrl = listing.facebook && (listing.facebook.startsWith('http://') || listing.facebook.startsWith('https://')) ? listing.facebook : (listing.facebook ? 'https://' + listing.facebook : null)
+  // NICE (v9.17): dedupe gallery images — cover == logo used to render twice.
+  const allImages = [...new Set([listing.cover_url, listing.logo_url, ...(listing.images || [])].filter(Boolean))]
   const cover = allImages[activeImg] ? getOptimizedUrl(allImages[activeImg], { width: 800 }) : null
-  const displayName = lang === 'mm' ? (listing.name_mm || listing.name) : listing.name
+  // Issue 1 (v9.17): EN mode falls back to the Myanmar name — a bare
+  // listing.name rendered a blank H1 for Myanmar-only listings.
+  const displayName = listingDisplayName(listing, lang)
+  // S3 (v9.17): strip a pasted t.me/ prefix and all leading @s.
+  const telegramHandle = (listing.telegram || '').replace(/^(https?:\/\/)?t\.me\//i, '').replace(/^@+/, '')
 
   const openLightbox = (index) => {
     setLightboxIndex(index)
@@ -344,7 +391,7 @@ export default function ListingDetailPage() {
       {/* Images gallery with lightbox */}
       {cover && (
         <div className="relative h-52 overflow-hidden mx-4 rounded-2xl mb-4 cursor-pointer" onClick={() => openLightbox(activeImg)}>
-          <img src={cover} alt={displayName} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+          <img src={cover} alt={displayName} className="w-full h-full object-cover" onError={(e) => { e.currentTarget.parentElement.style.display = 'none' }} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           {allImages.length > 1 && (
             <>
@@ -366,7 +413,7 @@ export default function ListingDetailPage() {
           <div className="flex items-start gap-3">
             {listing.logo_url && (
               <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0 cursor-pointer" onClick={() => openLightbox(allImages.indexOf(listing.logo_url))}>
-                <img src={getOptimizedUrl(listing.logo_url, { width: 120 })} alt={listing.name_mm || listing.name} className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+                <img src={getOptimizedUrl(listing.logo_url, { width: 120 })} alt={displayName} className="w-full h-full object-contain" onError={(e) => { e.currentTarget.parentElement.style.display = 'none' }} />
               </div>
             )}
             <div className="flex-1 min-w-0">
@@ -469,7 +516,7 @@ export default function ListingDetailPage() {
                 </a>
               )}
               {listing.viber && (
-                <a href={`viber://chat?number=${listing.viber.replace(/\s/g, '')}`} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-purple-600/20 border border-purple-500/30 text-purple-300 text-sm hover:bg-purple-600/30 transition-colors">
+                <a href={`viber://chat?number=${toIntlDigits(listing.viber)}`} className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-purple-600/20 border border-purple-500/30 text-purple-300 text-sm hover:bg-purple-600/30 transition-colors">
                   <MessageCircle size={16} /> Viber
                 </a>
               )}
@@ -489,8 +536,8 @@ export default function ListingDetailPage() {
               </button>
             )
           )}
-          {listing.telegram && (
-            <a href={`https://t.me/${listing.telegram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-sky-600/20 border border-sky-500/30 text-sky-300 text-sm hover:bg-sky-600/30 transition-colors">
+          {listing.telegram && telegramHandle && (
+            <a href={`https://t.me/${telegramHandle}`} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-sky-600/20 border border-sky-500/30 text-sky-300 text-sm hover:bg-sky-600/30 transition-colors">
               <Send size={16} /> Telegram
             </a>
           )}
@@ -501,14 +548,16 @@ export default function ListingDetailPage() {
           )}
         </div>
 
-        {/* Prominent Menu Button — only when the listing actually has menu items */}
-        {hasMenu && (
+        {/* Prominent Menu Button — M4 (v9.17): always shown for the
+            owner/admin/mod (was hidden when no menu existed, so nobody
+            could ever add the first item). Label reads "Add menu" when empty. */}
+        {(hasMenu || (isLoggedIn && (listing.owner_id === profile?.id || listing.submitted_by === profile?.id || isAdmin || isModerator))) && (
         <button
           onClick={() => navigate(`/directory/${id}/menu`)}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-brand-600/40 to-brand-700/40 border border-brand-400/50 text-brand-200 font-semibold text-base hover:from-brand-600/60 hover:to-brand-700/60 transition-all"
         >
           <UtensilsCrossed size={20} className="text-brand-300" />
-          <span className="font-display font-bold">မီနူးနှင့် ဈေးနှုန်းများ ကြည့်ရန်</span>
+          <span className="font-display font-bold">{hasMenu ? 'မီနူးနှင့် ဈေးနှုန်းများ ကြည့်ရန်' : (lang === 'mm' ? 'မီနူး ထည့်မည်' : 'Add menu')}</span>
         </button>
         )}
 
@@ -688,9 +737,11 @@ export default function ListingDetailPage() {
                   </button>
                 ))}
               </div>
-              <textarea value={myComment} onChange={e => setMyComment(e.target.value)} placeholder={t('review_placeholder')} className="input-dark resize-none h-20 font-myanmar" />
+              <textarea value={myComment} onChange={e => setMyComment(e.target.value)} maxLength={1000} placeholder={t('review_placeholder')} className="input-dark resize-none h-20 font-myanmar" />
+              {/* S5 (v9.17): 1000-char cap + counter (validateReview enforces it server-side too). */}
+              <p className="text-[10px] text-white/40 text-right -mt-1">{myComment.length}/1000</p>
               <button onClick={submitReview} disabled={myRating === 0 || submitting} className="btn-primary text-sm w-full">
-                {submitting ? t('submitting') : t('submit_review')}
+                {submitting ? t('submitting') : (myReview ? (lang === 'mm' ? 'Review ပြင်မည်' : 'Update review') : t('submit_review'))}
               </button>
             </div>
           ) : (

@@ -1,6 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
+import { queryClient } from './lib/queryClient'
 import App from './App'
 import './index.css'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -10,16 +12,17 @@ import 'react-toastify/dist/ReactToastify.css'
 import PWAInstallBanner from './components/PWAInstallBanner'
 import UpdatePrompt from './components/UpdatePrompt'
 
-// Create a client
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5, // 5 minutes
-      gcTime: 1000 * 60 * 10, // 10 minutes
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
+// v9.17 (Issue 4/5): persist the query cache to localStorage so pages
+// render instantly from cache (vital under VPN) and the Profile Offline
+// panel finally shows real data. The persister key MUST stay
+// 'cherry-directory-cache' — OfflineCachePanel reads exactly that key
+// (cacheStatus.js). maxAge 24 h. The client itself lives in
+// src/lib/queryClient.js (single client — the duplicate inline client
+// that used to live here is gone; OfflineCachePanel's useQueryClient
+// resolves to this provider's client).
+const persister = createSyncStoragePersister({
+  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  key: 'cherry-directory-cache',
 })
 
 // Sentry stays completely off unless VITE_SENTRY_DSN is set (Vercel env var).
@@ -35,7 +38,7 @@ console.log('Environment:', import.meta.env.MODE)
 // on SecurityError) — was removed in v9.3.
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <QueryClientProvider client={queryClient}>
+  <PersistQueryClientProvider client={queryClient} persistOptions={{ persister, maxAge: 1000 * 60 * 60 * 24 }}>
     <ErrorBoundary>
       <App />
       {/* PWA install banner needs no contexts, so it lives here as a sibling. */}
@@ -46,5 +49,5 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         after a crash used to be invisible because the boundary unmounted
         everything inside it. */}
     <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} closeOnClick pauseOnHover draggable />
-  </QueryClientProvider>
+  </PersistQueryClientProvider>
 )

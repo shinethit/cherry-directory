@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { Sparkles, MapPin, LogOut, Edit3, Crown, Shield, User, BookMarked, Star, Building2, Bell, BellOff, Download, Trophy, Clock, ChevronRight, Calendar } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
@@ -24,7 +25,7 @@ const ROLE_CONFIG = {
 export default function ProfilePage() {
   const navigate  = useNavigate()
   const { id: profileId } = useParams()
-  const { profile, isAdmin, isModerator, signOut, updateProfile, user, isLoggedIn } = useAuth()
+  const { profile, isAdmin, isModerator, signOut, updateProfile, user, isLoggedIn, profileLoading, profileError, refreshProfile } = useAuth()
   const { lang }  = useLang()
   const config = useAppConfig()
   const { installable, installApp, pushEnabled, enablePush, disablePush } = usePWA()
@@ -86,6 +87,22 @@ export default function ProfilePage() {
   // The profile on display: someone else's (read-only) or the signed-in user's.
   const viewed = isOther ? otherProfile : profile
 
+  // Issue 3e (v9.17): monthly points next to the all-time total — the
+  // single "အမှတ်: X" badge was ambiguous. Monthly comes from the
+  // leaderboard_month view (the SAME Yangon-month definition the board
+  // uses); the view has one row per profile, so this always resolves.
+  // A failure shows '—', never a wrong 0.
+  const { data: monthPointsData } = useQuery({
+    queryKey: ['profile-month-points', viewed?.id],
+    queryFn: async () => {
+      if (!viewed?.id) return null
+      const { data, error } = await withTimeout(supabase.from('leaderboard_month').select('period_points').eq('id', viewed.id).maybeSingle(), 30000, 'Profile month points')
+      if (error) throw error
+      return data?.period_points ?? 0
+    },
+    enabled: !!viewed?.id,
+  })
+
   const [editing, setEditing]     = useState(false)
   const [name, setName]           = useState(profile?.full_name || '')
   const [nickname, setNickname]   = useState(profile?.nickname || '')
@@ -93,8 +110,6 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving]       = useState(false)
   const [pushLoading, setPushLoading] = useState(false)
-  const [myStats, setMyStats]     = useState({ listings: 0, reviews: 0, bookmarks: 0, rsvps: 0 })
-  const [statsError, setStatsError] = useState('')
   const [nickError, setNickError] = useState('')
 
   // Profile loads async — the mount-time useState initializers above run
@@ -109,49 +124,51 @@ export default function ProfilePage() {
   }, [profile, editing])
 
   // Stats are the signed-in user's own counts (never another user's).
-  // allSettled: one failing count must not zero out the other three
-  // (F-MED-5). A failure shows a retry affordance instead of silent 0s.
-  async function loadStats() {
-    if (!user) return
-    setStatsError('')
-    // 30 s timeout (was none): a hung count left the stats at 0 with
-    // no error and no retry affordance.
-    let results
-    try {
-      results = await withTimeout(Promise.allSettled([
+  // Issue 4c (v9.17): useQuery ['profile-stats', user.id] — cached, so
+  // the profile renders instantly on revisit under VPN. allSettled: one
+  // failing count must not zero out the other three (F-MED-5). A failure
+  // shows a retry affordance instead of silent 0s.
+  // Issue 3b (v9.17): while loading the cards show "—", never 0.
+  // S6 (v9.17): RSVPs count going/interested only (the old count
+  // included not_going/maybe, so it disagreed with /my-rsvps).
+  const { data: statsData, isLoading: statsLoading, isError: statsQueryError, refetch: refetchStats } = useQuery({
+    queryKey: ['profile-stats', user?.id],
+    queryFn: async () => {
+      // 30 s timeout (was none): a hung count left the stats at 0 with
+      // no error and no retry affordance.
+      const results = await withTimeout(Promise.allSettled([
         supabase.from('listings').select('*', { count: 'exact', head: true }).eq('submitted_by', user.id),
         supabase.from('reviews').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('bookmarks').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('event_rsvps').select('*', { count: 'exact', head: true }).eq('user_id', user.id).in('status', ['going', 'interested']),
       ]), 30000, 'Profile stats')
-    } catch (e) {
-      console.warn('Profile stats load failed:', e)
-      setStatsError('Stats အချို့ ရယူမရပါ')
-      return
-    }
-    const countOf = (r) => (r.status === 'fulfilled' ? (r.value?.count || 0) : 0)
-    setMyStats({
-      listings: countOf(results[0]),
-      reviews: countOf(results[1]),
-      bookmarks: countOf(results[2]),
-      rsvps: countOf(results[3]),
-    })
-    const failed = results.find(r => r.status === 'rejected')
-    if (failed) {
-      console.warn('Profile stats load partially failed:', failed.reason)
-      setStatsError(failed.reason?.message || 'Stats အချို့ ရယူမရပါ')
-    }
-  }
-
-  useEffect(() => {
-    if (!user || isOther) return
-    loadStats()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isOther])
+      const countOf = (r) => (r.status === 'fulfilled' ? (r.value?.count || 0) : 0)
+      const failed = results.find(r => r.status === 'rejected')
+      if (failed) console.warn('Profile stats load partially failed:', failed.reason)
+      return {
+        stats: {
+          listings: countOf(results[0]),
+          reviews: countOf(results[1]),
+          bookmarks: countOf(results[2]),
+          rsvps: countOf(results[3]),
+        },
+        failed: !!failed,
+      }
+    },
+    enabled: !!user && !isOther,
+  })
+  const myStats = statsData?.stats || { listings: 0, reviews: 0, bookmarks: 0, rsvps: 0 }
+  const statsError = (statsData?.failed || statsQueryError) ? 'Stats အချို့ ရယူမရပါ' : ''
 
   async function handleAvatarChange(e) {
     const file = e.target.files?.[0]
     if (!file) return
+    // N6 (v9.17): file.type check (uploadImage also enforces it now).
+    if (file.type && !file.type.startsWith('image/')) {
+      showError('ပုံဖိုင် (image) သာ တင်နိုင်ပါသည်')
+      e.target.value = ''
+      return
+    }
     // Avatar size limit (F16): the upload helper enforces none, so
     // check here — the 2MB cap and the note below must match.
     if (file.size > 2 * 1024 * 1024) {
@@ -165,9 +182,10 @@ export default function ProfilePage() {
       await updateProfile({ avatar_url: url })
     } catch (err) {
       console.warn('Avatar upload failed:', err)
-      showError(err?.message || 'Avatar တင်မရပါ — ထပ်ကြိုးစားပါ')
+      showError('Avatar တင်မရပါ — ထပ်ကြိုးစားပါ')
     } finally {
       setUploading(false)
+      e.target.value = ''
     }
   }
 
@@ -182,17 +200,25 @@ export default function ProfilePage() {
       await updateProfile({ full_name: name, nickname: nickname || null, bio })
       setEditing(false)
     } catch (err) {
-      // Surface ALL errors, not only unique-constraint ones.
-      const msg = err?.message || 'Profile သိမ်းမရပါ'
-      if (err.message?.includes('unique')) setNickError('ဒီ Nickname ကို တစ်ယောက်ယောက် သုံးထားပြီးပါပြီ')
-      else setNickError(msg)
-      showError(msg)
+      // N7 (v9.17): fixed Myanmar strings — never surface raw err.message
+      // (DB English) to the user.
+      const msg = err?.message || ''
+      if (msg.includes('unique') || msg.includes('duplicate')) setNickError('ဒီ Nickname ကို တစ်ယောက်ယောက် သုံးထားပြီးပါပြီ')
+      else setNickError('Profile သိမ်းမရပါ — ထပ်ကြိုးစားပါ')
+      showError('Profile သိမ်းမရပါ — ထပ်ကြိုးစားပါ')
     }
     setSaving(false)
   }
 
   async function handleSignOut() {
-    await signOut()
+    // M6 (v9.17): signOut returns its error now — stay on the profile
+    // and show the error when sign-out fails (e.g. offline), instead of
+    // looking signed out while the session is still alive.
+    const { error } = await signOut()
+    if (error) {
+      showError('Logout ထွက်မရပါ — ထပ်ကြိုးစားပါ')
+      return
+    }
     navigate('/')
   }
 
@@ -205,7 +231,6 @@ export default function ProfilePage() {
 
   const role = ROLE_CONFIG[viewed?.role || 'member']
   const RoleIcon = role.icon
-  const displayName = viewed?.nickname ? `@${viewed.nickname}` : viewed?.full_name || 'User'
 
   // Guests need to sign in to see their own profile (F-MED-4) — the same
   // "Login Required" gate the sibling pages use. Another user's public
@@ -231,6 +256,32 @@ export default function ProfilePage() {
     return (
       <div className="flex items-center justify-center min-h-[60dvh]">
         <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  // S3 (v9.17): never render a fake-empty profile — while the profile is
+  // still loading show a spinner; on error (or logged-in with no profile
+  // row) show the error with Retry instead of 'User' + 0s.
+  if (isLoggedIn && !isOther && profileLoading && !profile) {
+    return (
+      <div className="flex items-center justify-center min-h-[60dvh]">
+        <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (isLoggedIn && !isOther && !profile) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[70dvh] px-8 text-center">
+        <User size={48} className="text-white/20 mb-4" />
+        <h2 className="font-display font-bold text-xl text-white mb-2">
+          {lang === 'mm' ? 'Profile ရယူမရပါ' : 'Could not load profile'}
+        </h2>
+        <p className="text-white/50 font-myanmar mb-6">{profileError || 'Profile မတွေ့ပါ'}</p>
+        <button onClick={() => refreshProfile()} className="btn-primary">
+          {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
+        </button>
       </div>
     )
   }
@@ -264,7 +315,7 @@ export default function ProfilePage() {
               }
             </div>
           ) : (
-          <label className="cursor-pointer">
+          <label className={uploading ? 'cursor-pointer opacity-60 pointer-events-none' : 'cursor-pointer'}>
             <div className="w-20 h-20 rounded-3xl bg-brand-700 border-2 border-brand-400/30 flex items-center justify-center overflow-hidden mx-auto">
               {viewed?.avatar_url
                 ? <img src={viewed.avatar_url} alt="" className="w-full h-full object-cover" />
@@ -343,7 +394,10 @@ export default function ProfilePage() {
                   Bronze), a user must see their tier (F-LOW-2). */}
               {/* Points with label + link to the Points Guide (F18). */}
               <button onClick={() => navigate('/points')} className="badge bg-gold-500/15 text-gold-400 border border-gold-500/25 hover:bg-gold-500/25 transition-colors">
-                <Trophy size={10} /> {lang === 'mm' ? `အမှတ်: ${(viewed?.points || 0).toLocaleString()} မှတ်` : `Points: ${(viewed?.points || 0).toLocaleString()}`}
+                <Trophy size={10} /> {lang === 'mm' ? `စုစုပေါင်း: ${(viewed?.points || 0).toLocaleString()} မှတ်` : `Total: ${(viewed?.points || 0).toLocaleString()} pts`}
+              </button>
+              <button onClick={() => navigate('/points')} className="badge bg-gold-500/15 text-gold-400 border border-gold-500/25 hover:bg-gold-500/25 transition-colors">
+                <Trophy size={10} /> {lang === 'mm' ? `ဒီလ: ${typeof monthPointsData === 'number' ? monthPointsData.toLocaleString() : '—'} မှတ်` : `This month: ${typeof monthPointsData === 'number' ? monthPointsData.toLocaleString() : '—'} pts`}
               </button>
               <TierBadge points={viewed?.points || 0} size="sm" lang={lang} />
             </div>
@@ -353,8 +407,10 @@ export default function ProfilePage() {
                 {timeAgo(viewed.last_seen, lang)}
               </p>
             )}
+            {/* S3 (v9.17): Edit stays disabled until the profile exists —
+                tapping it with no profile used to save over '' fields. */}
             {!isOther && (
-              <button onClick={() => setEditing(true)} className="btn-ghost text-sm flex items-center gap-2 mx-auto">
+              <button onClick={() => setEditing(true)} disabled={!profile} className="btn-ghost text-sm flex items-center gap-2 mx-auto disabled:opacity-50">
                 <Edit3 size={14} /> {lang === 'mm' ? 'Profile ပြင်မယ်' : 'Edit Profile'}
               </button>
             )}
@@ -413,23 +469,25 @@ export default function ProfilePage() {
           action ? (
             <button key={label} onClick={action} className="card-dark p-3 rounded-2xl text-center hover:bg-white/8 transition-colors">
               <Icon size={15} className={`mx-auto mb-1 ${highlight ? 'text-gold-400' : 'text-brand-300'}`} />
-              <p className={`font-display font-bold text-base ${highlight ? 'text-gold-400' : 'text-white'}`}>{(value || 0).toLocaleString()}</p>
-              <p className="text-[8px] text-white/60">{label}</p>
+              {/* Issue 3b (v9.17): "—" while loading, never a fake 0. */}
+              <p className={`font-display font-bold text-base ${highlight ? 'text-gold-400' : 'text-white'}`}>{statsLoading ? '—' : (value || 0).toLocaleString()}</p>
+              {/* N9 (v9.17): labels 8px → 10px (were unreadably small). */}
+              <p className="text-[10px] text-white/60">{label}</p>
             </button>
           ) : (
             // F8 (v9.5): Reviews now has a dedicated page (/my-reviews),
             // so the stat is a button like the others.
             <div key={label} className="card-dark p-3 rounded-2xl text-center">
               <Icon size={15} className="mx-auto mb-1 text-brand-300" />
-              <p className="font-display font-bold text-base text-white">{(value || 0).toLocaleString()}</p>
-              <p className="text-[8px] text-white/60">{label}</p>
+              <p className="font-display font-bold text-base text-white">{statsLoading ? '—' : (value || 0).toLocaleString()}</p>
+              <p className="text-[10px] text-white/60">{label}</p>
             </div>
           )
         ))}
       </div>
       )}
       {!isOther && statsError && (
-        <button onClick={loadStats} className="w-full text-center text-[11px] text-amber-400 font-myanmar hover:text-amber-300 transition-colors">
+        <button onClick={() => refetchStats()} className="w-full text-center text-[11px] text-amber-400 font-myanmar hover:text-amber-300 transition-colors">
           ⚠️ {statsError} — {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
         </button>
       )}

@@ -31,9 +31,11 @@ export const normalizePhone = (phone) => {
  * @returns {boolean} True if valid
  */
 export const validatePhone = (phone) => {
-  const latin = toLatinDigits(phone || '')
-  const phoneRegex = /^[0-9\-\+\(\)\s]{7,}$/;
-  return phoneRegex.test(latin);
+  // M2 (v9.17): the old regex accepted any 7+ chars from [0-9-+() ] —
+  // '-------' and '   ' passed with zero digits. Strip to digits after
+  // toLatinDigits and require 7–15 digits.
+  const digits = toLatinDigits(phone || '').replace(/\D/g, '')
+  return digits.length >= 7 && digits.length <= 15
 };
 
 /**
@@ -42,11 +44,13 @@ export const validatePhone = (phone) => {
  * @returns {boolean} True if valid
  */
 export const validateUrl = (url) => {
+  // S21 (v9.17): require an http:/https: scheme — new URL('javascript:...')
+  // parses fine, so the old check accepted javascript: URLs.
   try {
-    new URL(url);
-    return true;
+    const u = new URL(url)
+    return u.protocol === 'http:' || u.protocol === 'https:'
   } catch {
-    return false;
+    return false
   }
 };
 
@@ -83,11 +87,18 @@ export const validateListing = (data) => {
     errors.push('ဝဘ်ဆိုက် လိပ်စာ မှားမှားမှားနေသည်။');
   }
 
-  if (data.latitude && (data.latitude < -90 || data.latitude > 90)) {
+  // M1 (v9.17): NaN is not < -90 and not > 90, so a NaN coordinate used
+  // to pass the range check and JSON-serialize to null (erasing the pin).
+  // Reject non-finite coordinates explicitly.
+  if (data.latitude != null && data.latitude !== '' && !Number.isFinite(Number(data.latitude))) {
+    errors.push('အနေအထားအတိုင်း (Latitude) မှားမှားမှားနေသည်။');
+  } else if (data.latitude && (data.latitude < -90 || data.latitude > 90)) {
     errors.push('အနေအထားအတိုင်း (Latitude) မှားမှားမှားနေသည်။');
   }
 
-  if (data.longitude && (data.longitude < -180 || data.longitude > 180)) {
+  if (data.longitude != null && data.longitude !== '' && !Number.isFinite(Number(data.longitude))) {
+    errors.push('အနေအထားအတိုင်း (Longitude) မှားမှားမှားနေသည်။');
+  } else if (data.longitude && (data.longitude < -180 || data.longitude > 180)) {
     errors.push('အနေအထားအတိုင်း (Longitude) မှားမှားမှားနေသည်။');
   }
 
@@ -120,43 +131,5 @@ export const validateReview = (data) => {
   return {
     isValid: errors.length === 0,
     errors,
-  };
-};
-
-/**
- * Sanitize user input to prevent XSS
- * @param {string} input - User input to sanitize
- * @returns {string} Sanitized input
- */
-export const sanitizeInput = (input) => {
-  if (typeof input !== 'string') return input;
-
-  const div = document.createElement('div');
-  div.textContent = input;
-  return div.innerHTML;
-};
-
-/**
- * Validate and sanitize listing data
- * @param {object} data - Listing data to validate and sanitize
- * @returns {object} Validation result with sanitized data
- */
-export const validateAndSanitizeListing = (data) => {
-  const validation = validateListing(data);
-
-  if (!validation.isValid) {
-    return validation;
-  }
-
-  return {
-    isValid: true,
-    errors: [],
-    data: {
-      ...data,
-      name: data.name ? sanitizeInput(data.name) : data.name,
-      name_mm: data.name_mm ? sanitizeInput(data.name_mm) : data.name_mm,
-      description: data.description ? sanitizeInput(data.description) : data.description,
-      address: data.address ? sanitizeInput(data.address) : data.address,
-    },
   };
 };

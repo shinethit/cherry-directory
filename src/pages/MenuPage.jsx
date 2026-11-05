@@ -26,14 +26,14 @@ function MenuItem({ item, canEdit, onEdit, onDelete }) {
     <div className={`flex gap-3 p-3 rounded-xl transition-colors ${item.is_available ? '' : 'opacity-50'}`}>
       {item.image_url && (
         <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-white/5 border border-white/8">
-          <img src={item.image_url} alt={item.name_mm || item.name} className="w-full h-full object-cover" />
+          <img src={item.image_url} alt={item.name || item.name_mm} className="w-full h-full object-cover" />
         </div>
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-display font-semibold text-white">{item.name}</p>
-            {item.name_mm && <p className="text-[10px] text-white/50 font-myanmar">{item.name_mm}</p>}
+            <p className="text-sm font-display font-semibold text-white">{item.name || item.name_mm}</p>
+            {item.name_mm && item.name && item.name_mm !== item.name && <p className="text-[10px] text-white/50 font-myanmar">{item.name_mm}</p>}
             {item.unit && <p className="text-[9px] text-white/60 mt-0.5">({item.unit})</p>}
             {item.description && <p className="text-xs text-white/60 mt-0.5 font-myanmar line-clamp-2">{item.description}</p>}
             <div className="mt-1.5">
@@ -227,8 +227,8 @@ export default function MenuPage() {
   }
 
   async function addCategory() {
-    if (!newCatName.trim()) return
-    const { data, error } = await supabase.from('menu_categories').insert({ listing_id: id, name: newCatName.trim(), name_mm: newCatMm.trim() || null, sort_order: menuCategories.length }).select().single()
+    if (!newCatName.trim() && !newCatMm.trim()) { showError('Category အမည် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ'); return }
+    const { data, error } = await supabase.from('menu_categories').insert({ listing_id: id, name: newCatName.trim() || newCatMm.trim(), name_mm: newCatMm.trim() || null, sort_order: menuCategories.length }).select().single()
     if (error || !data) { showError(error?.message || 'Category ထည့်မရပါ'); return }
     setMenuCategories(prev => [...prev, data])
     setNewCatName(''); setNewCatMm(''); setAddingCat(false)
@@ -246,11 +246,30 @@ export default function MenuPage() {
     setItems(prev => prev.map(i => i.category_id === catId ? { ...i, category_id: null } : i))
   }
 
+  // NICE (v9.17): opening another form while one is open discards
+  // unsaved edits — confirm first.
+  async function openEditForm(target) {
+    if (editItem) {
+      const same = (target === 'new' && editItem === 'new')
+        || (target?.id && editItem?.id === target.id)
+        || (target?._new && editItem?._new && editItem?.category_id === target?.category_id)
+      if (!same) {
+        if (!(await confirmDialog('ပြင်နေတဲ့ item ကို မသိမ်းဘဲ ပြောင်းမည်လား?', { danger: true }))) return
+      }
+    }
+    setEditItem(target)
+  }
+
   async function saveItem(form) {
     // B23: the * means "Myanmar OR English, one required" — enforce it
     // here (the old code checked neither name).
     if (!form.name?.trim() && !form.name_mm?.trim()) {
       showError('အမည် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ')
+      return
+    }
+    // S20 (v9.17): a max price below the base price is a data error.
+    if (form.price && form.price_max && parseFloat(form.price_max) < parseFloat(form.price)) {
+      showError('အများဆုံး ဈေး (Max) သည် ဈေးထက် နည်းလို့ မရပါ')
       return
     }
     const payload = {
@@ -323,7 +342,7 @@ export default function MenuPage() {
         </div>
         {canEdit && (
           <button
-            onClick={() => setEditItem('new')}
+            onClick={() => openEditForm('new')}
             className="flex items-center gap-1.5 btn-primary text-xs px-3 py-2"
           >
             <Plus size={14} /> Item ထည့်မည်
@@ -368,7 +387,7 @@ export default function MenuPage() {
                       <ItemForm listingId={id} categoryId={null} item={item} categories={menuCategories} onSave={saveItem} onCancel={() => setEditItem(null)} />
                     </div>
                   ) : (
-                    <MenuItem item={item} canEdit={canEdit} onEdit={setEditItem} onDelete={deleteItem} />
+                    <MenuItem item={item} canEdit={canEdit} onEdit={openEditForm} onDelete={deleteItem} />
                   )}
                 </div>
               ))}
@@ -390,7 +409,7 @@ export default function MenuPage() {
                 </button>
                 {canEdit && (
                   <div className="flex gap-2 ml-2">
-                    <button onClick={() => setEditItem({ category_id: cat.id, _new: true })} aria-label="Item ထည့်မည်" className="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center text-white/40 hover:text-white/70">
+                    <button onClick={() => openEditForm({ category_id: cat.id, _new: true })} aria-label="Item ထည့်မည်" className="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center text-white/40 hover:text-white/70">
                       <Plus size={14} />
                     </button>
                     <button onClick={() => deleteCategory(cat.id)} aria-label="Category ဖျက်မည်" className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center">
@@ -418,7 +437,7 @@ export default function MenuPage() {
                               <ItemForm listingId={id} categoryId={cat.id} item={item} categories={menuCategories} onSave={saveItem} onCancel={() => setEditItem(null)} />
                             </div>
                           ) : (
-                            <MenuItem item={item} canEdit={canEdit} onEdit={setEditItem} onDelete={deleteItem} />
+                            <MenuItem item={item} canEdit={canEdit} onEdit={openEditForm} onDelete={deleteItem} />
                           )}
                         </div>
                       ))}

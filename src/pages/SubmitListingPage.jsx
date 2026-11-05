@@ -14,6 +14,7 @@ import { BusinessHoursEditor } from '../components/BusinessHours'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
 import { validateListing, normalizePhone, toLatinDigits } from '../lib/validation'
+import { draftKey, saveDraft, loadDraft, clearDraft, debounce } from '../lib/draftStorage'
 
 function Field({ label, children, required, optional }) {
   return (
@@ -78,10 +79,14 @@ export default function SubmitListingPage() {
   const [menuItems, setMenuItems] = useState([])
   const [editingMenuItem, setEditingMenuItem] = useState(null)
   const [menuFormOpen, setMenuFormOpen] = useState(false)
-  const [menuForm, setMenuForm] = useState({ name: '', price: '', description: '', images: [] })
+  const [menuForm, setMenuForm] = useState({ name: '', name_mm: '', price: '', description: '', images: [] })
   const [menuImageLoading, setMenuImageLoading] = useState(false)
   const [menuError, setMenuError] = useState('')
   const [dupError, setDupError] = useState(null)
+  // v9.17 (Issue 2): submit draft autosave — same mechanism as Edit
+  // (cherry-submit-draft). A draft restores on mount with a small note.
+  const [draftRestored, setDraftRestored] = useState(false)
+  const saveDraftDebounced = useRef(null)
   // B22: bypass once the user confirms the listing is genuinely different.
   // A ref (not state) so the banner button can set it and submit in one tap.
   const dupBypassRef = useRef(false)
@@ -93,6 +98,19 @@ export default function SubmitListingPage() {
   useEffect(() => {
     supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order').then(({ data }) => setCategories(data || []))
   }, [])
+
+  // v9.17 (Issue 2): restore an unsaved submit draft, then autosave the
+  // form (debounced ~500 ms) on every change. Cleared on success.
+  useEffect(() => {
+    const d = loadDraft(draftKey('submit'))
+    if (d?.form) { setForm(prev => ({ ...prev, ...d.form })); setDraftRestored(true) }
+  }, [])
+  useEffect(() => {
+    if (!saveDraftDebounced.current) {
+      saveDraftDebounced.current = debounce(f => saveDraft(draftKey('submit'), f), 500)
+    }
+    saveDraftDebounced.current(form)
+  }, [form])
 
   function setFormField(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
@@ -169,20 +187,22 @@ export default function SubmitListingPage() {
   const openMenuForm = (item = null) => {
     if (item) {
       setEditingMenuItem(item)
-      setMenuForm({ name: item.name, price: item.price, description: item.description, images: item.images || [] })
+      setMenuForm({ name: item.name, name_mm: item.name_mm || '', price: item.price, description: item.description, images: item.images || [] })
     } else {
       setEditingMenuItem(null)
-      setMenuForm({ name: '', price: '', description: '', images: [] })
+      setMenuForm({ name: '', name_mm: '', price: '', description: '', images: [] })
     }
     setMenuFormOpen(true)
     setMenuError('')
   }
   const closeMenuForm = () => {
     setMenuFormOpen(false); setEditingMenuItem(null)
-    setMenuForm({ name: '', price: '', description: '', images: [] }); setMenuError('')
+    setMenuForm({ name: '', name_mm: '', price: '', description: '', images: [] }); setMenuError('')
   }
   const handleMenuImageUpload = async (file) => {
-    if (menuForm.images.length >= 5) { setMenuError(lang === 'mm' ? 'အများဆုံး ၅ ပုံသာ တင်နိုင်ပါသည်' : 'Maximum 5 images'); return }
+    // M5 (v9.17): 1 image per menu item — the insert only ever saved
+    // images[0], so images 2–5 were uploaded and then silently discarded.
+    if (menuForm.images.length >= 1) { setMenuError(lang === 'mm' ? '၁ ပုံသာ တင်နိုင်ပါသည်' : 'Maximum 1 image'); return }
     setMenuImageLoading(true)
     try {
       const url = await uploadImage(file, 'menu')
@@ -200,6 +220,7 @@ export default function SubmitListingPage() {
     const newItem = {
       id: editingMenuItem?.id || Date.now().toString(),
       name: menuForm.name.trim(),
+      name_mm: menuForm.name_mm.trim(),
       price: menuForm.price.trim(),
       description: menuForm.description.trim(),
       images: menuForm.images,
@@ -312,6 +333,17 @@ export default function SubmitListingPage() {
     }
     setSubmitError('')
 
+    // M1 (v9.17): explicit NaN guard before validation (mirror Edit) —
+    // parseFloat('abc') is NaN and used to slip through as a null pin.
+    const lat = form.latitude ? parseFloat(form.latitude) : null
+    const lng = form.longitude ? parseFloat(form.longitude) : null
+    if ((form.latitude && Number.isNaN(lat)) || (form.longitude && Number.isNaN(lng))) {
+      const msg = lang === 'mm' ? 'Latitude/Longitude သည် ဂဏန်း ဖြစ်ရမည်' : 'Latitude/Longitude must be numbers'
+      setSubmitError(msg)
+      showError(msg)
+      return
+    }
+
     // Pre-submit validation (honest Burmese errors; Myanmar-only names pass).
     const validation = validateListing({
       name: form.name,
@@ -319,8 +351,8 @@ export default function SubmitListingPage() {
       category_id: form.category_id,
       phones: form.phones,
       website: form.website,
-      latitude: form.latitude ? parseFloat(form.latitude) : null,
-      longitude: form.longitude ? parseFloat(form.longitude) : null,
+      latitude: lat,
+      longitude: lng,
     })
     if (!validation.isValid) {
       setSubmitError(validation.errors.join(' '))
@@ -377,6 +409,7 @@ export default function SubmitListingPage() {
           menuItems.map((item, idx) => ({
             listing_id: newListingId,
             name: item.name,
+            name_mm: item.name_mm || null,
             description: item.description || null,
             price: item.price ? parseFloat(item.price) : null,
             image_url: item.images?.[0] || null,
@@ -389,6 +422,11 @@ export default function SubmitListingPage() {
         }
       }
       setDone(true)
+      // v9.17 (Issue 2): the draft is saved — clear it (and cancel any
+      // pending debounced write, or it rewrites the draft a moment later).
+      saveDraftDebounced.current?.cancel?.()
+      clearDraft(draftKey('submit'))
+      setDraftRestored(false)
     } catch (err) {
       console.error('Submit listing failed:', err)
       showError(lang === 'mm' ? 'တင်ရာတွင် အမှားဖြစ်သွားသည် — ပြန်ကြိုးစားမည်' : 'Could not submit — please check your connection and try again')
@@ -429,6 +467,12 @@ export default function SubmitListingPage() {
       )
     : categories
   const visibleParents = filteredCategories.filter(c => !c.parent_id)
+  // NICE (v9.17): the search filter must never hide the currently
+  // selected category — a filtered-out selection rendered as blank.
+  const selectedCategory = categories.find(c => c.id === form.category_id)
+  const selectedCatVisible = !selectedCategory
+    || visibleParents.some(p => p.id === selectedCategory.id)
+    || filteredCategories.some(c => c.id === selectedCategory.id && visibleParents.some(p => p.id === c.parent_id))
 
   return (
     <div className="pb-28">
@@ -512,6 +556,13 @@ export default function SubmitListingPage() {
 
       <form id="submit-listing-form" onSubmit={handleSubmit} className="px-4 pt-4 space-y-4">
 
+        {/* v9.17 (Issue 2): an unsaved draft was restored. */}
+        {draftRestored && (
+          <div className="rounded-xl bg-brand-600/10 border border-brand-400/25 px-3 py-2">
+            <p className="text-[11px] text-brand-300 font-myanmar">မသိမ်းရသေး draft ပြန်ရသည်</p>
+          </div>
+        )}
+
         {/* Logo + Cover */}
         <p className="text-xs text-white/60 font-myanmar -mb-1">ပုံများ (optional)</p>
         <div className="grid grid-cols-2 gap-3">
@@ -538,7 +589,11 @@ export default function SubmitListingPage() {
         {/* ① အခြေခံအချက် */}
         <SectionHeader num="1" title={lang === 'mm' ? 'အခြေခံအချက်' : 'Basic Info'} subtitle={lang === 'mm' ? 'လုပ်ငန်း အမည်နှင့် အမျိုးအစား' : 'Name & category'} />
 
-        <Field label={t('name_mm_label')} required>
+        {/* Issue 1 (v9.17): EITHER name is enough — the lone `required`
+            on the Myanmar field lied (validation already enforces
+            either-or). The * sits on the group, never on one language. */}
+        <p className="text-xs text-white/50 mb-1.5">{t('name_mm_label')} <span className="text-red-400 ml-1">*</span> <span className="text-white/60 font-normal">({lang === 'mm' ? 'မြန်မာ သို့မဟုတ် English တစ်ခု' : 'Myanmar or English, one is enough'})</span></p>
+        <Field label={t('name_mm_label')}>
           <input
             type="text"
             ref={nameInputRef}
@@ -558,6 +613,7 @@ export default function SubmitListingPage() {
             placeholder="Business Name (English)"
           />
         </Field>
+        <p className="text-[10px] text-white/60 font-myanmar -mt-2">အမည် တစ်ခု (မြန်မာ သို့မဟုတ် English) ရှိရမည်</p>
 
         <Field label={t('category_label')} required>
           {/* Category search */}
@@ -601,6 +657,9 @@ export default function SubmitListingPage() {
                   </optgroup>
                 )
               })}
+              {selectedCategory && !selectedCatVisible && (
+                <option key={selectedCategory.id} value={selectedCategory.id}>{selectedCategory.icon} {selectedCategory.name_mm || selectedCategory.name}</option>
+              )}
               {catQuery && visibleParents.length === 0 && (
                 <option value="" disabled>
                   {lang === 'mm' ? 'ရှာတွေ့မှု မရှိ' : 'No matches'}
@@ -901,6 +960,14 @@ export default function SubmitListingPage() {
                   className="input-dark w-full" placeholder={lang === 'mm' ? 'ဥပမာ: မုန့်တီ' : 'e.g. Mohinga'} />
               </div>
               <div>
+                <label className="block text-xs text-white/50 mb-1.5 font-myanmar">
+                  {lang === 'mm' ? 'အမည် (မြန်မာ)' : 'Item Name (Myanmar)'}
+                </label>
+                <input type="text" value={menuForm.name_mm}
+                  onChange={e => setMenuForm(prev => ({ ...prev, name_mm: e.target.value }))}
+                  className="input-dark w-full font-myanmar" placeholder={lang === 'mm' ? 'ဥပမာ: မုန့်တီ' : 'e.g. မုန့်တီ'} />
+              </div>
+              <div>
                 <label className="block text-xs text-white/50 mb-1.5">
                   {lang === 'mm' ? 'ဈေးနှုန်း (ကျပ်)' : 'Price (Ks)'}
                 </label>
@@ -919,7 +986,7 @@ export default function SubmitListingPage() {
               </div>
               <div>
                 <label className="block text-xs text-white/50 mb-1.5">
-                  {lang === 'mm' ? 'ပုံများ (အများဆုံး ၅ ပုံ)' : 'Images (max 5)'}
+                  {lang === 'mm' ? 'ပုံ (၁ ပုံ)' : 'Image (1)'}  {/* M5 (v9.17): 1 image per item — images 2–5 were discarded on save */}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   {menuForm.images.map((img, i) => (
@@ -931,7 +998,7 @@ export default function SubmitListingPage() {
                       </button>
                     </div>
                   ))}
-                  {menuForm.images.length < 5 && (
+                  {menuForm.images.length < 1 && (
                     <ImageUploader onUpload={handleMenuImageUpload} loading={menuImageLoading} label="+" className="aspect-square w-full" />
                   )}
                 </div>

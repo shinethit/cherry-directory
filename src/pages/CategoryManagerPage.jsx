@@ -9,6 +9,7 @@ import { useAuditLog } from '../hooks/useAuditLog'
 import { showError, showSuccess } from '../lib/toast'
 import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့်ထားပါ
 import { confirmDialog } from '../lib/confirmDialog'
+import { withTimeout } from '../lib/withTimeout'
 
 const BLANK = { name: '', name_mm: '', icon: '📦', type: 'directory', sort_order: 0, parent_id: null, description_mm: '', is_active: true, is_featured: false }
 
@@ -25,6 +26,13 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
 
   async function save() {
     if (!form.name_mm && !form.name) { setError('အမည် ထည့်ပါ'); return }
+    // S7 (v9.17): duplicate check is case-insensitive and covers both
+    // name fields, within the same type — the DB has no unique index.
+    const effName = (form.name || form.name_mm).trim().toLowerCase()
+    const dup = (allCategories || []).some(c =>
+      c.id !== initial?.id && c.type === form.type &&
+      [c.name, c.name_mm].some(n => (n || '').trim().toLowerCase() === effName))
+    if (dup) { setError('အမည်တူ Category ရှိပြီးဖြစ်သည်'); return }
     setSaving(true)
     const payload = {
       name:           form.name || form.name_mm,
@@ -378,11 +386,13 @@ export default function CategoryManagerPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
+    // S8 (v9.17): 30 s timeout — a hung categories query used to leave
+    // the manager on skeletons forever.
+    const { data, error } = await withTimeout(supabase
       .from('categories')
       .select('*')
       .order('sort_order')
-      .order('name_mm')
+      .order('name_mm'), 30000, 'Categories')
     if (error) {
       showError('Categories ရယူရာတွင် အမှားရှိသည်: ' + error.message)
       setLoading(false)
@@ -621,7 +631,7 @@ export default function CategoryManagerPage() {
 
       {formData !== null && (
         <CategoryForm
-          initial={formData.initial}
+          initial={formData.initial || { type: typeFilter }}
           parentId={formData.parentId}
           parentName={formData.parentName}
           allCategories={cats}

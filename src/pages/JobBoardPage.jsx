@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Phone, MapPin, ArrowLeft, Trash2, Edit2, Clock, Briefcase, Users, CheckCircle } from 'lucide-react'
+import { Plus, Phone, MapPin, ArrowLeft, Trash2, Edit2, Clock, Briefcase, Users, CheckCircle, Search } from 'lucide-react'
+import { escapePostgrestOr } from '../hooks/useListings'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
@@ -54,6 +55,8 @@ const STATUSES = {
 
 function timeAgo(iso, lang) {
   const m = Math.floor((Date.now() - new Date(iso)) / 60000)
+  // N20 (v9.17): a future/clock-skew timestamp must not read "-5မိနစ်".
+  if (m < 1) return lang === 'mm' ? 'ယခု' : 'just now'
   if (m < 60) return `${m}${lang === 'mm' ? 'မိနစ်' : 'm'}`
   const h = Math.floor(m / 60)
   if (h < 24) return `${h}${lang === 'mm' ? 'နာရီ' : 'h'}`
@@ -175,13 +178,13 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
         
         {isOwner && (
           <div className="flex gap-1">
-            <button onClick={() => onStatusChange(job)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center" title="Status ပြောင်း">
+            <button onClick={() => onStatusChange(job)} className="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center" title="Status ပြောင်း">
               <Clock size={11} className="text-white/40" />
             </button>
-            <button onClick={() => onEdit(job)} className="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/30">
+            <button onClick={() => onEdit(job)} className="w-9 h-9 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center hover:bg-blue-500/30">
               <Edit2 size={11} />
             </button>
-            <button onClick={() => onDelete(job.id)} className="w-6 h-6 rounded-lg btn-danger flex items-center justify-center">
+            <button onClick={() => onDelete(job.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center">
               <Trash2 size={11} className="text-white" />
             </button>
           </div>
@@ -241,6 +244,11 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
 
   async function submit() {
     if (!form.title_mm && !form.title) return
+    // S27 (v9.17): at least one way to reach the poster is required.
+    if (!form.contact_phone?.trim() && !form.contact_name?.trim() && !form.contact_fb?.trim()) { showError('ဆက်သွယ်ရန် (ဖုန်း / နာမည် / Facebook) တစ်ခုခု ထည့်ပါ'); return }
+    // N23 (v9.17): Max must not be below Min.
+    const salMin = parseInt(form.salary_min), salMax = parseInt(form.salary_max)
+    if (!Number.isNaN(salMin) && !Number.isNaN(salMax) && salMax < salMin) { showError('အများဆုံး လစာ (Max) သည် အနည်းဆုံး လစာ (Min) ထက် နည်းလို့ မရပါ'); return }
     setSubmitting(true)
     try {
       const payload = {
@@ -360,9 +368,13 @@ function JobForm({ onClose, onSuccess, lang, editPost }) {
 
 function StatusModal({ post, onClose, onUpdate, lang }) {
   const [status, setStatus] = useState(post.status)
+  const [saving, setSaving] = useState(false) // N22 (v9.17): block double-taps
 
   const updateStatus = async () => {
+    if (saving) return
+    setSaving(true)
     const { error } = await supabase.from('jobs').update({ status }).eq('id', post.id)
+    setSaving(false)
     if (error) { showError(error.message); return }
     onUpdate()
     onClose()
@@ -380,7 +392,7 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
           ))}
         </div>
         <div className="flex gap-2 mt-4">
-          <button onClick={updateStatus} className="flex-1 btn-primary text-xs py-2">သိမ်းမည်</button>
+          <button onClick={updateStatus} disabled={saving} className="flex-1 btn-primary text-xs py-2 disabled:opacity-50">{saving ? '...' : 'သိမ်းမည်'}</button>
           <button onClick={onClose} className="flex-1 btn-ghost text-xs py-2">Cancel</button>
         </div>
       </div>
@@ -401,6 +413,9 @@ export default function JobBoardPage() {
   const [catFilter, setCatFilter] = useState('all')
   const [postTypeFilter, setPostTypeFilter] = useState(() => normalizePostType(searchParams.get('type')))
   const [statusFilter, setStatusFilter] = useState('all')
+  // S29 (v9.17): search box, debounced; honours ?q= from SearchPage.
+  const [search, setSearch] = useState(() => searchParams.get('q') || '')
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('q') || '')
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [statusTarget, setStatusTarget] = useState(null)
@@ -408,8 +423,10 @@ export default function JobBoardPage() {
   const [hasMore, setHasMore] = useState(false)
   const PAGE_SIZE = 20
 
-  async function load() {
-    setLoading(true)
+  async function load(background = false) {
+    // S18/S23 (v9.17): realtime reloads run in the background — no
+    // skeleton flash while the user is reading the list.
+    if (!background) setLoading(true)
     setLoadError(false)
     try {
       const limit = (page + 1) * PAGE_SIZE
@@ -422,30 +439,46 @@ export default function JobBoardPage() {
 
       if (catFilter !== 'all') q = q.eq('category', catFilter)
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
-      if (statusFilter !== 'all') q = q.eq('status', statusFilter)
+      // S26 (v9.17): 'expired' is a virtual filter — no row ever carries
+      // status='expired' (expiry lives in expires_at), so the server
+      // query must not filter by status; the client keeps expired rows.
+      if (statusFilter !== 'all' && statusFilter !== 'expired') q = q.eq('status', statusFilter)
+      const term = debouncedSearch.trim()
+      if (term) {
+        const t = escapePostgrestOr(term)
+        q = q.or(`title.ilike.%${t}%,title_mm.ilike.%${t}%,company.ilike.%${t}%,company_mm.ilike.%${t}%,location_mm.ilike.%${t}%`)
+      }
 
       // 30 s timeout (was none): a hung query left the list on skeletons forever.
       const { data, error } = await withTimeout(q, 30000, 'Jobs')
       if (error) throw error
       // Client-side expiry: schema sets expires_at +30d but nothing flips the status.
       const now = Date.now()
-      const visible = (data || []).filter(j => !j.expires_at || new Date(j.expires_at).getTime() >= now)
+      const visible = statusFilter === 'expired'
+        ? (data || []).filter(j => j.expires_at && new Date(j.expires_at).getTime() < now)
+        : (data || []).filter(j => !j.expires_at || new Date(j.expires_at).getTime() >= now)
       setJobs(visible)
       setHasMore((data || []).length === limit)
     } catch (e) { console.warn(e); setLoadError(true) }
-    setLoading(false)
+    if (!background) setLoading(false)
   }
+
+  // Debounce the search box — each keystroke is a server query now.
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(0) }, 400)
+    return () => clearTimeout(t)
+  }, [search])
 
   useEffect(() => {
     load()
     const channel = supabase
       .channel('jobs-live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'jobs' }, load)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs' }, load)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'jobs' }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'jobs' }, () => load(true))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'jobs' }, () => load(true))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'jobs' }, () => load(true))
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [catFilter, postTypeFilter, statusFilter, page])
+  }, [catFilter, postTypeFilter, statusFilter, page, debouncedSearch])
 
   async function deleteJob(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
@@ -468,6 +501,10 @@ export default function JobBoardPage() {
 
       {/* Filters */}
       <div className="px-4 space-y-2 mb-4">
+        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+          <Search size={16} className="text-white/40 flex-shrink-0" />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={lang === 'mm' ? 'အလုပ်ရှာရန်...' : 'Search jobs...'} className="bg-transparent border-none outline-none text-sm text-white w-full font-myanmar placeholder:text-white/30" />
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <div className="relative">
             <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setPage(0) }} className="select-dark">

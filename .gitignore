@@ -5,14 +5,9 @@
 .env.*.local
 # Temp scripts
 *.cjs
-# SQL migration files
+# SQL migration files — kept as DB history in supabase/ (v9.15: moved from root)
 supabase-*.sql
-!supabase-migration-v0.9.1.sql
-!supabase-migration-9.3.sql
-!supabase-migration-9.5.sql
-!supabase-migration-9.6.sql
-!supabase-migration-9.12.sql
-!supabase-migration-9.14.sql
+!supabase/*.sql
 # Test files
 public/test.html
 # Environment

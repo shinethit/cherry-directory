@@ -112,7 +112,11 @@ export default function EventFormPage() {
 
   async function handleSave(e) {
     e.preventDefault()
-    if (!form.title || !form.event_start) return
+    // S12 (v9.17): title in either language is enough, like news.
+    if (!form.title?.trim() && !form.title_mm?.trim()) { showError('ခေါင်းစဉ် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ'); return }
+    if (!form.event_start) return
+    // S11 (v9.17): end must be after start.
+    if (form.event_end && form.event_end < form.event_start) { showError('ပြီးဆုံးချိန်သည် စတင်ချိန်ထက် နောက်ကျရမည်'); return }
     setSaving(true)
 
     // datetime-local is Myanmar wall time — never new Date(v).toISOString()
@@ -120,9 +124,11 @@ export default function EventFormPage() {
     const payload = {
       ...form,
       type: 'event',
+      title: form.title || form.title_mm,
       event_start: form.event_start ? localInputToMMT(form.event_start) : null,
       event_end:   form.event_end   ? localInputToMMT(form.event_end)   : null,
-      author_id:   user?.id,
+      // S13 (v9.17): preserve the original author on edit (NewsEditPage).
+      author_id:   isEdit ? original?.author_id || user?.id : user?.id,
       updated_at:  new Date().toISOString(),
     }
 

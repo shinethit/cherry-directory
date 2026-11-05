@@ -1,6 +1,6 @@
 import { Star, MapPin, Bookmark, BookmarkCheck } from 'lucide-react'
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -27,6 +27,7 @@ export function Skeleton({ className = '' }) {
 
 // ── Listing Card ─────────────────────────────────────────────
 export function ListingCard({ listing, compact = false }) {
+  const location = useLocation()
   const navigate = useNavigate()
   const { isLoggedIn } = useAuth()
   // Real bookmark state from the bookmarks table (the old local useState
@@ -41,7 +42,7 @@ export function ListingCard({ listing, compact = false }) {
 
   function toggleBookmark(e) {
     e.stopPropagation()
-    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ သိမ်းနိုင်မည်'); navigate('/login'); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ သိမ်းနိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
     if (bookmarkPending) return
     // No per-call onError: the bookmark hooks already toast via
     // handleSupabaseError on failure (I-M2) — a second toast here would
@@ -59,7 +60,7 @@ export function ListingCard({ listing, compact = false }) {
       {/* Logo */}
       <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
         {logo
-          ? <img src={logo} alt={listing.name} className="w-full h-full object-contain" loading="lazy" />
+          ? <img src={logo} alt={listing.name || listing.name_mm} className="w-full h-full object-contain" loading="lazy" />
           : <span className="text-2xl">{listing.category?.icon || '🏢'}</span>}
       </div>
 
@@ -212,6 +213,7 @@ const EMOJIS = ['❤️', '😂', '😮', '😢', '👏', '🔥']
 export function ReactionBar({ targetType, targetId }) {
   const { isLoggedIn, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [counts, setCounts] = useState({})
   const [myReactions, setMyReactions] = useState(new Set())
 
@@ -240,10 +242,10 @@ export function ReactionBar({ targetType, targetId }) {
   }, [targetType, targetId, user?.id])
 
   async function react(emoji) {
-    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ တုံ့ပြန်မှု ပေးနိုင်မည်'); navigate('/login'); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ တုံ့ပြန်မှု ပေးနိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
     const { data: { user: authUser } } = await supabase.auth.getUser()
     const uid = authUser?.id || user?.id
-    if (!uid) { showError('အကောင့်ဝင်မှ တုံ့ပြန်မှု ပေးနိုင်မည်'); navigate('/login'); return }
+    if (!uid) { showError('အကောင့်ဝင်မှ တုံ့ပြန်မှု ပေးနိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
     if (myReactions.has(emoji)) {
       const { error } = await supabase.from('reactions').delete().match({ target_type: targetType, target_id: targetId, user_id: uid, emoji })
       if (error) { showError(error.message); return }

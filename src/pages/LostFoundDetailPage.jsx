@@ -83,7 +83,14 @@ export default function LostFoundDetailPage() {
     else navigate('/lost-found')
   }
 
+  const [saving, setSaving] = useState(false)
+
   async function handleUpdate() {
+    // N24 (v9.17): a blank title violates the NOT NULL column — require
+    // at least one title, and block double-submit while saving.
+    if (!editForm.title?.trim() && !editForm.title_mm?.trim()) { showError('ခေါင်းစဉ် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ'); return }
+    if (saving) return
+    setSaving(true)
     // Whitelist editable columns — never send id/timestamps through.
     const payload = {
       title: editForm.title || editForm.title_mm || null,
@@ -98,6 +105,7 @@ export default function LostFoundDetailPage() {
       is_urgent: !!editForm.is_urgent,
     }
     const { error } = await supabase.from('lost_found').update(payload).eq('id', id)
+    setSaving(false)
     if (error) showError(error.message)
     else {
       setPost(p => ({ ...p, ...payload }))
@@ -124,11 +132,28 @@ export default function LostFoundDetailPage() {
       return
     }
     setClaimed(true)
-    showSuccess(lang === 'mm' ? 'ပိုင်ဆိုင်ကြောင်း တောင်းဆိုချက် မှတ်တမ်းတင်ပြီးပါပြီ — ဆက်သွယ်ရန် အချက်အလက်ကို အောက်မှာ ပြသထားသည်' : 'Claim noted — contact details are shown below')
+    // M3 (v9.17): no claim record is made server-side — the toast must
+    // not say one was. Claiming only reveals the poster's contact.
+    showSuccess(lang === 'mm' ? 'ဆက်သွယ်ရန် အချက်အလက်ကို အောက်မှာ ပြသထားသည်' : 'Contact details are shown below')
   }
 
   async function handleReport() {
     if (!reportReason.trim()) return
+    // N25 (v9.17): one report per user per post per 24 h — repeated taps
+    // used to stack identical rows for the admin to triage.
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const coolMsg = lang === 'mm' ? 'ဤ Post ကို ၂၄ နာရီအတွင်း Report တင်ပြီးဖြစ်သည်' : 'You already reported this post in the last 24 hours'
+    if (user?.id) {
+      const { data: existing } = await supabase.from('reports')
+        .select('id').eq('target_type', 'lost_found').eq('target_id', id)
+        .eq('reporter_id', user.id).gte('created_at', since).limit(1)
+      if (existing && existing.length > 0) { showError(coolMsg); return }
+    } else {
+      try {
+        const last = Number(localStorage.getItem('cherry-report-lostfound-' + id) || 0)
+        if (last && Date.now() - last < 24 * 60 * 60 * 1000) { showError(coolMsg); return }
+      } catch { /* storage unavailable — fall through to the insert */ }
+    }
     const { error } = await supabase.from('reports').insert({
       target_type: 'lost_found',
       target_id: id,
@@ -137,6 +162,7 @@ export default function LostFoundDetailPage() {
       status: 'pending',
     })
     if (error) { showError(error.message); return }
+    if (!user?.id) { try { localStorage.setItem('cherry-report-lostfound-' + id, String(Date.now())) } catch { /* ignore */ } }
     setReporting(false)
     setReportReason('')
     showSuccess(lang === 'mm' ? 'Report တင်ပြီးပါပြီ — Admin မှ စစ်ဆေးမည်' : 'Report submitted — an admin will review it')
@@ -180,7 +206,7 @@ export default function LostFoundDetailPage() {
             <ArrowLeft size={18} className="text-white" />
           </button>
           <h1 className="font-display font-bold text-lg text-white">ပြင်ဆင်မည်</h1>
-          <button onClick={handleUpdate} className="btn-primary text-xs px-4 py-2">သိမ်းမည်</button>
+          <button onClick={handleUpdate} disabled={saving} className="btn-primary text-xs px-4 py-2 disabled:opacity-50">{saving ? '...' : 'သိမ်းမည်'}</button>
         </div>
         <div className="px-4 space-y-4">
           <div>

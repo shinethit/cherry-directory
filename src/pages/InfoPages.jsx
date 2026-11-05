@@ -10,13 +10,15 @@ import { goBackOrHome } from '../lib/navigation'
 // ── Shared layout ─────────────────────────────────────────────
 function InfoLayout({ title, titleMm, children }) {
   const navigate = useNavigate()
+  const { lang } = useLang() // S34 (v9.17): page title follows the language
+  const shownTitle = lang === 'mm' ? (titleMm || title) : (title || titleMm)
   return (
     <div className="pb-12">
       <div className="flex items-center gap-3 px-4 py-3">
         <button onClick={() => goBackOrHome(navigate, '/')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
           <ArrowLeft size={18} className="text-white" />
         </button>
-        <h1 className="font-display font-bold text-lg text-white">{titleMm || title}</h1>
+        <h1 className="font-display font-bold text-lg text-white">{shownTitle}</h1>
       </div>
       <div className="px-4 space-y-6 text-sm text-white/70 leading-relaxed font-myanmar">
         {children}
@@ -26,9 +28,11 @@ function InfoLayout({ title, titleMm, children }) {
 }
 
 function Section({ title, titleMm, children }) {
+  const { lang } = useLang() // S34 (v9.17): section title follows the language
+  const shownTitle = lang === 'mm' ? (titleMm || title) : (title || titleMm)
   return (
     <div className="space-y-2">
-      <h2 className="font-display font-bold text-base text-white">{titleMm || title}</h2>
+      <h2 className="font-display font-bold text-base text-white">{shownTitle}</h2>
       <div className="text-white/60 space-y-2 leading-relaxed">{children}</div>
     </div>
   )
@@ -178,8 +182,9 @@ export function PrivacyPage() {
         <p>Data များကို <span className="text-white font-semibold">Supabase</span> (PostgreSQL) တွင် သိမ်းဆည်းပြီး ပုံများကို <span className="text-white font-semibold">Cloudinary CDN</span> တွင် သိမ်းဆည်းပါသည်။ Chat History ၆ လကျော်ပါက auto-delete ဖြစ်ပါသည်။</p>
       </Section>
 
-      <Section titleMm="Third-party Data မမျှဝေ">
-        <p>Cherry Directory သည် သင်၏ Personal Data ကို ကြော်ငြာရှင် သို့မဟုတ် တတိယပါတီ ကုမ္ပဏီများသို့ <span className="text-green-400 font-semibold">လုံးဝ မမျှဝေပါ</span>။</p>
+      <Section titleMm="Third-party ဝန်ဆောင်မှုများ">
+        <p>Cherry Directory ၏ Data များကို <span className="text-white font-semibold">Supabase</span> (Database) နှင့် <span className="text-white font-semibold">Cloudinary</span> (ပုံများ) တို့ဖြင့် သိမ်းဆည်းဆောင်ရွက်ပါသည်။ ကြော်ငြာရှင်များသို့ Personal Data <span className="text-green-400 font-semibold">မရောင်းပါ / မမျှဝေပါ</span>။</p>
+        <p>လာရောက်ကြည့်ရှုမှု စာရင်းအတွက် <span className="text-white font-semibold">ipwho.is</span> ကို သုံး၍ နိုင်ငံသာ သိရှိပါသည် — IP လိပ်စာကို မသိမ်းပါ။</p>
       </Section>
 
       <Section titleMm="သင်၏ အခွင့်အရေး">

@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, TrendingDown, Minus, Plus, RefreshCw, AlertCircle, Trash2, CheckCircle, ChevronDown, ChevronUp, Pencil } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
+import { fetchMarketPrices } from '../lib/prefetch'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
@@ -68,9 +70,17 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
   const [submitting, setSubmitting] = useState(false)
   const [error, setError]   = useState('')
 
+  // S20 (v9.17): markets/stations load async in the parent, so the
+  // modal often opens with locations=[] and market=''. Sync to the
+  // first location when it arrives.
+  useEffect(() => {
+    if (locations.length > 0 && !market) setMarket(locations[0])
+  }, [locations])
+
   async function submit() {
     const p = parseInt(price)
     if (!p || p < 100 || p > 10_000_000) { setError(lang === 'mm' ? 'ဈေးနှုန်း မမှန်ကန်' : 'Invalid price'); return }
+    if (!market.trim()) { setError(lang === 'mm' ? 'ဈေးကွက် ရွေးပါ' : 'Choose a market'); return }
     setSubmitting(true)
     await onSubmit({ price: p, market, notes })
     setSubmitting(false)
@@ -172,7 +182,7 @@ function ReportModal({ item, onClose, onSubmit, lang, markets = [], fuelStations
         )}
         </div>
         <div className="px-5 py-3 border-t border-white/8">
-          <button onClick={submit} disabled={!price || submitting} className="btn-primary w-full">
+          <button onClick={submit} disabled={!price || !market.trim() || submitting} className="btn-primary w-full">
             {submitting ? <span className="flex items-center justify-center gap-2"><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />...</span>
               : lang === 'mm' ? '📤 တင်ပြမည်' : '📤 Submit'}
           </button>
@@ -304,6 +314,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
   }
 
   async function deleteMarket(id) {
+    if (!(await confirmDialog(lang === 'mm' ? 'ဒီ ဈေးကွက်ကို ဖျက်မည်လား?' : 'Delete this market?', { danger: true }))) return
     const { error } = await supabase.from('markets').delete().eq('id', id)
     if (error) { showError(error.message); return }
     setList(l => l.filter(m => m.id !== id))
@@ -374,6 +385,14 @@ function AddItemModal({ onClose, onAdded, lang }) {
 
   async function submit() {
     if (!form.name) return
+    // N13 (v9.17): same name in the same category already exists — the
+    // list used to grow a silent duplicate.
+    const { data: siblings } = await supabase.from('price_items')
+      .select('name, name_en').eq('category', form.category)
+    const dup = (siblings || []).some(x =>
+      (x.name || '').trim().toLowerCase() === form.name.trim().toLowerCase() ||
+      (form.name_en && (x.name_en || '').trim().toLowerCase() === form.name_en.trim().toLowerCase()))
+    if (dup) { showError(lang === 'mm' ? 'အမည်တူ ကုန်ပစ္စည်း ရှိပြီးဖြစ်သည်' : 'An item with this name already exists'); return }
     setSubmitting(true)
     const { error } = await supabase.from('price_items').insert({
       name: form.name, name_en: form.name_en || null,
@@ -582,40 +601,39 @@ export default function MarketPricePage() {
       .then(({ data }) => { if (data) setFuelStations(data.map(s => s.name_mm || s.name)) })
   }, [])
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setLoadError(false)
-    // 30 s timeout + try/catch (was a bare await): a hung or rejected
-    // query used to leave the page on skeletons forever with no retry.
-    try {
-      const { data, error } = await withTimeout(supabase.from('current_prices').select('*'), 30000, 'Market prices')
-      if (error) throw error
-      setPrices(data || [])
+  // Issue 4c (v9.17): useQuery ['market-prices'] (same fetcher as the
+  // prefetch runner), so prices render from cache instantly on revisit
+  // under VPN. S18/S23: realtime refetches are background-only — the
+  // sync effect uses isLoading (not isFetching), so a live update never
+  // flashes the full-page skeletons.
+  const { data: marketData, isLoading: marketQueryLoading, isFetching: marketQueryFetching, isError: marketQueryError, refetch: refetchPrices } = useQuery({
+    queryKey: ['market-prices'],
+    queryFn: fetchMarketPrices,
+  })
+  useEffect(() => {
+    if (marketData) {
+      setPrices(marketData.prices)
       // "Updated … ago" comes from the data's own latest timestamp, never
       // from page-load time.
-      const latest = (data || [])
+      const latest = (marketData.prices || [])
         .map(p => p.last_reported || p.updated_at)
         .filter(Boolean)
         .sort()
         .pop()
       setLast(latest ? new Date(latest) : null)
-    } catch (e) {
-      console.warn(e)
-      setLoadError(true)
-      setPrices([])
+      setRecent(marketData.recent)
     }
-    setLoading(false)
-    supabase.from('price_reports').select('*, item:price_items(name, name_en, icon, unit, unit_en), reporter:profiles(full_name, nickname)').order('reported_at', { ascending: false }).limit(8).then(({ data }) => setRecent(data || []))
-  }, [])
+    setLoading(marketQueryLoading)
+    setLoadError(marketQueryError)
+  }, [marketData, marketQueryLoading, marketQueryError])
 
   useEffect(() => {
-    load()
     channelRef.current = supabase.channel('prices-live')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_reports' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_items' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_reports' }, () => refetchPrices())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_items' }, () => refetchPrices())
       .subscribe((status) => setLiveConnected(status === 'SUBSCRIBED'))
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); setLiveConnected(false) }
-  }, [load])
+  }, [])
 
   useEffect(() => {
     const on = () => setIsOnline(true)
@@ -654,13 +672,19 @@ export default function MarketPricePage() {
 
   async function handleVerify(item) {
     if (!item.median_price) return
+    const { data: latest } = await supabase.from('verified_prices')
+      .select('price').eq('item_id', item.id).order('created_at', { ascending: false }).limit(1)
+    if (latest && latest.length > 0 && Number(latest[0].price) === Number(item.median_price)) {
+      showToast('ok', lang === 'mm' ? `✓ ${item.name} ဈေးနှုန်း Verify ပြီးသား ဖြစ်သည်` : `✓ ${item.name} price already verified`)
+      return
+    }
     const { error } = await supabase.from('verified_prices').insert({
       item_id: item.id, price: item.median_price,
       verified_by: user?.id, note: `Community median (${item.report_count} reports)`,
     })
     if (error) { showError(error.message); return }
     showToast('ok', lang === 'mm' ? `✓ ${item.name} ဈေးနှုန်း Verify လုပ်ပြီး` : `✓ ${item.name} price verified`)
-    load()
+    refetchPrices()
   }
 
   const [editTarget, setEditTarget] = useState(null)
@@ -670,7 +694,7 @@ export default function MarketPricePage() {
     if (error) { showError(error.message); return }
     setEditTarget(null)
     showToast('ok', lang === 'mm' ? '✓ ပြင်ဆင်ပြီး' : '✓ Updated')
-    load()
+    refetchPrices()
   }
 
   async function handleDeleteItem(item) {
@@ -678,7 +702,7 @@ export default function MarketPricePage() {
     const { error } = await supabase.from('price_items').update({ is_active: false }).eq('id', item.id)
     if (error) { showError(error.message); return }
     showToast('ok', lang === 'mm' ? 'ဖျက်ပြီး' : 'Deleted')
-    load()
+    refetchPrices()
   }
 
   // Group by category → then by subcategory within each category
@@ -708,8 +732,8 @@ export default function MarketPricePage() {
             <h1 className="font-display font-bold text-xl text-white">🛒 {lang === 'mm' ? 'ဈေးနှုန်းဘုတ်' : 'Market Prices'}</h1>
             <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? 'Community တင်ပြသော ဈေးနှုန်း • Real-time' : 'Community-reported prices • Real-time'}</p>
           </div>
-          <button onClick={load} disabled={loading} className="flex items-center gap-1 text-[10px] text-brand-300 mt-1">
-            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          <button onClick={() => refetchPrices()} disabled={marketQueryFetching} className="flex items-center gap-1 text-[10px] text-brand-300 mt-1">
+            <RefreshCw size={12} className={marketQueryFetching ? 'animate-spin' : ''} />
             {lastUpdate && !loading ? timeAgoShort(lastUpdate.toISOString(), lang) : '...'}
           </button>
         </div>
@@ -767,7 +791,7 @@ export default function MarketPricePage() {
           loadError ? (
             <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
               <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
-              <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+              <button onClick={() => refetchPrices()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
             </div>
           ) :
           displayed.map(group => (
@@ -841,10 +865,12 @@ export default function MarketPricePage() {
 
       {/* Admin action buttons */}
       <div className="px-4 mb-4 space-y-2">
-        <button onClick={() => setShowAdd(true)}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-white/15 text-white/60 text-sm hover:border-brand-400/30 hover:text-brand-300 transition-colors">
-          <Plus size={16} /> {lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}
-        </button>
+        {isModerator && (
+          <button onClick={() => setShowAdd(true)}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-white/15 text-white/60 text-sm hover:border-brand-400/30 hover:text-brand-300 transition-colors">
+            <Plus size={16} /> {lang === 'mm' ? 'ကုန်ပစ္စည်း အသစ်ထည့်မည်' : 'Add Custom Item'}
+          </button>
+        )}
         {isModerator && (
           <button onClick={() => setShowManageMarkets(true)}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl border border-white/10 text-white/60 text-xs hover:border-brand-400/30 hover:text-brand-300 transition-colors">
@@ -867,7 +893,7 @@ export default function MarketPricePage() {
                 <span className="text-white/60">{r.reporter?.nickname ? `@${r.reporter.nickname}` : 'Guest'}</span>
                 <span className="text-white/60">{timeAgoShort(r.reported_at, lang)}</span>
                 {isModerator && (
-                  <button onClick={async () => { const { error } = await supabase.from('price_reports').delete().eq('id', r.id); if (error) { showError(error.message); return } load() }} className="w-5 h-5 flex items-center justify-center hover:text-red-400 transition-colors">
+                  <button onClick={async () => { if (!(await confirmDialog(lang === 'mm' ? 'ဒီ Report ကို ဖျက်မည်လား?' : 'Delete this report?', { danger: true }))) return; const { error } = await supabase.from('price_reports').delete().eq('id', r.id); if (error) { showError(error.message); return } refetchPrices() }} className="w-5 h-5 flex items-center justify-center hover:text-red-400 transition-colors">
                     <Trash2 size={10} />
                   </button>
                 )}

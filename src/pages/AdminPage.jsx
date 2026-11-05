@@ -4,7 +4,7 @@ import {
   ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, 
   LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, 
   UserCog, Search, RefreshCw, TrendingUp, FileText, Star,
-  EyeOff, Calendar, Megaphone, Shield, BadgeCheck, Lock
+  EyeOff, Calendar, Megaphone, Shield, BadgeCheck, Lock, Database, Download
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
@@ -14,6 +14,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { showError, showSuccess } from '../lib/toast'
 import { yangonToday, formatMyanmarDate } from '../lib/myanmarDate'
+import { toCSV } from '../lib/csv'
+import { formatPeakHour, devicePercentages } from '../lib/visitTracking'
+import { validatePhone, validateUrl } from '../lib/validation'
 
 const PRESET_LINKS = [
   { url: '', label: '-- App ထဲရှိ စာမျက်နှာတစ်ခုကို ရွေးပါ --' },
@@ -38,6 +41,11 @@ export default function AdminPage() {
   const [listingFilter, setListingFilter] = useState('all')
   const [editingId, setEditingId]     = useState(null)
   const [editForm, setEditForm]       = useState({})
+  const [editOriginal, setEditOriginal] = useState(null) // M6 (v9.17): row before the edit, for the audit log
+  const [listingsLimit, setListingsLimit] = useState(50) // S2 (v9.17): admin listings pagination
+  const [listingsHasMore, setListingsHasMore] = useState(false)
+  const [usersLimit, setUsersLimit] = useState(50) // S2 (v9.17): admin users pagination
+  const [usersHasMore, setUsersHasMore] = useState(false)
   const [reports, setReports]         = useState({})
   const [deleting, setDeleting]       = useState(null)
   // Unfiltered pending count for the filter badge (G7) — the listing
@@ -76,6 +84,13 @@ export default function AdminPage() {
   // Per-listing busy id for Approve/Suspend (H-L5).
   const [listingBusy, setListingBusy] = useState(null)
   const [editSaving, setEditSaving] = useState(false)
+  // Data tab (v9.16) — admin-only export view: listings + users + visitor stats.
+  const [visitStats, setVisitStats] = useState(null)
+  const [visitStatsLoading, setVisitStatsLoading] = useState(false)
+  const [dataRows, setDataRows] = useState([])
+  const [dataUsers, setDataUsers] = useState([])
+  const [dataLoading, setDataLoading] = useState(false)
+  const [exportBusy, setExportBusy] = useState(null)
 
   async function loadListings() {
     setLoading(true)
@@ -90,11 +105,15 @@ export default function AdminPage() {
       else if (listingFilter === 'pending')   query = query.eq('status', 'pending')
       else query = query.neq('status', 'suspended')
 
+      // S2 (v9.17): page the admin list (was: every listing at once).
+      // Fetch one extra row to know whether a Load more button is needed.
+      query = query.range(0, listingsLimit)
       // 30 s timeout (was none): a hung listings query left the admin
       // table on skeletons forever.
       const { data: rows, error } = await withTimeout(query, 30000, 'Admin listings')
       if (error) throw error
-      setData(rows || [])
+      setListingsHasMore((rows || []).length > listingsLimit)
+      setData((rows || []).slice(0, listingsLimit))
       // The rows are visible now. The badge/report counts below are
       // secondary: each has its own timeout and must never gate the
       // list (a hung count query used to hold loading=true).
@@ -142,8 +161,10 @@ export default function AdminPage() {
       // days at Yangon midnight), not "now minus 7d" in UTC — the old
       // toISOString() version was up to ~6.5h off.
       const [yy, mm, dd] = yangonToday().split('-').map(Number)
-      const seven = new Date(Date.UTC(yy, mm - 1, dd - 7))
-      const sevenDaysAgo = seven.toISOString().slice(0, 10) + 'T00:00:00+06:30'
+      // S5 (v9.17): "New (7d)" is 7 days inclusive — today minus 6 days,
+      // not today minus 7 (which spans 8 calendar days).
+      const seven = new Date(Date.UTC(yy, mm - 1, dd - 6))
+      const weekAgo = seven.toISOString().slice(0, 10) + 'T00:00:00+06:30'
 
       // Parallel + allSettled + one 30 s timeout (was 13 sequential
       // awaits with no timeout): on slow mobile data the sequence
@@ -153,7 +174,7 @@ export default function AdminPage() {
       const countQueries = [
         supabase.from('profiles').select('*', { count: 'exact', head: true }),
         supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', todayStr),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo),
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', weekAgo),
         // Server-side counts per role (was: download every profile row
         // and count client-side — wrong past 1,000 users). "member" is
         // every non-null role that is neither admin nor moderator, which
@@ -168,6 +189,9 @@ export default function AdminPage() {
         supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'event'),
         supabase.from('posts').select('*', { count: 'exact', head: true }).eq('type', 'announcement'),
         supabase.from('reviews').select('*', { count: 'exact', head: true }),
+        // M4 (v9.17): super_admins were counted inside "member" — count
+        // them separately so they can be subtracted like admin/moderator.
+        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'super_admin'),
       ]
       const countResults = await withTimeout(Promise.allSettled(countQueries), 30000, 'Dashboard stats')
       const c = (i) => (countResults[i].status === 'fulfilled' ? (countResults[i].value?.count || 0) : 0)
@@ -177,10 +201,13 @@ export default function AdminPage() {
       const adminCount = c(3)
       const moderatorCount = c(4)
       const nonNullRoleCount = c(5)
+      const superAdminCount = c(13)
       const usersByRole = {
         admin: adminCount || 0,
         moderator: moderatorCount || 0,
-        member: Math.max(0, (nonNullRoleCount || 0) - (adminCount || 0) - (moderatorCount || 0)),
+        // M4: member is every non-null role that is neither admin,
+        // moderator nor super_admin.
+        member: Math.max(0, (nonNullRoleCount || 0) - (adminCount || 0) - (moderatorCount || 0) - (superAdminCount || 0)),
       }
 
       const approvedListings = c(6)
@@ -218,9 +245,10 @@ export default function AdminPage() {
     setLoading(true)
     try {
       // 30 s timeout (was none): a hung query left the users table on skeletons forever.
-      const { data, error } = await withTimeout(supabase.from('profiles').select('*').order('created_at', { ascending: false }), 30000, 'Admin users')
+      const { data, error } = await withTimeout(supabase.from('profiles').select('*').order('created_at', { ascending: false }).range(0, usersLimit), 30000, 'Admin users')
       if (error) throw error
-      setUsersList(data || [])
+      setUsersHasMore((data || []).length > usersLimit)
+      setUsersList((data || []).slice(0, usersLimit))
     } catch (e) {
       console.warn('Load users error:', e)
       showError('Users ရယူရာတွင် အမှားရှိသည်: ' + e.message)
@@ -247,11 +275,97 @@ export default function AdminPage() {
   }
 
   async function loadPendingClaimCount() {
-    const { count } = await supabase
-      .from('listing_claims')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'pending')
-    setPendingClaims(count || 0)
+    // N1 (v9.17): a hung/failed count must not crash the tab — the badge
+    // simply keeps its previous value.
+    try {
+      const { count } = await withTimeout(supabase
+        .from('listing_claims')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending'), 30000, 'Admin pending claims')
+      setPendingClaims(count || 0)
+    } catch (e) { console.warn('Pending claim count failed:', e) }
+  }
+
+  // Data tab (v9.16): everything the Admin needs to take the data out.
+  // Listings use the admin RLS policy ("Admins can view all listings") so
+  // ALL statuses are included, not just the listings tab's filter. Users
+  // come from profiles (select * — the admin already receives every
+  // column). Visitor stats come from the get_visit_stats RPC (aggregates
+  // only — raw visit rows are never exposed). Each section tolerates its
+  // own failure: one failed query shows '—'/0, never blanks the tab.
+  async function loadDataTab() {
+    setDataLoading(true)
+    setVisitStatsLoading(true)
+    try {
+      const [listRes, userRes, visitRes] = await Promise.allSettled([
+        withTimeout(supabase
+          .from('listings')
+          .select('*, category:categories(name, name_mm), submitter:profiles!submitted_by(full_name)')
+          .order('created_at', { ascending: false }), 30000, 'Admin data listings'),
+        withTimeout(supabase.from('profiles').select('*').order('created_at', { ascending: false }), 30000, 'Admin data users'),
+        withTimeout(supabase.rpc('get_visit_stats'), 30000, 'Admin visit stats'),
+      ])
+      if (listRes.status === 'fulfilled' && !listRes.value.error) setDataRows(listRes.value.data || [])
+      else console.warn('Data listings failed:', listRes.status === 'fulfilled' ? listRes.value.error : listRes.reason)
+      if (userRes.status === 'fulfilled' && !userRes.value.error) setDataUsers(userRes.value.data || [])
+      else console.warn('Data users failed:', userRes.status === 'fulfilled' ? userRes.value.error : userRes.reason)
+      if (visitRes.status === 'fulfilled' && !visitRes.value.error && visitRes.value.data) setVisitStats(visitRes.value.data)
+      else console.warn('Visit stats failed:', visitRes.status === 'fulfilled' ? visitRes.value.error : visitRes.reason)
+    } catch (e) { console.warn('Data tab load failed:', e) }
+    setDataLoading(false)
+    setVisitStatsLoading(false)
+  }
+
+  function downloadCSV(filename, headers, rows) {
+    if (!rows || rows.length === 0) { showError('ဒေါင်းလုတ်လုပ်ရန် Data မရှိပါ'); return }
+    try {
+      const blob = new Blob([toCSV(headers, rows)], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+      showSuccess('✓ CSV ဒေါင်းလုတ်လုပ်ပြီးပါပြီ')
+    } catch (e) { showError('CSV ဒေါင်းလုတ်မရပါ: ' + e.message) }
+  }
+
+  function exportListingsCSV() {
+    setExportBusy('listings')
+    const date = yangonToday()
+    const headers = ['name', 'name_mm', 'category', 'city', 'township', 'address', 'phone_1', 'phone_2', 'viber', 'telegram', 'facebook', 'website', 'status', 'is_verified', 'is_featured', 'rating_avg', 'rating_count', 'submitted_by', 'created_at']
+    const rows = dataRows.map(r => [
+      r.name, r.name_mm, r.category?.name_mm || r.category?.name, r.city, r.township, r.address,
+      r.phone_1, r.phone_2, r.viber, r.telegram, r.facebook, r.website,
+      r.status, r.is_verified ? 'yes' : 'no', r.is_featured ? 'yes' : 'no',
+      r.rating_avg, r.rating_count, r.submitter?.full_name, r.created_at,
+    ])
+    downloadCSV(`cherry-listings-${date}.csv`, headers, rows)
+    setExportBusy(null)
+  }
+
+  function exportUsersCSV() {
+    setExportBusy('users')
+    const date = yangonToday()
+    const headers = ['full_name', 'username', 'role', 'phone', 'created_at']
+    const rows = dataUsers.map(u => [u.full_name, u.username, u.role || 'member', u.phone, u.created_at])
+    downloadCSV(`cherry-users-${date}.csv`, headers, rows)
+    setExportBusy(null)
+  }
+
+  function exportVisitsCSV(kind) {
+    setExportBusy('visits-' + kind)
+    const date = yangonToday()
+    if (kind === 'daily') {
+      const headers = ['date', 'visits']
+      const rows = (visitStats?.daily || []).map(d => [d.date, d.count])
+      downloadCSV(`cherry-visits-daily-${date}.csv`, headers, rows)
+    } else {
+      const headers = ['country_code', 'country', 'visits']
+      const rows = (visitStats?.by_country || []).map(c => [c.code, c.name, c.count])
+      downloadCSV(`cherry-visits-countries-${date}.csv`, headers, rows)
+    }
+    setExportBusy(null)
   }
 
   async function handleClaimDecision(claim, approve) {
@@ -296,11 +410,24 @@ export default function AdminPage() {
         // the listing does not keep a stale verify_type='cherry' from
         // an earlier admin approval (which would keep showing the
         // "🍒 Cherry Directory Verified" badge above the owner card).
-        const { error: vtErr } = await supabase
+        // S3 (v9.17): re-check ownership in the same update — the
+        // trigger sets owner_id = this claimant, so a 0-row result means
+        // another admin's approval won the race. N2: surface the failure
+        // instead of swallowing it in console.warn.
+        const { data: vtRows, error: vtErr } = await supabase
           .from('listings')
           .update({ verify_type: 'owner' })
           .eq('id', claim.listing_id)
-        if (vtErr) console.warn('verify_type owner update failed:', vtErr.message)
+          .eq('owner_id', claim.user_id)
+          .select('id')
+        if (vtErr) { showError('verify_type ပြင်မရပါ: ' + vtErr.message); setClaimBusy(null); return }
+        if (!vtRows || vtRows.length === 0) {
+          showError('ဤလုပ်ငန်း၏ ပိုင်ရှင်ကို အခြား Admin မှ အတည်ပြုပြီးဖြစ်သည်')
+          loadClaims()
+          loadPendingClaimCount()
+          setClaimBusy(null)
+          return
+        }
       }
       // The DB trigger handle_claim_approved() verifies ownership
       // (is_verified + owner_id); handle_claim_points() awards +30.
@@ -424,7 +551,8 @@ export default function AdminPage() {
     if (tab === 'quicklinks') loadQuickLinks()
     if (tab === 'users') loadUsers()
     if (tab === 'claims') loadClaims()
-  }, [tab, listingFilter, authLoading, isAuthorized])
+    if (tab === 'data') loadDataTab()
+  }, [tab, listingFilter, listingsLimit, usersLimit, authLoading, isAuthorized])
 
   async function handleApprove(id) {
     setListingBusy(id)
@@ -508,10 +636,15 @@ export default function AdminPage() {
   async function handleEdit(listing) {
     setEditingId(listing.id)
     setEditForm(listing)
+    setEditOriginal(listing) // M6 (v9.17): the audit log needs the BEFORE row
   }
 
   async function handleSaveEdit(id) {
     const { name, name_mm, description, description_mm, address, phone_1, city, township } = editForm
+    // S4 (v9.17): a listing needs at least one name, and a phone must be
+    // a real number when given — same rules as the public forms.
+    if (!name?.trim() && !name_mm?.trim()) { showError('လုပ်ငန်းအမည် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ'); return }
+    if (phone_1?.trim() && !validatePhone(phone_1)) { showError('ဖုန်းနံပါတ် မှန်ကန်စွာ ထည့်ပါ'); return }
     setEditSaving(true)
     const { error } = await supabase.from('listings').update({
       name, name_mm, description, description_mm, address, phone_1, city, township
@@ -519,7 +652,7 @@ export default function AdminPage() {
     if (error) { setEditSaving(false); return showError('သိမ်းရာတွင် အမှားဖြစ်သည်: ' + error.message) }
 
     // Audit log (fire-and-forget) — edit previously had no audit entry.
-    log({ action: 'update', table: 'listings', id, name: name_mm || name, before: { name }, after: { name, name_mm, description, description_mm, address, phone_1, city, township } })
+    log({ action: 'update', table: 'listings', id, name: name_mm || name, before: editOriginal, after: { name, name_mm, description, description_mm, address, phone_1, city, township } })
       .then(ok => { if (!ok) console.warn('Audit log failed for listing edit') })
     setEditingId(null)
     setEditSaving(false)
@@ -532,6 +665,10 @@ export default function AdminPage() {
       showError('Title နှင့် URL ထည့်ရန်လိုအပ်ပါတယ်')
       return
     }
+    // N3 (v9.17): a saved link must be a real http(s) URL (no javascript:)
+    // and its CSS classes must be plain class names — no url()/expressions.
+    if (!validateUrl(linkForm.url)) { showError('URL မှန်ကန်စွာ ထည့်ပါ (https://...)'); return }
+    if (/url\s*\(|expression\s*\(|[;<>"'`]/.test(linkForm.css_classes || '')) { showError('CSS classes တွင် url() / အထူးစာလုံး ပါလို့ မရပါ'); return }
 
     const payload = { ...linkForm }
     delete payload.id
@@ -569,9 +706,19 @@ export default function AdminPage() {
     }
   }
 
-  const filteredUsers = usersList.filter(u => 
-    (u.full_name || '').toLowerCase().includes(userSearch.toLowerCase())
-  )
+  // S6 (v9.17): search matches name, username, nickname and phone.
+  const superAdminCount = usersList.filter(u => u.role === 'super_admin').length
+  const filteredUsers = usersList.filter(u => {
+    const q = userSearch.trim().toLowerCase()
+    if (!q) return true
+    return [u.full_name, u.username, u.nickname, u.phone].some(v => (v || '').toLowerCase().includes(q))
+  })
+
+  // Data tab derived values (v9.16) — computed at top level so the JSX stays clean.
+  const visitTotal = Number(visitStats?.total) || 0
+  const visitPct = devicePercentages(visitStats?.by_device, visitTotal)
+  const visitTopCountry = visitStats?.by_country?.[0] || null
+  const visitPeak = formatPeakHour(visitStats?.by_hour)
 
   // Render guard: the route guard in App.jsx is the first line of
   // defence; this page never renders the panel to a non-admin/mod
@@ -607,6 +754,9 @@ export default function AdminPage() {
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           <button onClick={() => setTab('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <LayoutDashboard size={14} /> Dashboard
+          </button>
+          <button onClick={() => setTab('data')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'data' ? 'bg-teal-600 text-white' : 'bg-white/5 text-white/60'}`}>
+            <Database size={14} /> Data
           </button>
           <button onClick={() => setTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'users' ? 'bg-pink-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <UserCog size={14} /> Users
@@ -689,6 +839,62 @@ export default function AdminPage() {
         </div>
       )}
 
+      {tab === 'data' && (
+        <div className="px-4 space-y-6 animate-fade-in">
+          <p className="text-xs text-white/50 font-myanmar">Admin သာ ကြည့်နိုင်သည် — လုပ်ငန်း / User / လာကြည့်သူ ဒေတာကို CSV အဖြစ် ယူလို့ရသည် (Excel မှာ ဖွင့်လို့ရ)</p>
+
+          {/* Visitor stats (v9.16) — same get_visit_stats RPC as /visitors */}
+          <div>
+            <h3 className="text-sm font-semibold text-white/70 mb-2">👀 လာကြည့်သူများ</h3>
+            {visitStatsLoading ? (
+              <p className="text-white/60 text-center py-4 text-sm">Loading...</p>
+            ) : visitStats === null ? (
+              <p className="text-white/60 text-center py-4 text-sm font-myanmar">လာကြည့်သူ စာရင်းအင်း မရသေးပါ (—)</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <StatCard title="Total" value={visitTotal} icon={Users} color="text-blue-400" />
+                  <StatCard title="Today" value={Number(visitStats.today) || 0} icon={TrendingUp} color="text-yellow-400" />
+                  <StatCard title="This week" value={Number(visitStats.week) || 0} icon={TrendingUp} color="text-amber-400" />
+                  <StatCard title="This month" value={Number(visitStats.month) || 0} icon={TrendingUp} color="text-white/60" />
+                </div>
+                <div className="mt-3 space-y-1 text-xs text-white/70">
+                  <p>📱 ဖုန်း {visitPct.phone}% • 💻 ကွန်ပျူတာ {visitPct.desktop}%{Number(visitStats.by_device?.tablet) > 0 ? ` • 📟 Tablet ${visitPct.tablet}%` : ''}</p>
+                  <p>🌍 အများဆုံး: {visitTopCountry ? `${visitTopCountry.name} (${Number(visitTopCountry.count).toLocaleString()})` : '—'}</p>
+                  <p>🕐 အကြည့်များဆုံးအချိန်: {visitPeak || '—'}</p>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => exportVisitsCSV('daily')} disabled={exportBusy !== null} className="flex-1 px-3 py-2.5 bg-white/8 border border-white/10 text-white/80 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                    <Download size={14} /> နေ့စဉ် CSV
+                  </button>
+                  <button onClick={() => exportVisitsCSV('countries')} disabled={exportBusy !== null} className="flex-1 px-3 py-2.5 bg-white/8 border border-white/10 text-white/80 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                    <Download size={14} /> နိုင်ငံ CSV
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Listings export */}
+          <div>
+            <h3 className="text-sm font-semibold text-white/70 mb-2">📋 လုပ်ငန်းများ ({dataRows.length.toLocaleString()})</h3>
+            <button onClick={exportListingsCSV} disabled={dataLoading || exportBusy !== null} className="w-full px-3 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+              <Download size={14} /> {exportBusy === 'listings' ? '...' : 'Listings CSV ဒေါင်းလုတ်'}
+            </button>
+            <p className="text-[10px] text-white/40 mt-1.5 font-myanmar">အခြေအနေ အားလုံး (Approved / Pending / Suspended) ပါဝင်သည်</p>
+          </div>
+
+          {/* Users export */}
+          <div>
+            <h3 className="text-sm font-semibold text-white/70 mb-2">👥 Users ({dataUsers.length.toLocaleString()})</h3>
+            <button onClick={exportUsersCSV} disabled={dataLoading || exportBusy !== null} className="w-full px-3 py-2.5 bg-pink-600 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+              <Download size={14} /> {exportBusy === 'users' ? '...' : 'Users CSV ဒေါင်းလုတ်'}
+            </button>
+            <p className="text-[10px] text-white/40 mt-1.5 font-myanmar">နာမည် / Role / ဖုန်း / စတင်သည့်ရက် — Admin သာ ကြည့်နိုင်သည်</p>
+          </div>
+        </div>
+      )}
+
       {tab === 'users' && (
         <div className="px-4 space-y-4 animate-fade-in">
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
@@ -728,10 +934,11 @@ export default function AdminPage() {
                     <select 
                       value={u.role === 'user' ? 'member' : (u.role || 'member')}
                       onChange={(e) => handleRoleChange(u.id, e.target.value)}
-                      disabled={!isSuperAdmin || u.role === 'super_admin'}
+                      disabled={!isSuperAdmin || u.id === user?.id || (u.role === 'super_admin' && superAdminCount <= 1)}
                       title={
                         !isSuperAdmin ? 'Role ပြောင်းရန် Super Admin သာ ခွင့်ရှိသည်'
-                        : u.role === 'super_admin' ? 'Super Admin role ကို ဒီနေရာက ပြောင်းလို့မရပါ'
+                        : u.id === user?.id ? 'ကိုယ့်ရဲ့ Role ကို ကိုယ်တိုင်ပြောင်းလို့မရပါ'
+                        : u.role === 'super_admin' && superAdminCount <= 1 ? 'နောက်ဆုံး Super Admin ဖြစ်နေလို့ ပြောင်းလို့မရပါ'
                         : ''
                       }
                       className={`text-xs px-2 py-1.5 rounded-lg border outline-none font-bold disabled:opacity-60 ${
@@ -768,6 +975,9 @@ export default function AdminPage() {
                   )}
                 </div>
               ))
+            )}
+            {usersHasMore && !loading && (
+              <button onClick={() => setUsersLimit(l => l + 50)} className="w-full px-3 py-2.5 bg-white/5 border border-white/10 text-white/70 rounded-xl text-xs font-bold">ထပ်တင်ရန် • Load more</button>
             )}
           </div>
         </div>
@@ -953,6 +1163,7 @@ export default function AdminPage() {
                 <div key={item.id} className="bg-white/5 border border-white/8 rounded-2xl p-4">
                   {editingId === item.id ? (
                     <div className="space-y-3">
+                      <p className="text-[10px] text-white/50 font-myanmar">လုပ်ငန်းအမည် * (မြန်မာ သို့မဟုတ် English တစ်ခု)</p>
                       <input value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white" placeholder="Name" />
                       <input value={editForm.name_mm || ''} onChange={e => setEditForm({...editForm, name_mm: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white font-myanmar" placeholder="Name (Myanmar)" />
                       <textarea value={editForm.description || ''} onChange={e => setEditForm({...editForm, description: e.target.value})} className="w-full bg-white/8 border border-white/12 rounded-lg px-3 py-2 text-white" placeholder="Description" rows="3" />
@@ -1018,6 +1229,9 @@ export default function AdminPage() {
                   )}
                 </div>
               ))
+            )}
+            {listingsHasMore && !loading && (
+              <button onClick={() => setListingsLimit(l => l + 50)} className="w-full px-3 py-2.5 bg-white/5 border border-white/10 text-white/70 rounded-xl text-xs font-bold">ထပ်တင်ရန် • Load more</button>
             )}
           </div>
         </div>

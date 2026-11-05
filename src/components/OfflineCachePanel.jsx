@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Database, Check, X, RefreshCw, Trash2, Clock, HardDrive, AlertCircle } from 'lucide-react'
 import { subscribe, inspectLocalStorage, clearCache } from '../lib/cacheStatus'
+import { runPrefetch } from '../lib/prefetch'
 import { useLang } from '../contexts/LangContext'
 import { useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from '../lib/confirmDialog'
@@ -33,6 +34,27 @@ export default function OfflineCachePanel() {
     const h = Math.floor(m / 60)
     if (h < 24) return l === 'mm' ? `${h} နာရီက` : `${h}h ago`
     return d.toLocaleString()
+  }
+
+  // v9.17 (Issue 5): Re-save is back — it was removed in v9.3 only
+  // because no prefetch existed. Now runPrefetch exists, so this
+  // manually re-runs it (forced, bypassing the 15-min throttle) and
+  // refreshes the storage readout when it finishes.
+  const [resaving, setResaving] = useState(false)
+  async function handleResave() {
+    if (resaving || status?.running) return
+    setResaving(true)
+    try {
+      await runPrefetch({ force: true })
+      // The sync-storage persister throttles writes by 1 s (trailing),
+      // so the readout must wait for the write to land — an immediate
+      // read would show the pre-run (stale/0) numbers.
+      await new Promise(r => setTimeout(r, 1200))
+      setStorage(inspectLocalStorage())
+      showSuccess(lang === 'mm' ? 'Offline data ပြန်သိမ်းပြီးပါပြီ' : 'Offline data re-saved')
+    } finally {
+      setResaving(false)
+    }
   }
 
   async function handleClear() {
@@ -152,10 +174,18 @@ export default function OfflineCachePanel() {
             </div>
           )}
 
-          {/* Actions — v9.3 (C-M2): the "Re-save" button was removed. It only
-              reloaded the page on the claim that a prefetch would re-run —
-              no prefetch exists, so the button pretended to save nothing. */}
+          {/* Actions — v9.17: the "Re-save" button is back (it was
+              removed in v9.3 only because no prefetch existed — now one
+              does, and this button runs it manually). */}
           <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleResave}
+              disabled={running || resaving}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-brand-600/30 border border-brand-400/40 text-brand-200 text-xs font-bold transition-colors disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={resaving ? 'animate-spin' : ''} />
+              {lang === 'mm' ? 'ပြန်သိမ်းမည်' : 'Re-save'}
+            </button>
             {cached && (
               <button
                 onClick={handleClear}

@@ -13,6 +13,7 @@ import { confirmDialog } from '../lib/confirmDialog'
 import { showError, showSuccess } from '../lib/toast'
 import { yangonToday, mmtParts, formatMyanmarDate } from '../lib/myanmarDate'
 import { maskPhone, toTelHref } from '../lib/phoneMask'
+import { validateUrl } from '../lib/validation'
 import ShareButton from '../components/ShareButton'
 
 // Short date in Myanmar time ("Jan 5, 2026" / "ဇန်နဝါရီ 5 ရက်၊ 2026") —
@@ -64,9 +65,15 @@ const DON_CATS = [
 ]
 
 function CopyButton({ value, label, lang }) {
+  const { isLoggedIn } = useAuth()
   const [copied, setCopied] = useState(false)
+  // M5 (v9.17): payment numbers are masked for guests (BusSchedulePage
+  // pattern) — copying the masked value would be useless, so the button
+  // only copies for logged-in users.
+  const shown = maskPhone(value, isLoggedIn)
   async function handleCopy(e) {
     e.stopPropagation()
+    if (!isLoggedIn) return
     try {
       await navigator.clipboard.writeText(value)
       setCopied(true)
@@ -82,7 +89,7 @@ function CopyButton({ value, label, lang }) {
       {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} className="text-white/50" />}
       <span className="flex flex-col items-start leading-tight">
         {label && <span className="text-[11px] font-bold text-white/85">{label}</span>}
-        <span className="text-[11px] text-white/60 font-mono">{value}</span>
+        <span className="text-[11px] text-white/60 font-mono">{shown}</span>
       </span>
     </button>
   )
@@ -144,9 +151,14 @@ export function DonationPage() {
   const [imgLoading, setImgLoading] = useState(false)
 
   // E6: scroll the shared campaign into view once the list has loaded.
+  // N15 (v9.17): an unknown highlight id says so instead of silently
+  // showing the plain list.
+  const [highlightMissing, setHighlightMissing] = useState(false)
   useEffect(() => {
     if (!highlightId || loading || items.length === 0) return
-    document.getElementById(`donation-${highlightId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const el = document.getElementById(`donation-${highlightId}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    else setHighlightMissing(true)
   }, [highlightId, loading, items.length])
 
   async function handleImageUpload(file) {
@@ -189,6 +201,10 @@ export function DonationPage() {
   async function submit() {
     if (!isLoggedIn) { showError(lang === 'mm' ? 'Campaign တင်ရန် Login ဝင်ပါ' : 'Login to post a campaign'); return }
     if (!form.title_mm) { showError(lang === 'mm' ? 'ခေါင်းစဉ် ထည့်ပါ' : 'Title is required'); return }
+    // N15 (v9.17): a deadline in the past makes no sense, and a negative
+    // target is a data error.
+    if (form.deadline && form.deadline < yangonToday()) { showError(lang === 'mm' ? 'ပြီးဆုံးရက်သည် ယနေ့ထက် နောက်ကျရမည်' : 'Deadline must be today or later'); return }
+    if (form.target_amount && (isNaN(parseInt(form.target_amount)) || parseInt(form.target_amount) < 0)) { showError(lang === 'mm' ? 'ပန်းတိုင် ငွေပမာဏ မှန်ကန်စွာ ထည့်ပါ' : 'Enter a valid target amount'); return }
     // A campaign with no way to donate through is useless — require at
     // least one contact/payment method.
     if (!form.contact_phone && !form.kbz_pay && !form.wave_pay && !form.bank_account) {
@@ -236,6 +252,13 @@ export function DonationPage() {
 
   return (
     <div className="pb-8">
+      {highlightMissing && (
+        <div className="px-4 pt-4">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2 text-xs text-amber-300 font-myanmar">
+            {lang === 'mm' ? 'မျှဝေထားသော လှူဒါန်းမှု မတွေ့တော့ပါ' : 'The shared campaign was not found'}
+          </div>
+        </div>
+      )}
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">❤️ {lang === 'mm' ? 'လှူဒါန်းမှု' : 'Donations'}</h1>
@@ -348,11 +371,13 @@ export function DonationPage() {
 
                {/* Contact + payment with copy buttons */}
                <div className="flex flex-wrap gap-1.5">
-                 {d.contact_phone && (
-                   <a href={`tel:${d.contact_phone}`} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20">
-                     📞 {d.contact_phone}
+                 {d.contact_phone && (isLoggedIn ? (
+                   <a href={toTelHref(d.contact_phone, true)} className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20">
+                     📞 {maskPhone(d.contact_phone, true)}
                    </a>
-                 )}
+                 ) : (
+                   <span className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-white/60">📞 {maskPhone(d.contact_phone, false)}</span>
+                 ))}
                  {d.kbz_pay && <CopyButton value={d.kbz_pay} label="KBZPay" lang={lang} />}
                  {d.wave_pay && <CopyButton value={d.wave_pay} label="WavePay" lang={lang} />}
                  {d.bank_account && <CopyButton value={d.bank_account} label={d.bank_name || 'Bank'} lang={lang} />}
@@ -498,7 +523,7 @@ function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
         )}
       </div>
 
-      {service.blood_types_needed?.length > 0 && (
+      {service.type === 'blood_drive' && service.blood_types_needed?.length > 0 && (
         <div className="flex gap-1.5 flex-wrap">
           <span className="text-[9px] text-red-400/70 font-myanmar">🩸 လိုအပ်သော သွေးအုပ်စု:</span>
           {service.blood_types_needed.map(bt => (
@@ -513,13 +538,33 @@ function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
         {service.start_time && <span>🕐 {service.start_time}{service.end_time ? `–${service.end_time}` : ''}</span>}
       </div>
 
+      {/* S20 (v9.17): the gallery was never rendered (Donations pattern). */}
+      {service.images?.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+          {service.images.slice(0, 4).map((img, i) => (
+            <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-white/10">
+              <img src={img} alt={service.title_mm || 'ဝန်ဆောင်မှု ပုံ'} className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
+            </a>
+          ))}
+          {service.images.length > 4 && (
+            <div className="flex-shrink-0 w-16 h-16 rounded-lg bg-white/8 border border-white/10 flex items-center justify-center text-[10px] text-white/50 font-bold">
+              +{service.images.length - 4}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* E17/E23 (v9.6): opening hours + specialty — shown only when set. */}
       {service.opening_hours && <p className="text-xs text-white/60 font-myanmar">🕒 {lang === 'mm' ? 'ဖွင့်ချိန်' : 'Hours'}: {service.opening_hours}</p>}
       {service.specialty && <p className="text-xs text-white/60 font-myanmar">⭐ {lang === 'mm' ? 'အထူးပြု' : 'Specialty'}: {service.specialty}</p>}
 
       <div className="flex gap-2 flex-wrap">
-        {service.contact_phone && <a href={`tel:${service.contact_phone}`} className="flex items-center gap-1.5 min-h-9 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">📞 {lang === 'mm' ? 'ဖုန်းခေါ်မည်' : 'Call'} {service.contact_phone}</a>}
-        {service.facebook && <a href={service.facebook} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400">FB Page →</a>}
+        {service.contact_phone && (userId ? (
+          <a href={toTelHref(service.contact_phone, true)} className="flex items-center gap-1.5 min-h-9 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">📞 {lang === 'mm' ? 'ဖုန်းခေါ်မည်' : 'Call'} {maskPhone(service.contact_phone, true)}</a>
+        ) : (
+          <span className="flex items-center gap-1.5 min-h-9 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white/60 text-sm font-bold">📞 {maskPhone(service.contact_phone, false)}</span>
+        ))}
+        {service.facebook && (service.facebook.startsWith('http://') || service.facebook.startsWith('https://')) && <a href={service.facebook} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400">FB Page →</a>}
       </div>
     </div>
   )
@@ -583,6 +628,8 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
 
   async function submit() {
     if (!form.title_mm) return
+    // M6 (v9.17): a javascript: "facebook" link must never be saved.
+    if (form.facebook && !validateUrl(form.facebook)) { showError(lang === 'mm' ? 'Facebook လင့်ခ် မှန်ကန်စွာ ထည့်ပါ (https://...)' : 'Enter a valid Facebook link (https://...)'); return }
     setSubmitting(true)
 
     const payload = {
@@ -637,7 +684,7 @@ function HealthForm({ onClose, onSuccess, lang, editTarget }) {
           <label className="block text-xs text-white/50 mb-1.5">အမျိုးအစား</label>
           <div className="flex gap-2 flex-wrap">
             {HEALTH_TYPES.filter(t => t.id !== 'all').map(t => (
-              <button key={t.id} onClick={() => set('type', t.id)} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border ${form.type === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{t.icon} {t.mm}</button>
+              <button key={t.id} onClick={() => setForm(f => ({ ...f, type: t.id, blood_types_needed: t.id === 'blood_drive' ? f.blood_types_needed : [] }))} className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs border ${form.type === t.id ? 'bg-brand-600/60 border-brand-400/50 text-brand-200' : 'bg-white/5 border-white/10 text-white/50'}`}>{t.icon} {t.mm}</button>
             ))}
           </div>
         </div>
@@ -712,7 +759,10 @@ export function HealthServicePage() {
     setLoading(true)
     setLoadError(false)
     try {
-      let q = supabase.from('health_services').select('*').eq('status', 'active').order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(healthLimit)
+      // S22 (v9.17): hide past services — a service is past when its
+      // end_date is before today, or (no end_date) its start_date is.
+      const todayStr = new Date().toISOString().slice(0, 10)
+      let q = supabase.from('health_services').select('*').eq('status', 'active').or(`end_date.gte.${todayStr},and(end_date.is.null,start_date.gte.${todayStr}),and(end_date.is.null,start_date.is.null)`).order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(healthLimit)
       if (typeFilter !== 'all') q = q.eq('type', typeFilter)
       // 30 s timeout (was none): a hung query left the skeletons up forever.
       const { data, error } = await withTimeout(q, 30000, 'Health services')
@@ -859,6 +909,7 @@ export function BusSchedulePage() {
   useSEO({ title: lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule' })
 
   const [routes, setRoutes] = useState([])
+  const [routesError, setRoutesError] = useState(false)
   const [departures, setDepartures] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
@@ -870,8 +921,11 @@ export function BusSchedulePage() {
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
 
   async function loadRoutes() {
+    setRoutesError(false)
     const { data, error } = await supabase.from('bus_routes').select('*').eq('is_active', true).order('sort_order', { ascending: true })
-    if (error) { console.warn(error); return }
+    // S24 (v9.17): a failed routes load used to fail silently, leaving
+    // the filter empty with no retry.
+    if (error) { console.warn(error); setRoutesError(true); return }
     setRoutes(data || [])
   }
 
@@ -908,6 +962,13 @@ export function BusSchedulePage() {
     if (!form.route_id || !form.departure_time) return
     setSubmitting(true)
     try {
+      // S23 (v9.17): warn on a duplicate departure (same route + date +
+      // time) — the reporter confirms before a second row is added.
+      const depDate = form.departure_date || dateFilter
+      const { data: dup } = await supabase.from('bus_departures').select('id').eq('route_id', form.route_id).eq('departure_date', depDate).eq('departure_time', form.departure_time).limit(1).maybeSingle()
+      if (dup) {
+        if (!(await confirmDialog(lang === 'mm' ? 'ဒီလမ်းကြောင်း/နေ့/အချိန် အတွက် report ရှိပြီးသားဖြစ်သည် — ထပ်ထည့်မည်လား?' : 'A report for this route, date and time already exists — add another?', { danger: true }))) { setSubmitting(false); return }
+      }
       const { error } = await supabase.from('bus_departures').insert({
         route_id: form.route_id,
         departure_date: form.departure_date || dateFilter,
@@ -945,6 +1006,14 @@ export function BusSchedulePage() {
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
       </div>
+      {routesError && routes.length === 0 && (
+        <div className="px-4 mb-4">
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+            <p className="text-sm text-red-400 font-myanmar">လမ်းကြောင်းများ တင်မရပါ</p>
+            <button onClick={loadRoutes} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
+        </div>
+      )}
       <div className="px-4 mb-4 space-y-2">
         <div className="relative">
           <select value={routeFilter} onChange={e => setRouteFilter(e.target.value)} className="select-dark">
@@ -1087,7 +1156,7 @@ const TOUR_INCLUDES = [
 
 export function ToursPage() {
   const { lang } = useLang()
-  const { isModerator } = useAuth()
+  const { isModerator, isLoggedIn } = useAuth()
   const config = useAppConfig()
   useSEO({ title: 'Tour Guide' })
 
@@ -1336,8 +1405,12 @@ export function ToursPage() {
                        return (
                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                            <span className="text-[10px] text-white/50 font-myanmar">🧭 Guide: {lang === 'mm' ? (g.name_mm || g.name) : (g.name || g.name_mm)}</span>
-                           {g.phone && <a href={`tel:${g.phone}`} className="flex items-center gap-1 min-h-9 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-xs font-bold">📞 {lang === 'mm' ? 'ဆက်သွယ်ရန်' : 'Contact'} {g.phone}</a>}
-                           {!g.phone && g.facebook && <a href={g.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400">FB Page →</a>}
+                           {g.phone && (isLoggedIn ? (
+                             <a href={toTelHref(g.phone, true)} className="flex items-center gap-1 min-h-9 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-xs font-bold">📞 {lang === 'mm' ? 'ဆက်သွယ်ရန်' : 'Contact'} {maskPhone(g.phone, true)}</a>
+                           ) : (
+                             <span className="flex items-center gap-1 min-h-9 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/60 text-xs font-bold">📞 {maskPhone(g.phone, false)}</span>
+                           ))}
+                           {!g.phone && g.facebook && (g.facebook.startsWith('http://') || g.facebook.startsWith('https://')) && <a href={g.facebook} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-400">FB Page →</a>}
                          </div>
                        )
                      }

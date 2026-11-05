@@ -12,6 +12,8 @@ import AnnouncementBanner from './components/AnnouncementBanner'
 import OnboardingGuide from './components/OnboardingGuide'
 import { ConfirmProvider } from './components/ConfirmModal'
 import { logVisit } from './lib/visitTracking'
+import { schedulePrefetch } from './lib/prefetch'
+import { usePresence } from './hooks/usePresence'
 
 // ── Lazy pages — default exports ─────────────────────────────
 // H-28: lazy() has no timeout and no retry — a hung or failed chunk fetch
@@ -203,11 +205,20 @@ function AppRoutes() {
   const { loading } = useAuth()
   const [timeoutExceeded, setTimeoutExceeded] = useState(false)
 
+  // S33 (v9.17): keep presence alive for logged-in users — pings
+  // last_seen/is_online every minute, which feeds the leaderboard
+  // online dots and the Profile "last seen" line. No-op for guests.
+  usePresence()
+
   // v9.12: log one visit per browser session (once only — logVisit guards
   // on sessionStorage). Fire-and-forget and never throws; a missing table
   // (migration not run yet) or blocked network fails silently.
   useEffect(() => {
     try { logVisit() } catch { /* never break boot */ }
+    // v9.17 (Issue 4/5): warm the persisted query cache on idle after
+    // boot, so pages render instantly under VPN and the Offline panel
+    // shows real counts. Never blocks first paint, never throws.
+    try { schedulePrefetch() } catch { /* never break boot */ }
   }, [])
 
   // H-28: preload the HomePage chunk on boot so the landing route rarely

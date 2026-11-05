@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { withTimeout } from '../lib/withTimeout'
+import { fetchNews } from '../lib/prefetch'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { PostCard, Skeleton, EmptyState } from '../components/UI'
@@ -34,6 +35,7 @@ export default function NewsPage() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [pageSize, setPageSize] = useState(30)
+  const [hasMore, setHasMore] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   // Calendar "See all" links here as /news?type=event.
@@ -44,58 +46,40 @@ export default function NewsPage() {
   const [lightboxImages, setLightboxImages] = useState([])
   const [lightboxIndex, setLightboxIndex] = useState(0)
 
-  async function load() {
-    if (pageSize > 30) setLoadingMore(true)
-    else setLoading(true)
-    setLoadError(false)
-    try {
-      let postsQuery = supabase
-        .from('posts')
-        .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
-        .eq('status', 'published')
-        .eq('is_pinned', false)
-        .order('created_at', { ascending: false })
-        .limit(pageSize)
+  // Issue 4c (v9.17): useQuery ['news', type, pageSize] (same fetcher
+  // as the prefetch runner), so the list renders from cache instantly
+  // on revisit under VPN.
+  const { data: newsData, isLoading: newsQueryLoading, isFetching: newsQueryFetching, isError: newsQueryError, refetch: refetchNews } = useQuery({
+    queryKey: ['news', type, pageSize],
+    queryFn: () => fetchNews({ type, pageSize }),
+  })
+  useEffect(() => {
+    if (newsData) {
+      setPinned(newsData.pinned)
+      setPosts(newsData.posts)
+      setHasMore(newsData.hasMore)
+    }
+    // Load-more fetches (pageSize > 30) keep the current list visible
+    // and spin the button instead of flashing full-page skeletons.
+    setLoading(newsQueryLoading && pageSize <= 30)
+    setLoadingMore(newsQueryFetching && !newsQueryLoading && pageSize > 30)
+    setLoadError(newsQueryError)
+  }, [newsData, newsQueryLoading, newsQueryFetching, newsQueryError, pageSize])
 
-      if (type) postsQuery = postsQuery.eq('type', type)
+  // S8 (v9.17): keep the type filter in sync with ?type= when the URL
+  // changes from outside this page (Calendar "See all", Back button).
+  // The guard prevents fighting the select's own onChange above.
+  useEffect(() => {
+    const t = searchParams.get('type') || ''
+    setType(prev => (prev === t ? prev : t))
+  }, [searchParams])
 
-      // Pinned posts must respect the type filter too.
-      let pinnedQuery = supabase
-        .from('posts')
-        .select('*, author:profiles(full_name), category:categories(name, name_mm, icon)')
-        .eq('status', 'published')
-        .eq('is_pinned', true)
-        .order('created_at', { ascending: false })
-        .limit(3)
-      if (type) pinnedQuery = pinnedQuery.eq('type', type)
-
-      // 30 s timeout (was none) + allSettled: the posts list is core,
-      // pinned posts are not — one failed pinned query used to clear
-      // both lists and mark the whole page failed.
-      const [pinnedRes, postsRes] = await withTimeout(Promise.allSettled([
-        pinnedQuery,
-        postsQuery,
-      ]), 30000, 'News')
-      if (postsRes.status === 'rejected' || postsRes.value?.error) throw (postsRes.status === 'rejected' ? postsRes.reason : postsRes.value.error)
-      if (pinnedRes.status === 'rejected' || pinnedRes.value?.error) {
-        console.warn(pinnedRes.status === 'rejected' ? pinnedRes.reason : pinnedRes.value.error)
-        setPinned([])
-      } else {
-        setPinned(pinnedRes.value.data || [])
-      }
-      setPosts(postsRes.value.data || [])
-    } catch (e) { console.warn(e); setLoadError(true); setPinned([]); setPosts([]) }
-    setLoading(false)
-    setLoadingMore(false)
-  }
-
-  useEffect(() => { load() }, [type, pageSize])
 
   async function handleDelete(postId) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဤသတင်းကို ဖျက်မှာလား?' : 'Delete this post?', { danger: true }))) return
     const { error } = await supabase.from('posts').delete().eq('id', postId)
     if (error) showError(error.message)
-    else load()
+    else refetchNews()
   }
 
   function openLightbox(post, startIndex = 0) {
@@ -191,7 +175,7 @@ export default function NewsPage() {
         ) : loadError ? (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
-            <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            <button onClick={() => refetchNews()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
           </div>
         ) : posts.length === 0 ? (
           <EmptyState
@@ -242,7 +226,7 @@ export default function NewsPage() {
               )}
             </div>
           ))}
-          {posts.length >= pageSize && (
+          {hasMore && (
             <button
               onClick={() => setPageSize(s => s + 30)}
               disabled={loadingMore}

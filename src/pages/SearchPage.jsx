@@ -15,7 +15,7 @@ const SEARCH_SOURCES = [
     icon: '🏢',
     table: 'listings',
     select: 'id, name, name_mm, address_mm, city, icon:category_id',
-    searchFields: ['name', 'name_mm', 'description_mm', 'address_mm'],
+    searchFields: ['name', 'name_mm', 'description', 'description_mm', 'address', 'address_mm', 'phone_1', 'phone_2', 'phone_3', 'phone_4', 'phone_5'],
     routePrefix: '/directory/',
     statusFilter: { column: 'status', value: 'approved' },
   },
@@ -202,6 +202,11 @@ export default function SearchPage() {
   const anyCapped = sourcesWithResults.some(s => (results[s.id] || []).length === 8)
   function seeMoreUrl(source) {
     if (source.id === 'listing') return `/directory?q=${encodeURIComponent(query)}`
+    // S15 (v9.17): pass the query to jobs/rent/tutoring — those pages
+    // honour ?q= as their initial filter (S29).
+    if (source.id === 'job' || source.id === 'rental' || source.id === 'tutoring') {
+      return `${source.routePrefix}?q=${encodeURIComponent(query)}`
+    }
     return source.routePrefix.replace(/\/$/, '') || '/'
   }
 

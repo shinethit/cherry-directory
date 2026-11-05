@@ -33,14 +33,21 @@ export default function WeeklyView({ events = [], selected, setSelected, lang = 
   })
 
   // Multi-day events appear on every day in [event_start, event_end].
+  // S14 (v9.17): compare MMT date keys, not local-Date instants (same
+  // fix as CalendarPage eventsOnDay).
   function eventsOnDay(date) {
-    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    const dayKey = (iso) => {
+      const p = mmtParts(iso)
+      if (!p) return null
+      return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`
+    }
     return events.filter(ev => {
       if (!ev.event_start) return false
-      const start = new Date(ev.event_start)
-      const end = ev.event_end ? new Date(ev.event_end) : start
-      return start < dayEnd && end >= dayStart
+      const sKey = dayKey(ev.event_start)
+      const eKey = ev.event_end ? dayKey(ev.event_end) : sKey
+      if (!sKey || !eKey) return false
+      return sKey <= key && key <= eKey
     })
   }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Phone, MapPin, Home, Users, CheckCircle, XCircle, Clock, ArrowLeft, Trash2, Edit2 } from 'lucide-react'
+import { Plus, Phone, MapPin, Home, Users, CheckCircle, XCircle, Clock, ArrowLeft, Trash2, Edit2, Search } from 'lucide-react'
+import { escapePostgrestOr } from '../hooks/useListings'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
@@ -43,6 +44,8 @@ const STATUSES = {
 
 function timeAgo(iso, lang) {
   const m = Math.floor((Date.now() - new Date(iso)) / 60000)
+  // N20 (v9.17): a future/clock-skew timestamp must not read "-5မိနစ်".
+  if (m < 1) return lang === 'mm' ? 'ယခု' : 'just now'
   if (m < 60) return `${m}${lang === 'mm' ? 'မိနစ်' : 'm'}`
   const h = Math.floor(m / 60)
   if (h < 24) return `${h}${lang === 'mm' ? 'နာရီ' : 'h'}`
@@ -138,12 +141,12 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
         <div className="flex gap-2 items-center flex-wrap">
           {post.phone && (
             isLoggedIn ? (
-              <button onClick={handleContact} className="flex items-center gap-1 text-[10px] text-green-400 hover:text-green-300">
-                <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{post.phone}
+              <button onClick={handleContact} className="flex items-center gap-1.5 min-h-11 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">
+                <Phone size={14} /> {lang === 'mm' ? 'ဖုန်းခေါ်မည်' : 'Call'} {post.contact_name ? `${post.contact_name} · ` : ''}{post.phone}
               </button>
             ) : (
-              <button onClick={() => navigate('/login')} className="flex items-center gap-1 text-[10px] text-green-400/70 hover:text-green-400">
-                <Phone size={10} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.phone, false)} · {lang === 'mm' ? 'Login ဝင်မှ ဖုန်းခေါ်နိုင်မည်' : 'Login to call'}
+              <button onClick={() => navigate('/login')} className="flex items-center gap-1.5 min-h-11 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/25 text-green-400 hover:bg-green-500/20 text-sm font-bold">
+                <Phone size={14} /> {post.contact_name ? `${post.contact_name} · ` : ''}{maskPhone(post.phone, false)} · {lang === 'mm' ? 'ဖုန်းခေါ်ရန် Login ဝင်ပါ' : 'Login to call'}
               </button>
             )
           )}
@@ -160,15 +163,15 @@ function RentCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onDelet
           <div className="flex gap-1">
             {isOwner && (
               <>
-                <button onClick={() => onStatusChange(post)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12" title="Status ပြောင်း">
+                <button onClick={() => onStatusChange(post)} className="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12" title="Status ပြောင်း">
                   <Clock size={11} className="text-white/40" />
                 </button>
-                <button onClick={() => onEdit(post)} className="w-6 h-6 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12">
+                <button onClick={() => onEdit(post)} className="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12">
                   <Edit2 size={11} className="text-white/40" />
                 </button>
               </>
             )}
-            <button onClick={() => onDelete(post.id)} className="w-6 h-6 rounded-lg btn-danger flex items-center justify-center">
+            <button onClick={() => onDelete(post.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center">
               <Trash2 size={11} className="text-white" />
             </button>
           </div>
@@ -236,6 +239,8 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
 
   async function submit() {
     if (!form.title_mm && !form.title) return
+    // S27 (v9.17): at least one way to reach the poster is required.
+    if (!form.phone?.trim() && !form.contact_name?.trim()) { showError('ဆက်သွယ်ရန် (ဖုန်း / နာမည်) တစ်ခုခု ထည့်ပါ'); return }
     setSubmitting(true)
 
     const payload = {
@@ -247,7 +252,6 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
       poster_name: profile?.full_name || profile?.nickname,
     }
 
-    console.log('[RentForm] Submitting payload:', payload)
 
     try {
       if (editPost) {
@@ -255,7 +259,6 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
         if (error) throw error
       } else {
         const { data, error } = await supabase.from('rentals').insert(payload).select()
-        console.log('[RentForm] Insert response:', { data, error })
         if (error) throw error
       }
       setSubmitting(false)
@@ -337,9 +340,13 @@ function RentForm({ onClose, onSuccess, lang, editPost }) {
 
 function StatusModal({ post, onClose, onUpdate, lang }) {
   const [status, setStatus] = useState(post.status)
+  const [saving, setSaving] = useState(false) // N22 (v9.17): block double-taps
 
   const updateStatus = async () => {
+    if (saving) return
+    setSaving(true)
     const { error } = await supabase.from('rentals').update({ status }).eq('id', post.id)
+    setSaving(false)
     if (error) { showError(error.message); return }
     onUpdate()
     onClose()
@@ -357,7 +364,7 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
           ))}
         </div>
         <div className="flex gap-2 mt-4">
-          <button onClick={updateStatus} className="flex-1 btn-primary text-xs py-2">သိမ်းမည်</button>
+          <button onClick={updateStatus} disabled={saving} className="flex-1 btn-primary text-xs py-2 disabled:opacity-50">{saving ? '...' : 'သိမ်းမည်'}</button>
           <button onClick={onClose} className="flex-1 btn-ghost text-xs py-2">Cancel</button>
         </div>
       </div>
@@ -381,12 +388,17 @@ export default function RentPage() {
   const [showForm, setShowForm] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [statusTarget, setStatusTarget] = useState(null)
+  // S29 (v9.17): search box, debounced; honours ?q= from SearchPage.
+  const [search, setSearch] = useState(() => searchParams.get('q') || '')
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('q') || '')
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const PAGE_SIZE = 50
 
-  async function load() {
-    setLoading(true)
+  async function load(background = false) {
+    // S18/S23 (v9.17): realtime reloads run in the background — no
+    // skeleton flash while the user is reading the list.
+    if (!background) setLoading(true)
     setLoadError(false)
     try {
       const limit = (page + 1) * PAGE_SIZE
@@ -394,28 +406,39 @@ export default function RentPage() {
       if (propertyFilter !== 'all') q = q.eq('property_type', propertyFilter)
       if (postTypeFilter !== 'all') q = q.eq('post_type', postTypeFilter)
       if (statusFilter !== 'all') q = q.eq('status', statusFilter)
+      const term = debouncedSearch.trim()
+      if (term) {
+        const t = escapePostgrestOr(term)
+        q = q.or(`title.ilike.%${t}%,title_mm.ilike.%${t}%,location_mm.ilike.%${t}%,description_mm.ilike.%${t}%`)
+      }
       // 30 s timeout (was none): a hung query left the list on skeletons forever.
       const { data, error } = await withTimeout(q, 30000, 'Rentals')
       if (error) throw error
-      // No expiry concept in the rentals schema; hide expired rows only if an
-      // expires_at column ever exists (guarded so it is a no-op otherwise).
+      // S25 (v9.17): the guarded filter below now activates — migration
+      // 9.17 adds expires_at (+30d) to rentals, so expired rows hide.
       const now = Date.now()
       setPosts((data || []).filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now))
       setHasMore((data || []).length === limit)
     } catch (e) { console.warn(e); setLoadError(true) }
-    setLoading(false)
+    if (!background) setLoading(false)
   }
+
+  // Debounce the search box — each keystroke is a server query now.
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(0) }, 400)
+    return () => clearTimeout(t)
+  }, [search])
 
   useEffect(() => {
     load()
     const channel = supabase
       .channel('rentals-live')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rentals' }, load)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rentals' }, load)
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'rentals' }, load)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'rentals' }, () => load(true))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rentals' }, () => load(true))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'rentals' }, () => load(true))
       .subscribe()
     return () => supabase.removeChannel(channel)
-  }, [propertyFilter, postTypeFilter, statusFilter, page])
+  }, [propertyFilter, postTypeFilter, statusFilter, page, debouncedSearch])
 
   async function deletePost(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
@@ -436,6 +459,10 @@ export default function RentPage() {
 
       {/* Filters */}
       <div className="px-4 space-y-2 mb-4">
+        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+          <Search size={16} className="text-white/40 flex-shrink-0" />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={lang === 'mm' ? 'အိမ်/အခန်း ရှာရန်...' : 'Search rentals...'} className="bg-transparent border-none outline-none text-sm text-white w-full font-myanmar placeholder:text-white/30" />
+        </div>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <select value={propertyFilter} onChange={e => { setPropertyFilter(e.target.value); setPage(0) }} className="select-dark">

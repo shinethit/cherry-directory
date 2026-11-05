@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { showError } from '../lib/toast'
 
 const AuthContext = createContext(null)
@@ -27,11 +28,16 @@ export function AuthProvider({ children }) {
     setProfileLoading(true)
     setProfileError('')
     try {
-      const { data, error } = await supabase
+      // v9.17 (Issue 2b): 10 s timeout — the profiles select used to hang
+      // forever on a stalled connection, leaving profileLoading true and
+      // the app stuck on Loading after switching back from another app.
+      // On timeout/failure profileLoading still goes false (finally) so
+      // the app proceeds and the existing retry UI handles the rest.
+      const { data, error } = await withTimeout(supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single()
+        .single(), 10000, 'Profile')
 
       if (error) throw error
       if (!data) throw new Error('Profile row not found')
@@ -42,9 +48,10 @@ export function AuthProvider({ children }) {
       // A missing/failed profile row is NOT silent: without it the user
       // loses role/points/name, and an admin can be permanently locked
       // out. Surface it so the UI can offer Retry (H-3 / I-M1).
+      // S11 (v9.17): fixed Myanmar string — never toast raw DB English.
       console.warn('fetchProfile failed:', err)
-      setProfileError(err?.message || 'Profile ရယူမရပါ')
-      showError(err?.message || 'Profile ရယူမရပါ — ထပ်ကြိုးစားပါ')
+      setProfileError('Profile ရယူမရပါ — ထပ်ကြိုးစားပါ')
+      showError('Profile ရယူမရပါ — ထပ်ကြိုးစားပါ')
       return false
     } finally {
       profileInFlight.current -= 1
@@ -146,8 +153,11 @@ export function AuthProvider({ children }) {
   }
 
   async function resetPasswordForEmail(email) {
+    // M5 (v9.17): ?recovery=1 marks the reset link unambiguously —
+    // ResetPasswordPage treats it as recovery on mount (the event
+    // subscription stays as backup).
     const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${window.location.origin}/reset-password?recovery=1`,
     })
     if (error) throw error
     return data
@@ -160,12 +170,20 @@ export function AuthProvider({ children }) {
   }
 
   async function signOut() {
+    // M6 (v9.17): return the error instead of swallowing it — the old
+    // code cleared local state even when the server sign-out failed, so
+    // the user looked signed out while the session was still alive.
+    // Callers show the error and stay put on failure.
     const { error } = await supabase.auth.signOut()
-    if (error) console.error('Sign out error:', error)
+    if (error) {
+      console.error('Sign out error:', error)
+      return { error }
+    }
     setUser(null)
     setProfile(null)
     setProfileError('')
     setProfileLoading(false)
+    return { error: null }
   }
 
   async function updateProfile(updates) {

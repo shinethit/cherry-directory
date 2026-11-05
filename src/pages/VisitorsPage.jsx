@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Eye } from 'lucide-react'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
-import { supabase } from '../lib/supabase'
+import { fetchVisitStats } from '../lib/prefetch'
 import { formatPeakHour, devicePercentages } from '../lib/visitTracking'
 
 // Visitors dashboard — v9.12 (public, no login needed).
@@ -17,10 +18,14 @@ function last14Days(daily) {
   const byDate = {}
   for (const d of daily || []) byDate[d.date] = Number(d.count) || 0
   const out = []
-  const now = new Date()
+  // N29 (v9.17): dates in Asia/Rangoon, matching the RPC grouping — the
+  // device timezone can be on a different day than Yangon.
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Rangoon', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  const get = (t) => Number(parts.find(p => p.type === t).value)
+  const today = new Date(Date.UTC(get('year'), get('month') - 1, get('day')))
   for (let i = 13; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i)
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const d = new Date(today.getTime() - i * 86400000)
+    const key = d.toISOString().slice(0, 10)
     out.push({ date: key, count: byDate[key] || 0 })
   }
   return out
@@ -39,20 +44,18 @@ export default function VisitorsPage() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
 
+  // Issue 4c (v9.17): useQuery ['visit-stats'] (same fetcher as the
+  // prefetch runner), so the stats render from cache instantly on
+  // revisit under VPN. An RPC failure (migration not run yet) leaves
+  // stats null and the page shows "—" as before.
+  const { data: statsData, isLoading: statsQueryLoading } = useQuery({
+    queryKey: ['visit-stats'],
+    queryFn: fetchVisitStats,
+  })
   useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const { data, error } = await supabase.rpc('get_visit_stats')
-        if (alive && !error && data) setStats(data)
-      } catch {
-        // RPC missing (migration not run yet) or network blocked — "—".
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => { alive = false }
-  }, [])
+    if (statsData) setStats(statsData)
+    setLoading(statsQueryLoading)
+  }, [statsData, statsQueryLoading])
 
   const total = Number(stats?.total) || 0
   const pct = devicePercentages(stats?.by_device, total)
@@ -123,7 +126,7 @@ export default function VisitorsPage() {
                   className="w-full rounded-t bg-brand-500/80"
                   style={{ height: `${maxDay > 0 ? Math.max(d.count > 0 ? 4 : 0, (d.count / maxDay) * 64) : 0}px` }}
                 />
-                <span className="text-[8px] text-white/40 leading-none">{d.date.slice(8)}</span>
+                <span className="text-[8px] text-white/40 leading-none">{d.date.slice(5)}</span>
               </div>
             ))}
           </div>

@@ -124,7 +124,6 @@ export default function ChatPage() {
   const [showRoomManager, setShowRoomManager] = useState(false)
   const [newRoomName, setNewRoomName] = useState('')
   const [newRoomDesc, setNewRoomDesc] = useState('')
-  const [newRoomType, setNewRoomType] = useState('group')
   const [editingRoom, setEditingRoom] = useState(null)
   const [roomError, setRoomError] = useState('')
   const [roomsError, setRoomsError] = useState(false)
@@ -332,7 +331,9 @@ export default function ChatPage() {
 
   const saveGuestName = () => {
     const name = guestName.trim()
-    if (!name) return
+    // N2 (v9.17): an empty name used to fail silently (the prompt just
+    // stayed open with no explanation).
+    if (!name) { showError('နာမည် ထည့်ပါ'); return }
     // Guests must not impersonate staff or the app itself.
     if (isReservedGuestName(name)) {
       showError('ဒီနာမည် သုံးလို့မရပါ — တခြားနာမည် ရွေးပါ')
@@ -366,19 +367,25 @@ export default function ChatPage() {
       setRoomError('အခန်းအမည် ထည့်ပါ')
       return
     }
+    // N20 (v9.17): warn on a duplicate room name (case-insensitive).
+    if (rooms.some(r => (r.name || '').trim().toLowerCase() === newRoomName.trim().toLowerCase())) {
+      setRoomError('အမည်တူ အခန်း ရှိပြီးဖြစ်သည်')
+      return
+    }
     try {
-      const { error } = await supabase.from('chat_rooms').insert({
+      const { data, error } = await supabase.from('chat_rooms').insert({
         name: newRoomName.trim(),
         description: newRoomDesc.trim() || null,
-        type: newRoomType,
+        type: 'group', // M1 (v9.17): no private rooms — the type picker was removed
         is_active: true,
-      })
+      }).select().single()
       if (error) throw error
       setNewRoomName('')
       setNewRoomDesc('')
-      setNewRoomType('group')
       setRoomError('')
       await loadRooms()
+      // N1 (v9.17): auto-select the room just created.
+      if (data) setActiveRoom(data)
     } catch (err) {
       console.error('Create room error:', err)
       setRoomError('ဖန်တီးရာတွင် အမှားရှိသည်: ' + err.message)
@@ -445,6 +452,7 @@ export default function ChatPage() {
                   placeholder="အခန်းအမည် (မြန်မာ/အင်္ဂလိပ်)"
                   value={newRoomName}
                   onChange={e => setNewRoomName(e.target.value)}
+                  maxLength={50}
                   className="input-dark"
                 />
                 <input
@@ -454,28 +462,6 @@ export default function ChatPage() {
                   onChange={e => setNewRoomDesc(e.target.value)}
                   className="input-dark"
                 />
-                {/* Room type (D17): Group / Private — stored in chat_rooms.type */}
-                <div>
-                  <p className="text-xs text-white/50 mb-1.5">အခန်းအမျိုးအစား</p>
-                  <div className="grid grid-cols-2 gap-2" role="group" aria-label="အခန်းအမျိုးအစား">
-                    <button
-                      type="button"
-                      onClick={() => setNewRoomType('group')}
-                      aria-pressed={newRoomType === 'group'}
-                      className={`min-h-[44px] rounded-xl text-sm font-semibold border transition-colors ${newRoomType === 'group' ? 'bg-brand-600/60 text-brand-200 border-brand-400/40' : 'text-white/50 border-white/10 hover:text-white/80'}`}
-                    >
-                      အဖွဲ့
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNewRoomType('private')}
-                      aria-pressed={newRoomType === 'private'}
-                      className={`min-h-[44px] rounded-xl text-sm font-semibold border transition-colors ${newRoomType === 'private' ? 'bg-brand-600/60 text-brand-200 border-brand-400/40' : 'text-white/50 border-white/10 hover:text-white/80'}`}
-                    >
-                      တစ်ဦးချင်း
-                    </button>
-                  </div>
-                </div>
                 <button onClick={handleCreateRoom} className="w-full btn-primary text-sm py-3 min-h-[44px] flex items-center justify-center gap-1">
                   <Plus size={14} /> အခန်းသစ်ထည့်မည်
                 </button>

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
+import { fetchFuelData } from '../lib/prefetch'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
@@ -23,7 +25,9 @@ function StationCard({ station, lang, allFuelTypes }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-display font-semibold text-sm text-white truncate">{lang === 'mm' ? (station.name_mm || station.name) : station.name}</p>
-          <p className="text-[10px] text-white/60 font-myanmar truncate">{station.address} • {station.township}</p>
+          {[station.address, station.township].filter(Boolean).length > 0 && (
+            <p className="text-[10px] text-white/60 font-myanmar truncate">{[station.address, station.township].filter(Boolean).join(' • ')}</p>
+          )}
           <div className="flex gap-1.5 mt-1.5 flex-wrap">
             {stationFuels.map(ft => (
               <span key={ft.id} className="flex items-center gap-1 text-[9px] text-white/60">
@@ -51,6 +55,12 @@ function StationCard({ station, lang, allFuelTypes }) {
           )}
           {station.notes && (
             <p className="text-xs text-white/60 font-myanmar">{station.notes}</p>
+          )}
+          {/* S22 (v9.17): Directions link when coordinates exist */}
+          {station.latitude != null && station.longitude != null && (
+            <p className="text-xs text-white/70">
+              📍 <a href={`https://maps.google.com/?q=${station.latitude},${station.longitude}`} target="_blank" rel="noopener noreferrer" className="text-brand-300">{lang === 'mm' ? 'လမ်းညွှန်' : 'Directions'}</a>
+            </p>
           )}
           {/* Fuel types sold here */}
           <div className="pt-1">
@@ -105,7 +115,10 @@ function FuelTypesTab({ onChanged }) {
     // fuel_types.id is a text PK with no default — generate it as a slug
     // from the name ('Petrol 92' → 'petrol92', matching the seeded ids).
     // The old insert passed no id at all, so it always failed.
-    const slugId = form.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || `fuel${Date.now()}`
+    const slugBase = form.name.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || `fuel${Date.now()}`
+    let slugId = slugBase
+    let n = 2
+    while (list.some(x => x.id === slugId)) slugId = slugBase + '-' + (n++)
     const { error } = await supabase.from('fuel_types').insert({
       id: slugId,
       name: form.name.trim(),
@@ -136,8 +149,16 @@ function FuelTypesTab({ onChanged }) {
 
   async function deleteFuelType(id) {
     if (!(await confirmDialog('ဆီအမျိုးအစားကို ဖျက်မည်လား? ဆိုင်များမှ ဆီပိတ်သွားနိုင်သည်။', { danger: true }))) return
+    const ft = list.find(x => x.id === id)
     const { error } = await supabase.from('fuel_types').delete().eq('id', id)
     if (error) { showError(error.message); return }
+    if (ft) {
+      const { data: stations } = await supabase.from('fuel_stations').select('id, fuel_type_names')
+      const affected = (stations || []).filter(x => (x.fuel_type_names || []).includes(ft.name))
+      for (const st of affected) {
+        await supabase.from('fuel_stations').update({ fuel_type_names: (st.fuel_type_names || []).filter(n => n !== ft.name) }).eq('id', st.id)
+      }
+    }
     load()
     onChanged?.()
   }
@@ -191,6 +212,11 @@ function FuelTypesTab({ onChanged }) {
                       className="input-dark" placeholder="Name (English)" />
                     <input value={editData.name_mm} onChange={e => setE('name_mm', e.target.value)}
                       className="input-dark font-myanmar" placeholder="အမည် (မြန်မာ)" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-white/60">Sort order:</span>
+                    <input type="number" value={editData.sort_order ?? 0} onChange={e => setE('sort_order', e.target.value)}
+                      className="input-dark w-20 text-center" />
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] text-white/60">Icon:</span>
@@ -311,6 +337,15 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
   async function deleteStation(id) {
     if (!(await confirmDialog('ဆိုင်ကို ဖျက်မည်လား?', { danger: true }))) return
     const { error } = await supabase.from('fuel_stations').delete().eq('id', id)
+    if (error) { showError(error.message); return }
+    load()
+    onUpdated()
+  }
+
+  // N17 (v9.17): hide/show a station — the public list only shows
+  // is_active stations, so this is the soft-delete.
+  async function toggleStation(id, current) {
+    const { error } = await supabase.from('fuel_stations').update({ is_active: !current }).eq('id', id)
     if (error) { showError(error.message); return }
     load()
     onUpdated()
@@ -458,7 +493,9 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                       <div className="flex items-start justify-between">
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-semibold text-white font-myanmar truncate">{s.name_mm || s.name}</p>
-                          <p className="text-[10px] text-white/60 truncate">{s.address} • {s.township}</p>
+                          {[s.address, s.township].filter(Boolean).length > 0 && (
+                            <p className="text-[10px] text-white/60 truncate">{[s.address, s.township].filter(Boolean).join(' • ')}</p>
+                          )}
                           <div className="flex gap-1 mt-1.5 flex-wrap">
                             {(s.fuel_type_names || []).map(name => {
                               const ft = allFuelTypes.find(f => f.name === name)
@@ -474,6 +511,7 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
                           </div>
                         </div>
                         <div className="flex gap-1 ml-2 flex-shrink-0">
+                          <button onClick={() => toggleStation(s.id, s.is_active)} title={s.is_active ? 'ဖျောက်မည်' : 'ပြန်ပြမည်'} className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs flex-shrink-0 ${s.is_active ? 'bg-green-500/20 text-green-400' : 'bg-white/8 text-white/60'}`}>{s.is_active ? '✓' : '○'}</button>
                           <button onClick={() => { setEditId(s.id); setEditData({ ...s, fuel_type_names: s.fuel_type_names || [] }) }}
                             className="w-7 h-7 bg-blue-500/10 text-blue-400 rounded-lg flex items-center justify-center">
                             <Pencil size={12} />
@@ -512,47 +550,43 @@ export default function FuelPage() {
   const [showManage, setShowManage]     = useState(false)
   const [loadError, setLoadError]       = useState(false)
 
-  // Load initial data
-  async function load() {
-    setLoading(true)
-    setLoadError(false)
-    try {
-      // allSettled + 30 s timeout (was two sequential awaits with no
-      // timeout): a failed/slow fuel-types query used to blank the
-      // station list too, and a hung query left skeletons up forever.
-      const [ftRes, stRes] = await withTimeout(Promise.allSettled([
-        supabase.from('fuel_types').select('*').order('sort_order'),
-        supabase.from('fuel_stations').select('*').eq('is_active', true).order('sort_order'),
-      ]), 30000, 'Fuel stations')
-      if (ftRes.status === 'fulfilled' && !ftRes.value.error) setAllFuelTypes(ftRes.value.data || [])
-      else console.warn('Fuel types failed:', ftRes.status === 'rejected' ? ftRes.reason : ftRes.value.error)
-      if (stRes.status === 'rejected' || stRes.value?.error) throw (stRes.status === 'rejected' ? stRes.reason : stRes.value.error)
-      const stationsRaw = stRes.value.data
+  // Load initial data — Issue 4c (v9.17): useQuery ['fuel-stations']
+  // (same fetcher as the prefetch runner), so the list renders from
+  // cache instantly on revisit under VPN. S22: the fetcher keeps lat/lng
+  // so the Directions link in StationCard can use them.
+  const { data: fuelData, isLoading: fuelQueryLoading, isFetching: fuelQueryFetching, isError: fuelQueryError, refetch: refetchFuel } = useQuery({
+    queryKey: ['fuel-stations'],
+    queryFn: fetchFuelData,
+  })
+  useEffect(() => {
+    if (fuelData) {
+      setAllFuelTypes(fuelData.types)
+      setStations(fuelData.stations)
+    }
+    setLoading(fuelQueryLoading || fuelQueryFetching)
+    setLoadError(fuelQueryError)
+  }, [fuelData, fuelQueryLoading, fuelQueryFetching, fuelQueryError])
 
-      const merged = (stationsRaw || []).map(s => ({
-        id: s.id,
-        name: s.name,
-        name_mm: s.name_mm,
-        township: s.township,
-        address: s.address,
-        notes: s.notes,
-        operating_hours: s.operating_hours,
-        phone: s.phone,
-        fuel_type_names: s.fuel_type_names || [],
-      }))
-
-      setStations(merged)
-    } catch (e) { console.warn(e); setLoadError(true) }
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
+  // S21 (v9.17): search + township + fuel-type filters.
+  const [searchQuery, setSearchQuery] = useState('')
+  const [townshipFilter, setTownshipFilter] = useState('All')
+  const [fuelTypeFilter, setFuelTypeFilter] = useState('All')
+  const townships = [...new Set(stations.map(s => s.township).filter(Boolean))].sort()
+  const filteredStations = stations.filter(s => {
+    if (townshipFilter !== 'All' && s.township !== townshipFilter) return false
+    if (fuelTypeFilter !== 'All' && !(s.fuel_type_names || []).includes(fuelTypeFilter)) return false
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      if (!((s.name || '').toLowerCase().includes(q) || (s.name_mm || '').includes(searchQuery.trim()) || (s.address || '').toLowerCase().includes(q))) return false
+    }
+    return true
+  })
 
   return (
     <div className="pb-36">
       <div className="px-4 pt-4 pb-3 flex items-center justify-between">
         <h1 className="font-display font-bold text-xl text-white">{lang === 'mm' ? '⛽ ဓာတ်ဆီဆိုင်များ' : '⛽ Fuel Stations'}</h1>
-        <button onClick={load} className="text-brand-300">
+        <button onClick={() => refetchFuel()} className="text-brand-300">
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
@@ -564,18 +598,40 @@ export default function FuelPage() {
         </button>
       )}
 
+      {/* S21 (v9.17): search + township + fuel-type filters */}
+      <div className="px-4 pb-3 space-y-2">
+        <input
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder={lang === 'mm' ? '🔍 ဆိုင်အမည် / လိပ်စာ ရှာမည်' : '🔍 Search name / address'}
+          className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-white/40 outline-none"
+        />
+        <div className="flex gap-2">
+          <select value={townshipFilter} onChange={e => setTownshipFilter(e.target.value)} className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white outline-none">
+            <option value="All">{lang === 'mm' ? 'မြို့နယ် အားလုံး' : 'All townships'}</option>
+            {townships.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={fuelTypeFilter} onChange={e => setFuelTypeFilter(e.target.value)} className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white outline-none">
+            <option value="All">{lang === 'mm' ? 'ဆီ အမျိုးအစား အားလုံး' : 'All fuel types'}</option>
+            {allFuelTypes.map(ft => <option key={ft.id} value={ft.name}>{lang === 'mm' ? (ft.name_mm || ft.name) : ft.name}</option>)}
+          </select>
+        </div>
+      </div>
+
       {loading ? (
         <div className="px-4 py-8 text-center text-white/60 text-sm">ဖွင့်နေသည်...</div>
       ) : loadError ? (
         <div className="px-4 py-8 text-center space-y-3">
           <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
-          <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          <button onClick={() => refetchFuel()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
         </div>
       ) : stations.length === 0 ? (
         <div className="px-4 py-8 text-center text-white/60 text-sm">ဆိုင် မရှိသေးပါ</div>
+      ) : filteredStations.length === 0 ? (
+        <div className="px-4 py-8 text-center text-white/60 text-sm">{lang === 'mm' ? 'ရှာမတွေ့ပါ' : 'No stations match'}</div>
       ) : (
         <div className="px-4 space-y-2">
-          {stations.map(s => (
+          {filteredStations.map(s => (
             <StationCard
               key={s.id}
               station={s}
@@ -610,8 +666,8 @@ export default function FuelPage() {
           lang={lang}
           allFuelTypes={allFuelTypes}
           onClose={() => setShowManage(false)}
-          onUpdated={load}
-          onFuelTypesChanged={load}
+          onUpdated={() => refetchFuel()}
+          onFuelTypesChanged={() => refetchFuel()}
         />
       )}
 

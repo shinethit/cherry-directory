@@ -190,7 +190,7 @@ export default function HomePage() {
         supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
         supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
         supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'published')
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'published').neq('type', 'event')
       ], LOAD_TIMEOUT_MS, applySection);
 
       if (attempt !== loadAttemptRef.current) return;
@@ -264,12 +264,15 @@ export default function HomePage() {
       // soon as it resolves.
       const setters = [setRentListingsCount, setRentSeekersCount, setTutorOffersCount, setTutorRequestsCount, setJobOpeningsCount, setJobSeekersCount];
       const { results } = await loadPartial([
-        count('rentals', q => q.eq('post_type', 'owner')),
-        count('rentals', q => q.eq('post_type', 'tenant')),
-        count('tutoring', q => q.eq('post_type', 'tutor')),
-        count('tutoring', q => q.eq('post_type', 'student')),
-        count('jobs', q => q.eq('post_type', 'employer')),
-        count('jobs', q => q.eq('post_type', 'jobseeker')),
+        // S32 (v9.17): labels promise currently-available posts, so
+        // count only available/active ones. M1: jobs post_type is
+        // 'offer'/'seeker' (DB check constraint), not 'employer'/'jobseeker'.
+        count('rentals', q => q.eq('post_type', 'owner').eq('status', 'available')),
+        count('rentals', q => q.eq('post_type', 'tenant').eq('status', 'available')),
+        count('tutoring', q => q.eq('post_type', 'tutor').eq('status', 'available')),
+        count('tutoring', q => q.eq('post_type', 'student').eq('status', 'available')),
+        count('jobs', q => q.eq('post_type', 'offer').eq('status', 'active')),
+        count('jobs', q => q.eq('post_type', 'seeker').eq('status', 'active')),
       ], LOAD_TIMEOUT_MS, (i, outcome) => {
         if (outcome.status === 'fulfilled') setters[i](outcome.value);
       });
@@ -488,15 +491,15 @@ export default function HomePage() {
             <div className="flex flex-col gap-1.5 flex-shrink-0 w-[70px]">
               <div className="glass rounded-lg px-2 py-1.5 text-center">
                 <p className="font-display font-bold text-sm text-white leading-none">{loading ? '…' : stats.listings == null ? '—' : stats.listings.toLocaleString()}</p>
-                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">လုပ်ငန်း</p>
+                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">{lang === 'mm' ? 'လုပ်ငန်း' : 'Listings'}</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
                 <p className="font-display font-bold text-sm text-white leading-none">{loading ? '…' : stats.posts == null ? '—' : stats.posts.toLocaleString()}</p>
-                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">သတင်း</p>
+                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">{lang === 'mm' ? 'သတင်း' : 'News'}</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
-                <p className="font-display font-bold text-sm text-gold-400 leading-none">အခမဲ့</p>
-                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">သုံးနိုင်သည်</p>
+                <p className="font-display font-bold text-sm text-gold-400 leading-none">{lang === 'mm' ? 'အခမဲ့' : 'Free'}</p>
+                <p className="text-[8px] text-white/60 mt-0.5 leading-tight">{lang === 'mm' ? 'သုံးနိုင်သည်' : 'to use'}</p>
               </div>
             </div>
 
@@ -562,7 +565,8 @@ export default function HomePage() {
             quickLinks.map(link => (
               <button
                 key={link.id}
-                onClick={() => link.url.startsWith('http') ? window.open(link.url, '_blank') : navigate(link.url)}
+                // N3 (v9.17): noopener so an opened page cannot reach back via window.opener.
+                onClick={() => link.url.startsWith('http') ? window.open(link.url, '_blank', 'noopener,noreferrer') : navigate(link.url)}
                 className={`px-2 py-2.5 flex flex-col items-center gap-1 rounded-xl border transition-colors text-center ${link.css_classes}`}
               >
                 <span className="text-lg leading-none">{link.icon}</span>
@@ -652,7 +656,7 @@ export default function HomePage() {
               </p>
             </div>
             <button
-              onClick={() => navigate('/jobs')}
+              onClick={() => navigate('/jobs?type=offer')}
               className="w-full flex items-center justify-between py-2.5 hover:opacity-80 transition-opacity"
             >
               <span className="text-[9px] text-white/50 font-myanmar truncate mr-1">

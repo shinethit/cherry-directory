@@ -20,6 +20,10 @@ export default function AppSettingsPage() {
   const [appName, setAppName] = useState('')
   const [appCity, setAppCity] = useState('')
   const [saving, setSaving]   = useState(false)
+  // S13 (v9.17): inputs stay disabled until the first load completes,
+  // so an admin cannot edit (and save over) empty defaults while the
+  // real values are still in flight.
+  const [loaded, setLoaded] = useState(false)
   // Which sections were just saved — cleared as soon as anything is
   // edited again (G20).
   const [justSaved, setJustSaved] = useState(false)
@@ -31,6 +35,7 @@ export default function AppSettingsPage() {
     supabase.from('app_config').select('*').then(({ data, error }) => {
       if (error) {
         showError('Settings ရယူရာတွင် အမှားရှိသည်: ' + error.message)
+        setLoaded(true) // failed load still unblocks editing (values stay as-is)
         return
       }
       if (!data) return
@@ -47,6 +52,7 @@ export default function AppSettingsPage() {
           showError(`Settings '${key}' ဖတ်မရပါ — တန်ဖိုး မမှန်ကန်ပါ`)
         }
       })
+      setLoaded(true)
     })
   }, [isAdmin])
 
@@ -137,12 +143,12 @@ export default function AppSettingsPage() {
           </div>
           <div>
             <label className="block text-xs text-white/50 mb-1.5">App Name</label>
-            <input value={appName} onChange={e => setAppName(e.target.value)} className="input-dark" placeholder="Cherry Directory" />
+            <input value={appName} onChange={e => setAppName(e.target.value)} disabled={!loaded} className="input-dark disabled:opacity-50" placeholder="Cherry Directory" />
             <p className="text-[10px] text-white/60 font-myanmar mt-1">App ၏ အမည် — Header နှင့် browser tab တွင် ပြသမည်</p>
           </div>
           <div>
             <label className="block text-xs text-white/50 mb-1.5">မြို့အမည် (Header တွင် ပြသမည်)</label>
-            <input value={appCity} onChange={e => setAppCity(e.target.value)} className="input-dark font-myanmar" placeholder="တောင်ကြီးမြို့" />
+            <input value={appCity} onChange={e => setAppCity(e.target.value)} disabled={!loaded} className="input-dark font-myanmar disabled:opacity-50" placeholder="တောင်ကြီးမြို့" />
             <p className="text-[10px] text-white/60 font-myanmar mt-1">Header အောက်တွင် ပြမည့် မြို့အမည် — App က ဘယ်မြို့အတွက်လဲဆိုတာ ပြသည်</p>
           </div>
         </div>
@@ -162,11 +168,12 @@ export default function AppSettingsPage() {
               onChange={e => { setNewCity(e.target.value); setCityError('') }}
               onKeyDown={e => e.key === 'Enter' && addCity()}
               placeholder="မြို့အမည် ထည့်ပါ..."
-              className={'input-dark flex-1' + (cityError ? ' border-red-500/60' : '')}
+              disabled={!loaded}
+              className={'input-dark flex-1 disabled:opacity-50' + (cityError ? ' border-red-500/60' : '')}
               maxLength={30}
             />
             {cityError && <p className="text-xs text-red-400 mt-1 font-myanmar">{cityError}</p>}
-            <button onClick={addCity} disabled={!newCity.trim()} className="btn-primary px-4 disabled:opacity-40">
+            <button onClick={addCity} disabled={!loaded || !newCity.trim()} className="btn-primary px-4 disabled:opacity-40">
               <Plus size={16} />
             </button>
           </div>
@@ -177,7 +184,7 @@ export default function AppSettingsPage() {
               <div key={c} className="flex items-center gap-2 px-3 py-2 bg-white/5 border border-white/8 rounded-xl">
                 <span className="text-[10px] text-white/60 w-5 flex-shrink-0">{i + 1}.</span>
                 <p className="flex-1 text-sm text-white">{c}</p>
-                <button onClick={() => removeCity(c)} className="w-7 h-7 rounded-lg btn-danger flex items-center justify-center flex-shrink-0">
+                <button onClick={() => removeCity(c)} disabled={!loaded} className="w-7 h-7 rounded-lg btn-danger flex items-center justify-center flex-shrink-0 disabled:opacity-40">
                   <X size={12} />
                 </button>
               </div>
@@ -189,7 +196,7 @@ export default function AppSettingsPage() {
         </div>
 
         {/* Save */}
-        <button onClick={save} disabled={saving} className="w-full btn-primary flex items-center justify-center gap-2 py-3">
+        <button onClick={save} disabled={!loaded || saving} className="w-full btn-primary flex items-center justify-center gap-2 py-3">
           <Save size={16} />
           {saving ? 'သိမ်းနေသည်...' : 'Settings သိမ်းမည်'}
         </button>

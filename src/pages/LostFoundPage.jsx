@@ -118,6 +118,8 @@ function PostForm({ onClose, onSuccess, lang }) {
 
   async function submit() {
     if (!form.title && !form.title_mm) return
+    // S27 (v9.17): at least one way to reach the poster is required.
+    if (!form.contact_phone?.trim() && !form.contact_name?.trim()) { showError('ဆက်သွယ်ရန် (ဖုန်း / နာမည်) တစ်ခုခု ထည့်ပါ'); return }
     setSubmitting(true)
     try {
       const { error } = await supabase.from('lost_found').insert({

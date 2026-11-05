@@ -25,6 +25,8 @@ export default function MyReviewsPage() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
+  const [pageSize, setPageSize] = useState(20)
+  const [hasMore, setHasMore] = useState(false)
 
   const load = useCallback(async () => {
     if (!user) { setLoading(false); return }
@@ -37,16 +39,19 @@ export default function MyReviewsPage() {
         .from('reviews')
         .select('*, listing:listings(name, name_mm)')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false }), 30000, 'My reviews')
+        .order('created_at', { ascending: false })
+        .limit(pageSize + 1), 30000, 'My reviews')
       if (error) throw error
-      setItems(data || [])
+      const rows = data || []
+      setItems(rows.slice(0, pageSize))
+      setHasMore(rows.length > pageSize)
     } catch (err) {
       console.error('loadMyReviews error:', err)
       setLoadError(true)
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, pageSize])
 
   useEffect(() => { load() }, [load])
 
@@ -112,6 +117,14 @@ export default function MyReviewsPage() {
             </div>
           )
         })
+      )}
+      {!loading && !loadError && hasMore && (
+        <button
+          onClick={() => setPageSize(s => s + 20)}
+          className="btn-primary w-full text-sm px-4 py-3"
+        >
+          {lang === 'mm' ? 'ထပ်တင်ရန်' : 'Load more'}
+        </button>
       )}
     </div>
   )

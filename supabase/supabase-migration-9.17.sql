@@ -1,0 +1,384 @@
+-- Cherry Directory v9.17 — SQL migration
+-- RUN AFTER DEPLOY in Supabase SQL Editor (Dashboard -> SQL Editor -> New query -> paste -> Run).
+-- Idempotent: every statement is CREATE OR REPLACE / DROP IF EXISTS /
+-- ADD COLUMN IF NOT EXISTS / IF EXISTS-guarded, so running it twice is safe.
+--
+-- What it changes:
+--   1. Leaderboard views (leaderboard_month / _6month / _year): add
+--      p.points AS all_time_points (tiers are lifetime, not period), fix
+--      period boundaries to Asia/Rangoon midnight instead of UTC midnight,
+--      and count period_listings by approved_at (approval month) instead of
+--      created_at (submission month).
+--   2. Delete-reversal triggers also decrement profiles.total_reviews /
+--      total_listings (they only reversed points before), plus a one-off
+--      live recount that repairs already-stale counters.
+--   3. prevent_profile_privilege_change: also blocks direct (depth-1)
+--      changes to total_reviews / total_listings (server triggers at
+--      depth >= 2 still pass), and blocks can_manage_donations changes
+--      unless the caller is admin-only (the admin-only RPC
+--      set_donation_permission still passes — it checks is_admin_only()
+--      itself before updating).
+--   4. New RSVP update trigger: leaving going/interested writes -2
+--      (only if a +2 exists and no -2 yet); entering writes +2 (only if
+--      no +2 row exists yet).
+--   5. Lost & found owner delete policy: owners can delete their own
+--      lost_found rows (guests have poster_id NULL, so still cannot).
+--   6. listings.approved_at column + BEFORE UPDATE trigger that stamps
+--      it on the approve transition + backfill from updated_at
+--      (approximate for already-approved rows).
+--   7. rentals / tutoring expires_at (+30 days) with backfill — guarded
+--      by IF EXISTS because those two tables were created live and are
+--      not in the repo schema. (Jobs already has expires_at +30d.)
+--
+-- What it does NOT touch: the user_points ledger rows are never
+-- rewritten — the admin's historical bulk-import points stay, and
+-- bulk import keeps earning points exactly as before
+-- (submitted_by: profile.id). The Points Guide now shows the
+-- ledger breakdown instead.
+--
+-- NOTE on ordering: the one-off recount in §2 runs BEFORE the privilege
+-- trigger replacement in §3 — a direct UPDATE is depth-1, so it must
+-- run while the old trigger (points/role only) is still in place.
+
+-- ============================================================
+-- §6a. listings.approved_at — approval timestamp (must exist
+--     before the view rewrites in §1 reference it).
+-- ============================================================
+alter table public.listings add column if not exists approved_at timestamptz;
+
+-- handle_listing_submitted is an AFTER trigger, so it cannot set
+-- NEW.approved_at (AFTER-trigger writes to NEW are discarded). A
+-- small BEFORE UPDATE trigger stamps it on the approve transition.
+create or replace function public.set_listing_approved_at()
+returns trigger as $$
+begin
+  if NEW.status = 'approved' and OLD.status is distinct from 'approved' then
+    NEW.approved_at = now();
+  end if;
+  return NEW;
+end;
+$$ language plpgsql;
+
+drop trigger if exists set_listing_approved_at on public.listings;
+create trigger set_listing_approved_at
+  before update on public.listings
+  for each row execute procedure public.set_listing_approved_at();
+
+-- Backfill already-approved rows (approximate: updated_at is the last
+-- edit time, not the approval time — close enough for period counts).
+update public.listings
+  set approved_at = updated_at
+  where status = 'approved' and approved_at is null;
+
+-- ============================================================
+-- §2. Delete-reversal triggers also decrement the counters,
+--     plus a one-off live recount of already-stale counters.
+-- ============================================================
+create or replace function public.handle_review_deleted_points()
+returns trigger as $$
+begin
+  if exists (select 1 from public.profiles where id = OLD.user_id)
+    and exists (
+      select 1 from public.user_points
+      where user_id = OLD.user_id and action = 'write_review' and points = 5
+        and ref_table = 'reviews' and ref_id = OLD.id
+    )
+    and not exists (
+      select 1 from public.user_points
+      where user_id = OLD.user_id and action = 'write_review' and points = -5
+        and ref_table = 'reviews' and ref_id = OLD.id
+    ) then
+    insert into public.user_points(user_id, action, points, ref_table, ref_id)
+    values (OLD.user_id, 'write_review', -5, 'reviews', OLD.id);
+    -- Counter decrement, guarded by the same reversal-row checks above.
+    update public.profiles
+      set total_reviews = greatest(0, total_reviews - 1)
+      where id = OLD.user_id;
+  end if;
+  return OLD;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_review_deleted_points on public.reviews;
+create trigger on_review_deleted_points
+  after delete on public.reviews
+  for each row execute procedure public.handle_review_deleted_points();
+
+create or replace function public.handle_listing_deleted_points()
+returns trigger as $$
+begin
+  -- submitted_by earned +10 on submit and +20 on approval;
+  -- reverse each leg only if it was actually awarded.
+  if OLD.submitted_by is not null
+    and exists (select 1 from public.profiles where id = OLD.submitted_by) then
+    if exists (
+      select 1 from public.user_points
+      where user_id = OLD.submitted_by and action = 'submit_listing' and points = 10
+        and ref_table = 'listings' and ref_id = OLD.id
+    )
+    and not exists (
+      select 1 from public.user_points
+      where user_id = OLD.submitted_by and action = 'submit_listing' and points = -10
+        and ref_table = 'listings' and ref_id = OLD.id
+    ) then
+      insert into public.user_points(user_id, action, points, ref_table, ref_id)
+      values (OLD.submitted_by, 'submit_listing', -10, 'listings', OLD.id);
+    end if;
+    if exists (
+      select 1 from public.user_points
+      where user_id = OLD.submitted_by and action = 'listing_approved' and points = 20
+        and ref_table = 'listings' and ref_id = OLD.id
+    )
+    and not exists (
+      select 1 from public.user_points
+      where user_id = OLD.submitted_by and action = 'listing_approved' and points = -20
+        and ref_table = 'listings' and ref_id = OLD.id
+    ) then
+      insert into public.user_points(user_id, action, points, ref_table, ref_id)
+      values (OLD.submitted_by, 'listing_approved', -20, 'listings', OLD.id);
+    end if;
+    -- Counter decrement (once per deleted listing, not per points leg).
+    update public.profiles
+      set total_listings = greatest(0, total_listings - 1)
+      where id = OLD.submitted_by;
+  end if;
+  return OLD;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_listing_deleted_points on public.listings;
+create trigger on_listing_deleted_points
+  after delete on public.listings
+  for each row execute procedure public.handle_listing_deleted_points();
+
+-- One-off recount: repairs counters that went stale before the
+-- triggers above existed. Basis matches the increment triggers:
+-- all reviews by the user, all listings submitted by the user
+-- (any status — same as /my-submissions).
+update public.profiles p
+  set total_reviews = (select count(*) from public.reviews where user_id = p.id),
+      total_listings = (select count(*) from public.listings where submitted_by = p.id);
+
+-- ============================================================
+-- §4. RSVP update trigger — mirror the delete-reversal style.
+--     (The INSERT trigger handle_rsvp_created only fires on
+--     INSERT, so changing going -> not_going never reversed +2.)
+-- ============================================================
+create or replace function public.handle_rsvp_updated_points()
+returns trigger as $$
+begin
+  -- Leaving going/interested: write -2 only if a +2 exists and no -2 yet.
+  if OLD.status in ('going', 'interested')
+    and (NEW.status is null or NEW.status not in ('going', 'interested')) then
+    if exists (
+      select 1 from public.user_points
+      where user_id = OLD.user_id and action = 'rsvp_going' and points = 2
+        and ref_table = 'event_rsvps' and ref_id = OLD.id
+    )
+    and not exists (
+      select 1 from public.user_points
+      where user_id = OLD.user_id and action = 'rsvp_going' and points = -2
+        and ref_table = 'event_rsvps' and ref_id = OLD.id
+    ) then
+      insert into public.user_points(user_id, action, points, ref_table, ref_id)
+      values (OLD.user_id, 'rsvp_going', -2, 'event_rsvps', OLD.id);
+    end if;
+  end if;
+  -- Entering going/interested: write +2 only if no +2 row exists yet.
+  if NEW.status in ('going', 'interested')
+    and (OLD.status is null or OLD.status not in ('going', 'interested')) then
+    if not exists (
+      select 1 from public.user_points
+      where user_id = NEW.user_id and action = 'rsvp_going' and points = 2
+        and ref_table = 'event_rsvps' and ref_id = NEW.id
+    ) then
+      insert into public.user_points(user_id, action, points, ref_table, ref_id)
+      values (NEW.user_id, 'rsvp_going', 2, 'event_rsvps', NEW.id);
+    end if;
+  end if;
+  return NEW;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists on_rsvp_updated_points on public.event_rsvps;
+create trigger on_rsvp_updated_points
+  after update on public.event_rsvps
+  for each row execute procedure public.handle_rsvp_updated_points();
+
+-- ============================================================
+-- §5. Lost & found — owner can delete their own row.
+--     Guests have poster_id NULL, so auth.uid() = NULL is never
+--     true and they still cannot delete.
+-- ============================================================
+drop policy if exists "Owner deletes own lost_found" on public.lost_found;
+create policy "Owner deletes own lost_found" on public.lost_found
+  for delete using (auth.uid() = poster_id);
+
+-- ============================================================
+-- §3. prevent_profile_privilege_change — extend the 9.3 trigger.
+--     total_reviews / total_listings: block depth-1 changes like
+--     the existing points guard, so the legitimate server triggers
+--     (depth >= 2) still pass. can_manage_donations: block unless
+--     the caller is admin-only — is_admin_only() is what the
+--     admin-only RPC set_donation_permission (9.5) checks, so the
+--     RPC still passes (it verifies admin before updating).
+--     (is_admin_or_above() would ALSO let moderators through,
+--     which would defeat the admin-only RPC.)
+-- ============================================================
+create or replace function public.prevent_profile_privilege_change()
+returns trigger as $$
+begin
+  if NEW.points is distinct from OLD.points and pg_trigger_depth() = 1 then
+    raise exception 'points ကို တိုက်ရိုက် ပြောင်းလို့မရပါ';
+  end if;
+  if NEW.total_reviews is distinct from OLD.total_reviews and pg_trigger_depth() = 1 then
+    raise exception 'total_reviews ကို တိုက်ရိုက် ပြောင်းလို့မရပါ';
+  end if;
+  if NEW.total_listings is distinct from OLD.total_listings and pg_trigger_depth() = 1 then
+    raise exception 'total_listings ကို တိုက်ရိုက် ပြောင်းလို့မရပါ';
+  end if;
+  if NEW.can_manage_donations is distinct from OLD.can_manage_donations and not public.is_admin_only() then
+    raise exception 'Donation permission ကို Admin သာ ပြောင်းနိုင်သည်';
+  end if;
+  if NEW.role is distinct from OLD.role and not public.is_super_admin() then
+    raise exception 'Role ကို Super Admin သာ ပြောင်းနိုင်သည်';
+  end if;
+  return NEW;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists prevent_profile_privilege_change on public.profiles;
+create trigger prevent_profile_privilege_change
+  before update on public.profiles
+  for each row execute procedure public.prevent_profile_privilege_change();
+
+-- ============================================================
+-- §1. Leaderboard views — all_time_points + MMT boundaries +
+--     period_listings by approved_at.
+--     MMT midnight as a timestamptz:
+--       (date_trunc('month', now() at time zone 'Asia/Rangoon')
+--          at time zone 'Asia/Rangoon')
+--     (a bare date_trunc(...) is a naive timestamp and would be
+--     read in the session timezone — usually UTC — which is the
+--     bug being fixed: the old views used UTC now() directly.)
+-- ============================================================
+create or replace view leaderboard_month as
+select
+  p.id, p.full_name, p.nickname, p.avatar_url,
+  p.role, p.last_seen, p.is_online,
+  p.total_reviews, p.total_listings,
+  p.points as all_time_points,
+  coalesce(sum(up.points) filter (
+    where up.created_at >= (date_trunc('month', now() at time zone 'Asia/Rangoon') at time zone 'Asia/Rangoon')
+  ), 0)::int as period_points,
+  coalesce(count(distinct r.id) filter (
+    where r.created_at >= (date_trunc('month', now() at time zone 'Asia/Rangoon') at time zone 'Asia/Rangoon')
+  ), 0)::int as period_reviews,
+  coalesce(count(distinct l.id) filter (
+    where l.approved_at >= (date_trunc('month', now() at time zone 'Asia/Rangoon') at time zone 'Asia/Rangoon')
+      and l.status = 'approved'
+  ), 0)::int as period_listings
+from profiles p
+left join user_points up on up.user_id = p.id
+left join reviews r      on r.user_id  = p.id
+left join listings l     on l.submitted_by = p.id
+group by p.id;
+
+create or replace view leaderboard_6month as
+select
+  p.id, p.full_name, p.nickname, p.avatar_url,
+  p.role, p.last_seen, p.is_online,
+  p.total_reviews, p.total_listings,
+  p.points as all_time_points,
+  coalesce(sum(up.points) filter (
+    where up.created_at >= now() - interval '6 months'
+  ), 0)::int as period_points,
+  coalesce(count(distinct r.id) filter (
+    where r.created_at >= now() - interval '6 months'
+  ), 0)::int as period_reviews,
+  coalesce(count(distinct l.id) filter (
+    where l.approved_at >= now() - interval '6 months'
+      and l.status = 'approved'
+  ), 0)::int as period_listings
+from profiles p
+left join user_points up on up.user_id = p.id
+left join reviews r      on r.user_id  = p.id
+left join listings l     on l.submitted_by = p.id
+group by p.id;
+
+create or replace view leaderboard_year as
+select
+  p.id, p.full_name, p.nickname, p.avatar_url,
+  p.role, p.last_seen, p.is_online,
+  p.total_reviews, p.total_listings,
+  p.points as all_time_points,
+  coalesce(sum(up.points) filter (
+    where up.created_at >= (date_trunc('year', now() at time zone 'Asia/Rangoon') at time zone 'Asia/Rangoon')
+  ), 0)::int as period_points,
+  coalesce(count(distinct r.id) filter (
+    where r.created_at >= (date_trunc('year', now() at time zone 'Asia/Rangoon') at time zone 'Asia/Rangoon')
+  ), 0)::int as period_reviews,
+  coalesce(count(distinct l.id) filter (
+    where l.approved_at >= (date_trunc('year', now() at time zone 'Asia/Rangoon') at time zone 'Asia/Rangoon')
+      and l.status = 'approved'
+  ), 0)::int as period_listings
+from profiles p
+left join user_points up on up.user_id = p.id
+left join reviews r      on r.user_id  = p.id
+left join listings l     on l.submitted_by = p.id
+group by p.id;
+
+-- ============================================================
+-- §7. Rent / tutoring expiry (+30 days, like jobs).
+--     rentals / tutoring were created live and are NOT in the
+--     repo schema, so this is IF EXISTS-guarded: it applies on
+--     the live DB and no-ops anywhere the tables do not exist.
+-- ============================================================
+do $$
+begin
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'rentals') then
+    alter table public.rentals add column if not exists expires_at timestamptz default (now() + interval '30 days');
+    update public.rentals set expires_at = created_at + interval '30 days' where expires_at is null;
+  end if;
+  if exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'tutoring') then
+    alter table public.tutoring add column if not exists expires_at timestamptz default (now() + interval '30 days');
+    update public.tutoring set expires_at = created_at + interval '30 days' where expires_at is null;
+  end if;
+end $$;
+
+-- ============================================================
+-- §8. Orphaned bookmarks cleanup.
+--     bookmarks is polymorphic (target_type 'listing'/'post' +
+--     target_id, no FK — schema-final:206-213), so deleting a
+--     listing or post left bookmark rows pointing at nothing.
+--     The triggers delete those rows on target delete; the two
+--     one-off DELETEs repair already-orphaned rows.
+-- ============================================================
+create or replace function public.cleanup_bookmarks_on_target_delete()
+returns trigger as $$
+begin
+  if TG_TABLE_NAME = 'listings' then
+    delete from bookmarks where target_type = 'listing' and target_id = OLD.id;
+  elsif TG_TABLE_NAME = 'posts' then
+    delete from bookmarks where target_type = 'post' and target_id = OLD.id;
+  end if;
+  return OLD;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists trg_cleanup_bookmarks_listing on public.listings;
+create trigger trg_cleanup_bookmarks_listing
+  after delete on public.listings
+  for each row execute procedure public.cleanup_bookmarks_on_target_delete();
+
+drop trigger if exists trg_cleanup_bookmarks_post on public.posts;
+create trigger trg_cleanup_bookmarks_post
+  after delete on public.posts
+  for each row execute procedure public.cleanup_bookmarks_on_target_delete();
+
+delete from bookmarks b
+where target_type = 'listing'
+  and not exists (select 1 from listings l where l.id = b.target_id);
+delete from bookmarks b
+where target_type = 'post'
+  and not exists (select 1 from posts p where p.id = b.target_id);

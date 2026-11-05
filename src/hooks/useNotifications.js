@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -31,13 +32,29 @@ export const useNotifications = (limit = 20) => {
 };
 
 /**
- * Get unread notification count
+ * Get unread notification count — S31 (v9.17): a count query, not a
+ * count of the capped (20-row) page, which under-reported the badge.
  */
 export const useUnreadNotificationCount = () => {
   const { user } = useAuth();
-  const { data: notifications = [] } = useNotifications();
 
-  return notifications.filter((n) => !n.is_read).length;
+  const { data } = useQuery({
+    queryKey: ['unread-notification-count', user?.id],
+    queryFn: async () => {
+      if (!user) return 0;
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+      if (error) throw error;
+      return count || 0;
+    },
+    enabled: !!user,
+    staleTime: 1000 * 60, // 1 minute
+  });
+
+  return data ?? 0;
 };
 
 /**
@@ -53,6 +70,7 @@ export const useMarkNotificationAsRead = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [NOTIFICATIONS_QUERY_KEY, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['unread-notification-count', user?.id] });
     },
     onError: (err) => {
       showError(err?.message || 'ဖတ်ပြီးအဖြစ် မှတ်မရပါ');
@@ -74,6 +92,7 @@ export const useMarkAllNotificationsAsRead = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [NOTIFICATIONS_QUERY_KEY, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['unread-notification-count', user?.id] });
     },
     onError: (err) => {
       showError(err?.message || 'အားလုံးဖတ်ပြီးအဖြစ် မှတ်မရပါ');
@@ -94,6 +113,7 @@ export const useDeleteNotification = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [NOTIFICATIONS_QUERY_KEY, user?.id] });
+      queryClient.invalidateQueries({ queryKey: ['unread-notification-count', user?.id] });
     },
     onError: (err) => {
       showError(err?.message || 'ဖျက်မရပါ — ထပ်ကြိုးစားပါ');
@@ -114,6 +134,7 @@ export const useNotificationSubscription = () => {
     const subscription = subscribeToNotifications(user.id, (newNotification) => {
       // Invalidate and refetch notifications
       queryClient.invalidateQueries({ queryKey: [NOTIFICATIONS_QUERY_KEY, user.id] });
+      queryClient.invalidateQueries({ queryKey: ['unread-notification-count', user.id] });
     });
 
     return () => {

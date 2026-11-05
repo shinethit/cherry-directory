@@ -65,10 +65,15 @@ export default function LoginPage() {
   async function handleSubmit(e) {
     e.preventDefault()
     setError(''); setSuccess('')
+    // S1 (v9.17): trim inputs — a trailing space in the email used to
+    // fail sign-in with a confusing error, and a spaces-only name slipped
+    // through sign-up.
+    const cleanEmail = email.trim().toLowerCase()
+    const cleanName = fullName.trim()
     setLoading(true)
     try {
       if (mode === 'login') {
-        await signIn({ email, password })
+        await signIn({ email: cleanEmail, password })
         goBackOrHome()
       } else {
         // Confirm password must match before creating the account (F4).
@@ -77,7 +82,12 @@ export default function LoginPage() {
           setLoading(false)
           return
         }
-        const data = await signUp({ email, password, fullName })
+        if (!cleanName) {
+          setError('နာမည် ထည့်ပါ')
+          setLoading(false)
+          return
+        }
+        const data = await signUp({ email: cleanEmail, password, fullName: cleanName })
         // Email confirmation ON → no session yet, user must confirm via email.
         // Confirmation OFF → Supabase returns a session immediately: go in.
         if (data?.session) {

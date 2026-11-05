@@ -1,9 +1,24 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Trophy, Sparkles, Target } from 'lucide-react'
+import { ArrowLeft, Trophy, Sparkles, Target, History } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
+import { usePoints } from '../hooks/usePoints'
+import { formatMyanmarDate } from '../lib/myanmarDate'
 import { TIERS, getTier, getNextTier, getTierProgress, POINT_ACTIONS } from '../lib/tiers'
+
+// Ledger action → human label (same values as POINT_ACTIONS). Reversal
+// rows share the action with negative points — the sign comes from the
+// row itself, so a -5 Review row reads as a removed review.
+const HISTORY_LABELS = {
+  write_review:     { mm: 'Review',   en: 'Review' },
+  submit_listing:   { mm: 'တင်ပြခြင်း', en: 'Submit' },
+  listing_approved: { mm: 'Approved', en: 'Approved' },
+  rsvp_going:       { mm: 'RSVP',     en: 'RSVP' },
+  chat_message:     { mm: 'Chat',     en: 'Chat' },
+  claim_approved:   { mm: 'Claim',    en: 'Claim' },
+}
 
 // E10 (v9.5): where each "how to earn" action is done. Order mirrors
 // POINT_ACTIONS in src/lib/tiers.js (not owned by this track, so the
@@ -28,6 +43,23 @@ export default function PointsGuidePage() {
   const currentTier = getTier(myPoints)
   const nextTier = getNextTier(myPoints)
   const progress = getTierProgress(myPoints)
+
+  // Issue 3c (v9.17): the ledger breakdown — the user-visible proof of
+  // where points came from. getHistory had ZERO callers before this.
+  const { getHistory, getMonthlyPoints } = usePoints()
+  const [history, setHistory] = useState(null)
+  const [historyError, setHistoryError] = useState(false)
+  // Issue 3e (v9.17): this-month points next to the all-time total —
+  // one bare number was ambiguous. Monthly comes from the
+  // leaderboard_month view (same Yangon-month definition as the board).
+  const [monthPoints, setMonthPoints] = useState(null)
+  useEffect(() => {
+    if (!isLoggedIn) return
+    let cancelled = false
+    getHistory(20).then(rows => { if (!cancelled) setHistory(rows || []) }).catch(() => { if (!cancelled) setHistoryError(true) })
+    getMonthlyPoints().then(v => { if (!cancelled) setMonthPoints(v) }).catch(() => { if (!cancelled) setMonthPoints(null) })
+    return () => { cancelled = true }
+  }, [isLoggedIn])
 
   return (
     <div className="pb-10">
@@ -58,7 +90,8 @@ export default function PointsGuidePage() {
               </div>
               <div className="text-right">
                 <p className="font-display font-bold text-xl text-white">{myPoints.toLocaleString()}</p>
-                <p className="text-[10px] text-white/50">{lang === 'mm' ? 'မှတ်' : 'pts'}</p>
+                <p className="text-[10px] text-white/50">{lang === 'mm' ? 'စုစုပေါင်း မှတ်' : 'total pts'}</p>
+                <p className="text-[11px] text-gold-400 mt-1 font-myanmar">{lang === 'mm' ? `ဒီလ: ${monthPoints === null ? '—' : monthPoints.toLocaleString()} မှတ်` : `This month: ${monthPoints === null ? '—' : monthPoints.toLocaleString()} pts`}</p>
               </div>
             </div>
             {nextTier ? (
@@ -129,6 +162,45 @@ export default function PointsGuidePage() {
           })}
         </div>
       </div>
+
+      {/* Issue 3c (v9.17): points history from the ledger. */}
+      {isLoggedIn && (
+      <div className="px-4 mt-6">
+        <h2 className="text-xs font-display font-bold text-white/60 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <History size={14} className="text-gold-400" />
+          {lang === 'mm' ? 'အမှတ်မှတ်တမ်း' : 'Points History'}
+        </h2>
+        {history === null && !historyError ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(n => <div key={n} className="h-11 rounded-xl shimmer" />)}
+          </div>
+        ) : historyError ? (
+          <p className="text-xs text-white/60 font-myanmar p-3 card-dark rounded-xl">မှတ်တမ်း ရယူမရပါ — ထပ်ကြိုးစားပါ</p>
+        ) : history.length === 0 ? (
+          <p className="text-xs text-white/60 font-myanmar p-3 card-dark rounded-xl">
+            {lang === 'mm' ? 'အမှတ် မှတ်တမ်း မရှိသေးပါ — Review ရေး၊ လုပ်ငန်း တင်ပြီး အမှတ် ရယူပါ' : 'No points yet — write a review or submit a listing to earn points'}
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {history.map(row => {
+              const label = HISTORY_LABELS[row.action] || { mm: row.action, en: row.action }
+              const pts = Number(row.points) || 0
+              return (
+                <div key={row.id} className="flex items-center gap-3 p-3 rounded-xl bg-white/4 border border-white/8">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white/80 font-myanmar">{lang === 'mm' ? label.mm : label.en}</p>
+                    <p className="text-[10px] text-white/50 mt-0.5">{formatMyanmarDate(row.created_at, { year: true })}</p>
+                  </div>
+                  <span className={`font-mono font-bold text-sm ${pts >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {pts >= 0 ? `+${pts}` : pts}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      )}
 
       <div className="px-4 mt-6">
         <button

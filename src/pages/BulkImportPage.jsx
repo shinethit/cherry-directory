@@ -30,9 +30,10 @@ const COLUMNS = [
 ]
 
 function generateTemplate() {
+  // S9 (v9.17): header row only — the live example row used to be
+  // imported as a real listing when users forgot to delete it.
   const header = COLUMNS.map(c => c.key).join(',')
-  const example = COLUMNS.map(c => '"' + c.example + '"').join(',')
-  const blob = new Blob([header + '\n' + example], { type: 'text/csv' })
+  const blob = new Blob([header + '\n'], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a'); a.href = url; a.download = 'cherry-directory-import-template.csv'; a.click()
   URL.revokeObjectURL(url)
@@ -108,6 +109,15 @@ export default function BulkImportPage() {
         setPreview(null)
         return
       }
+      // S12 (v9.17): cap rows at 1,000/file — larger files time out
+      // mid-import and leave a half-imported batch.
+      if (parsed.rows.length > 1000) {
+        showError('ဖိုင် တစ်ခု အများဆုံး ၁၀၀၀ row သာ — ဖိုင်ကို ခွဲပါ')
+        e.target.value = ''
+        setFileName('')
+        setPreview(null)
+        return
+      }
       setPreview(parsed)
     }
     reader.onerror = () => {
@@ -170,6 +180,7 @@ export default function BulkImportPage() {
         const { data: existing, error: dedupeErr } = await supabase
           .from('listings')
           .select('name, phone_1')
+          .order('id')
           .range(from, from + PAGE - 1)
         if (dedupeErr) throw dedupeErr
         ;(existing || []).forEach(l => seenKeys.add(dedupeKey(l.name, l.phone_1)))
@@ -201,9 +212,21 @@ export default function BulkImportPage() {
         }
 
         const catId = catMap[row.category?.toLowerCase().trim()] || catMap[row.category?.trim()] || null;
-        if (!catId && row.category) {
-          // Category not found → error list, never inserted as success.
-          errors.push({ row: rowNum, field: 'category', message: 'Category "' + row.category + '" not found' });
+        // M5 (v9.17): an empty category is an error like a missing name —
+        // it used to import with category_id null and vanish from the
+        // Directory (which filters by category).
+        if (!catId) {
+          errors.push({ row: rowNum, field: 'category', message: row.category ? 'Category "' + row.category + '" not found' : 'Category is required' });
+          failed++;
+          continue;
+        }
+
+        // S10 (v9.17): lat/lng range — an out-of-range coordinate used
+        // to insert fine and then break the map pin.
+        const lat = row.latitude ? parseFloat(row.latitude) : null
+        const lng = row.longitude ? parseFloat(row.longitude) : null
+        if ((lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) || (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180))) {
+          errors.push({ row: rowNum, field: 'location', message: 'Latitude/Longitude မှားနေသည်' });
           failed++;
           continue;
         }
@@ -231,8 +254,8 @@ export default function BulkImportPage() {
             telegram: row.telegram?.trim() || null,
             whatsapp: row.whatsapp?.trim() || null,
             facebook: row.facebook?.trim() || null,
-            latitude: row.latitude ? parseFloat(row.latitude) : null,
-            longitude: row.longitude ? parseFloat(row.longitude) : null,
+            latitude: lat,
+            longitude: lng,
             submitted_by: profile.id,
             // Imported rows go to the admin approve queue, never live.
             status: 'pending',
@@ -434,6 +457,9 @@ export default function BulkImportPage() {
                 <><Upload size={15} /> {preview.rows.length} လုပ်ငန်း Import လုပ်မည်</>
               )}
             </button>
+            {/* Issue 3a (v9.17): imported shops earn no points — they are
+                seed data, not the importer's personal submissions. */}
+            <p className="text-[10px] text-white/60 font-myanmar text-center">Import လုပ်တဲ့ ဆိုင်တွေအတွက် အမှတ် မရပါ</p>
             {importing && (
               <button onClick={handleCancelImport} className="btn-ghost w-full text-sm">
                 Import ရပ်မည် (ထည့်ပြီးသားများ ကျန်မည်)

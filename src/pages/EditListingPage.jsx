@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Save, MapPin, Search, X } from 'lucide-react'
+import { ArrowLeft, Save, MapPin, Search, X, Plus, Minus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
@@ -13,7 +13,8 @@ import { useAppConfig } from '../contexts/AppConfigContext'
 import { BusinessHoursEditor } from '../components/BusinessHours'
 import LocationPicker from '../components/LocationPicker'
 import { showError, showSuccess } from '../lib/toast'
-import { validateListing } from '../lib/validation'
+import { validateListing, toLatinDigits } from '../lib/validation'
+import { draftKey, saveDraft, loadDraft, clearDraft, debounce } from '../lib/draftStorage'
 
 function Field({ label, children, required, error }) {
   return (
@@ -51,6 +52,13 @@ export default function EditListingPage() {
   const [adminFieldSaving, setAdminFieldSaving] = useState(false)
   const [showMapPicker, setShowMapPicker] = useState(false)
   const [catSearch, setCatSearch] = useState('')
+  // v9.17 (Issue 2): draft autosave — an iOS-evicted PWA reload used to
+  // lose every unsaved edit. draftRestored = a draft was applied over
+  // the server row; draftMode = the server load failed and the form is
+  // rendering from the draft alone (amber banner + Retry).
+  const [draftRestored, setDraftRestored] = useState(false)
+  const [draftMode, setDraftMode] = useState(false)
+  const saveDraftDebounced = useRef(null)
   // B17: photos removed in the form are only gone from local state — the
   // DB keeps them until Save. Keep them here so the user can undo.
   const [removedPhotos, setRemovedPhotos] = useState([])
@@ -82,7 +90,7 @@ export default function EditListingPage() {
         setCanEdit(allowed)
         setCategories(cats || [])
         setOriginal(listing)
-        setForm({
+        const serverForm = {
           name: listing.name || '',
           name_mm: listing.name_mm || '',
           description: listing.description || '',
@@ -94,8 +102,13 @@ export default function EditListingPage() {
           ward: listing.ward || '',
           address: listing.address || '',
           address_mm: listing.address_mm || '',
-          phone_1: listing.phone_1 || '',
-          phone_2: listing.phone_2 || '',
+          // S11 (v9.17): same dynamic phone list as Submit (up to 5) —
+          // the edit form used to show only phone_1/phone_2, silently
+          // dropping phone_3..5 on every save.
+          phones: (() => {
+            const saved = [listing.phone_1, listing.phone_2, listing.phone_3, listing.phone_4, listing.phone_5].filter(Boolean)
+            return saved.length > 0 ? saved : ['']
+          })(),
           viber: listing.viber || '',
           telegram: listing.telegram || '',
           whatsapp: listing.whatsapp || '',
@@ -107,9 +120,44 @@ export default function EditListingPage() {
           longitude: listing.longitude?.toString() || '',
           gallery: listing.images || [],   // load existing gallery images
           hours: listing.hours || null,
-        })
-    } catch (e) { console.warn(e); setLoadError(true) }
+        }
+        // A draft is the user's latest typing — it wins over the server
+        // row (the user was mid-edit when the app was evicted).
+        const draft = loadDraft(draftKey('edit', id))
+        if (draft?.form) {
+          setForm({ ...serverForm, ...draft.form })
+          setDraftRestored(true)
+        } else {
+          setForm(serverForm)
+          setDraftRestored(false)
+        }
+        setDraftMode(false)
+    } catch (e) {
+      console.warn(e)
+      // v9.17 (Issue 2c): the fetch failed, but a draft exists — render
+      // the form from the draft with an amber banner + Retry instead of
+      // the full error screen. No draft → keep the error screen.
+      const draft = loadDraft(draftKey('edit', id))
+      if (draft?.form) {
+        setForm(draft.form)
+        setCategories([])
+        setCanEdit(true)
+        setDraftMode(true)
+        setDraftRestored(true)
+      } else {
+        setLoadError(true)
+      }
+    }
   }
+
+  // Draft autosave (debounced ~500 ms) on every form change.
+  useEffect(() => {
+    if (!form) return
+    if (!saveDraftDebounced.current) {
+      saveDraftDebounced.current = debounce(f => saveDraft(draftKey('edit', id), f), 500)
+    }
+    saveDraftDebounced.current(form)
+  }, [form, id])
 
   useEffect(() => {
     // Don't decide canEdit until the auth/profile load settles: profile
@@ -120,6 +168,19 @@ export default function EditListingPage() {
   }, [id, profile, authLoading])
 
   function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
+
+  // S12 (v9.17): same business-type picker as Submit (was missing from
+  // the edit form, so business_type could never be changed after submit).
+  const BUSINESS_TYPES = [
+    { value: 'shop',    emoji: '🏪', label: lang === 'mm' ? 'ဆိုင်' : 'Shop',       desc: lang === 'mm' ? 'လူကိုယ်တိုင် လာရောက်' : 'Walk-in' },
+    { value: 'service', emoji: '🛠',  label: lang === 'mm' ? 'ဝန်ဆောင်မှု' : 'Service', desc: lang === 'mm' ? 'ဖုန်း / အွန်လိုင်း' : 'Phone/Online' },
+    { value: 'home',    emoji: '🏠', label: lang === 'mm' ? 'အိမ်မှ' : 'Home-based', desc: lang === 'mm' ? 'အိမ်မှ လုပ်ငန်း' : 'From home' },
+  ]
+
+  // S11 (v9.17): dynamic phone list (up to 5), same as Submit.
+  function updatePhone(idx, value) { set('phones', (form.phones || []).map((p, i) => i === idx ? value : p)) }
+  function addPhone() { if ((form.phones || []).length < 5) set('phones', [...(form.phones || []), '']) }
+  function removePhone(idx) { if ((form.phones || []).length > 1) set('phones', (form.phones || []).filter((_, i) => i !== idx)) }
 
   // Max 5 photos per listing: logo(1) + cover(1) + gallery(max 3)
   const MAX_GALLERY = 3
@@ -241,8 +302,7 @@ export default function EditListingPage() {
       name: form.name,
       name_mm: form.name_mm,
       category_id: form.category_id,
-      phone_1: form.phone_1,
-      phone_2: form.phone_2,
+      phones: form.phones,
       website: form.website,
       latitude: lat,
       longitude: lng,
@@ -262,9 +322,14 @@ export default function EditListingPage() {
     }
     setSaving(true)
 
-    const { gallery, ...formWithoutGallery } = form
+    const { gallery, phones, ...formWithoutGallery } = form
+    // Phones are stored phone_1..phone_5 (Submit pattern, Latin digits);
+    // a removed phone must clear its column, so write all five.
+    const phoneColumns = {}
+    for (let i = 0; i < 5; i++) phoneColumns['phone_' + (i + 1)] = (phones || [])[i] ? toLatinDigits((phones || [])[i]) : null
     const updates = {
       ...formWithoutGallery,
+      ...phoneColumns,
       images: gallery || [],                             // save gallery as images[]
       latitude: lat,
       longitude: lng,
@@ -293,6 +358,10 @@ export default function EditListingPage() {
 
     setSaved(true)
     setRemovedPhotos([])
+    saveDraftDebounced.current?.cancel?.()
+    clearDraft(draftKey('edit', id))
+    setDraftRestored(false)
+    setDraftMode(false)
     showSuccess('သိမ်းပြီးပါပြီ')
     setSaving(false)
     setTimeout(() => setSaved(false), 2500)
@@ -361,6 +430,20 @@ export default function EditListingPage() {
       </div>
 
       <form id="edit-listing-form" onSubmit={handleSave} className="px-4 space-y-5 pt-4">
+
+        {/* v9.17 (Issue 2): a draft was restored — the user's unsaved
+            typing survived the app switch. In draftMode the server load
+            itself failed, so this IS the data (Retry re-fetches). */}
+        {(draftRestored || draftMode) && (
+          <div className={`flex items-center justify-between rounded-xl border px-3 py-2 ${draftMode ? 'bg-amber-500/10 border-amber-500/25' : 'bg-brand-600/10 border-brand-400/25'}`}>
+            <p className="text-[11px] text-amber-300 font-myanmar">
+              {draftMode ? 'Data ပြန်တင်မရပါ — draft ပြနေသည်' : 'မသိမ်းရသေး draft ပြန်ရသည်'}
+            </p>
+            {draftMode && (
+              <button type="button" onClick={() => load()} className="text-[11px] font-bold text-amber-300 underline">ပြန်ကြိုးစားမည်</button>
+            )}
+          </div>
+        )}
 
         {/* Photos — max 5 total (logo + cover + gallery max 3) */}
         <div className="space-y-3">
@@ -442,12 +525,14 @@ export default function EditListingPage() {
           </div>
         </div>
 
-        {/* Basic — name in EITHER language is enough (Myanmar-only listings must save) */}
-        <Field label="လုပ်ငန်းအမည် (English)" required>
-          <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className={'input-dark' + (fieldErrors.name ? ' border-red-500/60' : '')} />
-        </Field>
-        <Field label="လုပ်ငန်းအမည် (မြန်မာ)" required error={fieldErrors.name}>
+        {/* Basic — name in EITHER language is enough (Myanmar-only listings must save).
+            The * sits on the shared group label, never on one language alone. */}
+        <p className="text-xs text-white/50 mb-1.5">လုပ်ငန်းအမည် <span className="text-brand-400">*</span> <span className="text-white/60 font-normal">(မြန်မာ သို့မဟုတ် English တစ်ခု)</span></p>
+        <Field label="လုပ်ငန်းအမည် (မြန်မာ)" error={fieldErrors.name}>
           <input type="text" value={form.name_mm} onChange={e => set('name_mm', e.target.value)} className={'input-dark font-myanmar' + (fieldErrors.name ? ' border-red-500/60' : '')} />
+        </Field>
+        <Field label="လုပ်ငန်းအမည် (English)">
+          <input type="text" value={form.name} onChange={e => set('name', e.target.value)} className={'input-dark' + (fieldErrors.name ? ' border-red-500/60' : '')} />
         </Field>
         <p className="text-[10px] text-white/60 font-myanmar -mt-2">အမည် တစ်ခု (မြန်မာ သို့မဟုတ် English) ရှိရမည်</p>
         <Field label="အမျိုးအစား" required error={fieldErrors.category}>
@@ -496,6 +581,28 @@ export default function EditListingPage() {
               <option value="" disabled>{lang === 'mm' ? 'ရှာတွေ့မှု မရှိ' : 'No matches'}</option>
             )}
           </select>
+        </Field>
+        {/* S12 (v9.17): business-type picker, same as Submit. */}
+        <Field label={lang === 'mm' ? 'လုပ်ငန်းအမျိုးအစား' : 'Business type'}>
+          <div className="grid grid-cols-3 gap-2">
+            {BUSINESS_TYPES.map(opt => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => set('business_type', opt.value)}
+                className={
+                  'p-2.5 rounded-xl border text-center transition-colors ' +
+                  (form.business_type === opt.value
+                    ? 'bg-brand-600/50 border-brand-400/60 text-brand-200'
+                    : 'bg-white/5 border-white/10 text-white/50')
+                }
+              >
+                <p className="text-lg leading-none mb-1">{opt.emoji}</p>
+                <p className="text-xs font-semibold leading-tight">{opt.label}</p>
+                <p className="text-[9px] text-white/60 mt-0.5 leading-tight">{opt.desc}</p>
+              </button>
+            ))}
+          </div>
         </Field>
         <Field label="ဖော်ပြချက် (မြန်မာ)">
           <textarea value={form.description_mm} onChange={e => set('description_mm', e.target.value)} className="input-dark font-myanmar resize-none h-24" />
@@ -620,9 +727,31 @@ export default function EditListingPage() {
         <div className="border-t border-white/8 pt-4">
           <p className="text-xs text-white/60 mb-3 font-display font-semibold uppercase tracking-wider">ဆက်သွယ်ရေး</p>
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="ဖုန်း (၁)" error={fieldErrors.phone}><input type="tel" value={form.phone_1} onChange={e => set('phone_1', e.target.value)} className={'input-dark' + (fieldErrors.phone ? ' border-red-500/60' : '')} placeholder="09xxxxxxxxx" /></Field>
-              <Field label="ဖုန်း (၂)"><input type="tel" value={form.phone_2} onChange={e => set('phone_2', e.target.value)} className="input-dark" /></Field>
+            {/* S11 (v9.17): dynamic phone list (up to 5), same as Submit. */}
+            <div className="space-y-2">
+              <label className="block text-xs text-white/50">ဖုန်းနံပါတ်များ</label>
+              {(form.phones || ['']).map((phone, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => updatePhone(idx, e.target.value)}
+                    className={'input-dark flex-1' + (fieldErrors.phone ? ' border-red-500/60' : '')}
+                    placeholder={'ဖုန်း ' + (idx + 1) + ' (09xxxxxxxxx)'}
+                  />
+                  {(form.phones || []).length > 1 && (
+                    <button type="button" onClick={() => removePhone(idx)} className="w-10 h-10 rounded-xl btn-danger flex items-center justify-center transition-colors">
+                      <Minus size={16} />
+                    </button>
+                  )}
+                  {idx === (form.phones || []).length - 1 && (form.phones || []).length < 5 && (
+                    <button type="button" onClick={addPhone} className="w-10 h-10 rounded-xl bg-brand-600/20 text-brand-300 flex items-center justify-center hover:bg-brand-600/30 transition-colors">
+                      <Plus size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {fieldErrors.phone && <p className="text-xs text-red-400 mt-1 font-myanmar">{fieldErrors.phone}</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Viber"><input type="tel" value={form.viber} onChange={e => set('viber', e.target.value)} className="input-dark" /></Field>
@@ -650,6 +779,21 @@ export default function EditListingPage() {
             Audit Log →
           </button>
         </div>
+
+        {/* S13 (v9.17): bottom Save button mirroring Submit's — the form
+            is long and the header Save scrolls away. */}
+        <button
+          type="submit"
+          disabled={saving}
+          className="btn-primary w-full disabled:opacity-50"
+        >
+          {saving ? (
+            <span className="flex items-center justify-center gap-2">
+              <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              သိမ်းနေသည်...
+            </span>
+          ) : saved ? '✓ သိမ်းပြီးပါပြီ' : 'သိမ်းမည်'}
+        </button>
 
       </form>
 

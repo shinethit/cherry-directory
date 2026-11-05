@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, MapPin, Clock, CheckCircle, Star, Plus, Edit3, LayoutGrid, List } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
@@ -68,6 +68,7 @@ function formatDateEnLong(iso) {
 
 // ── RSVP Button ───────────────────────────────────────────────
 function RsvpButton({ postId }) {
+  const location = useLocation()
   const { isLoggedIn, user, isModerator, isAdmin } = useAuth()
   const navigate = useNavigate()
   const [status, setStatus] = useState(null) // null | 'going' | 'interested'
@@ -93,7 +94,7 @@ function RsvpButton({ postId }) {
   }, [postId, user])
 
   async function rsvp(newStatus) {
-    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ RSVP လုပ်နိုင်မည်'); navigate('/login'); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ RSVP လုပ်နိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
     setLoading(true)
     if (status === newStatus) {
       const { error } = await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
@@ -292,6 +293,9 @@ export default function CalendarPage() {
   const loadEvents = useCallback(async () => {
     setLoading(true)
     setLoadError(false)
+    // S15 (v9.17): clear the old month's events first — otherwise the
+    // previous month's dots linger until the new fetch lands.
+    setEvents([])
     const from = new Date(viewYear, viewMonth - 1, 1).toISOString()
     const to   = new Date(viewYear, viewMonth + 2, 1).toISOString()
 
@@ -332,19 +336,31 @@ export default function CalendarPage() {
   }, [viewYear, viewMonth])
 
   // Load upcoming events (next 10 from today)
-  useEffect(() => {
-    supabase
-      .from('posts')
-      .select('id, title, title_mm, cover_url, event_start, event_end, event_location, type, author_id')
-      .eq('type', 'event')
-      .eq('status', 'published')
-      // Include multi-day events still in progress (event_end >= now),
-      // not only events starting in the future.
-      .or(`event_start.gte.${today.toISOString()},event_end.gte.${today.toISOString()}`)
-      .order('event_start')
-      .limit(10)
-      .then(({ data }) => setUpcoming(data || []))
-  }, [])
+  // S16 (v9.17): withTimeout + error state, like loadEvents — the old
+  // bare .then() failed silently and left "no upcoming" as a false empty.
+  const [upcomingError, setUpcomingError] = useState(false)
+  async function loadUpcoming() {
+    setUpcomingError(false)
+    try {
+      const nowIso = new Date().toISOString()
+      const { data, error } = await withTimeout(supabase
+        .from('posts')
+        .select('id, title, title_mm, cover_url, event_start, event_end, event_location, type, author_id')
+        .eq('type', 'event')
+        .eq('status', 'published')
+        // Include multi-day events still in progress (event_end >= now),
+        // not only events starting in the future.
+        .or(`event_start.gte.${nowIso},event_end.gte.${nowIso}`)
+        .order('event_start')
+        .limit(10), 30000, 'Calendar upcoming')
+      if (error) throw error
+      setUpcoming(data || [])
+    } catch (e) {
+      console.warn(e)
+      setUpcomingError(true)
+    }
+  }
+  useEffect(() => { loadUpcoming() }, [])
 
   useEffect(() => { loadEvents() }, [loadEvents])
 
@@ -366,16 +382,24 @@ export default function CalendarPage() {
 
   // Events on a given day — multi-day events appear on EVERY day in
   // [event_start, event_end], not just the start day.
+  // S14 (v9.17): compare MMT date keys, not local-Date instants — a
+  // stored +06:30 datetime compared in device time could split one MMT
+  // day across two local days (same fix as formatDateRange above).
   function eventsOnDay(date) {
-    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate())
-    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1)
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+    const dayKey = (iso) => {
+      const p = mmtParts(iso)
+      if (!p) return null
+      return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`
+    }
     return events
       .filter(ev => !selEventCat || ev.category_id === selEventCat)
       .filter(ev => {
         if (!ev.event_start) return false
-        const start = new Date(ev.event_start)
-        const end = ev.event_end ? new Date(ev.event_end) : start
-        return start < dayEnd && end >= dayStart
+        const sKey = dayKey(ev.event_start)
+        const eKey = ev.event_end ? dayKey(ev.event_end) : sKey
+        if (!sKey || !eKey) return false
+        return sKey <= key && key <= eKey
       })
   }
 
@@ -400,7 +424,7 @@ export default function CalendarPage() {
             onClick={() => navigate('/events/create')}
             className="flex items-center gap-1.5 btn-primary text-xs px-3 py-2 flex-shrink-0"
           >
-            <Plus size={14} /> Event ထည့်
+            <Plus size={14} /> {lang === 'mm' ? 'Event ထည့်' : 'Add Event'}
           </button>
         )}
       </div>
@@ -488,7 +512,7 @@ export default function CalendarPage() {
           {gridCells.map((date, i) => {
             if (!date) return <div key={`empty-${i}`} />
             const dots = eventsOnDay(date)
-            const isToday = isSameDay(date, today)
+            const isToday = isSameDay(date, new Date())
             const isSelected = isSameDay(date, selected)
             const hasDots = dots.length > 0
 
@@ -573,8 +597,8 @@ export default function CalendarPage() {
               </p>
             )}
           </div>
-          {isSameDay(selected, today) && (
-            <span className="badge bg-green-500/20 text-green-400 border border-green-500/30 text-[9px]">Today</span>
+          {isSameDay(selected, new Date()) && (
+            <span className="badge bg-green-500/20 text-green-400 border border-green-500/30 text-[9px]">{lang === 'mm' ? 'ဒီနေ့' : 'Today'}</span>
           )}
         </div>
 
@@ -608,6 +632,16 @@ export default function CalendarPage() {
             {upcoming.slice(0, 5).map(ev => (
               <EventCard key={ev.id} event={ev} compact />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* S16 (v9.17): upcoming load failed — retry, not a false empty. */}
+      {upcomingError && upcoming.length === 0 && (
+        <div className="px-4 mt-6">
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+            <p className="text-sm text-red-400 font-myanmar">လာမည့် Event များ တင်မရပါ</p>
+            <button onClick={loadUpcoming} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
           </div>
         </div>
       )}

@@ -9,6 +9,7 @@ import { useSEO } from '../hooks/useSEO'
 import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { confirmDialog } from '../lib/confirmDialog'
+import { displayName } from '../lib/displayName'
 import { showError } from '../lib/toast'
 
 const STATUS_META = {
@@ -38,7 +39,7 @@ export default function MySubmissionsPage() {
       const { data, error } = await withTimeout(supabase
         .from('listings')
         .select('id, name, name_mm, status, cover_url, logo_url, is_verified, is_featured, view_count, rating_avg, rating_count, category:categories(icon, name, name_mm), created_at, updated_at')
-        .eq('submitted_by', user.id)
+        .or(`submitted_by.eq.${user.id},owner_id.eq.${user.id}`)
         .order('created_at', { ascending: false }), 30000, 'My submissions')
       if (error) throw error
       setItems(data || [])
@@ -174,7 +175,7 @@ export default function MySubmissionsPage() {
             const meta = STATUS_META[item.status] || STATUS_META.pending
             const Icon = meta.icon
             const img = item.cover_url || item.logo_url
-            const displayName = lang === 'mm' ? (item.name_mm || item.name) : (item.name || item.name_mm)
+            const name = displayName(item, lang)
             return (
               <div key={item.id} className="card-dark rounded-2xl overflow-hidden">
                 <div className="flex gap-3 p-3">
@@ -191,13 +192,13 @@ export default function MySubmissionsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-2">
                       <p className="text-sm font-semibold text-white truncate font-myanmar flex-1">
-                        {displayName}
+                        {name}
                       </p>
                       {item.is_featured && <span className="text-[10px] text-gold-400 flex-shrink-0">⭐</span>}
                       {item.is_verified && <span className="text-[10px] text-gold-400 flex-shrink-0">✓</span>}
                     </div>
                     <p className="text-[10px] text-white/60 mt-0.5 truncate font-myanmar">
-                      {item.category?.icon} {lang === 'mm' ? (item.category?.name_mm || item.category?.name) : item.category?.name}
+                      {item.category?.icon} {item.category ? displayName(item.category, lang) : ''}
                     </p>
 
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">

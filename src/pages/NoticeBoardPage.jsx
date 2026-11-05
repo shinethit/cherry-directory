@@ -31,6 +31,8 @@ const LEGACY_CATS = {
 
 function timeAgo(iso, lang) {
   const m = Math.floor((Date.now() - new Date(iso)) / 60000)
+  // N12 (v9.17): a future/clock-skew timestamp must not read "-5မိနစ်".
+  if (m < 1) return lang === 'mm' ? 'ယခု' : 'just now'
   if (m < 60) return `${m}${lang === 'mm' ? 'မိနစ်' : 'm'}`
   const h = Math.floor(m / 60)
   if (h < 24) return `${h}${lang === 'mm' ? 'နာရီ' : 'h'}`
@@ -60,7 +62,7 @@ function NoticeCard({ notice, lang, isMod, onDelete }) {
       </div>
       <h3 className="font-display font-semibold text-sm text-white break-words">{lang === 'mm' ? (notice.title_mm || notice.title) : (notice.title || notice.title_mm)}</h3>
       {(notice.content_mm || notice.content) && (
-        <p className="text-xs text-white/60 font-myanmar leading-relaxed break-words">{lang === 'mm' ? (notice.content_mm || notice.content) : notice.content}</p>
+        <p className="text-xs text-white/60 font-myanmar leading-relaxed break-words">{lang === 'mm' ? (notice.content_mm || notice.content) : (notice.content || notice.content_mm)}</p>
       )}
       <div className="flex items-center gap-2 text-[9px] text-white/60">
         <span className="font-myanmar">{notice.poster_name || 'Community'}</span>
@@ -124,8 +126,8 @@ function PostForm({ onClose, onSuccess, lang }) {
             ))}
           </div>
         </div>
-        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကြေညာချက် ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" /></div>
-        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အကြောင်းအရာ' : 'Content'}</label><textarea value={form.content_mm} onChange={e => set('content_mm', e.target.value)} className="input-dark font-myanmar resize-none h-28" /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ကြေညာချက် ခေါင်းစဉ် (မြန်မာ)' : 'Title (Myanmar)'} *</label><input value={form.title_mm} onChange={e => set('title_mm', e.target.value)} className="input-dark font-myanmar" maxLength={120} /></div>
+        <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'အကြောင်းအရာ' : 'Content'}</label><textarea value={form.content_mm} onChange={e => set('content_mm', e.target.value)} className="input-dark font-myanmar resize-none h-28" maxLength={1000} /></div>
         <div><label className="block text-xs text-white/50 mb-1.5">{lang === 'mm' ? 'ရပ်ကွက်/နေရာ' : 'Ward/Area'}</label><input value={form.ward} onChange={e => set('ward', e.target.value)} className="input-dark font-myanmar" placeholder={lang === 'mm' ? 'ဥပမာ: ဗိုလ်ချုပ်ရပ်ကွက်' : 'e.g. Bogyoke Ward'} /></div>
         <button onClick={() => set('is_urgent', !form.is_urgent)} className={`w-full flex items-center gap-2 px-4 py-3 rounded-xl border text-sm ${form.is_urgent ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'bg-white/5 border-white/10 text-white/50'}`}>
           <AlertTriangle size={16} /> {lang === 'mm' ? 'အရေးပေါ် ကြေညာချက်' : 'Mark as Emergency/Urgent'}
@@ -155,7 +157,9 @@ export default function NoticeBoardPage() {
     setLoading(true)
     setLoadError(false)
     try {
-    let q = supabase.from('notices').select('*').eq('status', 'approved').order('is_pinned', { ascending: false }).order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(50)
+    // S17 (v9.17): filter expired notices server-side BEFORE .limit(50),
+    // so expired rows cannot crowd live ones out of the page.
+    let q = supabase.from('notices').select('*').eq('status', 'approved').or(`expires_at.is.null,expires_at.gte.${new Date().toISOString()}`).order('is_pinned', { ascending: false }).order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(50)
     if (catFilter !== 'all') q = q.eq('category', catFilter)
     // 30 s timeout (was none): a hung query left the skeletons up forever.
     const { data, error } = await withTimeout(q, 30000, 'Notices')

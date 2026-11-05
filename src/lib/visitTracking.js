@@ -60,49 +60,66 @@ export function devicePercentages(byDevice, total) {
   return { phone: get('phone'), tablet: get('tablet'), desktop: get('desktop') }
 }
 
+// In-memory guard for a double mount in the same page load (React
+// StrictMode in dev fires the effect twice). The sessionStorage flag
+// below is the cross-load guard; this Set is the same-load guard.
+const inFlightPages = new Set()
+
 // Log one visit per browser session. Fire-and-forget: the caller never
 // awaits this, and it NEVER throws — a missing table (migration not run
 // yet), a blocked network, or a failed geo lookup all fail silently.
 export async function logVisit() {
   try {
     if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return
-    // Set the flag BEFORE any async work so a double mount (e.g. React
-    // StrictMode in dev) can never log twice in one session.
+    // Already logged this session — nothing to do.
     if (sessionStorage.getItem(VISIT_FLAG)) return
-    sessionStorage.setItem(VISIT_FLAG, '1')
     const device = getDeviceType()
     const page = window.location.pathname || '/'
+    // Same-load double mount (StrictMode): skip while a log for this
+    // page is already in flight.
+    if (inFlightPages.has(page)) return
+    inFlightPages.add(page)
     // Country via a free geo-IP lookup, best effort. IMPORTANT: call
     // ipwho.is DIRECTLY — a proxied lookup (through /api/supabase or any
     // server) would geo-locate that server, not the visitor. On ANY
     // failure the visit still counts, just without a country.
+    // v9.17: bound to 1.2 s (was 3 s) — under VPN the lookup traverses
+    // the VPN exit node and used to delay the visit insert up to 3 s.
+    // Promise.race against a delay: do not await the full timeout.
     let countryCode = null
     let countryName = null
     try {
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), 3000)
-      const res = await fetch('https://ipwho.is/', { signal: ctrl.signal })
-      clearTimeout(timer)
-      if (res.ok) {
-        const j = await res.json()
-        if (j && j.success) {
-          countryCode = j.country_code || null
-          countryName = j.country || null
+      const geo = (async () => {
+        const res = await fetch('https://ipwho.is/')
+        if (res.ok) {
+          const j = await res.json()
+          if (j && j.success) return { code: j.country_code || null, name: j.country || null }
         }
-      }
+        return null
+      })()
+      const delay = new Promise(resolve => setTimeout(() => resolve(null), 1200))
+      const found = await Promise.race([geo, delay])
+      if (found) { countryCode = found.code; countryName = found.name }
     } catch {
       // Geo lookup failed — visit still counts without a country.
     }
     try {
       const { supabase } = await import('./supabase')
-      await supabase.from('site_visits').insert({
+      const { error } = await supabase.from('site_visits').insert({
         device_type: device,
         country_code: countryCode,
         country_name: countryName,
         page,
       })
+      if (error) throw error
+      // S37 (v9.17): set the session flag ONLY after a successful
+      // insert — a failed insert used to mark the session "done" and
+      // never retry. The in-memory Set above still guards StrictMode.
+      sessionStorage.setItem(VISIT_FLAG, '1')
     } catch {
-      // Table missing (migration not run yet) or network blocked — silent.
+      // Table missing (migration not run yet) or network blocked —
+      // silent, and the flag stays unset so the next session retries.
+      inFlightPages.delete(page)
     }
   } catch {
     // Never throw: visit logging must never break the page.

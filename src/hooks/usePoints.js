@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { fetchMonthlyPoints } from '../lib/pointsDisplay'
 import { useAuth } from '../contexts/AuthContext'
 
 // Point values (reference — the server is the source of truth for what an
@@ -78,5 +79,15 @@ export function usePoints() {
     return data || []
   }, [user])
 
-  return { award, getMyPoints, getHistory, POINTS }
+  // Monthly (this-month) points, from the leaderboard_month view — the
+  // SAME Yangon-month definition the leaderboard uses (see
+  // pointsDisplay.js — never computed client-side from the ledger).
+  // Returns null when the query fails (callers show '—', never a wrong 0).
+  const getMonthlyPoints = useCallback(async (userId) => {
+    const id = userId || user?.id
+    if (!id) return null
+    return fetchMonthlyPoints(supabase, id)
+  }, [user])
+
+  return { award, getMyPoints, getHistory, getMonthlyPoints, POINTS }
 }

@@ -1,5 +1,43 @@
 import { describe, it, expect } from 'vitest'
-import { parseCSV } from './csv'
+import { parseCSV, toCSV } from './csv'
+
+describe('toCSV', () => {
+  it('serializes a plain header + rows', () => {
+    expect(toCSV(['name', 'category'], [['Shop A', 'Food'], ['Shop B', 'Retail']]))
+      .toBe('name,category\nShop A,Food\nShop B,Retail\n')
+  })
+
+  it('quotes fields with commas, quotes and newlines', () => {
+    expect(toCSV(['name', 'note'], [['Golden, Palace', 'Say "hi"'], ['Shop', 'line one\nline two']]))
+      .toBe('name,note\n"Golden, Palace","Say ""hi"""\nShop,"line one\nline two"\n')
+  })
+
+  it('turns null/undefined into empty fields and round-trips through parseCSV', () => {
+    const text = toCSV(['name', 'phone'], [['Shop A', null], ['Shop B', undefined]])
+    expect(text).toBe('name,phone\nShop A,\nShop B,\n')
+    const { headers, rows } = parseCSV(text)
+    expect(headers).toEqual(['name', 'phone'])
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toEqual({ name: 'Shop A', phone: '' })
+  })
+
+  it('returns header-only output for empty rows', () => {
+    expect(toCSV(['name', 'phone'], [])).toBe('name,phone\n')
+  })
+})
+
+describe('v9.17: S38 quoted fields keep their spaces, unquoted are trimmed', () => {
+  it('keeps spaces inside quoted fields, trims unquoted ones', () => {
+    const { rows } = parseCSV('name,note\n"  spaced  ",  padded  \n')
+    expect(rows[0].name).toBe('  spaced  ')
+    expect(rows[0].note).toBe('padded')
+  })
+
+  it('strips quotes from headers via the state machine (N32)', () => {
+    const { headers } = parseCSV('"name","phone"\nShop A,09123\n')
+    expect(headers).toEqual(['name', 'phone'])
+  })
+})
 
 describe('parseCSV', () => {
   it('parses a plain header + rows', () => {
