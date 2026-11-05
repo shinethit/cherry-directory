@@ -6,12 +6,27 @@
 // activity this month still resolves with period_points 0.
 // Returns the monthly number, or null when the query fails — callers
 // show '—', never a wrong 0.
+// v9.19: the query is wrapped in withTimeout(10 s) — while the old
+// slow view was timing out server-side this call hung with it; a slow
+// view now returns null (callers show '—') instead of hanging.
+import { withTimeout } from './withTimeout'
+
 export async function fetchMonthlyPoints(client, userId) {
-  const { data, error } = await client
-    .from('leaderboard_month')
-    .select('period_points')
-    .eq('id', userId)
-    .maybeSingle()
+  let res
+  try {
+    res = await withTimeout(
+      Promise.resolve(client
+        .from('leaderboard_month')
+        .select('period_points')
+        .eq('id', userId)
+        .maybeSingle()),
+      10000,
+      'Monthly points'
+    )
+  } catch {
+    return null
+  }
+  const { data, error } = res || {}
   if (error) return null
   return data?.period_points ?? 0
 }

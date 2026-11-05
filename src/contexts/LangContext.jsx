@@ -29,7 +29,7 @@ export const T = {
   no_results: { mm: 'မတွေ့ပါ', en: 'No results found' },
   change_filter: { mm: 'ရှာဖွေမှုကို ပြောင်းလဲကြည့်ပါ', en: 'Try changing filters' },
   clear_filter: { mm: 'Filter ဖယ်ရှားရန်', en: 'Clear filters' },
-  all_cities: { mm: 'ခပ်သိမ်း', en: 'All cities' },
+  all_cities: { mm: 'အားလုံး', en: 'All cities' },
   // Listing detail
   reviews_title: { mm: 'Reviews', en: 'Reviews' },
   write_review: { mm: 'သင်၏ အကဲဖြတ်ချက်', en: 'Your review' },

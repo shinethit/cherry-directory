@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, Phone, MessageCircle, MapPin, Star, Send, CheckCircle, ExternalLink, Bookmark, BookmarkCheck, BadgeCheck, Edit3, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
@@ -71,6 +71,13 @@ function ReviewRow({ r, listingId, onDeleted }) {
 export default function ListingDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  // v9.19: arriving from a successful edit carries the updated row in
+  // router state — render it instantly instead of a full-screen
+  // spinner, then refresh it softly in the background. The id check
+  // guards against a stale row from another listing.
+  const stateListing = location.state?.listing
+  const hasStateListing = !!stateListing && String(stateListing.id) === String(id)
   const { isLoggedIn, profile, isAdmin, isModerator, user } = useAuth()
   const { t, lang } = useLang()
   const { data: bookmarked = false, isError: bookmarkCheckError } = useIsBookmarked(id)
@@ -97,7 +104,7 @@ export default function ListingDetailPage() {
       addBookmark.mutate({ targetId: id, targetType: 'listing' })
     }
   }
-  const [listing, setListing] = useState(null)
+  const [listing, setListing] = useState(hasStateListing ? stateListing : null)
   const [reviews, setReviews] = useState([])
   const [myRating, setMyRating] = useState(0)
   const [myComment, setMyComment] = useState('')
@@ -110,7 +117,7 @@ export default function ListingDetailPage() {
   const [voteLoading, setVoteLoading] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!hasStateListing)
   const [notFound, setNotFound] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [hasMenu, setHasMenu] = useState(false)
@@ -137,7 +144,14 @@ export default function ListingDetailPage() {
 
   useEffect(() => {
     async function load() {
-      setLoading(true)
+      // v9.19: only show the full-screen spinner when there is no
+      // listing yet (fresh navigation). With a row already on screen
+      // (post-save router state) this is a soft background refresh —
+      // the effect re-runs when the profile arrives, and that must
+      // never re-show the spinner either. A failed background refresh
+      // likewise must not swap a good listing for the error screen.
+      const hadListing = !!listing
+      if (!hadListing) setLoading(true)
       setNotFound(false)
       setLoadError(false)
       try {
@@ -150,8 +164,8 @@ export default function ListingDetailPage() {
         ]), 30000, 'Listing detail')
         const l = lRes.status === 'fulfilled' ? lRes.value.data : null
         const lErr = lRes.status === 'fulfilled' ? lRes.value.error : lRes.reason
-        if (lErr && lErr.code !== 'PGRST116') { setLoadError(true); setLoading(false); return }
-        if (!l) { setNotFound(true); setLoading(false); return }
+        if (lErr && lErr.code !== 'PGRST116') { if (!hadListing) setLoadError(true); setLoading(false); return }
+        if (!l) { if (!hadListing) setNotFound(true); setLoading(false); return }
         const r = rRes.status === 'fulfilled' ? rRes.value.data : null
         const rErr = rRes.status === 'fulfilled' ? rRes.value.error : rRes.reason
         if (rErr) { console.warn(rErr); showError('Review များ တင်မရပါ — ထပ်ကြိုးစားပါ') }
@@ -193,7 +207,7 @@ export default function ListingDetailPage() {
             if (viewErr) console.warn('increment_listing_views failed:', viewErr)
           } catch (viewEx) { console.warn('increment_listing_views failed:', viewEx) }
         }
-      } catch (e) { console.warn(e); setLoadError(true) }
+      } catch (e) { console.warn(e); if (!hadListing) setLoadError(true) }
       finally { setLoading(false) }
     }
     load()

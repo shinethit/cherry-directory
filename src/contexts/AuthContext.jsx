@@ -133,11 +133,30 @@ export function AuthProvider({ children }) {
       }
     }
 
-    // Force loading false after 5 seconds as a safety net
-    timeoutId = setTimeout(() => {
-      console.warn('[Auth] Loading timeout – forcing loading false')
-      setLoadingFalse()
-    }, 5000)
+    // Safety net (v9.19): force loading false after 5 s — BUT only
+    // when no profile fetch is in flight. The old timer fired at 5 s
+    // while fetchProfile was still running (10 s timeout + one quiet
+    // retry = up to 20 s), so pages judged the still-null profile and
+    // flashed the "no permission" screen. While a fetch is in flight,
+    // re-arm for another 5 s instead — bounded to 4 re-arms (≈25 s
+    // total); the profile fetch always settles within ~20 s via its
+    // own timeouts + finally, so the bound is a backstop only. The
+    // re-armed timer is stored in the same timeoutId, so the
+    // setLoadingFalse clear + the unmount cleanup still work.
+    let safetyNetRearms = 0
+    const armSafetyNet = () => {
+      timeoutId = setTimeout(() => {
+        if (profileInFlight.current > 0 && safetyNetRearms < 4) {
+          safetyNetRearms += 1
+          console.warn('[Auth] Loading timeout – profile fetch still in flight, re-arming safety net (' + safetyNetRearms + '/4)')
+          armSafetyNet()
+          return
+        }
+        console.warn('[Auth] Loading timeout – forcing loading false')
+        setLoadingFalse()
+      }, 5000)
+    }
+    armSafetyNet()
 
     const loadSession = async () => {
       try {

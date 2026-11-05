@@ -60,21 +60,6 @@ export async function fetchCategories() {
     r.status === 'fulfilled' ? r.value : { ...(data || [])[i], listing_count: null })
 }
 
-// Default directory browse (top approved listings, rating order) —
-// the ['listings','directory'] cache entry. Per-category pages use the
-// same base key plus their filter params.
-export async function fetchDirectoryListings() {
-  const { data, error } = await withTimeout(supabase
-    .from('listings')
-    .select('*, category:categories(name, name_mm, icon)')
-    .eq('status', 'approved')
-    .order('rating_avg', { ascending: false, nullsFirst: false })
-    .order('name', { ascending: true })
-    .range(0, 19), 30000, 'Directory listings')
-  if (error) throw error
-  return data || []
-}
-
 // Fuel stations + types, merged exactly like FuelPage.load did.
 export async function fetchFuelData() {
   const [ftRes, stRes] = await withTimeout(Promise.allSettled([
@@ -150,32 +135,6 @@ export async function fetchNews({ type = '', pageSize = 20 } = {}) {
   return { pinned, posts: rows.slice(0, pageSize), hasMore: rows.length > pageSize }
 }
 
-// Events: published event posts, same source as CalendarPage.
-export async function fetchEvents() {
-  const { data, error } = await withTimeout(supabase
-    .from('posts')
-    .select('*')
-    .eq('status', 'published')
-    .eq('type', 'event')
-    .order('created_at', { ascending: false })
-    .limit(50), 30000, 'Events')
-  if (error) throw error
-  return data || []
-}
-
-// Leaderboard default view (month) — same query as LeaderboardPage.
-export async function fetchLeaderboardMonth() {
-  const { data, error } = await withTimeout(supabase
-    .from('leaderboard_month')
-    .select('*')
-    .gt('period_points', 0)
-    .order('period_points', { ascending: false })
-    .order('id', { ascending: true })
-    .limit(100), 30000, 'Leaderboard')
-  if (error) throw error
-  return data || []
-}
-
 // Visitor stats aggregate (RPC — never a raw table select).
 export async function fetchVisitStats() {
   const { data, error } = await withTimeout(supabase.rpc('get_visit_stats'), 30000, 'Visit stats')
@@ -185,15 +144,34 @@ export async function fetchVisitStats() {
 
 // ── Runner ────────────────────────────────────────────────────
 
+// v9.19: NO leaderboard task — the board is live data, fetched on
+// demand by LeaderboardPage's own useQuery (5-min staleTime +
+// persisted cache). Prefetching it would hit the OLD slow view on
+// every boot until the 9.19 migration runs (code deploys BEFORE the
+// migration), and its 15 s prefetch timeout fired on every boot
+// while the view timed out. Prefetch failure is log-only
+// (console.warn below, no toast/UI) — keep it that way.
+// v9.19: NO directory-listings task either — nothing reads the exact
+// ['listings','directory'] key. DirectoryPage's listings are
+// per-subcategory queries (['listings','directory', subId, ...],
+// enabled only once a subcategory is picked) that no generic warm
+// can serve; the page keeps old rows visible and shows skeletons
+// only when empty. Same for events: CalendarPage never used
+// useQuery — its month view is a date-range query and upcoming is a
+// separate query, so fetchEvents warmed cache nobody read. Every
+// remaining task warms the EXACT key its page reads on mount (same
+// fetcher, same params) — a warmed key nobody reads is deleted,
+// not kept for the Offline panel count.
 const TASKS = [
   { key: ['categories'], label: 'Categories', queryFn: fetchCategories },
-  { key: ['listings', 'directory'], label: 'Directory listings', queryFn: fetchDirectoryListings },
   { key: ['fuel-stations'], label: 'Fuel stations', queryFn: fetchFuelData },
   { key: ['emergency-contacts'], label: 'Emergency contacts', queryFn: fetchEmergencyContacts },
   { key: ['market-prices'], label: 'Market prices', queryFn: fetchMarketPrices },
-  { key: ['news'], label: 'News', queryFn: fetchNews },
-  { key: ['events'], label: 'Events', queryFn: fetchEvents },
-  { key: ['leaderboard', 'month'], label: 'Leaderboard (month)', queryFn: fetchLeaderboardMonth },
+  // v9.19: warm the EXACT key NewsPage reads on mount — ['news', type,
+  // pageSize] with its defaults (type '', pageSize 30). The old ['news']
+  // key matched no page (fetchNews() defaults to pageSize 20), so the
+  // warmed rows sat in cache unread while the page fetched again.
+  { key: ['news', '', 30], label: 'News', queryFn: () => fetchNews({ type: '', pageSize: 30 }) },
   { key: ['visit-stats'], label: 'Visitor stats', queryFn: fetchVisitStats },
 ]
 

@@ -109,7 +109,7 @@ export default function DirectoryPage() {
   
   const cities = ['All', ...(config.cities || [])]
   const cityLabels = {
-    'All': { mm: '📍 ခပ်သိမ်း', en: 'All' },
+    'All': { mm: '📍 အားလုံး', en: 'All' },
     'Taunggyi': { mm: 'တောင်ကြီး', en: 'Taunggyi' },
     'Kalaw': { mm: 'ကလော', en: 'Kalaw' },
     'Pindaya': { mm: 'ပင်းတယ', en: 'Pindaya' },

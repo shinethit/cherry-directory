@@ -8,8 +8,9 @@ import { fetchMonthlyPoints } from './pointsDisplay.js'
 // show BOTH figures as two clearly labelled numbers — never a single
 // ambiguous number. The monthly figure comes from the
 // leaderboard_month view (same Yangon-month definition as the board).
-// pointsDisplay.js imports nothing, so the runtime tests below need no
-// mocks — a fake client is passed in directly.
+// pointsDisplay.js imports only withTimeout (which itself imports
+// nothing), so the runtime tests below need no mocks — a fake client
+// is passed in directly.
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const src = p => readFileSync(join(srcDir, p), 'utf8')
@@ -46,6 +47,13 @@ describe('fetchMonthlyPoints (leaderboard_month view)', () => {
   it('queries leaderboard_month, not a client-side month computation', () => {
     expect(readFileSync(join(srcDir, 'lib', 'pointsDisplay.js'), 'utf8'))
       .toContain("from('leaderboard_month')")
+  })
+
+  it('wraps the query in a 10 s timeout (v9.19) — a slow view returns null, never hangs', () => {
+    const s = readFileSync(join(srcDir, 'lib', 'pointsDisplay.js'), 'utf8')
+    expect(s).toContain('withTimeout')
+    expect(s).toContain('10000')
+    expect(s).toContain("'Monthly points'")
   })
 })
 

@@ -23,7 +23,7 @@ const PERIODS = [
   { id: 'month',  labelMm: 'ဒီလ',    labelEn: 'Month',   view: 'leaderboard_month'  },
   { id: '6month', labelMm: '၆ လ',    labelEn: '6 Months', view: 'leaderboard_6month' },
   { id: 'year',   labelMm: 'ဒီနှစ်', labelEn: 'This Year', view: 'leaderboard_year'  },
-  { id: 'all',    labelMm: 'အကုန်',  labelEn: 'All Time', view: null                },
+  { id: 'all',    labelMm: 'အားလုံး',  labelEn: 'All Time', view: null                },
 ]
 
 const RANK_GLOW = [
@@ -44,7 +44,7 @@ function periodLabel(id, lang) {
   }
   if (id === '6month') return lang === 'mm' ? 'ခြောက်လအတွင်း' : 'Last 6 months'
   if (id === 'year')   return lang === 'mm' ? `${now.getFullYear()} ခုနှစ်` : `Year ${now.getFullYear()}`
-  return lang === 'mm' ? 'အချိန်ကာလ အကုန်' : 'All time'
+  return lang === 'mm' ? 'အချိန်ကာလ အားလုံး' : 'All time'
 }
 
 function ptsUnit(tab, period, lang) {
@@ -204,7 +204,8 @@ export default function LeaderboardPage() {
   const [period, setPeriod] = useState('month')
 
   // Issue 4c (v9.17): useQuery — cached, so the board renders instantly
-  // on revisit under VPN. The prefetch runner warms ['leaderboard','month'].
+  // on revisit under VPN. v9.19: the board is deliberately NOT
+  // prefetched — it is live data, fetched on demand here.
   const { data: users = [], isLoading: loading, isError: loadFailed, error: loadErrObj, refetch: refetchBoard } = useQuery({
     queryKey: ['leaderboard', period, tab],
     queryFn: async () => {

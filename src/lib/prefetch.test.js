@@ -32,10 +32,6 @@ vi.mock('./supabase', () => {
       { id: 'p1', title: 'News 1', title_mm: 'သတင်း ၁', status: 'published', is_pinned: false, type: 'news', created_at: '2026-11-05T00:00:00Z' },
       { id: 'p2', title: 'Event 1', title_mm: 'ပွဲ ၁', status: 'published', is_pinned: true, type: 'event', created_at: '2026-11-05T00:00:00Z' },
     ],
-    leaderboard_month: [
-      { id: 'u1', period_points: 50, all_time_points: 120 },
-      { id: 'u2', period_points: 30, all_time_points: 80 },
-    ],
   }
   function builderFor(table) {
     const rows = ROWS[table] || []
@@ -76,7 +72,7 @@ function makeStorage() {
 import { queryClient } from './queryClient'
 import { persistQueryClient } from '@tanstack/query-persist-client-core'
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
-import { runPrefetch } from './prefetch'
+import { runPrefetch, PREFETCH_TASKS } from './prefetch'
 import { inspectLocalStorage, getState } from './cacheStatus'
 
 describe('prefetch writes the offline cache (v9.17 Issue 5)', () => {
@@ -98,26 +94,43 @@ describe('prefetch writes the offline cache (v9.17 Issue 5)', () => {
     delete globalThis.localStorage
   })
 
-  it('runPrefetch fills all 9 keys and inspectLocalStorage reads them back non-zero', async () => {
+  it('runPrefetch fills all 6 keys and inspectLocalStorage reads them back non-zero', async () => {
     const ran = await runPrefetch({ force: true })
     expect(ran).toBe(true)
     // Persister throttle (1000 ms, trailing) — wait for the write to land.
     await new Promise(r => setTimeout(r, 1500))
 
     const state = getState()
-    expect(state.succeeded).toBe(9)
+    expect(state.succeeded).toBe(6)
     expect(state.failed).toBe(0)
 
     const info = inspectLocalStorage()
     expect(info.exists).toBe(true)
     expect(info.size).toBeGreaterThan(0)
-    expect(info.queryCount).toBe(9)
+    expect(info.queryCount).toBe(6)
     const keys = info.keys.map(k => k.key)
-    for (const k of ['categories', 'listings/directory', 'fuel-stations', 'emergency-contacts', 'market-prices', 'news', 'events', 'leaderboard/month', 'visit-stats']) {
+    for (const k of ['categories', 'fuel-stations', 'emergency-contacts', 'market-prices', 'news//30', 'visit-stats']) {
       expect(keys).toContain(k)
     }
     expect(info.keys.every(k => k.hasData)).toBe(true)
   }, 10000)
+
+  it('TASKS contains no leaderboard key (v9.19 — the board is live data, never prefetched)', () => {
+    expect(PREFETCH_TASKS.length).toBe(6)
+    expect(PREFETCH_TASKS.every(t => !t.key.includes('leaderboard'))).toBe(true)
+    expect(PREFETCH_TASKS.map(t => t.key.join('/'))).not.toContain('leaderboard/month')
+  })
+
+  it('every TASKS key is the exact key its page reads on mount (v9.19 — no dead cache)', () => {
+    // Directory listings + events were dropped: nothing read their keys
+    // (per-subcategory / date-range queries cannot be warmed generically).
+    // News is warmed as ['news', '', 30] — NewsPage's mount defaults.
+    const keys = PREFETCH_TASKS.map(t => t.key.join('/'))
+    expect(keys).not.toContain('listings/directory')
+    expect(keys).not.toContain('events')
+    expect(keys).toContain('news//30')
+    expect(PREFETCH_TASKS.find(t => t.key[0] === 'news').queryFn).toBeTypeOf('function')
+  })
 
   it('main.jsx wires PersistQueryClientProvider on the same key + client', () => {
     const root = join(dirname(fileURLToPath(import.meta.url)), '..')

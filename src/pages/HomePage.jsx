@@ -540,7 +540,7 @@ export default function HomePage() {
               </ul>
             </div>
             <div className="rounded-xl bg-white/5 border border-white/10 p-3 space-y-1.5">
-              <p className="text-sm font-display font-bold text-white">🔑 {lang === 'mm' ? 'Account ရှိရင် — အပေါ်ကအကုန် +' : 'With an account — all of the above +'}</p>
+              <p className="text-sm font-display font-bold text-white">🔑 {lang === 'mm' ? 'Account ရှိရင် — အပေါ်က အားလုံး +' : 'With an account — all of the above +'}</p>
               <ul className="space-y-1">
                 <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>Review ရေး + အဆင့်သတ်မှတ်</li>
                 <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>သိမ်းဆည်း (Saved)</li>

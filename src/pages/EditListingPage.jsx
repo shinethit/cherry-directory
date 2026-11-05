@@ -31,7 +31,7 @@ function Field({ label, children, required, error }) {
 export default function EditListingPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const { profile, isAdmin, isModerator, loading: authLoading } = useAuth()
+  const { profile, isAdmin, isModerator, loading: authLoading, profileLoading } = useAuth()
   const { lang } = useLang()
   const { log } = useAuditLog()
   const config = useAppConfig()
@@ -163,9 +163,15 @@ export default function EditListingPage() {
     // Don't decide canEdit until the auth/profile load settles: profile
     // is null on the first run, so canEdit was false and the owner saw a
     // flash of the "no permission" screen before the profile arrived.
-    if (authLoading) return
+    // v9.19: authLoading alone is NOT enough — the 5 s AuthContext
+    // safety net used to force it false while fetchProfile was still
+    // in flight, so the denial flashed at ~5 s and vanished when the
+    // profile arrived. Wait for profileLoading too; the denial below
+    // then renders only after auth+profile resolved AND the user is
+    // confirmed unauthorized.
+    if (authLoading || profileLoading) return
     load()
-  }, [id, profile, authLoading])
+  }, [id, profile, authLoading, profileLoading])
 
   function set(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
@@ -367,6 +373,12 @@ export default function EditListingPage() {
     setTimeout(() => setSaved(false), 2500)
     // Refresh original snapshot
     setOriginal(prev => ({ ...prev, ...updates }))
+    // v9.19: land on the updated detail page at once — staying here
+    // made the user go back and watch the detail page reload with a
+    // full-screen spinner. Pass the saved row in router state so the
+    // detail page renders it instantly (replace: true — no dead edit
+    // page left on the back stack).
+    navigate(`/directory/${id}`, { state: { listing: { ...original, ...updates } }, replace: true })
   }
 
   if (loadError) return (
@@ -385,7 +397,7 @@ export default function EditListingPage() {
     </div>
   )
 
-  if (!form || authLoading) return (
+  if (!form || authLoading || profileLoading) return (
     <div className="flex items-center justify-center min-h-[60dvh]">
       <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin" />
     </div>

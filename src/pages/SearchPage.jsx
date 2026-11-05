@@ -118,6 +118,12 @@ export default function SearchPage() {
   const [searched, setSearched] = useState(false)
   const [activeTab, setActiveTab] = useState('all')
   const [searchError, setSearchError] = useState(false)
+  // v9.19: streaming — results appear per source as they arrive, so
+  // this is false only while every source is still pending. The
+  // "no results" empty state waits for it (the first source alone
+  // returning [] must not flash "ရလဒ် မတွေ့ပါ" while 8 sources are
+  // still in flight).
+  const [allSourcesDone, setAllSourcesDone] = useState(true)
   // Request guard: a slow earlier keystroke must never overwrite newer results.
   const searchTokenRef = useRef(0)
   // v9.18: abort the previous search's requests when a new one starts —
@@ -152,8 +158,21 @@ export default function SearchPage() {
     setLoading(true)
     setSearched(true)
     setSearchError(false)
+    setAllSourcesDone(false)
     const newResults = {}
     let hadError = false
+    // v9.19: stream per source — the ~10 s "ရှာနေသည်..." was the
+    // slowest of 9 parallel proxied requests, because runSearch
+    // awaited Promise.all before the first setResults. Each source
+    // now publishes its own rows the moment it resolves (success or
+    // error), and the spinner clears after the FIRST source so
+    // results appear as they arrive. Stale tokens never publish.
+    let firstDone = false
+    const streamResult = (sourceId, data) => {
+      if (token !== searchTokenRef.current) return
+      setResults(prev => ({ ...prev, [sourceId]: data }))
+      if (!firstDone) { firstDone = true; setLoading(false) }
+    }
 
     // Run all searches in parallel
     const promises = SEARCH_SOURCES.map(async (source) => {
@@ -187,9 +206,11 @@ export default function SearchPage() {
         const { data, error } = await withTimeout(query, 30000, 'Search ' + source.id)
         if (!error && data) {
           newResults[source.id] = data
+          streamResult(source.id, data)
         } else {
           hadError = true
           newResults[source.id] = []
+          streamResult(source.id, [])
         }
       } catch (e) {
         // v9.18: an aborted (superseded) request is not an error — a
@@ -200,6 +221,7 @@ export default function SearchPage() {
         }
         hadError = true
         newResults[source.id] = []
+        streamResult(source.id, [])
       }
     })
 
@@ -209,6 +231,7 @@ export default function SearchPage() {
     setResults(newResults)
     setSearchError(hadError)
     setLoading(false)
+    setAllSourcesDone(true)
 
     // Update URL
     setSearchParams({ q }, { replace: true })
@@ -359,7 +382,7 @@ export default function SearchPage() {
           </div>
         )}
 
-        {searched && !loading && totalResults === 0 && (
+        {searched && !loading && allSourcesDone && totalResults === 0 && (
           <div className="flex flex-col items-center py-16 text-center">
             <span className="text-5xl mb-4">😶</span>
             <p className="text-white/60 font-display font-semibold">

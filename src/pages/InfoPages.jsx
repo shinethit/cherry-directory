@@ -264,7 +264,7 @@ export function HelpPage() {
       titleMm: 'ဧည့်သည် နဲ့ Account ဘာကွာလဲ',
       steps: [
         'ဧည့်သည် (Login မလိုဘူး) — လုပ်ငန်းရှာဖွေ + ဖုန်းဆက်၊ ဈေးနှုန်း ကြည့်/တင်၊ လုပ်ငန်းတင် (Admin စစ်ပြီးမှ ပေါ်)၊ Chat (နာမည်ပေးပြီး ပြော)၊ ဆီဆိုင် လမ်းညွှန်၊ သတင်း/ပွဲ ကြည့်',
-        'Account ရှိရင် (အပေါ်ကအကုန် +) — Review ရေး + အဆင့်သတ်မှတ်၊ သိမ်းဆည်း (Saved)၊ အမှတ် + Leaderboard၊ Event RSVP၊ Push Notification',
+        'Account ရှိရင် (အပေါ်က အားလုံး +) — Review ရေး + အဆင့်သတ်မှတ်၊ သိမ်းဆည်း (Saved)၊ အမှတ် + Leaderboard၊ Event RSVP၊ Push Notification',
         'Account လုပ်ရန် — "Login" ကို နှိပ်ပြီး Google သို့မဟုတ် Email ဖြင့် ဝင်ပါ (အခမဲ့)',
       ],
     },
