@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 
 const AppConfigContext = createContext()
 
@@ -23,18 +24,32 @@ let _promise = null
 // invalidateAppConfig() can re-fetch everywhere at once.
 const _refreshers = new Set()
 
+// v9.21 (Bug D hardening): this fetch had NO timeout at all — a hung
+// proxy could stall the provider forever. 10 s timeout + one quiet
+// retry; failure still falls back to DEFAULTS via loadConfig's catch,
+// so a config failure alone can never blank Home.
 async function fetchConfig() {
-  const { data, error } = await supabase.from('app_config').select('key, value')
-  if (error) throw error
-  const obj = { ...DEFAULTS }
-  if (data) {
-    data.forEach(({ key, value }) => {
-      try { obj[key] = JSON.parse(value) }
-      catch { obj[key] = value }
-    })
+  let lastErr = null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const { data, error } = await withTimeout(
+        supabase.from('app_config').select('key, value'),
+        10000, 'AppConfig')
+      if (error) throw error
+      const obj = { ...DEFAULTS }
+      if (data) {
+        data.forEach(({ key, value }) => {
+          try { obj[key] = JSON.parse(value) }
+          catch { obj[key] = value }
+        })
+      }
+      _cache = obj
+      return obj
+    } catch (e) {
+      lastErr = e
+    }
   }
-  _cache = obj
-  return obj
+  throw lastErr
 }
 
 function loadConfig() {

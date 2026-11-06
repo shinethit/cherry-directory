@@ -730,7 +730,12 @@ export default function MarketPricePage() {
   const totalReports = prices.reduce((s, p) => s + (p.report_count || 0), 0)
 
   return (
-    <div className="pb-8">
+    // v9.21 (Bug C): pb-40 (160 px) — the Submit FAB sits at
+    // bottom calc(var(--nav-h) + safe-area + 12px) with --nav-h 5rem/80 px,
+    // so its band starts 140 px above the viewport bottom (48 px tall);
+    // pb-8 (32 px) let the last content slide underneath it. 160 px
+    // clears the FAB plus breathing room and typical safe-area insets.
+    <div className="pb-40">
       {/* Header */}
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-start justify-between">

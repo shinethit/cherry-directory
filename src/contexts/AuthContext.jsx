@@ -19,6 +19,29 @@ const SAFE_PROFILE_KEYS = ['full_name', 'nickname', 'bio', 'avatar_url']
 // affects what the UI renders, never what the server returns.
 const PROFILE_CACHE_KEY = 'cherry-directory-profile'
 
+// v9.21 (Bug D): a stolen navigator lock poisons this client's
+// initializePromise permanently — GoTrueClient awaits that same promise
+// in getSession/signIn/refresh and every later call rethrows the cached
+// rejection, so retrying getSession() on this client can never work.
+// Recovery is a fresh page (fresh client, fresh initializePromise),
+// guarded to once per browser session so a repeat steal can never
+// reload-loop. sessionStorage (not localStorage): a new session gets a
+// fresh chance. All helpers never throw.
+const AUTH_LOCK_RELOAD_KEY = 'cherry-auth-lock-reloaded'
+export function isLockError(err) {
+  const msg = err?.message || String(err || '')
+  return msg.includes('was released because another request stole it')
+    || msg.includes('Lock')
+    || err?.name === 'LockAcquireTimeoutError'
+    || err?.isAcquireTimeout === true
+}
+function lockReloadAlreadyDone() {
+  try { return window.sessionStorage.getItem(AUTH_LOCK_RELOAD_KEY) === '1' } catch { return false }
+}
+function markLockReloaded() {
+  try { window.sessionStorage.setItem(AUTH_LOCK_RELOAD_KEY, '1') } catch { /* ignore */ }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
@@ -177,6 +200,17 @@ export function AuthProvider({ children }) {
         setLoadingFalse()
       } catch (err) {
         console.warn('[Auth] Initialization error:', err?.message || err)
+        // v9.21 (Bug D): a stolen lock (second tab / tab + PWA racing
+        // the session refresh through the slow proxy) poisons this
+        // client's initializePromise — retrying getSession() here would
+        // just rethrow the cached rejection. Reload once per session so
+        // a fresh client re-initializes; on a repeat steal the guard
+        // stops the loop and the app proceeds (loading false) instead.
+        if (isLockError(err) && !lockReloadAlreadyDone()) {
+          markLockReloaded()
+          setTimeout(() => { try { window.location.reload() } catch { /* ignore */ } }, 500)
+          return
+        }
         setLoadingFalse()
       }
     }

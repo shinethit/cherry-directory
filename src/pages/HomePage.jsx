@@ -211,17 +211,19 @@ export default function HomePage() {
       setSectionErrors({ ...failed });
       setDataError(['posts', 'featured', 'categories'].some(k => failed[k]));
       setLoadTimedOut(timedOut);
-      // Auto-retry once (2 s delay) if the load timed out with a core
-      // section still missing; the guard guarantees it never loops.
-      if (timedOut) {
-        const coreMissing = [0, 1, 2].some(i => results[i].status !== 'fulfilled' || results[i].value?.error);
-        if (coreMissing && autoRetryGuardRef.current.shouldRetry()) {
-          setAutoRetrying(true);
-          autoRetryTimerRef.current = setTimeout(() => {
-            setAutoRetrying(false);
-            loadData();
-          }, 2000);
-        }
+      // Auto-retry once (2 s delay) if a core section is still missing;
+      // the guard guarantees it never loops.
+      // v9.21 (Bug D): the retry used to fire ONLY on timedOut — a core
+      // section failing FAST (proxy error, not a timeout) showed the red
+      // banner with no auto-retry at all. A fast failure is the same
+      // "core missing" state, so it retries too.
+      const coreMissing = [0, 1, 2].some(i => results[i].status !== 'fulfilled' || results[i].value?.error);
+      if (coreMissing && autoRetryGuardRef.current.shouldRetry()) {
+        setAutoRetrying(true);
+        autoRetryTimerRef.current = setTimeout(() => {
+          setAutoRetrying(false);
+          loadData();
+        }, 2000);
       }
     } catch (err) {
       // loadPartial never rejects on timeout; this is only for an

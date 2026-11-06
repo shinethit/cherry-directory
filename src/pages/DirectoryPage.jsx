@@ -310,18 +310,25 @@ export default function DirectoryPage() {
   }
 
   // Load subcategories when category is selected
+  // v9.21 (Bug B): the else-branch used to wipe the featured
+  // pseudo-subcategory in the same commit the H1 effect set it — last
+  // write won, the pseudo never stuck, and the listings query stayed
+  // disabled (enabled: !!selectedSubcategory). Guard the wipe to the
+  // non-featured view; featuredOnly in deps re-runs the cleanup when
+  // the param is removed (goBack deletes it) so leaving the featured
+  // view still clears the pseudo.
   useEffect(() => {
     if (selectedCategory) {
       loadSubcategories(selectedCategory.id)
       checkDirectListings(selectedCategory.id)
-    } else {
+    } else if (!featuredOnly) {
       setSubcategories([])
       setSelectedSubcategory(null)
       setListings([])
       setHasDirectListings(false)
       setDirectCount(0)
     }
-  }, [selectedCategory])
+  }, [selectedCategory, featuredOnly])
 
   // Listings — Issue 4c (v9.17): useQuery ['listings','directory', ...].
   // One query per (subcategory, filters, page); the apply effect below

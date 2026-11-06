@@ -36,6 +36,13 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: true,
     storageKey: 'cherry-directory-auth',
+    // v9.21 (Bug D): auth-js waits only 5 s (its default) for the
+    // "cherry-directory-auth" navigator lock during session refresh —
+    // a slow /api/supabase proxy lets a second tab (or tab + installed
+    // PWA, same origin, shared navigator.locks) steal it, and the
+    // stolen lock poisons that tab's auth until reload. 30 s gives a
+    // slow refresh room to finish instead of being stolen mid-flight.
+    lockAcquireTimeout: 30000,
   },
   realtime: { params: { eventsPerSecond: 10 } },
   // v9.18: these params only take effect where realtime is on
