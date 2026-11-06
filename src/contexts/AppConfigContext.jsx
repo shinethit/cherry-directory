@@ -56,7 +56,7 @@ function loadConfig() {
   if (_cache) return Promise.resolve(_cache)
   if (!_promise) {
     _promise = fetchConfig().catch((err) => {
-      console.warn('Failed to load app config:', err)
+      console.warn('Failed to load app config:', err?.message || err)
       _promise = null
       return DEFAULTS
     })

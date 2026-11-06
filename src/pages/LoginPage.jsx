@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Eye, EyeOff, Crown, Shield, User, ArrowLeft } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { handleLockPoison } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { goBackOrHome as goBackOrHomeNav } from '../lib/navigation'
 
 // Raw Supabase (English) auth errors → honest Burmese. Unknown messages fall back to raw.
@@ -54,12 +56,21 @@ export default function LoginPage() {
     setError(''); setSuccess('')
     setLoading(true)
     try {
-      await signInWithOAuth('google')
+      // v9.22: 20 s bound — signInWithOAuth awaits the same
+      // initializePromise a stalled refresh can leave pending forever.
+      await withTimeout(signInWithOAuth('google'), 20000, 'Google sign-in')
       // Supabase redirects to Google; no navigation here.
     } catch (err) {
-      setError(translateAuthError(err))
+      if (err?.name === 'TimeoutError') {
+        // A hung initializePromise only recovers via a fresh page.
+        setError('ချိတ်ဆက်၍ မရပါ — ထပ်ကြိုးစားပါ')
+        handleLockPoison()
+      } else {
+        setError(translateAuthError(err))
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   async function handleSubmit(e) {
@@ -73,21 +84,34 @@ export default function LoginPage() {
     setLoading(true)
     try {
       if (mode === 'login') {
-        await signIn({ email: cleanEmail, password })
+        try {
+          // v9.22: 20 s bound — signIn awaits the same initializePromise
+          // a stalled refresh can leave pending forever, spinning the
+          // button with no error.
+          await withTimeout(signIn({ email: cleanEmail, password }), 20000, 'Sign in')
+        } catch (err) {
+          if (err?.name === 'TimeoutError') {
+            // A hung initializePromise only recovers via a fresh page.
+            setError('ချိတ်ဆက်၍ မရပါ — ထပ်ကြိုးစားပါ')
+            handleLockPoison()
+            return
+          }
+          throw err
+        }
         goBackOrHome()
       } else {
         // Confirm password must match before creating the account (F4).
         if (password !== confirmPassword) {
           setError('စကားဝှက် နှစ်ခု မတူပါ — ထပ်စစ်ပါ')
-          setLoading(false)
           return
         }
         if (!cleanName) {
           setError('နာမည် ထည့်ပါ')
-          setLoading(false)
           return
         }
-        const data = await signUp({ email: cleanEmail, password, fullName: cleanName })
+        // v9.22: 20 s bound, like sign-in (a sign-up timeout surfaces
+        // the same message; no reload — the typed form is kept).
+        const data = await withTimeout(signUp({ email: cleanEmail, password, fullName: cleanName }), 20000, 'Sign up')
         // Email confirmation ON → no session yet, user must confirm via email.
         // Confirmation OFF → Supabase returns a session immediately: go in.
         if (data?.session) {
@@ -98,9 +122,14 @@ export default function LoginPage() {
         }
       }
     } catch (err) {
-      setError(translateAuthError(err))
+      if (err?.name === 'TimeoutError') {
+        setError('ချိတ်ဆက်၍ မရပါ — ထပ်ကြိုးစားပါ')
+      } else {
+        setError(translateAuthError(err))
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (

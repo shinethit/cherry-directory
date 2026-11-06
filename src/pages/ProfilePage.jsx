@@ -20,6 +20,10 @@ const ROLE_CONFIG = {
   admin:       { label: 'Admin',       icon: Crown,  color: 'text-gold-400',   bg: 'bg-gold-500/15 border-gold-500/30' },
   moderator:   { label: 'Moderator',   icon: Shield, color: 'text-amber-400',  bg: 'bg-amber-500/15 border-amber-500/30' },
   member:      { label: 'Member',      icon: User,   color: 'text-brand-300',  bg: 'bg-brand-600/20 border-brand-400/30' },
+  // v9.22 (crash): live profile rows also carry role 'user' — AdminPage
+  // maps 'user' → 'member' in its role dropdown, so treat it as Member
+  // here too instead of throwing on an unlisted role.
+  user:        { label: 'Member',      icon: User,   color: 'text-brand-300',  bg: 'bg-brand-600/20 border-brand-400/30' },
 }
 
 export default function ProfilePage() {
@@ -229,7 +233,10 @@ export default function ProfilePage() {
     setPushLoading(false)
   }
 
-  const role = ROLE_CONFIG[viewed?.role || 'member']
+  // v9.22 (crash): any role outside ROLE_CONFIG used to make `role`
+  // undefined and `role.icon` threw during render, crashing /profile
+  // behind the ErrorBoundary on every reload. Fall back to Member.
+  const role = ROLE_CONFIG[viewed?.role || 'member'] || ROLE_CONFIG.member
   const RoleIcon = role.icon
 
   // Guests need to sign in to see their own profile (F-MED-4) — the same

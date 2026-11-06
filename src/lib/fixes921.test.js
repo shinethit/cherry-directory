@@ -6,12 +6,17 @@ import { fileURLToPath } from 'node:url'
 // v9.21 fixes: Home dead with red banner + auth lock (Bug D, two tabs),
 // Featured "အားလုံး" shows 0 (Bug B), /prices FAB overlap (Bug C),
 // Change Log Admin rule + version bump. Static source assertions in the
-// wording.test.js / layout.test.js pattern, plus one functional test of
-// the lock-error detector (pure function — no render needed).
-// Bug A (second search returns 0) is NOT covered here: it did not
-// reproduce in a mocked jsdom run of the real SearchPage (sequential
-// searches and an overlapping slow-first-search variant both passed),
-// so SearchPage.jsx was left untouched — see the 9.21 report.
+// wording.test.js / layout.test.js pattern.
+// NOTE (v9.22): the Bug D mechanism changed — the v9.21 lockAcquireTimeout
+// never took effect (supabase-js drops it; grep -c on its dist is 0), so
+// the assertions below now pin the v9.22 design: a custom `lock` wrapper
+// (120 s), the backoff reload guard, and the isLockError detector in
+// lib/supabase.js. The functional isLockError / backoff / lock-wrapper
+// tests live in fixes922.test.js. Bug A (second search returns 0) is NOT
+// covered here either: it did not reproduce in a mocked jsdom run of the
+// real SearchPage (sequential searches and an overlapping slow-first-search
+// variant both passed), so SearchPage.jsx was left untouched in 9.21 —
+// the 9.22 live capture pinned it instead (see fixes922.test.js).
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (rel) => readFileSync(join(srcDir, rel), 'utf8')
@@ -25,10 +30,24 @@ function changelogEntry(header, v, nextV) {
 }
 
 describe('Bug D: auth lock (two tabs) — supabase client', () => {
-  it('lockAcquireTimeout is 30 s in the createClient auth options (auth-js default is 5 s)', () => {
+  it('the dead v9.21 lockAcquireTimeout is gone; the custom lock wrapper passes 120 s (auth-js default is 5 s)', () => {
     const lib = read('lib/supabase.js')
-    expect(lib).toContain('lockAcquireTimeout: 30000')
+    // supabase-js 2.100.1 drops lockAcquireTimeout (0 occurrences in
+    // its dist) — it must not be there as an option pretending to work
+    // (the explanatory comment may still name it).
+    expect(lib).not.toMatch(/^\s*lockAcquireTimeout:/m)
     expect(lib).toContain("storageKey: 'cherry-directory-auth'")
+    expect(lib).toContain('lock: authLock')
+    expect(lib).toContain('navigatorLock(name, 120000, fn)')
+    expect(lib).toContain("import { navigatorLock } from '@supabase/auth-js'")
+  })
+
+  it('the unhandledrejection handler is registered before createClient', () => {
+    const lib = read('lib/supabase.js')
+    expect(lib.indexOf("window.addEventListener('unhandledrejection'")).toBeGreaterThan(-1)
+    expect(lib.indexOf("window.addEventListener('unhandledrejection'")).toBeLessThan(lib.indexOf('createClient(supabaseUrl'))
+    expect(lib).toContain('supabase.auth.stopAutoRefresh()')
+    expect(lib).toContain('handleLockPoison()')
   })
 })
 
@@ -53,24 +72,37 @@ describe('Bug D: HomePage auto-retry on FAST core failure', () => {
 
 describe('Bug D: AuthContext lock-error recovery', () => {
   it('a lock error is detected by the stolen-lock message (auth-js wording)', () => {
-    const auth = read('contexts/AuthContext.jsx')
-    expect(auth).toContain('was released because another request stole it')
-    expect(auth).toContain('LockAcquireTimeoutError')
+    // The detector lives in lib/supabase.js now (single copy, shared
+    // with the unhandledrejection handler); AuthContext re-exports it.
+    const lib = read('lib/supabase.js')
+    expect(lib).toContain('was released because another request stole it')
+    expect(lib).toContain('Lock broken by another request')
+    expect(lib).toContain('LockAcquireTimeoutError')
   })
 
-  it('loadSession recovers with a guarded reload — never a getSession retry on the same client', () => {
+  it('loadSession recovers with the backoff-guarded reload — never a getSession retry on the same client', () => {
     const auth = read('contexts/AuthContext.jsx')
     // Exactly ONE real getSession call (the initial load); the catch
     // must not call it again — the cached initializePromise rejection
     // would just rethrow.
     const calls = auth.match(/supabase\.auth\.getSession\(\)/g) || []
     expect(calls.length).toBe(1)
-    // Recovery: reload, guarded to once per browser session.
-    expect(auth).toContain('window.location.reload()')
-    expect(auth).toContain('lockReloadAlreadyDone()')
-    expect(auth).toContain('markLockReloaded()')
-    expect(auth).toContain("sessionStorage.getItem(AUTH_LOCK_RELOAD_KEY)")
-    expect(auth).toContain('cherry-auth-lock-reloaded')
+    // Recovery: shared backoff reload, not the v9.21 once-per-session guard.
+    // (The reload itself lives in lib/supabase.js's handleLockPoison —
+    // AuthContext only calls it.)
+    expect(auth).not.toContain('window.location.reload()')
+    expect(auth).not.toContain('lockReloadAlreadyDone()')
+    expect(auth).not.toContain('markLockReloaded()')
+    expect(auth).toContain('handleLockPoison()')
+    expect(auth).toContain("import { supabase, isLockError, handleLockPoison } from '../lib/supabase'")
+    // The guard itself: 3 reloads max, ≥10 s apart, jittered delay.
+    const lib = read('lib/supabase.js')
+    expect(lib).toContain('window.location.reload()')
+    expect(lib).toContain("sessionStorage.getItem(AUTH_LOCK_RELOAD_KEY)")
+    expect(lib).toContain('cherry-auth-lock-reloaded')
+    expect(lib).toContain('LOCK_RELOAD_MAX = 3')
+    expect(lib).toContain('LOCK_RELOAD_MIN_GAP_MS = 10000')
+    expect(lib).toContain('500 + Math.random() * 1000')
   })
 
   it('the existing safety net, INITIAL_SESSION skip and profile dedupe are intact', () => {
@@ -81,34 +113,9 @@ describe('Bug D: AuthContext lock-error recovery', () => {
   })
 })
 
-// Functional: the lock-error detector itself (pure — no component
-// render, so it runs under the default node test env). The supabase
-// module throws without env vars, so it is mocked; toast is mocked to
-// keep react-toastify out of node. vi.mock hoists above the import, so
-// the real AuthContext module loads against the mocks. The file's JSX
-// never executes at import time.
-vi.mock('./supabase', () => ({ supabase: { auth: {}, from: () => ({}) } }))
-vi.mock('./toast', () => ({ showError: () => {} }))
-
-import { isLockError } from '../contexts/AuthContext'
-
-describe('Bug D: isLockError (functional)', () => {
-  it('recognises the stolen-lock error', () => {
-    expect(isLockError(new Error('Lock "cherry-directory-auth" was released because another request stole it'))).toBe(true)
-  })
-
-  it('recognises the acquire-timeout error shape', () => {
-    expect(isLockError({ name: 'LockAcquireTimeoutError', message: 'timed out' })).toBe(true)
-    expect(isLockError({ isAcquireTimeout: true, message: 'timed out' })).toBe(true)
-  })
-
-  it('does not treat ordinary failures as lock errors', () => {
-    expect(isLockError(new Error('Failed to fetch'))).toBe(false)
-    expect(isLockError(new Error('NetworkError when attempting to fetch resource.'))).toBe(false)
-    expect(isLockError(null)).toBe(false)
-    expect(isLockError(undefined)).toBe(false)
-  })
-})
+// (v9.22: the functional isLockError tests moved to fixes922.test.js —
+// the detector now lives in lib/supabase.js, imported there with stubbed
+// env vars; this file's vi.mock('./supabase') would shadow the real one.)
 
 describe('Bug D hardening: AppConfig fetchConfig', () => {
   it('has a timeout and one retry (was: no timeout at all)', () => {
@@ -155,9 +162,9 @@ describe('Bug C: /prices last content clears the Submit FAB', () => {
 })
 
 describe('v9.21: version + Change Log Admin rule', () => {
-  it('package.json is 9.21', () => {
+  it('package.json is 9.22 (work copy bumped; the 9.21 entry below is still the 9.21 record)', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.21')
+    expect(pkg.version).toBe('9.22')
   })
 
   it('the 9.21 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {

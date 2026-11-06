@@ -239,6 +239,11 @@ function AppRoutes() {
     return () => clearTimeout(t)
   }, [])
 
+  // v9.22: 30 s — the auth safety net is bound at ~25 s (5 s × 4 re-arms
+  // while a profile fetch is in flight), so the ErrorScreen must only
+  // appear after it, when boot is really stuck. At 8 s it fired while
+  // the safety net was still re-arming, and its reload Retry restarted
+  // the whole boot cycle.
   useEffect(() => {
     if (!loading) {
       setTimeoutExceeded(false)
@@ -247,7 +252,7 @@ function AppRoutes() {
     const timer = setTimeout(() => {
       console.warn('Auth loading timeout exceeded')
       setTimeoutExceeded(true)
-    }, 8000)
+    }, 30000)
     return () => clearTimeout(timer)
   }, [loading])
 

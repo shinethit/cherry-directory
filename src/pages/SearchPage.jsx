@@ -165,13 +165,19 @@ export default function SearchPage() {
     // slowest of 9 parallel proxied requests, because runSearch
     // awaited Promise.all before the first setResults. Each source
     // now publishes its own rows the moment it resolves (success or
-    // error), and the spinner clears after the FIRST source so
-    // results appear as they arrive. Stale tokens never publish.
-    let firstDone = false
+    // error). Stale tokens never publish.
+    // v9.22 (Bug A): the spinner used to clear on the FIRST source to
+    // resolve — usually one returning [], so the status line showed
+    // "0 ရလဒ် တွေ့သည်" with the previous query still in the URL while
+    // 8 sources were still in flight (live-timed: "0" for ~1.7 s,
+    // then "5 ရလဒ်"). loading now stays true until the final block
+    // below sets loading=false + allSourcesDone=true, so the status
+    // shows "ရှာနေသည်..." until the count is final. Per-source rows
+    // still stream in (the v9.19 intent is kept); only the
+    // spinner/status stops lying.
     const streamResult = (sourceId, data) => {
       if (token !== searchTokenRef.current) return
       setResults(prev => ({ ...prev, [sourceId]: data }))
-      if (!firstDone) { firstDone = true; setLoading(false) }
     }
 
     // Run all searches in parallel

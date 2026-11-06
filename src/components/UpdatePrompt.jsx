@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { useServiceWorker } from '../hooks/useServiceWorker'
 import { safeGet, safeSet } from '../lib/safeStorage'
@@ -12,8 +12,12 @@ import { setUpdateToastVisible } from '../lib/floatingBanners'
 // flight the button is disabled with an "updating…" label (H-6).
 //
 // v9.14 (F-1): the toast is dismissible, sits above the floating-button
-// band, auto-hides after ~10 s, and always wins over the install
-// banner/pill (it publishes its visibility via floatingBanners.js).
+// band, and always wins over the install banner/pill (it publishes its
+// visibility via floatingBanners.js).
+// v9.22: the 10 s auto-hide is REMOVED — the toast used to vanish before
+// the user could tap it, leaving no in-app way to apply a waiting
+// update. It now stays until dismissed (X, per-version persistent) or
+// applied.
 //
 // NOTE on the dismiss key: the waiting worker's own version string is
 // NOT exposed to the page — useServiceWorker only reports
@@ -23,36 +27,18 @@ import { setUpdateToastVisible } from '../lib/floatingBanners'
 // suppresses that update's prompt; once the user actually updates,
 // APP_VERSION changes and a future update's prompt is unaffected.
 const DISMISSED_KEY = `cherry_update_dismissed_${APP_VERSION}`
-const AUTO_HIDE_MS = 10_000
 
 export default function UpdatePrompt() {
   const { updateAvailable, updating, applyUpdate } = useServiceWorker()
   const [dismissed, setDismissed] = useState(() => safeGet(DISMISSED_KEY) !== null)
-  // Session-only hide (auto-hide): NOT recorded persistently, so a fresh
-  // visit shows the prompt again. Reset when a NEW update arrives after
-  // a previous one was auto-hidden.
-  const [autoHidden, setAutoHidden] = useState(false)
-  const prevAvailableRef = useRef(false)
 
-  const shown = updateAvailable && !dismissed && !autoHidden
-
-  useEffect(() => {
-    if (updateAvailable && !prevAvailableRef.current) setAutoHidden(false)
-    prevAvailableRef.current = updateAvailable
-  }, [updateAvailable])
+  const shown = updateAvailable && !dismissed
 
   // (d) Publish visibility so the install banner / pill can suppress
   // themselves — at most one floating banner at a time.
   useEffect(() => {
     setUpdateToastVisible(shown)
     return () => setUpdateToastVisible(false)
-  }, [shown])
-
-  // (c) Auto-hide after ~10 s as a session-only hide.
-  useEffect(() => {
-    if (!shown) return
-    const t = setTimeout(() => setAutoHidden(true), AUTO_HIDE_MS)
-    return () => clearTimeout(t)
   }, [shown])
 
   // (a) Persistent per-version dismissal — this version's prompt never

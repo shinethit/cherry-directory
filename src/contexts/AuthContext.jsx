@@ -1,8 +1,13 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, isLockError, handleLockPoison } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { showError } from '../lib/toast'
 import { safeGet, safeSet, safeRemove } from '../lib/safeStorage'
+
+// Re-exported so existing import sites keep working; the implementation
+// lives in lib/supabase.js (single copy — the unhandledrejection handler
+// there and loadSession here must share one guard).
+export { isLockError } from '../lib/supabase'
 
 const AuthContext = createContext(null)
 
@@ -19,28 +24,12 @@ const SAFE_PROFILE_KEYS = ['full_name', 'nickname', 'bio', 'avatar_url']
 // affects what the UI renders, never what the server returns.
 const PROFILE_CACHE_KEY = 'cherry-directory-profile'
 
-// v9.21 (Bug D): a stolen navigator lock poisons this client's
-// initializePromise permanently — GoTrueClient awaits that same promise
-// in getSession/signIn/refresh and every later call rethrows the cached
-// rejection, so retrying getSession() on this client can never work.
-// Recovery is a fresh page (fresh client, fresh initializePromise),
-// guarded to once per browser session so a repeat steal can never
-// reload-loop. sessionStorage (not localStorage): a new session gets a
-// fresh chance. All helpers never throw.
-const AUTH_LOCK_RELOAD_KEY = 'cherry-auth-lock-reloaded'
-export function isLockError(err) {
-  const msg = err?.message || String(err || '')
-  return msg.includes('was released because another request stole it')
-    || msg.includes('Lock')
-    || err?.name === 'LockAcquireTimeoutError'
-    || err?.isAcquireTimeout === true
-}
-function lockReloadAlreadyDone() {
-  try { return window.sessionStorage.getItem(AUTH_LOCK_RELOAD_KEY) === '1' } catch { return false }
-}
-function markLockReloaded() {
-  try { window.sessionStorage.setItem(AUTH_LOCK_RELOAD_KEY, '1') } catch { /* ignore */ }
-}
+// v9.22 (Bug D): the lock-error detector + backoff reload guard now live
+// in lib/supabase.js (isLockError, handleLockPoison) — one shared copy,
+// also used by the unhandledrejection handler registered before
+// createClient. The v9.21 once-per-session guard is gone: a continuous
+// two-tab race reloaded both tabs once and kept failing; the backoff
+// allows 3 reloads per session, ≥10 s apart, with jitter.
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -52,6 +41,9 @@ export function AuthProvider({ children }) {
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileError, setProfileError] = useState('')
   const initialized = useRef(false)
+  // v9.22: set at the end of loadSession — the onAuthStateChange handler
+  // must not clear `loading` before boot has finished (see below).
+  const booted = useRef(false)
   const profileInFlight = useRef(0)
   // v9.18: dedupes the double fetch at boot — loadSession() and the
   // onAuthStateChange INITIAL_SESSION event fired the same query twice,
@@ -183,7 +175,12 @@ export function AuthProvider({ children }) {
 
     const loadSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession()
+        // v9.22: 15 s bound — getSession() awaits initializePromise,
+        // which a stalled token refresh can leave pending forever (no
+        // timeout anywhere in auth-js). On timeout proceed as guest
+        // instead of hanging boot; the session may still arrive later
+        // via onAuthStateChange.
+        const { data: { session }, error } = await withTimeout(supabase.auth.getSession(), 15000, 'Auth session')
 
         if (error) {
           console.warn('[Auth] getSession error:', error?.message || error)
@@ -200,24 +197,25 @@ export function AuthProvider({ children }) {
         setLoadingFalse()
       } catch (err) {
         console.warn('[Auth] Initialization error:', err?.message || err)
-        // v9.21 (Bug D): a stolen lock (second tab / tab + PWA racing
-        // the session refresh through the slow proxy) poisons this
-        // client's initializePromise — retrying getSession() here would
-        // just rethrow the cached rejection. Reload once per session so
-        // a fresh client re-initializes; on a repeat steal the guard
-        // stops the loop and the app proceeds (loading false) instead.
-        if (isLockError(err) && !lockReloadAlreadyDone()) {
-          markLockReloaded()
-          setTimeout(() => { try { window.location.reload() } catch { /* ignore */ } }, 500)
+        // v9.22 (Bug D): a stolen lock poisons this client's
+        // initializePromise — retrying getSession() here would just
+        // rethrow the cached rejection. The shared backoff guard
+        // reloads (at most 3× per session, ≥10 s apart, jittered);
+        // when it blocks, proceed as guest instead of reload-looping.
+        if (isLockError(err)) {
+          if (handleLockPoison()) return
+          setLoadingFalse()
           return
         }
         setLoadingFalse()
+      } finally {
+        booted.current = true
       }
     }
 
     loadSession()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return
       // v9.18: loadSession() above already fetched the profile for the
       // initial session — skip this event or the fetch runs twice.
@@ -225,14 +223,25 @@ export function AuthProvider({ children }) {
 
       if (session?.user) {
         setUser(session.user)
-        await fetchProfile(session.user.id)
+        // v9.22 (Account loading): NEVER await inside this callback.
+        // _initialize() awaits every subscriber callback before
+        // getSession() resolves, and fetchProfile's PostgREST query
+        // needs getSession() — awaiting here deadlocked boot for
+        // ~42 s (the query never fired until withTimeout broke the
+        // wait). Fire and forget: the pendingProfile dedupe makes the
+        // double call with loadSession's own fetch harmless.
+        fetchProfile(session.user.id)
       } else {
         setUser(null)
         setProfile(null)
         setProfileError('')
         setProfileLoading(false)
       }
-      setLoadingFalse()
+      // v9.22: only clear loading once boot has finished — otherwise
+      // loading can go false while loadSession's own fetch is still in
+      // flight (the old v9.19 flash bug). loadSession remains the
+      // single boot fetch.
+      if (booted.current) setLoadingFalse()
     })
 
     return () => {
