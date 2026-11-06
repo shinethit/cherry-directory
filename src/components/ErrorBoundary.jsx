@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import * as Sentry from '@sentry/react'
 import { safeRemove } from '../lib/safeStorage'
+import { getRecoveryLines } from '../lib/recoverySteps'
 
 // v9.22: Retry used to be a plain reload — correct for a transient chunk
 // failure, a deterministic loop for a render throw (same profile, same
@@ -77,6 +78,14 @@ export class ErrorBoundary extends Component {
               <p className="text-white/60 text-xs font-myanmar">
                 အမှားတစ်ခု ဖြစ်သွားပါသည်။ စာမျက်နှာကို ပြန်ဖွင့်ကြည့်ပါ။ ပြဿနာ ဆက်ဖြစ်နေပါက Admin ကို ဆက်သွယ်ပါ။
               </p>
+              {/* v9.23: clear recovery steps — Android clears the cache,
+                  iOS deletes the home-screen Shortcut and re-adds it.
+                  Platform-aware: each phone only sees its own steps;
+                  unknown/desktop sees both (brief). */}
+              <p className="text-white/70 text-xs font-myanmar mt-2">မရသေးရင် ဒီလိုလုပ်ကြည့်ပါ —</p>
+              {getRecoveryLines().map((line) => (
+                <p key={line} className="text-white/60 text-xs font-myanmar mt-1">{line}</p>
+              ))}
             </div>
             <div className="flex gap-2">
               <button

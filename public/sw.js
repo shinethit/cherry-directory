@@ -1,6 +1,13 @@
 /* Cherry Directory — Service Worker v5 */
 
-const CACHE_VERSION = 'v13'
+// v9.23: v14 + install-time skipWaiting — a new worker used to sit in
+// "waiting" until every PWA instance closed, so an installed PWA could
+// keep running the old worker for days (iOS: the installed Shortcut never
+// self-updated). Now it activates at once when the browser's update check
+// installs it. (No code can force the check itself — the browser throttles
+// it to ~24h — so the error screens still carry the delete-Shortcut
+// recovery for an already-installed PWA.)
+const CACHE_VERSION = 'v14'
 const CACHE_NAME = 'cherry-directory-' + CACHE_VERSION
 
 function offlineFallback() {
@@ -17,6 +24,9 @@ function offlineFallback() {
 // the synthetic 503. Now the shell is cached on install, so the SPA
 // boots and shows its own retry UI instead of a bare 503.
 self.addEventListener('install', (event) => {
+  // v9.23: activate at once — without this the new worker waits until
+  // every client closes, and an installed PWA keeps the old worker.
+  self.skipWaiting()
   event.waitUntil(
     caches
       .open(CACHE_NAME)

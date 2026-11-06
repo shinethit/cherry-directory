@@ -16,6 +16,7 @@ import { loadPartial, createAutoRetryGuard } from '../lib/loadPartial';
 import { formatPeakHour, devicePercentages } from '../lib/visitTracking';
 import { subscribeUpdateToastVisible } from '../lib/floatingBanners';
 import { showError } from '../lib/toast';
+import { getRecoveryLines } from '../lib/recoverySteps';
 
 // How long the main Home queries may run before the page stops waiting
 // (v9.7: 30 s, was 10 s — slow mobile data needs the headroom). 30 s is
@@ -457,6 +458,11 @@ export default function HomePage() {
         <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
           <p className="text-sm text-red-400 font-myanmar">Data အချို့ တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
           <button onClick={handleRefresh} className="btn-primary text-sm px-6 py-3 min-h-[44px]">ပြန်ကြိုးစားမည်</button>
+          {/* v9.23: same recovery hint as the crash screen — short,
+              platform-aware, one line per platform. */}
+          {getRecoveryLines().map((line) => (
+            <p key={line} className="text-xs text-white/50 font-myanmar">{line}</p>
+          ))}
         </div>
       )}
 

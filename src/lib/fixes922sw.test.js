@@ -17,10 +17,24 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const read = (rel) => readFileSync(join(root, rel), 'utf8')
 
 describe('FIX 5: sw.js — new cache version + version.json bypass', () => {
-  it('CACHE_VERSION is v13 (one-time purge of the v12 caches)', () => {
+  it('CACHE_VERSION is v14 (one-time purge of the v13 caches)', () => {
     const sw = read('public/sw.js')
-    expect(sw).toContain("const CACHE_VERSION = 'v13'")
-    expect(sw).not.toContain("CACHE_VERSION = 'v12'")
+    expect(sw).toContain("const CACHE_VERSION = 'v14'")
+    expect(sw).not.toContain("CACHE_VERSION = 'v13'")
+  })
+
+  // v9.23: a new worker used to sit in "waiting" until every PWA instance
+  // closed, so an installed PWA could keep the old worker for days. Now
+  // install activates it at once (the browser's ~24 h update check itself
+  // cannot be forced — the error screens carry the delete-Shortcut
+  // recovery for an already-installed PWA).
+  it('new worker activates at once (install-time skipWaiting)', () => {
+    const sw = read('public/sw.js')
+    expect(sw).toContain('self.skipWaiting()')
+    const install = sw.indexOf("addEventListener('install'")
+    const skip = sw.indexOf('self.skipWaiting()')
+    expect(install).toBeGreaterThan(-1)
+    expect(skip).toBeGreaterThan(install)
   })
 
   it('/version.json bypasses the SW before the static (SWR) branch', () => {
