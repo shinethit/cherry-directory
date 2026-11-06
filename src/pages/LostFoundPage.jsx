@@ -11,7 +11,8 @@ import { uploadImage } from '../lib/cloudinary'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { showError } from '../lib/toast'
-import { escapePostgrestOr } from '../hooks/useListings'
+import { buildOrFilter } from '../lib/myanmarSearch'
+import { validatePhone } from '../lib/validation'
 
 const CATS = [
   { id: 'all',    mm: 'အားလုံး',   en: 'All',     icon: '🔍' },
@@ -110,7 +111,8 @@ function PostForm({ onClose, onSuccess, lang }) {
       const url = await uploadImage(file, 'lost-found')
       setImages(prev => [...prev, url])
     } catch (err) {
-      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+      console.warn('Lost & found image upload failed:', err)
+      showError(lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed')
     } finally {
       setImgLoading(false)
     }
@@ -120,6 +122,9 @@ function PostForm({ onClose, onSuccess, lang }) {
     if (!form.title && !form.title_mm) return
     // S27 (v9.17): at least one way to reach the poster is required.
     if (!form.contact_phone?.trim() && !form.contact_name?.trim()) { showError('ဆက်သွယ်ရန် (ဖုန်း / နာမည်) တစ်ခုခု ထည့်ပါ'); return }
+    // LF5 (v9.20): a phone, when given, must be a valid format — the
+    // old check only required it to be non-empty.
+    if (form.contact_phone?.trim() && !validatePhone(form.contact_phone)) { showError('ဖုန်းနံပါတ် မှားနေသည်'); return }
     setSubmitting(true)
     try {
       const { error } = await supabase.from('lost_found').insert({
@@ -133,7 +138,7 @@ function PostForm({ onClose, onSuccess, lang }) {
       if (error) throw error
       onSuccess()
     } catch (err) {
-      showError(err.message || (lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post'))
+      showError(lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post')
     } finally {
       setSubmitting(false)
     }
@@ -232,7 +237,7 @@ function PostForm({ onClose, onSuccess, lang }) {
             {images.map((url, i) => (
               <div key={i} className="relative w-20 h-20">
                 <img src={url} alt={form.title_mm || 'ပုံ'} className="w-full h-full object-cover rounded-xl border border-white/10" />
-                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 w-5 h-5 btn-danger rounded-full text-white text-[10px] flex items-center justify-center">✕</button>
+                <button onClick={() => setImages(prev => prev.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 min-w-[44px] min-h-[44px] btn-danger rounded-full text-white text-[10px] flex items-center justify-center" aria-label="ပုံ ဖျက်မည်">✕</button>
               </div>
             ))}
             {images.length < 3 && <ImageUploader onUpload={handleImg} loading={imgLoading} label="ပုံ" />}
@@ -280,10 +285,12 @@ export default function LostFoundPage() {
       if (catFilter !== 'all')  q = q.eq('category', catFilter)
       // Server-side search (was: client-side over the loaded 20 rows,
       // so anything past page 1 was unsearchable).
+      // LF2 (v9.20): buildOrFilter adds Zawgyi variants, like the
+      // Myanmar search — a Zawgyi-typed query used to miss
+      // Unicode-stored titles.
       const term = debouncedSearch.trim()
       if (term) {
-        const esc = escapePostgrestOr(term)
-        q = q.or(['title', 'title_mm', 'description', 'description_mm', 'location', 'location_mm'].map(f => `${f}.ilike.%${esc}%`).join(','))
+        q = q.or(buildOrFilter(['title', 'title_mm', 'description', 'description_mm', 'location', 'location_mm'], [term]))
       }
       // 30 s timeout (was none) + a real error state: a failed load used
       // to render the empty "Post မရှိသေး" as if nothing was ever posted.
@@ -291,9 +298,15 @@ export default function LostFoundPage() {
       if (error) throw error
       // Client-side expiry: expires_at defaults to +30d but nothing flips
       // the status, so hide expired posts here.
+      // LF3 (v9.20): hasMore is computed from the VISIBLE page — expired
+      // rows used to count toward it, so "Load more" showed even when
+      // nothing visible remained. (A full server page with at least one
+      // visible row still counts as "more", so a partially-expired page
+      // does not strand later pages.)
       const now = Date.now()
-      setPosts((data || []).filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now))
-      setHasMore((data || []).length === limit)
+      const visible = (data || []).filter(p => !p.expires_at || new Date(p.expires_at).getTime() >= now)
+      setPosts(visible)
+      setHasMore((data || []).length === limit && visible.length > 0)
     } catch (e) { console.warn(e); setLoadError(true) }
     setLoading(false)
   }
@@ -406,7 +419,7 @@ export default function LostFoundPage() {
           : loadError ? (
             <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
               <p className="text-sm text-red-400 font-myanmar">Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
-              <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+              <button onClick={() => load()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
             </div>
           ) : posts.length === 0 ? (
             <div className="flex flex-col items-center py-14 text-center"><span className="text-4xl mb-3">🔍</span><p className="text-white/60 font-display font-semibold">{lang === 'mm' ? 'Post မရှိသေး' : 'No posts yet'}</p></div>

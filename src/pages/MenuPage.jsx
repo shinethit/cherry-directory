@@ -6,7 +6,7 @@ import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
-import { uploadImage } from '../lib/cloudinary'
+import { uploadImage, getOptimizedUrl } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
@@ -21,12 +21,12 @@ function PriceDisplay({ price, priceMax }) {
   )
 }
 
-function MenuItem({ item, canEdit, onEdit, onDelete }) {
+function MenuItem({ item, canEdit, onEdit, onDelete, onMoveUp, onMoveDown, isFirst, isLast }) {
   return (
     <div className={`flex gap-3 p-3 rounded-xl transition-colors ${item.is_available ? '' : 'opacity-50'}`}>
       {item.image_url && (
         <div className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0 bg-white/5 border border-white/8">
-          <img src={item.image_url} alt={item.name || item.name_mm} className="w-full h-full object-cover" />
+          <img src={getOptimizedUrl(item.image_url, { width: 160 })} alt={item.name || item.name_mm} className="w-full h-full object-cover" />
         </div>
       )}
       <div className="flex-1 min-w-0">
@@ -42,6 +42,16 @@ function MenuItem({ item, canEdit, onEdit, onDelete }) {
           </div>
           {canEdit && (
             <div className="flex gap-2 flex-shrink-0">
+              {/* MN6 (v9.20): up/down reorder controls — items used to be
+                  stuck in insertion order. */}
+              <div className="flex flex-col gap-1">
+                <button onClick={onMoveUp} disabled={isFirst} aria-label="အပေါ်သို့ ရွှေ့မည်" className="w-9 h-5 rounded-md bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors disabled:opacity-30">
+                  <ChevronUp size={12} className="text-white/60" />
+                </button>
+                <button onClick={onMoveDown} disabled={isLast} aria-label="အောက်သို့ ရွှေ့မည်" className="w-9 h-5 rounded-md bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors disabled:opacity-30">
+                  <ChevronDown size={12} className="text-white/60" />
+                </button>
+              </div>
               <button onClick={() => onEdit(item)} aria-label="ပြင်မည်" className="w-9 h-9 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
                 <Edit2 size={14} className="text-white/50" />
               </button>
@@ -197,7 +207,7 @@ export default function MenuPage() {
       await loadMenu()
     } catch (e) {
       console.warn(e)
-      setLoadError(e?.message || 'တင်မရပါ')
+      setLoadError('load-failed')
     }
     setLoading(false)
   }
@@ -228,8 +238,17 @@ export default function MenuPage() {
 
   async function addCategory() {
     if (!newCatName.trim() && !newCatMm.trim()) { showError('Category အမည် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ'); return }
-    const { data, error } = await supabase.from('menu_categories').insert({ listing_id: id, name: newCatName.trim() || newCatMm.trim(), name_mm: newCatMm.trim() || null, sort_order: menuCategories.length }).select().single()
-    if (error || !data) { showError(error?.message || 'Category ထည့်မရပါ'); return }
+    // MN4 (v9.20): duplicate-name check, same rule as CategoryForm
+    // (case-insensitive, both name fields, within this listing).
+    const effName = (newCatName.trim() || newCatMm.trim()).toLowerCase()
+    if (menuCategories.some(c => [c.name, c.name_mm].some(n => (n || '').trim().toLowerCase() === effName))) {
+      showError('အမည်တူ Category ရှိပြီးဖြစ်သည်'); return
+    }
+    // MN5 (v9.20): max(sort_order)+1 — menuCategories.length collided
+    // after deletions.
+    const nextOrder = Math.max(0, ...menuCategories.map(c => c.sort_order ?? 0)) + 1
+    const { data, error } = await supabase.from('menu_categories').insert({ listing_id: id, name: newCatName.trim() || newCatMm.trim(), name_mm: newCatMm.trim() || null, sort_order: nextOrder }).select().single()
+    if (error || !data) { console.error('Add menu category error:', error); showError('Category ထည့်မရပါ'); return }
     setMenuCategories(prev => [...prev, data])
     setNewCatName(''); setNewCatMm(''); setAddingCat(false)
   }
@@ -239,9 +258,9 @@ export default function MenuPage() {
     // Items must be unlinked FIRST, or they keep the deleted category_id
     // and vanish from the menu entirely (H-17).
     const { error: unlinkErr } = await supabase.from('menu_items').update({ category_id: null }).eq('category_id', catId)
-    if (unlinkErr) { showError(unlinkErr.message || 'Category ဖျက်မရပါ'); return }
+    if (unlinkErr) { console.error('Unlink menu items error:', unlinkErr); showError('Category ဖျက်မရပါ'); return }
     const { error } = await supabase.from('menu_categories').delete().eq('id', catId)
-    if (error) { showError(error.message || 'Category ဖျက်မရပါ'); return }
+    if (error) { console.error('Delete menu category error:', error); showError('Category ဖျက်မရပါ'); return }
     setMenuCategories(prev => prev.filter(c => c.id !== catId))
     setItems(prev => prev.map(i => i.category_id === catId ? { ...i, category_id: null } : i))
   }
@@ -283,23 +302,45 @@ export default function MenuPage() {
 
     if (editItem && editItem !== 'new') {
       const { data, error } = await supabase.from('menu_items').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editItem.id).select().single()
-      if (error || !data) { showError(error?.message || 'Item ပြင်မရပါ'); return }
+      if (error || !data) { console.error('Update menu item error:', error); showError('Item ပြင်မရပါ'); return }
       setItems(prev => prev.map(i => i.id === data.id ? data : i))
       await log({ action: 'update', table: 'menu_items', id: editItem.id, name: form.name, before: editItem, after: data })
     } else {
-      const { data, error } = await supabase.from('menu_items').insert({ ...payload, sort_order: items.length }).select().single()
-      if (error || !data) { showError(error?.message || 'Item ထည့်မရပါ'); return }
+      // MN5 (v9.20): max(sort_order)+1 — items.length collided after
+      // deletions (a deleted slot's order got reused).
+      const nextOrder = Math.max(0, ...items.map(i => i.sort_order ?? 0)) + 1
+      const { data, error } = await supabase.from('menu_items').insert({ ...payload, sort_order: nextOrder }).select().single()
+      if (error || !data) { console.error('Add menu item error:', error); showError('Item ထည့်မရပါ'); return }
       setItems(prev => [...prev, data])
       await log({ action: 'create', table: 'menu_items', id: data.id, name: form.name, after: data })
     }
     setEditItem(null)
   }
 
+  // MN6 (v9.20): swap sort_order with the neighbour in the same group.
+  async function moveItem(item, dir) {
+    const group = items.filter(i => (i.category_id || null) === (item.category_id || null))
+    const idx = group.findIndex(i => i.id === item.id)
+    const other = group[idx + dir]
+    if (!other) return
+    const aOrder = item.sort_order ?? idx
+    const bOrder = other.sort_order ?? idx + dir
+    const { error: e1 } = await supabase.from('menu_items').update({ sort_order: bOrder }).eq('id', item.id)
+    const { error: e2 } = !e1 ? await supabase.from('menu_items').update({ sort_order: aOrder }).eq('id', other.id) : { error: null }
+    if (e1 || e2) {
+      console.error('Move menu item error:', e1 || e2)
+      showError('ရွှေ့ရာတွင် အမှားရှိသည်')
+      loadMenu()
+      return
+    }
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, sort_order: bOrder } : i.id === other.id ? { ...i, sort_order: aOrder } : i))
+  }
+
   async function deleteItem(itemId) {
     if (!(await confirmDialog('Item ဖျက်မည်လား?', { danger: true }))) return
     const item = items.find(i => i.id === itemId)
     const { error } = await supabase.from('menu_items').delete().eq('id', itemId)
-    if (error) { showError(error.message || 'Item ဖျက်မရပါ'); return }
+    if (error) { console.error('Delete menu item error:', error); showError('Item ဖျက်မရပါ'); return }
     setItems(prev => prev.filter(i => i.id !== itemId))
     await log({ action: 'delete', table: 'menu_items', id: itemId, name: item?.name, before: item })
   }
@@ -319,7 +360,6 @@ export default function MenuPage() {
       <p className="text-white/60 font-myanmar">
         {loadError === 'not-found' ? 'ဤလုပ်ငန်း မရှိတော့ပါ' : 'တင်မရပါ — ပြန်ကြိုးစားမည်'}
       </p>
-      {loadError !== 'not-found' && <p className="text-xs text-white/60">{loadError}</p>}
       {loadError === 'not-found' ? (
         <button onClick={() => navigate('/directory')} className="btn-primary text-sm px-5 py-2.5">Directory သို့</button>
       ) : (
@@ -387,7 +427,7 @@ export default function MenuPage() {
                       <ItemForm listingId={id} categoryId={null} item={item} categories={menuCategories} onSave={saveItem} onCancel={() => setEditItem(null)} />
                     </div>
                   ) : (
-                    <MenuItem item={item} canEdit={canEdit} onEdit={openEditForm} onDelete={deleteItem} />
+                    <MenuItem item={item} canEdit={canEdit} onEdit={openEditForm} onDelete={deleteItem} onMoveUp={() => moveItem(item, -1)} onMoveDown={() => moveItem(item, 1)} isFirst={uncategorized.indexOf(item) === 0} isLast={uncategorized.indexOf(item) === uncategorized.length - 1} />
                   )}
                 </div>
               ))}
@@ -437,7 +477,7 @@ export default function MenuPage() {
                               <ItemForm listingId={id} categoryId={cat.id} item={item} categories={menuCategories} onSave={saveItem} onCancel={() => setEditItem(null)} />
                             </div>
                           ) : (
-                            <MenuItem item={item} canEdit={canEdit} onEdit={openEditForm} onDelete={deleteItem} />
+                            <MenuItem item={item} canEdit={canEdit} onEdit={openEditForm} onDelete={deleteItem} onMoveUp={() => moveItem(item, -1)} onMoveDown={() => moveItem(item, 1)} isFirst={catItems.indexOf(item) === 0} isLast={catItems.indexOf(item) === catItems.length - 1} />
                           )}
                         </div>
                       ))}

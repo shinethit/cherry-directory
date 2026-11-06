@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Trash2 } from 'lucide-react'
+import { ArrowLeft, Trash2, Pencil } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
@@ -58,7 +58,7 @@ export default function MyReviewsPage() {
   async function deleteReview(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဤ Review ကို ဖျက်မှာလား?' : 'Delete this review?', { danger: true }))) return
     const { error } = await supabase.from('reviews').delete().eq('id', id).eq('user_id', user.id)
-    if (error) { showError(error.message); return }
+    if (error) { console.error('Delete review error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed'); return }
     showSuccess(lang === 'mm' ? 'ဖျက်ပြီးပါပြီ' : 'Deleted')
     setItems(prev => prev.filter(r => r.id !== id))
   }
@@ -107,6 +107,13 @@ export default function MyReviewsPage() {
                 <button onClick={() => navigate(`/directory/${r.listing_id}`)} className="text-left flex-1 min-w-0">
                   <p className="font-display font-semibold text-sm text-white truncate">{name || (lang === 'mm' ? 'လုပ်ငန်း' : 'Business')}</p>
                   <p className="text-[11px] text-white/60 mt-0.5">{formatMyanmarDate(r.created_at)}</p>
+                </button>
+                {/* MR4 (v9.20): edit affordance — opens the listing's
+                    review form in edit mode (?review=edit scrolls to it);
+                    the form already shows the existing review with an
+                    "Update review" button. */}
+                <button onClick={() => navigate(`/directory/${r.listing_id}?review=edit`)} className="min-w-[44px] min-h-[44px] rounded-lg bg-white/8 flex items-center justify-center flex-shrink-0" aria-label={lang === 'mm' ? 'ပြင်မည်' : 'Edit'}>
+                  <Pencil size={14} />
                 </button>
                 <button onClick={() => deleteReview(r.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center flex-shrink-0" aria-label={lang === 'mm' ? 'ဖျက်မည်' : 'Delete'}>
                   <Trash2 size={14} />

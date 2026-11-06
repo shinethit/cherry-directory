@@ -37,10 +37,10 @@ export function getTierProgress(points = 0) {
 // The Leaderboard used to list 5 rows and omit Claim +30; both lists
 // now render this same array, so they can never drift apart again.
 export const POINT_ACTIONS = [
-  { icon: Star,          points: 5,  mm: 'Review ရေးသည်',                 en: 'Write a review' },
-  { icon: Building2,     points: 10, mm: 'လုပ်ငန်း တင်ခြင်း',                 en: 'Submit a listing' },
-  { icon: Trophy,        points: 20, mm: 'လုပ်ငန်း အတည်ပြုခြင်း',           en: 'Listing approved' },
-  { icon: CalendarCheck, points: 2,  mm: 'Event RSVP',                     en: 'RSVP to event' },
-  { icon: MessageCircle, points: 1,  mm: 'Chat မက်ဆေ့ (max 10/day)',       en: 'Chat message (max 10/day)' },
-  { icon: ShieldCheck,   points: 30, mm: 'ပိုင်ဆိုင်ကြောင်း အတည်ပြုခြင်း',   en: 'Claim approved' },
+  { id: 'write_review',     icon: Star,          points: 5,  mm: 'Review ရေးသည်',                 en: 'Write a review' },
+  { id: 'submit_listing',   icon: Building2,     points: 10, mm: 'လုပ်ငန်း တင်ခြင်း',                 en: 'Submit a listing' },
+  { id: 'listing_approved', icon: Trophy,        points: 20, mm: 'လုပ်ငန်း အတည်ပြုခြင်း',           en: 'Listing approved' },
+  { id: 'rsvp_going',       icon: CalendarCheck, points: 2,  mm: 'Event RSVP',                     en: 'RSVP to event' },
+  { id: 'chat_message',     icon: MessageCircle, points: 1,  mm: 'Chat မက်ဆေ့ (max 10/day)',       en: 'Chat message (max 10/day)' },
+  { id: 'claim_approved',   icon: ShieldCheck,   points: 30, mm: 'ပိုင်ဆိုင်ကြောင်း အတည်ပြုခြင်း',   en: 'Claim approved' },
 ]

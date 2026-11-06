@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Plus, Edit3, Eye, Trash2, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Plus, Edit3, Eye, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { supabase } from '../lib/supabase'
@@ -8,9 +8,7 @@ import { withTimeout } from '../lib/withTimeout'
 import { useSEO } from '../hooks/useSEO'
 import { EmptyState } from '../components/UI'
 import { getOptimizedUrl } from '../lib/cloudinary'
-import { confirmDialog } from '../lib/confirmDialog'
 import { displayName } from '../lib/displayName'
-import { showError } from '../lib/toast'
 
 const STATUS_META = {
   pending:   { label_mm: 'စစ်ဆေးဆဲ',   label_en: 'Pending',   icon: Clock,        cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
@@ -45,24 +43,13 @@ export default function MySubmissionsPage() {
       setItems(data || [])
     } catch (e) {
       console.warn(e)
-      setLoadError(e?.message || 'တင်ထားသောများ ရယူမရပါ')
+      setLoadError('တင်ထားသောများ ရယူမရပါ')
       setItems([])
     }
     setLoading(false)
   }, [user])
 
   useEffect(() => { load() }, [load])
-
-  async function handleDelete(id) {
-    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this listing?', { danger: true }))) return
-    const { error } = await supabase.from('listings').delete().eq('id', id)
-    if (error) {
-      console.error('Delete listing failed:', error)
-      showError(error.message || (lang === 'mm' ? 'ဖျက်မရပါ — ထပ်ကြိုးစားပါ' : 'Could not delete — please try again'))
-      return
-    }
-    setItems(prev => prev.filter(i => i.id !== id))
-  }
 
   if (!isLoggedIn) {
     return (
@@ -234,7 +221,10 @@ export default function MySubmissionsPage() {
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Actions — View + Edit only. Owner delete was removed
+                    in 9.20 (user decision 2026-11-06: Admin ပဲဖျက်ခွင့်ပေး) —
+                    only Admin may delete, from AdminPage + ListingDetailPage
+                    (isAdmin-gated, via the shared delete helper). */}
                 <div className="border-t border-white/8 flex">
                   <button
                     onClick={() => navigate('/directory/' + item.id)}
@@ -248,13 +238,6 @@ export default function MySubmissionsPage() {
                     className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-brand-300 hover:bg-brand-600/10 transition-colors"
                   >
                     <Edit3 size={14} /> {lang === 'mm' ? 'ပြင်' : 'Edit'}
-                  </button>
-                  <div className="w-px bg-white/8" />
-                  <button
-                    onClick={() => handleDelete(item.id)}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-3 text-xs text-red-400 hover:bg-red-500/10 transition-colors"
-                  >
-                    <Trash2 size={14} /> {lang === 'mm' ? 'ဖျက်' : 'Delete'}
                   </button>
                 </div>
               </div>

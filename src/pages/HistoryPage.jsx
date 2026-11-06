@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
-import { uploadImage } from '../lib/cloudinary'
+import { uploadImage, getOptimizedUrl } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { Skeleton } from '../components/UI'
 import ShareButton from '../components/ShareButton'
@@ -30,7 +30,10 @@ const HISTORY_CATS = [
 ]
 
 function timeAgo(iso, lang) {
-  const m = Math.floor((Date.now() - new Date(iso)) / 60000)
+  // HY1 (v9.20): clamp future/clock-skew timestamps — a future time
+  // used to read "-5မိနစ်".
+  const m = Math.max(0, Math.floor((Date.now() - new Date(iso)) / 60000))
+  if (m === 0) return lang === 'mm' ? 'ယခု' : 'now'
   if (m < 60) return `${m}${lang === 'mm' ? 'မိနစ်' : 'm'}`
   const h = Math.floor(m / 60)
   if (h < 24) return `${h}${lang === 'mm' ? 'နာရီ' : 'h'}`
@@ -47,10 +50,12 @@ function readingTime(text, lang) {
 // Image with a skeleton placeholder while it loads (no blank gap).
 function GalleryImg({ src, className, alt }) {
   const [loaded, setLoaded] = useState(false)
+  // HY2 (v9.20): serve a Cloudinary-optimised image like ListingCard.
+  const optimized = getOptimizedUrl(src, { width: 800 })
   return (
     <div className="relative w-full h-full">
       {!loaded && <div className="absolute inset-0 shimmer" />}
-      <img src={src} alt={alt || 'ပုံ'} loading="lazy" onLoad={() => setLoaded(true)} className={className + (loaded ? ' opacity-100' : ' opacity-0') + ' transition-opacity duration-300'} />
+      <img src={optimized} alt={alt || 'ပုံ'} loading="lazy" onLoad={() => setLoaded(true)} className={className + (loaded ? ' opacity-100' : ' opacity-0') + ' transition-opacity duration-300'} />
     </div>
   )
 }
@@ -160,7 +165,8 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
       const url = await uploadImage(file, 'history/covers')
       setCoverUrl(url)
     } catch (err) {
-      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+      console.warn('History cover upload failed:', err)
+      showError(lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed')
     } finally {
       setCoverLoading(false)
     }
@@ -172,7 +178,8 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
       const url = await uploadImage(file, 'history/gallery')
       setImages(prev => [...prev, url])
     } catch (err) {
-      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+      console.warn('History gallery upload failed:', err)
+      showError(lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed')
     } finally {
       setImgLoading(false)
     }
@@ -197,7 +204,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
       const { error } = await supabase.from('history').update(payload).eq('id', editPost.id)
       if (error) {
         console.error('Update error:', error)
-        showError(error.message)
+        showError(lang === 'mm' ? 'ပြင်ရာတွင် အမှားရှိသည်' : 'Update failed')
         setSubmitting(false)
         return
       }
@@ -206,7 +213,7 @@ function HistoryForm({ onClose, onSuccess, lang, editPost }) {
       const { error } = await supabase.from('history').insert({ ...payload, created_at: new Date().toISOString() })
       if (error) {
         console.error('Insert error:', error)
-        showError(error.message)
+        showError(lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Submit failed')
         setSubmitting(false)
         return
       }
@@ -291,11 +298,22 @@ export function HistoryDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { lang } = useLang()
+  const { isModerator } = useAuth()
   const [post, setPost] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [retryCount, setRetryCount] = useState(0)
   const [related, setRelated] = useState([])
+  const [showEdit, setShowEdit] = useState(false)
+
+  // HY10 (v9.20): moderator edit/delete on the detail page, like
+  // PostDetailPage — the list page already had them, the detail did not.
+  async function handleDelete() {
+    if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
+    const { error } = await supabase.from('history').delete().eq('id', id)
+    if (error) { console.error('Delete history error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed') }
+    else navigate('/history')
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -389,6 +407,16 @@ export function HistoryDetailPage() {
         <button onClick={() => goBackOrHome(navigate, '/history')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
           <ArrowLeft size={18} className="text-white" />
         </button>
+        {isModerator && (
+          <div className="flex gap-1 flex-shrink-0 ml-auto">
+            <button onClick={() => setShowEdit(true)} className="min-w-[44px] min-h-[44px] rounded-xl bg-white/8 flex items-center justify-center" aria-label="Edit">
+              <Edit2 size={16} className="text-white/70" />
+            </button>
+            <button onClick={handleDelete} className="min-w-[44px] min-h-[44px] rounded-xl btn-danger flex items-center justify-center" aria-label="Delete">
+              <Trash2 size={16} className="text-white" />
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-xl flex-shrink-0">{cat.icon}</span>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-600/20 text-brand-300 flex-shrink-0">
@@ -409,7 +437,7 @@ export function HistoryDetailPage() {
 
       {post.cover_url && (
         <div className="mx-4 rounded-2xl overflow-hidden h-56 mb-4">
-          <img src={post.cover_url} alt={post.title_mm || post.title} className="w-full h-full object-cover" />
+          <img src={getOptimizedUrl(post.cover_url, { width: 800 })} alt={post.title_mm || post.title} className="w-full h-full object-cover" />
         </div>
       )}
 
@@ -471,7 +499,7 @@ export function HistoryDetailPage() {
                   >
                     {r.cover_url ? (
                       <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0">
-                        <img src={r.cover_url} alt={r.title_mm || r.title} className="w-full h-full object-cover" />
+                        <img src={getOptimizedUrl(r.cover_url, { width: 160 })} alt={r.title_mm || r.title} className="w-full h-full object-cover" />
                       </div>
                     ) : (
                       <div className="w-14 h-14 rounded-lg bg-brand-700/40 flex items-center justify-center flex-shrink-0 text-2xl">
@@ -497,6 +525,15 @@ export function HistoryDetailPage() {
           </div>
         )}
       </div>
+
+      {showEdit && (
+        <HistoryForm
+          lang={lang}
+          editPost={post}
+          onClose={() => setShowEdit(false)}
+          onSuccess={() => { setShowEdit(false); setRetryCount(c => c + 1) }}
+        />
+      )}
     </div>
   )
 }
@@ -533,7 +570,8 @@ export default function HistoryPage() {
         .from('history')
         .select('*')
         .eq('status', 'published')
-        .order('event_date', { ascending: false, nullsFirst: false })
+        // HY8 (v9.20): order by created_at — ordering by event_date let
+        // a far-future-dated post sit at the top indefinitely.
         .order('created_at', { ascending: false })
 
       if (catFilter !== 'all') {
@@ -600,7 +638,7 @@ export default function HistoryPage() {
     const { error } = await supabase.from('history').delete().eq('id', id)
     if (error) {
       console.error('Delete error:', error)
-      showError(error.message)
+      showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed')
     } else {
       load()
     }

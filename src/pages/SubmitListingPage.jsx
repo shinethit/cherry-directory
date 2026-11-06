@@ -101,16 +101,25 @@ export default function SubmitListingPage() {
 
   // v9.17 (Issue 2): restore an unsaved submit draft, then autosave the
   // form (debounced ~500 ms) on every change. Cleared on success.
+  // SB9 (v9.20): the draft also covers the logo/cover URLs and menu
+  // items — they used to be lost on reload despite the draft.
   useEffect(() => {
     const d = loadDraft(draftKey('submit'))
-    if (d?.form) { setForm(prev => ({ ...prev, ...d.form })); setDraftRestored(true) }
+    if (d?.form) {
+      const { logo: dLogo, coverImg: dCover, menuItems: dMenu, ...dForm } = d.form
+      setForm(prev => ({ ...prev, ...dForm }))
+      if (dLogo) setLogo(dLogo)
+      if (dCover) setCoverImg(dCover)
+      if (Array.isArray(dMenu) && dMenu.length) setMenuItems(dMenu)
+      setDraftRestored(true)
+    }
   }, [])
   useEffect(() => {
     if (!saveDraftDebounced.current) {
       saveDraftDebounced.current = debounce(f => saveDraft(draftKey('submit'), f), 500)
     }
-    saveDraftDebounced.current(form)
-  }, [form])
+    saveDraftDebounced.current({ ...form, logo, coverImg, menuItems })
+  }, [form, logo, coverImg, menuItems])
 
   function setFormField(key, value) { setForm(f => ({ ...f, [key]: value })) }
 
@@ -265,8 +274,13 @@ export default function SubmitListingPage() {
 
       let conditions = [];
       if (nameToCheck) conditions.push(`name.ilike.%${escapePostgrestOr(nameToCheck)}%`, `name_mm.ilike.%${escapePostgrestOr(nameToCheck)}%`);
-      for (const rawPhone of form.phones.filter(Boolean)) {
-        for (let i = 1; i <= 5; i++) conditions.push(`phone_${i}.eq.${escapePostgrestOr(rawPhone)}`);
+      // SB1 (v9.20): the candidate fetch used RAW phone strings, while
+      // stored phones are normalised (toLatinDigits at save) — a
+      // +95… / Myanmar-digit spelling never fetched its own match, so the
+      // canonical client-side comparison below never saw it. Query with
+      // the canonical forms (already computed above) instead.
+      for (const canonPhone of phoneCanons) {
+        for (let i = 1; i <= 5; i++) conditions.push(`phone_${i}.eq.${escapePostgrestOr(canonPhone)}`);
       }
 
       if (conditions.length > 0) {
@@ -651,6 +665,10 @@ export default function SubmitListingPage() {
                 }
                 return (
                   <optgroup key={parent.id} label={(parent.icon || '') + ' ' + (parent.name_mm || parent.name)}>
+                    {/* SB7/E9 (v9.20): the parent itself is selectable — a
+                        listing can be filed directly under a parent category,
+                        not only under its sub-categories. */}
+                    <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name} (အားလုံး)</option>
                     {subs.map(sub => (
                       <option key={sub.id} value={sub.id}>  {sub.icon} {sub.name_mm || sub.name}</option>
                     ))}

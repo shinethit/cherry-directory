@@ -136,7 +136,7 @@ export default function ClaimPage() {
     e.preventDefault()
     if (!phone.trim()) { setError('ဖုန်းနံပါတ် ထည့်ပါ'); return }
     // S7 (v9.17): validate + store Latin digits (same error as Submit).
-    if (!validatePhone(phone)) { setError('ဖုန်းနံပါတ် မှားမှားမှားနေသည်။'); return }
+    if (!validatePhone(phone)) { setError('ဖုန်းနံပါတ် မှားနေသည်။'); return }
     const phoneDigits = toLatinDigits(phone)
     if (!user) { setError('အကောင့်အချက်အလက် ရယူနေသည် — ပြန်ဝင်ပါ'); return }
     setSubmitting(true)

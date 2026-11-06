@@ -79,10 +79,12 @@ function RsvpButton({ postId }) {
     async function load() {
 
     try {
-        const [{ data: all }, { data: mine }] = await Promise.all([
+        // K1 (v9.20): withTimeout — a hung query used to leave the counts
+        // at 0 silently forever; the load now always settles.
+        const [{ data: all }, { data: mine }] = await withTimeout(Promise.all([
           supabase.from('event_rsvps').select('status').eq('post_id', postId),
           user ? supabase.from('event_rsvps').select('status').eq('post_id', postId).eq('user_id', user.id).maybeSingle() : Promise.resolve({ data: null }),
-        ])
+        ]), 30000, 'RSVP counts')
         const c = { going: 0, interested: 0 }
         ;(all || []).forEach(r => { if (r.status in c) c[r.status]++ })
         setCounts(c)
@@ -152,11 +154,24 @@ function EventCard({ event, compact = false }) {
   const { user, isAdmin, isModerator } = useAuth()
   const cover = event.cover_url ? getOptimizedUrl(event.cover_url, { width: 400 }) : null
   const countdown = getCountdown(event.event_start, lang)
-  const isMultiDay = event.event_end && !isSameDay(new Date(event.event_start), new Date(event.event_end))
-  const isPast = event.event_end
-    ? new Date(event.event_end) < new Date()
-    : new Date(event.event_start) < new Date()
-  const isToday = isSameDay(new Date(event.event_start || event.created_at), new Date())
+  // K2 (v9.20): compare MMT wall-clock parts, not device-local Dates —
+  // near midnight a device in another timezone put an event on the
+  // wrong day / marked it past too early.
+  const startP = mmtParts(event.event_start)
+  const endP = event.event_end ? mmtParts(event.event_end) : null
+  const nowP = mmtParts(new Date().toISOString())
+  const mmtBefore = (a, b) => {
+    if (!a || !b) return false
+    if (a.y !== b.y) return a.y < b.y
+    if (a.m !== b.m) return a.m < b.m
+    if (a.d !== b.d) return a.d < b.d
+    if (a.hh !== b.hh) return a.hh < b.hh
+    return a.mm < b.mm
+  }
+  const sameMmtDay = (a, b) => !!a && !!b && a.y === b.y && a.m === b.m && a.d === b.d
+  const isMultiDay = event.event_end && !sameMmtDay(startP, endP)
+  const isPast = mmtBefore(endP || startP, nowP)
+  const isToday = sameMmtDay(startP, nowP) || sameMmtDay(mmtParts(event.created_at), nowP)
   const canEdit = isAdmin || isModerator || event.author_id === user?.id
 
   return (

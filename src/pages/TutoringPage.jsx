@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useSEO } from '../hooks/useSEO'
-import { uploadImage } from '../lib/cloudinary'
+import { uploadImage, getOptimizedUrl } from '../lib/cloudinary'
 import { ImageUploader } from '../components/UI'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
@@ -90,7 +90,7 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
       {post.images?.length > 0 && (
         <div className="rounded-xl overflow-hidden">
           <img
-            src={post.images[0]}
+            src={getOptimizedUrl(post.images[0], { width: 800 })}
             alt={post.title_mm || post.title}
             loading="lazy"
             onError={e => { e.currentTarget.style.display = 'none' }}
@@ -145,7 +145,7 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
               {post.images?.length > 1 && (
                 <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
                   {post.images.slice(1).map((img, i) => (
-                    <img key={i} src={img} alt={post.title_mm || post.title || 'ပုံ'} loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10 flex-shrink-0" />
+                    <img key={i} src={getOptimizedUrl(img, { width: 160 })} alt={post.title_mm || post.title || 'ပုံ'} loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10 flex-shrink-0" />
                   ))}
                 </div>
               )}
@@ -254,7 +254,7 @@ function TutoringForm({ onClose, onSuccess, lang, editPost }) {
       const url = await uploadImage(file, 'tutoring')
       setImages(prev => [...prev, url])
     } catch (err) {
-      showError(err.message || (lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed'))
+      showError(lang === 'mm' ? 'ပုံတင်ရာတွင် အမှားရှိသည်' : 'Image upload failed')
     } finally {
       setImgLoading(false)
     }
@@ -288,7 +288,7 @@ function TutoringForm({ onClose, onSuccess, lang, editPost }) {
       onSuccess()
     } catch (err) {
       console.error('[TutoringForm] Submit error:', err)
-      showError(err.message)
+      showError(lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည် — ထပ်ကြိုးစားပါ' : 'Submit failed — please try again')
       setSubmitting(false)
     }
   }
@@ -379,7 +379,7 @@ function StatusModal({ post, onClose, onUpdate, lang }) {
     setSaving(true)
     const { error } = await supabase.from('tutoring').update({ status }).eq('id', post.id)
     setSaving(false)
-    if (error) { showError(error.message); return }
+    if (error) { console.error('Tutoring status error:', error); showError(lang === 'mm' ? 'Status ပြောင်းမရပါ' : 'Status update failed'); return }
     onUpdate()
     onClose()
   }
@@ -480,7 +480,7 @@ export default function TutoringPage() {
   async function deletePost(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('tutoring').delete().eq('id', id)
-    if (error) { showError(error.message); return }
+    if (error) { console.error('Tutoring delete error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed'); return }
     load()
   }
 
@@ -534,7 +534,7 @@ export default function TutoringPage() {
          loadError ? (
            <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
              <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
-             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+             <button onClick={() => load()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
            </div>
          ) :
          posts.length === 0 ? (

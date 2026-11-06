@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, CalendarDays, MapPin, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
@@ -43,11 +44,31 @@ export default function EventFormPage() {
   const isEdit = !!id
   const [original, setOriginal] = useState(null)
   const [categories, setCategories] = useState([])
+  const [catError, setCatError] = useState(false)
   const [form, setForm] = useState(BLANK)
   const [coverUploading, setCoverUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [canEdit, setCanEdit] = useState(false)
+  // EF5 (v9.20): the post-save navigate timer must not fire after the
+  // user navigated away — cleared on unmount.
+  const saveTimerRef = useRef(null)
+  useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }, [])
+
+  // EF4 (v9.20): the categories query used to hang silently (no timeout,
+  // no error) leaving the category select empty. withTimeout + error
+  // state + retry.
+  async function loadCategories() {
+    setCatError(false)
+    try {
+      const { data, error } = await withTimeout(supabase.from('categories').select('*').eq('type', 'event'), 30000, 'Event categories')
+      if (error) throw error
+      setCategories(data || [])
+    } catch (e) {
+      console.warn('Event categories error:', e)
+      setCatError(true)
+    }
+  }
 
   // Safe back (S9): shared goBackOrHome — deep-link visitors go to the
   // Calendar instead of being ejected out of the app.
@@ -62,7 +83,7 @@ export default function EventFormPage() {
     // Guests must not see the form at all (it used to render and report a
     // false "✓ Saved" on submit).
     if (!isLoggedIn) { showError('အကောင့်ဝင်မှ Event ထည့်နိုင်မည်'); navigate('/login'); return }
-    supabase.from('categories').select('*').eq('type', 'event').then(({ data }) => setCategories(data || []))
+    loadCategories()
 
     if (isEdit) {
       supabase.from('posts').select('*').eq('id', id).single().then(({ data }) => {
@@ -148,7 +169,7 @@ export default function EventFormPage() {
     setSaved(true)
     setSaving(false)
     showSuccess('✓ သိမ်းပြီးပါပြီ')
-    setTimeout(() => navigate('/calendar'), 1000)
+    saveTimerRef.current = setTimeout(() => navigate('/calendar'), 1000)
   }
 
   async function handleDelete() {
@@ -185,7 +206,10 @@ export default function EventFormPage() {
           )}
           <button
             onClick={handleSave}
-            disabled={saving || !form.title || !form.event_start}
+            // EF2 (v9.20): the disable condition must mirror handleSave —
+            // a title in EITHER language is enough (S12). Requiring the
+            // English title made a Myanmar-only event unsavable forever.
+            disabled={saving || (!form.title?.trim() && !form.title_mm?.trim()) || !form.event_start}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-display font-semibold transition-all ${
               saved
                 ? 'bg-green-500/20 border border-green-500/40 text-green-400'
@@ -213,8 +237,9 @@ export default function EventFormPage() {
           )}
         </div>
 
-        <Field label="ခေါင်းစဉ် (English)" required error={!form.title ? 'ခေါင်းစဉ် ထည့်ပါ' : ''}>
-          <input type="text" value={form.title} onChange={e => set('title', e.target.value)} className={'input-dark' + (!form.title ? ' border-red-500/60' : '')} placeholder="e.g. Taunggyi Literature Festival" required />
+        {/* EF2: English title is NOT required on its own — either language suffices (S12) */}
+        <Field label="ခေါင်းစဉ် (English)" error={(!form.title?.trim() && !form.title_mm?.trim()) ? 'ခေါင်းစဉ် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ' : ''}>
+          <input type="text" value={form.title} onChange={e => set('title', e.target.value)} className={'input-dark' + ((!form.title?.trim() && !form.title_mm?.trim()) ? ' border-red-500/60' : '')} placeholder="e.g. Taunggyi Literature Festival" />
         </Field>
 
         <Field label="ခေါင်းစဉ် (မြန်မာ)">
@@ -294,6 +319,9 @@ export default function EventFormPage() {
                   <option key={c.id} value={c.id}>{c.icon} {c.name_mm || c.name}</option>
                 ))}
               </select>
+              {catError && (
+                <p className="text-xs text-red-400 mt-1 font-myanmar">Category တင်မရပါ — <button type="button" onClick={loadCategories} className="underline text-brand-300">ပြန်ကြိုးစားမည်</button></p>
+              )}
             </Field>
             <Field label="Status">
               <select value={form.status} onChange={e => set('status', e.target.value)} className="select-dark">

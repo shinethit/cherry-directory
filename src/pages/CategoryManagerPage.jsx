@@ -10,6 +10,7 @@ import { showError, showSuccess } from '../lib/toast'
 import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့်ထားပါ
 import { confirmDialog } from '../lib/confirmDialog'
 import { withTimeout } from '../lib/withTimeout'
+import { myanmarVariants } from '../lib/myanmarSearch'
 
 const BLANK = { name: '', name_mm: '', icon: '📦', type: 'directory', sort_order: 0, parent_id: null, description_mm: '', is_active: true, is_featured: false }
 
@@ -21,8 +22,19 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const isEdit = !!initial?.id
 
-  // Available parents — top-level only
-  const parents = allCategories.filter(c => !c.parent_id && c.id !== initial?.id && c.type === 'directory')
+  // Available parents — top-level only, of the form's own type.
+  // CM2 (v9.20): the list used to be hardcoded to type==='directory'
+  // even for news/event forms.
+  // CM8 (v9.20): when editing, self + descendants are excluded — a
+  // category must never become its own (grand)parent.
+  const descendantIds = new Set()
+  if (initial?.id) {
+    const walk = (id) => {
+      allCategories.filter(c => c.parent_id === id).forEach(ch => { descendantIds.add(ch.id); walk(ch.id) })
+    }
+    walk(initial.id)
+  }
+  const parents = allCategories.filter(c => !c.parent_id && c.id !== initial?.id && !descendantIds.has(c.id) && c.type === form.type)
 
   async function save() {
     if (!form.name_mm && !form.name) { setError('အမည် ထည့်ပါ'); return }
@@ -101,7 +113,11 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
           </div>
 
           {/* Parent category */}
-          {!parentId && (
+          {/* CM8 (v9.20): shown when editing too (was hidden for a
+              sub-category being edited, because parentId was set to its
+              own parent) — only hidden when adding a sub, where the
+              parent is fixed. */}
+          {(!parentId || isEdit) && (
             <div>
               <label className="block text-xs text-white/50 mb-1.5">
                 {lang === 'mm' ? 'အဓိက Category (Sub-category ဆိုရင်)' : 'Parent Category (if sub-category)'}
@@ -180,7 +196,7 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
 }
 
 // ── Category Row (မပြောင်း) ───────────────────────────────────
-function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, onToggle, forceOpen }) {
+function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, onToggle, forceOpen, deletingId }) {
   const [open, setOpen] = useState(false)
   // Which sub-categories have their children (sub-sub-categories)
   // expanded — keyed by sub id (G12).
@@ -227,8 +243,8 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
             className="w-9 h-9 rounded-lg bg-white/6 flex items-center justify-center hover:bg-white/10 transition-colors">
             <Pencil size={13} className="text-white/50" />
           </button>
-          <button onClick={() => onDelete(cat)}
-            className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center transition-colors">
+          <button onClick={() => onDelete(cat)} disabled={deletingId === cat.id}
+            className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center transition-colors disabled:opacity-50">
             <Trash2 size={13} className="text-white" />
           </button>
         </div>
@@ -272,8 +288,8 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
                       className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
                       <Pencil size={12} className="text-white/40" />
                     </button>
-                    <button onClick={() => onDelete(sub)}
-                      className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center transition-colors">
+                    <button onClick={() => onDelete(sub)} disabled={deletingId === sub.id}
+                      className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center transition-colors disabled:opacity-50">
                       <Trash2 size={12} className="text-white" />
                     </button>
                   </div>
@@ -318,8 +334,8 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
                                 className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
                                 <Pencil size={11} className="text-white/40" />
                               </button>
-                              <button onClick={() => onDelete(gk)}
-                                className="w-8 h-8 rounded-lg btn-danger flex items-center justify-center transition-colors">
+                              <button onClick={() => onDelete(gk)} disabled={deletingId === gk.id}
+                                className="w-8 h-8 rounded-lg btn-danger flex items-center justify-center transition-colors disabled:opacity-50">
                                 <Trash2 size={11} className="text-white" />
                               </button>
                             </div>
@@ -339,6 +355,13 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
                                     {!ggk.is_active && <span className="text-[9px] text-white/60">hidden</span>}
                                   </div>
                                   <div className="flex items-center gap-2">
+                                    {/* CM9 (v9.20): level 4 is the deepest
+                                        the tree renders — no "add sub"
+                                        here by design (max 4 levels). */}
+                                    <button disabled title={lang === 'mm' ? 'အများဆုံး ၄ အဆင့်သာ' : 'Maximum 4 levels'}
+                                      className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center opacity-30 cursor-not-allowed">
+                                      <Plus size={11} className="text-white/40" />
+                                    </button>
                                     <button onClick={() => onToggle(ggk)}
                                       className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
                                       {ggk.is_active ? <Eye size={12} className="text-white/40" /> : <EyeOff size={12} className="text-white/25" />}
@@ -347,8 +370,8 @@ function CategoryRow({ cat, subcats, allCats, lang, onEdit, onDelete, onAddSub, 
                                       className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors">
                                       <Pencil size={11} className="text-white/40" />
                                     </button>
-                                    <button onClick={() => onDelete(ggk)}
-                                      className="w-8 h-8 rounded-lg btn-danger flex items-center justify-center transition-colors">
+                                    <button onClick={() => onDelete(ggk)} disabled={deletingId === ggk.id}
+                                      className="w-8 h-8 rounded-lg btn-danger flex items-center justify-center transition-colors disabled:opacity-50">
                                       <Trash2 size={11} className="text-white" />
                                     </button>
                                   </div>
@@ -382,6 +405,9 @@ export default function CategoryManagerPage() {
   const [loading, setLoading] = useState(true)
   const [typeFilter, setType] = useState('directory')
   const [formData, setFormData] = useState(null)
+  // CM5 (v9.20): busy state for the delete flow — the button disables
+  // while the count + sequential deletes run.
+  const [deletingId, setDeletingId] = useState(null)
   const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
@@ -394,7 +420,8 @@ export default function CategoryManagerPage() {
       .order('sort_order')
       .order('name_mm'), 30000, 'Categories')
     if (error) {
-      showError('Categories ရယူရာတွင် အမှားရှိသည်: ' + error.message)
+      console.error('Categories load error:', error)
+      showError('Categories ရယူရာတွင် အမှားရှိသည်')
       setLoading(false)
       return
     }
@@ -411,7 +438,10 @@ export default function CategoryManagerPage() {
   const searchedTop = search
     ? topLevel.filter(c => {
         const q = search.toLowerCase()
-        const match = (x) => (x.name_mm || '').includes(search) || (x.name || '').toLowerCase().includes(q)
+        // CM7 (v9.20): Zawgyi-variant matching, like the Myanmar search —
+        // a Zawgyi-typed query used to miss Unicode-stored names.
+        const variants = myanmarVariants(search)
+        const match = (x) => variants.some(v => (x.name_mm || '').includes(v)) || (x.name || '').toLowerCase().includes(q)
         // Match descendants at any depth (sub / sub-sub / ...).
         const matchTree = (id) => subsOf(id).some(s => match(s) || matchTree(s.id))
         return match(c) || matchTree(c.id)
@@ -427,14 +457,20 @@ export default function CategoryManagerPage() {
   // reference categories with NO ACTION, so the DB refuses the
   // delete while any listing uses the category.
   async function reportDeleteBlocked(category, error) {
-    const { count } = await supabase
-      .from('listings')
-      .select('*', { count: 'exact', head: true })
-      .eq('category_id', category.id)
-    if ((count || 0) > 0) {
+    // CM5 (v9.20): withTimeout + fixed text (was a bare await + raw error).
+    let count = 0
+    try {
+      const res = await withTimeout(supabase
+        .from('listings')
+        .select('*', { count: 'exact', head: true })
+        .eq('category_id', category.id), 30000, 'Category listing count')
+      count = res.count || 0
+    } catch (e) { console.warn(e) }
+    if (count > 0) {
       showError(`ဒီ category မှာ လုပ်ငန်း ${count} ခု ရှိနေလို့ ဖျက်လို့မရပါ`)
     } else {
-      showError('ဖျက်ရာတွင် အမှားရှိသည်: ' + error.message)
+      console.error('Delete category error:', error)
+      showError('ဖျက်ရာတွင် အမှားရှိသည်')
     }
     load()
   }
@@ -456,15 +492,21 @@ export default function CategoryManagerPage() {
     // count. Deleting deepest-first without this left a half-deleted
     // tree on a mid-way failure, with no rollback.
     const subtreeIds = [cat.id, ...descendants.map(d => d.id)]
-    const { count: listingCount, error: countErr } = await supabase
-      .from('listings')
-      .select('*', { count: 'exact', head: true })
-      .in('category_id', subtreeIds)
-    if (countErr) {
-      showError('လုပ်ငန်း အရေအတွက် စစ်ဆေးမရပါ: ' + countErr.message)
+    // CM5 (v9.20): withTimeout on the count query + fixed error text.
+    let listingCount = 0
+    try {
+      const { count, error: countErr } = await withTimeout(supabase
+        .from('listings')
+        .select('*', { count: 'exact', head: true })
+        .in('category_id', subtreeIds), 30000, 'Category listing count')
+      if (countErr) throw countErr
+      listingCount = count || 0
+    } catch (e) {
+      console.error('Category listing count error:', e)
+      showError('လုပ်ငန်း အရေအတွက် စစ်ဆေးမရပါ')
       return
     }
-    if ((listingCount || 0) > 0) {
+    if (listingCount > 0) {
       showError(`ဒီ category (နှင့် sub-category) အောက်မှာ လုပ်ငန်း ${listingCount} ခု ရှိနေလို့ ဖျက်လို့မရပါ — လုပ်ငန်းများကို အရင် ရွှေ့ပါ`)
       return
     }
@@ -472,14 +514,21 @@ export default function CategoryManagerPage() {
       ? (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်ရင် Sub-category ${descendants.length} ခုလည်း ဖျက်မည်။ ဆက်မည်လား?` : `Deleting "${cat.name}" will also delete ${descendants.length} sub-categories. Continue?`)
       : (lang === 'mm' ? `"${cat.name_mm || cat.name}" ကို ဖျက်မည်လား?` : `Delete "${cat.name}"?`)
     if (!(await confirmDialog(msg, { danger: true }))) return
-    // Descendants are collected parent-before-child, so reversed
-    // order deletes deepest first, then the parent itself.
-    for (const child of [...descendants].reverse()) {
-      const { error } = await supabase.from('categories').delete().eq('id', child.id)
-      if (error) { await reportDeleteBlocked(child, error); return }
+    // CM5 (v9.20): withTimeout on each delete + busy state — a hung
+    // delete used to leave the row clickable with no feedback.
+    setDeletingId(cat.id)
+    try {
+      // Descendants are collected parent-before-child, so reversed
+      // order deletes deepest first, then the parent itself.
+      for (const child of [...descendants].reverse()) {
+        const { error } = await withTimeout(supabase.from('categories').delete().eq('id', child.id), 30000, 'Delete category')
+        if (error) { await reportDeleteBlocked(child, error); return }
+      }
+      const { error } = await withTimeout(supabase.from('categories').delete().eq('id', cat.id), 30000, 'Delete category')
+      if (error) { await reportDeleteBlocked(cat, error); return }
+    } finally {
+      setDeletingId(null)
     }
-    const { error } = await supabase.from('categories').delete().eq('id', cat.id)
-    if (error) { await reportDeleteBlocked(cat, error); return }
     // Audit log (fire-and-forget) — category delete previously had none.
     log({
       action: 'delete',
@@ -495,7 +544,8 @@ export default function CategoryManagerPage() {
   async function handleToggle(cat) {
     const { error } = await supabase.from('categories').update({ is_active: !cat.is_active }).eq('id', cat.id)
     if (error) {
-      showError('ပြောင်းရာတွင် အမှားရှိသည်: ' + error.message)
+      console.error('Toggle category error:', error)
+      showError('ပြောင်းရာတွင် အမှားရှိသည်')
       return
     }
     load()
@@ -616,6 +666,7 @@ export default function CategoryManagerPage() {
               onAddSub={c => setFormData({ initial: null, parentId: c.id, parentName: c.name_mm || c.name })}
               onToggle={handleToggle}
               forceOpen={!!search}
+              deletingId={deletingId}
             />
           ))
         )}

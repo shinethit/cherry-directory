@@ -15,6 +15,17 @@ import { fileURLToPath } from 'node:url'
 
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
+// Separator-agnostic Header.jsx exclusion (v9.19 correction): on Windows
+// path.join produces backslash paths (D:\...\src\components\Header.jsx),
+// so a forward-slash endsWith('components/Header.jsx') NEVER matches and
+// the exclusion silently fails — the two blanket tests then fail on the
+// v9.19 changelog line itself (the 9.19 script's first run failed exactly
+// this way on the user's Windows machine, 2 failed | 158 passed). Always
+// normalize backslashes to forward slashes before comparing.
+export function isExcludedHeader(filePath) {
+  return filePath.replace(/\\/g, '/').endsWith('components/Header.jsx')
+}
+
 function walk(dir, out = []) {
   for (const e of readdirSync(dir)) {
     const full = join(dir, e)
@@ -24,7 +35,10 @@ function walk(dir, out = []) {
     } else if ((e.endsWith('.js') || e.endsWith('.jsx')) && !e.endsWith('.test.js')) {
       // Header.jsx: see the header comment — its v9.19 changelog entry
       // names the renamed words; covered by the dedicated test below.
-      if (full.endsWith('components/Header.jsx')) return
+      // `continue` (not `return`): skip just this file, keep scanning
+      // the rest of the directory — `return` would abort the whole
+      // directory walk and silently skip files after Header.jsx.
+      if (isExcludedHeader(full)) continue
       out.push(full)
     }
   }
@@ -40,6 +54,19 @@ describe('wording: ခပ်သိမ်း / အကုန် must not return to
   it('no UI source file contains အကုန်', () => {
     const hits = walk(srcDir).filter(f => readFileSync(f, 'utf8').includes('အကုန်'))
     expect(hits).toEqual([])
+  })
+
+  it('the Header.jsx exclusion works on Windows-style paths', () => {
+    // The 9.19 first run failed on Windows because walk() compared a
+    // forward-slash suffix against backslash paths. This test feeds the
+    // exclusion predicate Windows-style paths directly, so the fix is
+    // covered on any OS — a Linux-only run can never let it regress.
+    expect(isExcludedHeader('D:\\cherry-directory-main\\src\\components\\Header.jsx')).toBe(true)
+    expect(isExcludedHeader('D:/cherry-directory-main/src/components/Header.jsx')).toBe(true)
+    expect(isExcludedHeader('/home/user/cherry-directory/src/components/Header.jsx')).toBe(true)
+    expect(isExcludedHeader('D:\\cherry-directory-main\\src\\pages\\HomePage.jsx')).toBe(false)
+    expect(isExcludedHeader('D:\\cherry-directory-main\\src\\components\\UI.jsx')).toBe(false)
+    expect(isExcludedHeader('D:\\cherry-directory-main\\src\\components\\Header.jsx.bak')).toBe(false)
   })
 
   it('the six normalized strings use အားလုံး', () => {

@@ -14,6 +14,7 @@ import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError, showSuccess } from '../lib/toast'
+import { goBackOrHome } from '../lib/navigation'
 import { maskPhone, toTelHref } from '../lib/phoneMask'
 
 const LF_TYPES = [
@@ -55,7 +56,10 @@ export default function LostFoundDetailPage() {
     try {
       const { data, error } = await withTimeout(supabase.from('lost_found').select('*').eq('id', id).single(), 30000, 'Lost & found post')
       if (error) {
-        setLoadError(error.message)
+        // LFD4 (v9.20): fixed Myanmar text — the raw error.message used
+        // to render to the user here.
+        console.warn('Lost & found post error:', error)
+        setLoadError('တင်မရပါ — ပြန်ကြိုးစားမည်')
         setPost(null)
       } else {
         setPost(data)
@@ -79,7 +83,7 @@ export default function LostFoundDetailPage() {
   async function handleDelete() {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete?', { danger: true }))) return
     const { error } = await supabase.from('lost_found').delete().eq('id', id)
-    if (error) showError(error.message)
+    if (error) { console.error('Delete lost & found error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed') }
     else navigate('/lost-found')
   }
 
@@ -89,6 +93,9 @@ export default function LostFoundDetailPage() {
     // N24 (v9.17): a blank title violates the NOT NULL column — require
     // at least one title, and block double-submit while saving.
     if (!editForm.title?.trim() && !editForm.title_mm?.trim()) { showError('ခေါင်းစဉ် (မြန်မာ သို့မဟုတ် English) တစ်ခု ထည့်ပါ'); return }
+    // LFD3 (v9.20): the S27 contact requirement (same check as create) —
+    // editing used to be able to remove all contact info.
+    if (!editForm.contact_phone?.trim() && !editForm.contact_name?.trim()) { showError('ဆက်သွယ်ရန် (ဖုန်း / နာမည်) တစ်ခုခု ထည့်ပါ'); return }
     if (saving) return
     setSaving(true)
     // Whitelist editable columns — never send id/timestamps through.
@@ -106,7 +113,7 @@ export default function LostFoundDetailPage() {
     }
     const { error } = await supabase.from('lost_found').update(payload).eq('id', id)
     setSaving(false)
-    if (error) showError(error.message)
+    if (error) { console.error('Update lost & found error:', error); showError(lang === 'mm' ? 'ပြင်ရာတွင် အမှားရှိသည်' : 'Update failed') }
     else {
       setPost(p => ({ ...p, ...payload }))
       setEditing(false)
@@ -118,7 +125,7 @@ export default function LostFoundDetailPage() {
     setResolving(true)
     const { error } = await supabase.from('lost_found').update({ status: 'resolved' }).eq('id', id)
     setResolving(false)
-    if (error) { showError(error.message); return }
+    if (error) { console.error('Resolve lost & found error:', error); showError(lang === 'mm' ? 'ဖြေရှင်းပြီး သတ်မှတ်မရပါ' : 'Could not mark as resolved'); return }
     setPost(p => ({ ...p, status: 'resolved' }))
     showSuccess(lang === 'mm' ? 'ဖြေရှင်းပြီးအဖြစ် သတ်မှတ်ပြီးပါပြီ' : 'Marked as resolved')
   }
@@ -128,7 +135,11 @@ export default function LostFoundDetailPage() {
   // Claiming only reveals the poster's contact to a logged-in user.
   function handleClaim() {
     if (!isLoggedIn) {
+      // LFD2 (v9.20): a guest used to get only an error toast — a dead
+      // end. Send them to login with a return path (LoginPage honours
+      // location.state.from), like the Job/Rent/Tutoring cards.
       showError(lang === 'mm' ? 'ပိုင်ဆိုင်ကြောင်း တောင်းဆိုရန် Login ဝင်ပါ' : 'Please log in to claim')
+      navigate('/login', { state: { from: `/lost-found/${id}` } })
       return
     }
     setClaimed(true)
@@ -161,7 +172,7 @@ export default function LostFoundDetailPage() {
       reporter_id: user?.id || null,
       status: 'pending',
     })
-    if (error) { showError(error.message); return }
+    if (error) { console.error('Report lost & found error:', error); showError(lang === 'mm' ? 'Report တင်မရပါ' : 'Report failed'); return }
     if (!user?.id) { try { localStorage.setItem('cherry-report-lostfound-' + id, String(Date.now())) } catch { /* ignore */ } }
     setReporting(false)
     setReportReason('')
@@ -243,7 +254,7 @@ export default function LostFoundDetailPage() {
   return (
     <div className="pb-8">
       <div className="flex items-center justify-between px-4 py-3">
-        <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+        <button onClick={() => goBackOrHome(navigate, '/lost-found')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center" aria-label="Back">
           <ArrowLeft size={18} className="text-white" />
         </button>
         {canEdit && (
@@ -324,7 +335,9 @@ export default function LostFoundDetailPage() {
         )}
 
         {claimed && post.type === 'found' && (
-          <p className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl p-3 font-myanmar">✓ ပိုင်ဆိုင်ကြောင်း တောင်းဆိုချက် မှတ်တမ်းတင်ပြီးပါပြီ — အထက်ပါ ဖုန်းဖြင့် ပိုင်ရှင်ကို ဆက်သွယ်ပါ</p>
+          // LFD1 (v9.20): no claim record is made server-side (M3), so the
+          // banner must not say one was — worded to match the toast.
+          <p className="text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl p-3 font-myanmar">✓ ဆက်သွယ်ရန် အချက်အလက်ကို အောက်မှာ ပြသထားသည်</p>
         )}
 
         {post.status === 'resolved' && (

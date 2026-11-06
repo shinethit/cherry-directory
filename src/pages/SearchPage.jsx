@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
-import { escapePostgrestOr } from '../hooks/useListings'
+import { buildOrFilter } from '../lib/myanmarSearch'
 
 // Search across multiple tables
 const SEARCH_SOURCES = [
@@ -175,6 +175,35 @@ export default function SearchPage() {
     }
 
     // Run all searches in parallel
+    // v9.20: category-name search — a query matching a category name
+    // (either language, either encoding) also returns that category's
+    // listings. Search never looked at categories before, so a category
+    // word returned 0 unless some listing name happened to contain it.
+    // Runs alongside the source queries; its rows merge into the listing
+    // results below (direct matches first, capped at 8 like the rest).
+    const categoryListingsPromise = (async () => {
+      try {
+        const catFilter = buildOrFilter(['name', 'name_mm'], q.trim().split(/\s+/))
+        const { data: cats, error: catErr } = await withTimeout(
+          supabase.from('categories').select('id').or(catFilter).abortSignal(controller.signal),
+          30000, 'Search categories')
+        if (catErr || !cats?.length) return []
+        const { data, error } = await withTimeout(
+          supabase.from('listings')
+            .select('id, name, name_mm, address_mm, city')
+            .abortSignal(controller.signal)
+            .eq('status', 'approved')
+            .in('category_id', cats.map(c => c.id))
+            .limit(8),
+          30000, 'Search category listings')
+        if (error || !data) return []
+        return data
+      } catch (e) {
+        if (e?.name === 'AbortError' || controller.signal.aborted) return []
+        return []
+      }
+    })()
+
     const promises = SEARCH_SOURCES.map(async (source) => {
       try {
         // Build OR filters for search fields (escaped: raw `,`/`(`/`)`/`%` break it).
@@ -182,6 +211,9 @@ export default function SearchPage() {
         // somewhere (each word gets its own OR group; successive .or()
         // calls AND together). "upper house" now finds "Upper House";
         // a single word behaves exactly as before.
+        // v9.20: buildOrFilter also searches each Myanmar word in its
+        // alternate encoding (Zawgyi <-> Unicode) — the stored names are
+        // mixed encoding, and ilike is byte-exact (see myanmarSearch.js).
         let query = supabase
           .from(source.table)
           .select(source.select)
@@ -189,11 +221,7 @@ export default function SearchPage() {
           .limit(8)
 
         for (const word of q.trim().split(/\s+/)) {
-          const esc = escapePostgrestOr(word)
-          const orFilter = source.searchFields
-            .map(field => `${field}.ilike.%${esc}%`)
-            .join(',')
-          query = query.or(orFilter)
+          query = query.or(buildOrFilter(source.searchFields, [word]))
         }
 
         // Add status filter if defined
@@ -226,6 +254,18 @@ export default function SearchPage() {
     })
 
     await Promise.all(promises)
+    // v9.20: merge the category-name matches into the listing results
+    // (direct name matches first, deduped, still capped at 8).
+    const catRows = await categoryListingsPromise
+    if (catRows.length > 0) {
+      const seen = new Set((newResults.listing || []).map(r => r.id))
+      const merged = [...(newResults.listing || [])]
+      for (const row of catRows) {
+        if (merged.length >= 8) break
+        if (!seen.has(row.id)) { seen.add(row.id); merged.push(row) }
+      }
+      newResults.listing = merged
+    }
     // A newer keystroke may have started since — never let stale results win.
     if (token !== searchTokenRef.current) return
     setResults(newResults)
@@ -281,7 +321,7 @@ export default function SearchPage() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder={lang === 'mm' ? 'လုပ်ငန်း၊ သတင်း၊ အလုပ်...' : 'Business, news, job...'}
-            autoFocus
+            // S-C (v9.20): no autoFocus — it pops the mobile keyboard on entry.
             className="input-dark pl-10 pr-10 w-full"
           />
           {query && (
@@ -416,7 +456,14 @@ export default function SearchPage() {
                     source={source}
                     item={item}
                     lang={lang}
-                    onNavigate={() => navigate(source.routePrefix + (source.id === 'listing' || source.id === 'post' || source.id === 'lostfound' ? item.id : ''))}
+                    // S-A (v9.20): a job/rental/tutoring row used to land on
+                    // the bare list top — pass ?q= like seeMoreUrl does
+                    // (those pages honour it as their initial filter).
+                    onNavigate={() => {
+                      if (source.id === 'listing' || source.id === 'post' || source.id === 'lostfound') navigate(source.routePrefix + item.id)
+                      else if (source.id === 'job' || source.id === 'rental' || source.id === 'tutoring') navigate(`${source.routePrefix}?q=${encodeURIComponent(query)}`)
+                      else navigate(source.routePrefix)
+                    }}
                   />
                 ))}
               </div>

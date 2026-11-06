@@ -6,9 +6,10 @@ import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { fetchCategories } from '../lib/prefetch'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
+import { useBookmarkedSet } from '../hooks/useBookmarksDB'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
-import { escapePostgrestOr } from '../hooks/useListings'
+import { buildOrFilter } from '../lib/myanmarSearch'
 
 export default function DirectoryPage() {
   const navigate = useNavigate()
@@ -30,6 +31,9 @@ export default function DirectoryPage() {
   // Level 3: Listings
   const [listings, setListings] = useState([])
   const [listingsLoading, setListingsLoading] = useState(false)
+  // UI4 (v9.20): one batched bookmark query for the whole list instead
+  // of one per card.
+  const { data: bookmarkedSet } = useBookmarkedSet(listings.map(l => l.id))
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [listingsError, setListingsError] = useState(false)
@@ -136,6 +140,13 @@ export default function DirectoryPage() {
 
   // ── Auto-select from ?cat= (single-pass, no loops) ──
   const urlCatId = searchParams.get('cat')
+  // H1 (v9.20): Home's Featured "အားလုံး" links to /directory?featured=true,
+  // but DirectoryPage never read `featured` — the link landed on the
+  // unfiltered category list. A featured visit synthesises a
+  // pseudo-subcategory (below) so the listings level renders; the query
+  // branches to is_featured instead of category_id.
+  const featuredOnly = searchParams.get('featured') === 'true'
+  const FEATURED_PSEUDO_ID = '__featured__'
   const [urlResolved, setUrlResolved] = useState(!urlCatId)  // true if no URL param
   const processedUrlRef = useRef(null)
   const categoriesLoadedRef = useRef(false)
@@ -153,6 +164,11 @@ export default function DirectoryPage() {
     if (categoriesData) setCategories(categoriesData)
     setCategoryLoading(categoryQueryLoading || categoryQueryFetching)
     setCategoryError(categoryQueryError)
+    // D1 (v9.20): a failed categories query used to leave a ?cat= deep
+    // link on the infinite spinner forever — categoriesLoadedRef never
+    // became true, so directNavigate never ran and the gate never cleared.
+    // Clear the gate on failure so the error + Retry state renders.
+    if (categoryQueryError) setUrlResolved(true)
   }, [categoriesData, categoryQueryLoading, categoryQueryFetching, categoryQueryError])
 
   // Track when categories are loaded
@@ -220,6 +236,16 @@ export default function DirectoryPage() {
     directNavigate()
   }, [urlCatId, categories.length])
 
+  // H1: featured view — synthesise a pseudo-subcategory so the listings
+  // level renders without a category. Cleared when the param goes away.
+  useEffect(() => {
+    if (featuredOnly && !urlCatId && !selectedSubcategory) {
+      setSelectedSubcategory({ id: FEATURED_PSEUDO_ID, icon: '⭐', name: 'Featured', name_mm: 'Featured လုပ်ငန်းများ', is_featured_view: true })
+    } else if (!featuredOnly && selectedSubcategory?.id === FEATURED_PSEUDO_ID) {
+      setSelectedSubcategory(null)
+    }
+  }, [featuredOnly, urlCatId, selectedSubcategory])
+
   async function loadSubcategories(categoryId) {
     setSubcategoryLoading(true)
     setSubcategoryError(false)
@@ -254,7 +280,7 @@ export default function DirectoryPage() {
         })
       )
       const subcatsWithCount = countResults.map((r, i) =>
-        r.status === 'fulfilled' ? r.value : { ...(data || [])[i], listing_count: 0 }
+        r.status === 'fulfilled' ? r.value : { ...(data || [])[i], listing_count: null }
       )
       setSubcategories(subcatsWithCount)
     } catch (e) {
@@ -264,14 +290,15 @@ export default function DirectoryPage() {
     setSubcategoryLoading(false)
   }
 
-  // Check for direct listings under category
+  // Check for direct listings under category (D3: wrapped in withTimeout —
+  // a hung count used to leave the direct-listings button state unknown).
   async function checkDirectListings(categoryId) {
     try {
-      const { count } = await supabase
+      const { count } = await withTimeout(supabase
         .from('listings')
         .select('*', { count: 'exact', head: true })
         .eq('category_id', categoryId)
-        .eq('status', 'approved')
+        .eq('status', 'approved'), 30000, 'Directory direct listings')
       
       setDirectCount(count || 0)
       setHasDirectListings((count || 0) > 0)
@@ -304,14 +331,15 @@ export default function DirectoryPage() {
   // requestIdRef machinery is no longer needed.
   const filterKey = selectedSubcategory ? `${selectedSubcategory.id}|${city}|${verifiedOnly}|${q}|${sort}` : ''
   const { data: listingsData, isLoading: listingsQueryLoading, isFetching: listingsQueryFetching, isError: listingsQueryError, refetch: refetchListings } = useQuery({
-    queryKey: ['listings', 'directory', selectedSubcategory?.id, city, verifiedOnly, q, sort, page],
-    queryFn: async ({ queryKey: [, , subId, cityF, verifiedF, qF, sortF, pageF] }) => {
-      const esc = escapePostgrestOr(qF.trim())
+    queryKey: ['listings', 'directory', selectedSubcategory?.id, city, verifiedOnly, q, sort, page, featuredOnly],
+    queryFn: async ({ queryKey: [, , subId, cityF, verifiedF, qF, sortF, pageF, featuredF] }) => {
       let query = supabase
         .from('listings')
         .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
         .eq('status', 'approved')
-        .eq('category_id', subId)
+      // H1: the featured pseudo-subcategory filters is_featured, not a category.
+      if (featuredF && subId === FEATURED_PSEUDO_ID) query = query.eq('is_featured', true)
+      else query = query.eq('category_id', subId)
 
       // B7: sort chosen by the user — rating (default), newest, or name.
       if (sortF === 'newest') query = query.order('created_at', { ascending: false })
@@ -319,7 +347,17 @@ export default function DirectoryPage() {
       else query = query.order('rating_avg', { ascending: false, nullsFirst: false }).order('name', { ascending: true })
       query = query.range(pageF * PAGE_SIZE, (pageF + 1) * PAGE_SIZE - 1)
 
-      if (qF.trim()) query = query.or(`name.ilike.%${esc}%,name_mm.ilike.%${esc}%,description.ilike.%${esc}%,description_mm.ilike.%${esc}%`)
+      // v9.20: the ?q= filter also searches each Myanmar word in its
+      // alternate encoding (Zawgyi <-> Unicode) — stored names are mixed
+      // encoding, and ilike is byte-exact (see myanmarSearch.js).
+      // Per-word OR groups (one .or() per word, ANDed by PostgREST) —
+      // the same semantics as SearchPage; the whole-phrase single term
+      // used to require an exact-phrase match for multi-word queries.
+      if (qF.trim()) {
+        for (const word of qF.trim().split(/\s+/)) {
+          query = query.or(buildOrFilter(['name', 'name_mm', 'description', 'description_mm'], [word]))
+        }
+      }
       if (cityF !== 'All') query = query.eq('city', cityF)
       if (verifiedF) query = query.eq('is_verified', true)
 
@@ -418,6 +456,17 @@ export default function DirectoryPage() {
   }
 
   function goBack() {
+    // H1: in the featured view there is no category to go back to — drop
+    // the param so the next render shows the category list.
+    if (featuredOnly && !selectedCategory) {
+      setSelectedSubcategory(null)
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev)
+        next.delete('featured')
+        return next
+      }, { replace: true })
+      return
+    }
     if (selectedSubcategory) {
       setSelectedSubcategory(null)
       setListings([])
@@ -469,8 +518,9 @@ export default function DirectoryPage() {
     )
   }
 
-  // Render Category Level
-  if (!selectedCategory) {
+  // Render Category Level (skipped for the H1 featured view, which goes
+  // straight to the listings level via the pseudo-subcategory)
+  if (!selectedCategory && !featuredOnly) {
     return (
       <div className="pb-8">
         <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/10">
@@ -617,11 +667,11 @@ export default function DirectoryPage() {
         </button>
 
         <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-          <span className="text-2xl flex-shrink-0">{selectedSubcategory.icon}</span>
+          <span className="text-2xl flex-shrink-0">{selectedSubcategory?.icon || '⭐'}</span>
           <h1 className="font-display font-bold text-lg text-white truncate">
-            {selectedSubcategory.is_direct 
+            {selectedSubcategory?.is_direct
               ? (lang === 'mm' ? (selectedCategory?.name_mm || selectedCategory?.name) : selectedCategory?.name)
-              : (lang === 'mm' ? (selectedSubcategory.name_mm || selectedSubcategory.name) : selectedSubcategory.name)
+              : (lang === 'mm' ? (selectedSubcategory?.name_mm || selectedSubcategory?.name || 'Featured လုပ်ငန်းများ') : (selectedSubcategory?.name || 'Featured'))
             }
           </h1>
         </div>
@@ -735,7 +785,7 @@ export default function DirectoryPage() {
           ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
           : listings.length === 0
           ? <EmptyState icon="🔍" title="လုပ်ငန်း မတွေ့ပါ" message="ရှာဖွေမှုကို ပြောင်းလဲကြည့်ပါ" />
-          : listings.map(l => <ListingCard key={l.id} listing={l} />)
+          : listings.map(l => <ListingCard key={l.id} listing={l} bookmarked={bookmarkedSet ? bookmarkedSet.has(l.id) : undefined} />)
         }
 
         {listings.length < total && !listingsLoading && (

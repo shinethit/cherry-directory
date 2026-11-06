@@ -28,7 +28,10 @@ export default function SavedPage() {
   const [listings, setListings] = useState([])
   const [posts, setPosts] = useState([])
   const [loadingBookmarks, setLoadingBookmarks] = useState(true)
-  const [bookmarksError, setBookmarksError] = useState('')
+  // SV3 (v9.20): listings/posts errors tracked separately — one shared
+  // error used to blank BOTH tabs when only one fetch failed.
+  const [listingsError, setListingsError] = useState('')
+  const [postsError, setPostsError] = useState('')
 
   // Places
   const [places, setPlaces] = useState([])
@@ -41,7 +44,8 @@ export default function SavedPage() {
   const loadBookmarks = useCallback(async () => {
     if (!isLoggedIn || !user) { setLoadingBookmarks(false); return }
     setLoadingBookmarks(true)
-    setBookmarksError('')
+    setListingsError('')
+    setPostsError('')
     try {
       // 30 s timeout (was none): a hung query left the tab on skeletons forever.
       const { data: bmarks, error: bmarksError } = await withTimeout(supabase
@@ -71,12 +75,14 @@ export default function SavedPage() {
       const pOk = pRes.status === 'fulfilled' && !pRes.value.error
       if (!lOk) console.warn('Saved listings failed:', lRes.status === 'rejected' ? lRes.reason : lRes.value.error)
       if (!pOk) console.warn('Saved posts failed:', pRes.status === 'rejected' ? pRes.reason : pRes.value.error)
-      if (!lOk || !pOk) setBookmarksError('သိမ်းထားသော အချို့ ရယူမရပါ')
+      if (!lOk) setListingsError('သိမ်းထားသော လုပ်ငန်းများ ရယူမရပါ')
+      if (!pOk) setPostsError('သိမ်းထားသော သတင်းများ ရယူမရပါ')
       setListings(lOk ? (lRes.value.data || []) : [])
       setPosts(pOk ? (pRes.value.data || []) : [])
     } catch (err) {
       console.warn('Bookmarks load error:', err)
-      setBookmarksError(err?.message || 'သိမ်းထားသောများ ရယူမရပါ')
+      setListingsError('သိမ်းထားသော လုပ်ငန်းများ ရယူမရပါ')
+      setPostsError('သိမ်းထားသော သတင်းများ ရယူမရပါ')
       setListings([]); setPosts([])
     }
     setLoadingBookmarks(false)
@@ -237,19 +243,31 @@ export default function SavedPage() {
 
       {/* Content */}
       <div className="px-4 space-y-2">
-        {bookmarksError && (tab === 'businesses' || tab === 'news') && (
+        {tab === 'businesses' && listingsError && (
           <div className="flex flex-col items-center py-12 text-center px-8">
             <span className="text-4xl mb-3">⚠️</span>
             <p className="font-display font-semibold text-white/70">
               {lang === 'mm' ? 'သိမ်းထားသောများ ရယူမရပါ' : 'Could not load saved items'}
             </p>
-            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">{bookmarksError}</p>
+            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">{listingsError}</p>
             <button onClick={loadBookmarks} className="btn-primary text-sm mt-4 px-5 py-2">
               {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
             </button>
           </div>
         )}
-        {tab === 'businesses' && !bookmarksError && (
+        {tab === 'news' && postsError && (
+          <div className="flex flex-col items-center py-12 text-center px-8">
+            <span className="text-4xl mb-3">⚠️</span>
+            <p className="font-display font-semibold text-white/70">
+              {lang === 'mm' ? 'သိမ်းထားသောများ ရယူမရပါ' : 'Could not load saved items'}
+            </p>
+            <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">{postsError}</p>
+            <button onClick={loadBookmarks} className="btn-primary text-sm mt-4 px-5 py-2">
+              {lang === 'mm' ? 'ထပ်ကြိုးစားမည်' : 'Retry'}
+            </button>
+          </div>
+        )}
+        {tab === 'businesses' && !listingsError && (
           loadingBookmarks ? (
             [1, 2, 3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
           ) : listings.length === 0 ? (
@@ -263,7 +281,7 @@ export default function SavedPage() {
           )
         )}
 
-        {tab === 'news' && !bookmarksError && (
+        {tab === 'news' && !postsError && (
           loadingBookmarks ? (
             [1, 2, 3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
           ) : posts.length === 0 ? (

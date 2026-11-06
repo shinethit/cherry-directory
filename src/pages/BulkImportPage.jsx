@@ -4,6 +4,7 @@ import { ArrowLeft, Upload, Download, CheckCircle, XCircle, FileSpreadsheet, Loc
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
+import { useAppConfig } from '../contexts/AppConfigContext'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { showError, showSuccess } from '../lib/toast'
 import { parseCSV } from '../lib/csv'
@@ -46,14 +47,26 @@ function normPhone(p) {
   return (p || '').replace(/[၀-၉]/g, d => MY_DIGITS[d]).replace(/\D/g, '')
 }
 
-function dedupeKey(name, phone) {
-  return (name || '').trim().toLowerCase() + '|' + normPhone(phone)
+function dedupeKey(name, phone, township, address) {
+  // BI2 (v9.20): the key used to be name + phone only — two different
+  // same-name businesses with no phone both keyed to `name|` and the
+  // second was skipped as a duplicate. With a phone, name + phone is
+  // the key; without one, township + address discriminate. With no
+  // discriminator at all, there is no key — the row is not deduped.
+  const n = (name || '').trim().toLowerCase()
+  const p = normPhone(phone)
+  if (p) return n + '|' + p
+  const t = (township || '').trim().toLowerCase()
+  const a = (address || '').trim().toLowerCase()
+  if (!t && !a) return null
+  return n + '|' + t + '|' + a
 }
 
 export default function BulkImportPage() {
   const navigate = useNavigate()
   const { profile, isAdmin, isModerator, loading: authLoading } = useAuth()
   const { log } = useAuditLog()
+  const config = useAppConfig()
   useSEO({ title: 'Bulk Import' })
 
   const fileRef = useRef(null)
@@ -163,7 +176,8 @@ export default function BulkImportPage() {
     // record there is nothing to update later, so stop honestly
     // instead of crashing on importRec.id.
     if (importRecError || !importRec) {
-      showError('Import မှတ်တမ်း ဖန်တီးမရပါ: ' + (importRecError?.message || 'unknown error'))
+      console.warn('Bulk import record failed:', importRecError)
+      showError('Import မှတ်တမ်း ဖန်တီးမရပါ')
       setImporting(false)
       return
     }
@@ -179,11 +193,11 @@ export default function BulkImportPage() {
       for (let from = 0; ; from += PAGE) {
         const { data: existing, error: dedupeErr } = await supabase
           .from('listings')
-          .select('name, phone_1')
+          .select('name, phone_1, township, address_mm')
           .order('id')
           .range(from, from + PAGE - 1)
         if (dedupeErr) throw dedupeErr
-        ;(existing || []).forEach(l => seenKeys.add(dedupeKey(l.name, l.phone_1)))
+        ;(existing || []).forEach(l => { const k = dedupeKey(l.name, l.phone_1, l.township, l.address_mm); if (k) seenKeys.add(k) })
         if ((existing || []).length < PAGE) break
       }
     } catch (e) {
@@ -231,12 +245,12 @@ export default function BulkImportPage() {
           continue;
         }
 
-        const key = dedupeKey(row.name, row.phone_1)
-        if (seenKeys.has(key)) {
+        const key = dedupeKey(row.name, row.phone_1, row.township, row.address_mm)
+        if (key && seenKeys.has(key)) {
           skipped.push({ row: rowNum, field: 'duplicate', message: '"' + row.name.trim() + '" ထပ်နေသည် — ကျော်လိုက်သည်' });
           continue;
         }
-        seenKeys.add(key)
+        if (key) seenKeys.add(key)
 
         inserts.push({
           record: {
@@ -244,7 +258,12 @@ export default function BulkImportPage() {
             name_mm: row.name_mm?.trim() || null,
             description_mm: row.description_mm?.trim() || null,
             category_id: catId,
-            city: row.city?.trim() || 'Taunggyi',
+            // BI3 (v9.20): the default city comes from config, not a
+            // hardcoded 'Taunggyi'. Note: config.app_city is the Myanmar
+            // display name ('တောင်ကြီးမြို့'), which does not match the
+            // Latin city column — the default is the first configured
+            // city (the primary city), falling back to 'Taunggyi'.
+            city: row.city?.trim() || (config.cities?.[0] || 'Taunggyi'),
             township: row.township?.trim() || null,
             ward: row.ward?.trim() || null,
             address_mm: row.address_mm?.trim() || null,
@@ -275,10 +294,13 @@ export default function BulkImportPage() {
           if (res.status === 'fulfilled' && !res.value.error) {
             success++
           } else {
+            // Insert failures render a fixed Myanmar string — the raw
+            // Supabase message (e.g. constraint text) used to show here.
             const msg = res.status === 'rejected'
               ? (res.reason?.message || String(res.reason))
               : (res.value.error?.message || 'Insert failed')
-            errors.push({ row: rowNum, field: '-', message: msg })
+            console.warn('Bulk import row insert failed:', rowNum, msg)
+            errors.push({ row: rowNum, field: '-', message: 'ထည့်သွင်းမရပါ' })
             failed++
           }
         })
@@ -523,7 +545,7 @@ export default function BulkImportPage() {
             </p>
 
             <div className="flex gap-2">
-              <button onClick={() => navigate('/admin')} className="btn-primary flex-1 text-sm">Admin Panel တွင် Pending listing များ ကြည့်ရန်</button>
+              <button onClick={() => navigate('/admin?tab=listings')} className="btn-primary flex-1 text-sm">Admin Panel တွင် Pending listing များ ကြည့်ရန်</button>
               <button onClick={() => { setPreview(null); setResults(null); setFileName(''); setProgress(0); setCancelled(false); cancelRef.current = false }} className="btn-ghost flex-1 text-sm">ထပ် Import လုပ်မည်</button>
             </div>
           </div>

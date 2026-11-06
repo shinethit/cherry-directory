@@ -21,17 +21,19 @@ const HISTORY_LABELS = {
 }
 
 // E10 (v9.5): where each "how to earn" action is done. Order mirrors
-// POINT_ACTIONS in src/lib/tiers.js (not owned by this track, so the
-// destination lives here by index): Review → directory, Submit → /submit,
-// Approved/Claim → my submissions, RSVP → calendar, Chat → /chat.
-const ACTION_LINKS = [
-  { to: '/directory',      mm: 'Review ရေးရန် →',          en: 'Write a review →' },
-  { to: '/submit',         mm: 'လုပ်ငန်း တင်ရန် →',         en: 'Submit a listing →' },
-  { to: '/my-submissions', mm: 'တင်ပြမှုများ ကြည့်ရန် →',    en: 'View my submissions →' },
-  { to: '/calendar',       mm: 'Event ကြည့်ရန် →',         en: 'View events →' },
-  { to: '/chat',           mm: 'Chat သွားရန် →',            en: 'Go to chat →' },
-  { to: '/my-submissions', mm: 'ပိုင်ဆိုင်ကြောင်း အခြေအနေ ကြည့်ရန် →',  en: 'View claim status →' },
-]
+// PG1 (v9.20): keyed by POINT_ACTIONS id (the ledger action id), not
+// by index — the old array was index-coupled to POINT_ACTIONS order,
+// so reordering tiers.js silently sent every button to the wrong page.
+// Review → directory, Submit → /submit, Approved/Claim → my submissions,
+// RSVP → calendar, Chat → /chat.
+const ACTION_LINKS = {
+  write_review:     { to: '/directory',      mm: 'Review ရေးရန် →',         en: 'Write a review →' },
+  submit_listing:   { to: '/submit',         mm: 'လုပ်ငန်း တင်ရန် →',        en: 'Submit a listing →' },
+  listing_approved: { to: '/my-submissions', mm: 'တင်ပြမှုများ ကြည့်ရန် →',   en: 'View my submissions →' },
+  rsvp_going:       { to: '/calendar',       mm: 'Event ကြည့်ရန် →',        en: 'View events →' },
+  chat_message:     { to: '/chat',           mm: 'Chat သွားရန် →',           en: 'Go to chat →' },
+  claim_approved:   { to: '/my-submissions', mm: 'ပိုင်ဆိုင်ကြောင်း အခြေအနေ ကြည့်ရန် →', en: 'View claim status →' },
+}
 
 export default function PointsGuidePage() {
   const navigate = useNavigate()
@@ -49,6 +51,9 @@ export default function PointsGuidePage() {
   const { getHistory, getMonthlyPoints } = usePoints()
   const [history, setHistory] = useState(null)
   const [historyError, setHistoryError] = useState(false)
+  // PG2 (v9.20): the history error used to render as text with no retry —
+  // bumping this tick re-runs the load.
+  const [historyRetryTick, setHistoryRetryTick] = useState(0)
   // Issue 3e (v9.17): this-month points next to the all-time total —
   // one bare number was ambiguous. Monthly comes from the
   // leaderboard_month view (same Yangon-month definition as the board).
@@ -56,10 +61,11 @@ export default function PointsGuidePage() {
   useEffect(() => {
     if (!isLoggedIn) return
     let cancelled = false
+    setHistoryError(false)
     getHistory(20).then(rows => { if (!cancelled) setHistory(rows || []) }).catch(() => { if (!cancelled) setHistoryError(true) })
     getMonthlyPoints().then(v => { if (!cancelled) setMonthPoints(v) }).catch(() => { if (!cancelled) setMonthPoints(null) })
     return () => { cancelled = true }
-  }, [isLoggedIn])
+  }, [isLoggedIn, historyRetryTick])
 
   return (
     <div className="pb-10">
@@ -117,14 +123,14 @@ export default function PointsGuidePage() {
           {lang === 'mm' ? 'အမှတ် ရယူနည်း' : 'How to Earn'}
         </h2>
         <div className="space-y-2">
-          {POINT_ACTIONS.map(({ icon: Icon, points, mm, en }, i) => (
-            <button key={i} onClick={() => navigate(ACTION_LINKS[i]?.to || '/leaderboard')} className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/4 border border-white/8 hover:border-brand-400/40 hover:bg-white/6 transition-colors text-left">
+          {POINT_ACTIONS.map(({ id, icon: Icon, points, mm, en }) => (
+            <button key={id} onClick={() => navigate(ACTION_LINKS[id]?.to || '/leaderboard')} className="w-full flex items-center gap-3 p-3 rounded-xl bg-white/4 border border-white/8 hover:border-brand-400/40 hover:bg-white/6 transition-colors text-left">
               <div className="w-9 h-9 rounded-lg bg-brand-600/20 flex items-center justify-center flex-shrink-0">
                 <Icon size={15} className="text-brand-300" />
               </div>
               <p className="flex-1 min-w-0 text-xs text-white/70 font-myanmar">{lang === 'mm' ? mm : en}</p>
               <span className="font-mono font-bold text-sm text-green-400">+{points}</span>
-              <span className="text-[11px] font-bold text-brand-300">{lang === 'mm' ? ACTION_LINKS[i]?.mm : ACTION_LINKS[i]?.en}</span>
+              <span className="text-[11px] font-bold text-brand-300">{lang === 'mm' ? ACTION_LINKS[id]?.mm : ACTION_LINKS[id]?.en}</span>
             </button>
           ))}
         </div>
@@ -175,7 +181,10 @@ export default function PointsGuidePage() {
             {[1, 2, 3].map(n => <div key={n} className="h-11 rounded-xl shimmer" />)}
           </div>
         ) : historyError ? (
-          <p className="text-xs text-white/60 font-myanmar p-3 card-dark rounded-xl">မှတ်တမ်း ရယူမရပါ — ထပ်ကြိုးစားပါ</p>
+          <div className="p-3 card-dark rounded-xl text-center space-y-2 border border-red-500/30">
+            <p className="text-xs text-red-400 font-myanmar">မှတ်တမ်း ရယူမရပါ — ထပ်ကြိုးစားပါ</p>
+            <button onClick={() => setHistoryRetryTick(t => t + 1)} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
         ) : history.length === 0 ? (
           <p className="text-xs text-white/60 font-myanmar p-3 card-dark rounded-xl">
             {lang === 'mm' ? 'အမှတ် မှတ်တမ်း မရှိသေးပါ — Review ရေး၊ လုပ်ငန်း တင်ပြီး အမှတ် ရယူပါ' : 'No points yet — write a review or submit a listing to earn points'}

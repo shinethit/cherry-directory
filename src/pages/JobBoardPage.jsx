@@ -68,7 +68,7 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
   const [expanded, setExpanded] = useState(false)
   const cat = JOB_CATS.find(c => c.id === job.category) || JOB_CATS[0]
   const type = JOB_TYPES.find(t => t.id === job.type) || JOB_TYPES[0]
-  const postType = POST_TYPES.find(t => t.id === job.post_type) || POST_TYPES[1]
+  const postType = POST_TYPES.find(t => t.id === job.post_type) || { id: 'unknown', mm: job.post_type || 'အခြား', en: job.post_type || 'Other', icon: '💼' }
   const status = STATUSES[job.status] || STATUSES.active
   // Seeker cards must not say "လျှောက်လို့ရ" (that wording only fits a
   // job offer) — a seeker is looking for work (D13).
@@ -77,8 +77,11 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
   const statusEn = isSeeker && job.status === 'active' ? 'Seeking work' : status.en
   const isOwner = isLoggedIn && (job.poster_id === userId)
 
+  // J3 (v9.20): an unknown salary_unit used to fall through to 'လ'
+  // (month) — show the raw unit instead.
+  const salaryUnitMm = job.salary_unit === 'day' ? 'ရက်' : job.salary_unit === 'week' ? 'ပတ်' : job.salary_unit === 'month' ? 'လ' : (job.salary_unit || '')
   const salaryStr = job.salary_min
-    ? `${Number(job.salary_min).toLocaleString()}${job.salary_max ? '–' + Number(job.salary_max).toLocaleString() : '+'} Ks/${lang === 'mm' ? (job.salary_unit === 'day' ? 'ရက်' : job.salary_unit === 'week' ? 'ပတ်' : 'လ') : job.salary_unit}`
+    ? `${Number(job.salary_min).toLocaleString()}${job.salary_max ? '–' + Number(job.salary_max).toLocaleString() : '+'} Ks/${lang === 'mm' ? salaryUnitMm : job.salary_unit}`
     : (lang === 'mm' ? 'သဘောတူညီ' : 'Negotiable')
 
   const handleContact = () => {
@@ -90,10 +93,13 @@ function JobCard({ job, lang, isLoggedIn, userId, onEdit, onDelete, onStatusChan
     }
   }
 
-  // Distinct styles for employer vs job seeker
+  // Distinct styles for employer vs job seeker. J4 (v9.20): an unknown
+  // post_type used to render as an offer — neutral styling instead.
   const postTypeStyle = job.post_type === 'offer'
     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30 shadow-sm shadow-blue-500/10'
-    : 'bg-green-500/20 text-green-400 border border-green-500/30 shadow-sm shadow-green-500/10'
+    : job.post_type === 'seeker'
+    ? 'bg-green-500/20 text-green-400 border border-green-500/30 shadow-sm shadow-green-500/10'
+    : 'bg-white/10 text-white/60 border border-white/15'
 
   return (
     <div className={`card-dark rounded-2xl p-4 space-y-2 border-l-4 ${status.color === 'text-green-400' ? 'border-l-green-500/60' : 'border-l-amber-500/60'}`}>
@@ -539,7 +545,7 @@ export default function JobBoardPage() {
          loadError ? (
            <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
              <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
-             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+             <button onClick={() => load()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
            </div>
          ) :
          jobs.length === 0 ? (

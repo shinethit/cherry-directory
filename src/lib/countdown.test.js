@@ -1,12 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { getCountdown } from './countdown'
+import { yangonToday } from './myanmarDate'
 
-// Build an ISO date N days from today at local midnight, so the
-// day-difference math is exact regardless of the time of day.
+// Build an ISO date N days from today at MYANMAR midnight, so the
+// day-difference math is exact regardless of the time of day or the
+// device timezone. (v9.20: the old helper used device-local midnight,
+// but getCountdown counts MMT wall dates — the suite went red by one
+// day whenever UTC and MMT dates differed, i.e. 17:30–24:00 UTC.
+// Test-only fix; app behaviour unchanged.)
 function isoDaysFromNow(n) {
-  const now = new Date()
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + n)
-  return d.toISOString()
+  const [y, m, d] = yangonToday().split('-').map(Number)
+  // MMT midnight = 17:30 UTC on the previous UTC day.
+  return new Date(Date.UTC(y, m - 1, d + n) - 6.5 * 3600 * 1000).toISOString()
 }
 
 describe('getCountdown', () => {

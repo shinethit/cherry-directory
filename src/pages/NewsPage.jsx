@@ -7,6 +7,7 @@ import { fetchNews } from '../lib/prefetch'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { PostCard, Skeleton, EmptyState } from '../components/UI'
+import { useBookmarkedSet } from '../hooks/useBookmarksDB'
 import { useSEO } from '../hooks/useSEO'
 import Lightbox from 'yet-another-react-lightbox'
 import 'yet-another-react-lightbox/styles.css'
@@ -32,6 +33,9 @@ export default function NewsPage() {
 
   const [posts, setPosts]   = useState([])
   const [pinned, setPinned] = useState([])
+  // UI4 (v9.20): one batched bookmark query for both lists instead of
+  // one per card.
+  const { data: bookmarkedSet } = useBookmarkedSet([...pinned, ...posts].map(p => p.id), 'post')
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [pageSize, setPageSize] = useState(30)
@@ -139,7 +143,7 @@ export default function NewsPage() {
             {pinned.map(p => (
               <div key={p.id} className="relative transition-transform hover:-translate-y-0.5">
                 <div onClick={() => navigate(`/news/${p.id}`)} className="cursor-pointer">
-                  <PostCard post={p} />
+                  <PostCard post={p} bookmarked={bookmarkedSet ? bookmarkedSet.has(p.id) : undefined} />
                   <p className="text-right text-[11px] text-brand-300 font-semibold mt-1.5 pr-1">{lang === 'mm' ? 'ဆက်ဖတ်ရန် →' : 'Read more →'}</p>
                 </div>
                 {canEdit && (
@@ -192,7 +196,7 @@ export default function NewsPage() {
           {posts.map(p => (
             <div key={p.id} className="relative group transition-transform hover:-translate-y-0.5">
               <div onClick={() => navigate(`/news/${p.id}`)} className="cursor-pointer">
-                <PostCard post={p} />
+                <PostCard post={p} bookmarked={bookmarkedSet ? bookmarkedSet.has(p.id) : undefined} />
                 <p className="text-right text-[11px] text-brand-300 font-semibold mt-1.5 pr-1">{lang === 'mm' ? 'ဆက်ဖတ်ရန် →' : 'Read more →'}</p>
               </div>
               {canEdit && (

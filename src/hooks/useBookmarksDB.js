@@ -9,6 +9,38 @@ const BOOKMARKS_QUERY_KEY = 'bookmarks';
 // pages read bookmark state via useIsBookmarked only.
 
 /**
+ * Batched bookmark state for a whole list — UI4 (v9.20).
+ * Each ListingCard/PostCard used to mount its own useIsBookmarked query
+ * (20 cards = 20 bookmark queries per list page on slow mobile). One
+ * `.in()` query per list replaces them; cards take an optional
+ * `bookmarked` prop and skip their per-card query when it is given.
+ * The add/remove mutations invalidate the whole 'bookmarks' prefix on
+ * success, so this set refetches after a toggle.
+ */
+export const useBookmarkedSet = (ids, targetType = 'listing') => {
+  const { user } = useAuth();
+  const sortedIds = [...new Set((ids || []).filter(Boolean))].sort();
+
+  return useQuery({
+    queryKey: [BOOKMARKS_QUERY_KEY, user?.id, 'set', targetType, sortedIds.join(',')],
+    queryFn: async () => {
+      if (!user || sortedIds.length === 0) return new Set();
+
+      const { data, error } = await supabase
+        .from('bookmarks')
+        .select('target_id')
+        .eq('user_id', user.id)
+        .eq('target_type', targetType)
+        .in('target_id', sortedIds);
+
+      if (error) throw error;
+      return new Set((data || []).map(r => r.target_id));
+    },
+    enabled: !!user && sortedIds.length > 0,
+  });
+};
+
+/**
  * Check if a listing is bookmarked
  */
 export const useIsBookmarked = (listingId, targetType = 'listing') => {

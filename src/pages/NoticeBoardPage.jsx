@@ -55,7 +55,7 @@ function NoticeCard({ notice, lang, isMod, onDelete }) {
           {notice.ward && <span className="text-[9px] text-white/60 font-myanmar">{notice.ward}</span>}
         </div>
         {isMod && (
-          <button onClick={() => onDelete(notice.id)} className="w-9 h-9 rounded-lg btn-danger flex items-center justify-center transition-colors flex-shrink-0">
+          <button onClick={() => onDelete(notice.id)} className="min-w-[44px] min-h-[44px] rounded-lg btn-danger flex items-center justify-center transition-colors flex-shrink-0" aria-label="Delete notice">
             <Trash2 size={14} />
           </button>
         )}
@@ -101,7 +101,8 @@ function PostForm({ onClose, onSuccess, lang }) {
       }
       onSuccess()
     } catch (err) {
-      showError(err.message || (lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post notice'))
+      console.error('Post notice error:', err)
+      showError(lang === 'mm' ? 'တင်ရာတွင် အမှားရှိသည်' : 'Failed to post notice')
     } finally {
       setSubmitting(false)
     }
@@ -152,6 +153,7 @@ export default function NoticeBoardPage() {
   const [pendingCount, setPendingCount] = useState(0)
   const [showPending, setShowPending]   = useState(false)
   const [pendingList, setPendingList]   = useState([])
+  const [pendingError, setPendingError] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -181,10 +183,18 @@ export default function NoticeBoardPage() {
     } catch (e) { console.warn(e); setLoadError(true); setNotices([]); setLoading(false) }
   }
 
+  // NB1 (v9.20): withTimeout + error state — a hung query used to leave
+  // the pending panel empty with no error and no retry.
   async function loadPending() {
-    const { data, error } = await supabase.from('notices').select('*').eq('status', 'pending').order('posted_at', { ascending: false })
-    if (error) { showError(error.message); return }
-    setPendingList(data || [])
+    setPendingError(false)
+    try {
+      const { data, error } = await withTimeout(supabase.from('notices').select('*').eq('status', 'pending').order('posted_at', { ascending: false }), 30000, 'Pending notices')
+      if (error) throw error
+      setPendingList(data || [])
+    } catch (e) {
+      console.warn('Pending notices error:', e)
+      setPendingError(true)
+    }
   }
 
   useEffect(() => { load() }, [catFilter, isModerator])
@@ -193,20 +203,22 @@ export default function NoticeBoardPage() {
   async function deleteNotice(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဖျက်မည်လား?' : 'Delete this notice?', { danger: true }))) return
     const { error } = await supabase.from('notices').delete().eq('id', id)
-    if (error) { showError(error.message); return }
+    if (error) { console.error('Delete notice error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed'); return }
     load()
   }
 
   async function approveNotice(id) {
     const { error } = await supabase.from('notices').update({ status: 'approved' }).eq('id', id)
-    if (error) { showError(error.message); return }
+    if (error) { console.error('Approve notice error:', error); showError(lang === 'mm' ? 'အတည်ပြုရာတွင် အမှားရှိသည်' : 'Approve failed'); return }
     loadPending(); load()
   }
 
   async function rejectNotice(id) {
     if (!(await confirmDialog(lang === 'mm' ? 'ဒီကြေညာချက်ကို ပယ်ချမည်လား?' : 'Reject this notice?'))) return
-    const { error } = await supabase.from('notices').delete().eq('id', id)
-    if (error) { showError(error.message); return }
+    // NB2 (v9.20): reject sets status='rejected' (in the CHECK constraint)
+    // instead of deleting the row — the content survives for review/restore.
+    const { error } = await supabase.from('notices').update({ status: 'rejected' }).eq('id', id)
+    if (error) { console.error('Reject notice error:', error); showError(lang === 'mm' ? 'ပယ်ချရာတွင် အမှားရှိသည်' : 'Reject failed'); return }
     loadPending(); load()
   }
 
@@ -259,7 +271,12 @@ export default function NoticeBoardPage() {
             <h2 className="font-display font-bold text-base text-white">Pending Notices ({pendingList.length})</h2>
           </div>
           <div className="px-4 py-4 space-y-3 pb-24">
-            {pendingList.map(n => (
+            {pendingError ? (
+              <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+                <p className="text-sm text-red-400 font-myanmar">Pending ကြေညာချက်များ တင်ရာတွင် အမှားရှိသည်</p>
+                <button onClick={loadPending} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+              </div>
+            ) : pendingList.map(n => (
               <div key={n.id} className="card-dark rounded-2xl p-4 space-y-3">
                 <p className="text-sm font-display font-semibold text-white">{n.title_mm || n.title}</p>
                 {n.content_mm && <p className="text-xs text-white/50 font-myanmar">{n.content_mm}</p>}

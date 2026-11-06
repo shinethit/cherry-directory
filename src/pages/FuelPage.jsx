@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { RefreshCw, Pencil, Trash2, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
+import { myanmarVariants } from '../lib/myanmarSearch'
 import { fetchFuelData } from '../lib/prefetch'
 import { useLang } from '../contexts/LangContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -563,9 +564,9 @@ export default function FuelPage() {
       setAllFuelTypes(fuelData.types)
       setStations(fuelData.stations)
     }
-    setLoading(fuelQueryLoading || fuelQueryFetching)
+    setLoading(fuelQueryLoading)
     setLoadError(fuelQueryError)
-  }, [fuelData, fuelQueryLoading, fuelQueryFetching, fuelQueryError])
+  }, [fuelData, fuelQueryLoading, fuelQueryError])
 
   // S21 (v9.17): search + township + fuel-type filters.
   const [searchQuery, setSearchQuery] = useState('')
@@ -577,7 +578,11 @@ export default function FuelPage() {
     if (fuelTypeFilter !== 'All' && !(s.fuel_type_names || []).includes(fuelTypeFilter)) return false
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase()
-      if (!((s.name || '').toLowerCase().includes(q) || (s.name_mm || '').includes(searchQuery.trim()) || (s.address || '').toLowerCase().includes(q))) return false
+      // F2 (v9.20): name_mm matches in either Myanmar encoding — stored
+      // station names are mixed Zawgyi/Unicode, like listing names.
+      const variants = myanmarVariants(searchQuery.trim())
+      const nameMmHit = variants.some(v => (s.name_mm || '').includes(v))
+      if (!((s.name || '').toLowerCase().includes(q) || nameMmHit || (s.address || '').toLowerCase().includes(q))) return false
     }
     return true
   })
@@ -587,7 +592,7 @@ export default function FuelPage() {
       <div className="px-4 pt-4 pb-3 flex items-center justify-between">
         <h1 className="font-display font-bold text-xl text-white">{lang === 'mm' ? '⛽ ဓာတ်ဆီဆိုင်များ' : '⛽ Fuel Stations'}</h1>
         <button onClick={() => refetchFuel()} className="text-brand-300">
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          <RefreshCw size={16} className={fuelQueryFetching ? 'animate-spin' : ''} />
         </button>
       </div>
 

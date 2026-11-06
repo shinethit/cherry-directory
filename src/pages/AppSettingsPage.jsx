@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Plus, X } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useSEO } from '../hooks/useSEO'
 import { useAuditLog } from '../hooks/useAuditLog'
@@ -24,21 +25,22 @@ export default function AppSettingsPage() {
   // so an admin cannot edit (and save over) empty defaults while the
   // real values are still in flight.
   const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   // Which sections were just saved — cleared as soon as anything is
   // edited again (G20).
   const [justSaved, setJustSaved] = useState(false)
 
   useEffect(() => { setJustSaved(false) }, [appName, appCity, cities])
 
-  useEffect(() => {
-    if (!isAdmin) return
-    supabase.from('app_config').select('*').then(({ data, error }) => {
-      if (error) {
-        showError('Settings ရယူရာတွင် အမှားရှိသည်: ' + error.message)
-        setLoaded(true) // failed load still unblocks editing (values stay as-is)
-        return
-      }
-      if (!data) return
+  // AS5 (v9.20): withTimeout + retry — the bare .then() used to leave the
+  // inputs disabled forever on a hung query, and a null data return never
+  // set loaded at all.
+  async function loadSettings() {
+    setLoadError(false)
+    try {
+      const { data, error } = await withTimeout(supabase.from('app_config').select('*'), 30000, 'App settings')
+      if (error) throw error
+      if (!data) { setLoaded(true); return }
       data.forEach(({ key, value }) => {
         try {
           const v = JSON.parse(value)
@@ -53,7 +55,19 @@ export default function AppSettingsPage() {
         }
       })
       setLoaded(true)
-    })
+    } catch (e) {
+      // A failed load still unblocks editing (values stay as-is) and
+      // offers a retry — the old code showed the raw error.message.
+      console.warn('App settings load error:', e)
+      showError('Settings ရယူရာတွင် အမှားရှိသည်')
+      setLoadError(true)
+      setLoaded(true)
+    }
+  }
+
+  useEffect(() => {
+    if (!isAdmin) return
+    loadSettings()
   }, [isAdmin])
 
   async function save() {
@@ -75,7 +89,9 @@ export default function AppSettingsPage() {
       // supabase upsert() returns { error } — it never throws, so
       // each result must be checked or a failed save looks saved.
       const { error } = await supabase.from('app_config').upsert(entry)
-      if (error) failedKeys.push(entry.key + ': ' + error.message)
+      // Fixed label only — the raw error.message used to reach the user
+      // in the failed-keys toast.
+      if (error) { console.error('Save app setting error:', entry.key, error); failedKeys.push(entry.label) }
     }
     if (failedKeys.length > 0) {
       showError('✗ သိမ်းမရသော Settings: ' + failedKeys.join('; '))
@@ -134,6 +150,13 @@ export default function AppSettingsPage() {
       </div>
 
       <div className="px-4 space-y-5">
+
+        {loadError && (
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+            <p className="text-sm text-red-400 font-myanmar">Settings ရယူမရပါ — တန်ဖိုးများ မပြည့်စုံသေးပါ</p>
+            <button onClick={loadSettings} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
+        )}
 
         {/* App identity */}
         <div className="card-dark rounded-2xl p-4 space-y-3">

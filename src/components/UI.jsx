@@ -8,6 +8,7 @@ import VerifiedOwnerBadge from './VerifiedOwnerBadge'
 import { useIsBookmarked, useAddBookmark, useRemoveBookmark } from '../hooks/useBookmarksDB'
 import { showError } from '../lib/toast'
 import { formatMyanmarDate } from '../lib/myanmarDate'
+import { withTimeout } from '../lib/withTimeout'
 
 // ── Stars ────────────────────────────────────────────────────
 export function StarRating({ rating = 0, size = 14 }) {
@@ -26,13 +27,16 @@ export function Skeleton({ className = '' }) {
 }
 
 // ── Listing Card ─────────────────────────────────────────────
-export function ListingCard({ listing, compact = false }) {
+export function ListingCard({ listing, compact = false, bookmarked: bookmarkedProp }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { isLoggedIn } = useAuth()
   // Real bookmark state from the bookmarks table (the old local useState
   // toggle was fake — it never persisted anything).
-  const { data: bookmarked = false } = useIsBookmarked(listing.id)
+  // UI4 (v9.20): a list may pass the batched bookmark state instead —
+  // then this card skips its own query (one .in() query per list).
+  const { data: queried = false } = useIsBookmarked(bookmarkedProp === undefined ? listing.id : null)
+  const bookmarked = bookmarkedProp ?? queried
   const addBookmark = useAddBookmark()
   const removeBookmark = useRemoveBookmark()
 
@@ -78,7 +82,7 @@ export function ListingCard({ listing, compact = false }) {
               <p className="text-[10px] text-white/60 truncate">{listing.name}</p>
             )}
           </div>
-          <button onClick={toggleBookmark} disabled={bookmarkPending} className="w-9 h-9 flex items-center justify-center rounded-lg text-white/30 hover:text-gold-400 transition-colors flex-shrink-0 disabled:opacity-50" aria-label="သိမ်းမည်">
+          <button onClick={toggleBookmark} disabled={bookmarkPending} className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-lg text-white/30 hover:text-gold-400 transition-colors flex-shrink-0 disabled:opacity-50" aria-label="သိမ်းမည်">
             {bookmarked ? <BookmarkCheck size={18} className="text-gold-400" /> : <Bookmark size={18} />}
           </button>
         </div>
@@ -108,10 +112,13 @@ export function ListingCard({ listing, compact = false }) {
 }
 
 // ── Post Card ─────────────────────────────────────────────────
-export function PostCard({ post }) {
+export function PostCard({ post, bookmarked: bookmarkedProp }) {
   const navigate = useNavigate()
   const { isLoggedIn } = useAuth()
-  const { data: saved = false } = useIsBookmarked(post.id, 'post')
+  // UI4 (v9.20): batched bookmark state from the list when given, else
+  // the per-card query (see ListingCard).
+  const { data: queried = false } = useIsBookmarked(bookmarkedProp === undefined ? post.id : null, 'post')
+  const saved = bookmarkedProp ?? queried
   const addBookmark = useAddBookmark()
   const removeBookmark = useRemoveBookmark()
   const cover = post.cover_url ? getOptimizedUrl(post.cover_url, { width: 400 }) : null
@@ -147,7 +154,7 @@ export function PostCard({ post }) {
                 else addBookmark.mutate({ targetId: post.id, targetType: 'post' })
               }}
               disabled={addBookmark.isPending || removeBookmark.isPending}
-              className="flex items-center gap-1.5 h-9 px-3 rounded-lg text-brand-300 hover:text-brand-200 disabled:opacity-50"
+              className="flex items-center gap-1.5 min-h-[44px] px-3 rounded-lg text-brand-300 hover:text-brand-200 disabled:opacity-50"
               aria-label="သိမ်းမည်"
             >
               {saved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
@@ -219,15 +226,19 @@ export function ReactionBar({ targetType, targetId }) {
 
   // Fetch real counts + my reactions on mount — counts were always blank
   // because nothing ever loaded them.
+  // UI1 (v9.20): withTimeout — a hung query used to never settle, so the
+  // counts stayed blank forever with no error. A failure still only logs
+  // (reactions are auxiliary); the load now always settles.
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const { data, error } = await supabase
-        .from('reactions')
-        .select('emoji, user_id')
-        .eq('target_type', targetType)
-        .eq('target_id', targetId)
-      if (cancelled || error || !data) return
+      try {
+        const { data, error } = await withTimeout(supabase
+          .from('reactions')
+          .select('emoji, user_id')
+          .eq('target_type', targetType)
+          .eq('target_id', targetId), 30000, 'Reactions')
+        if (cancelled || error || !data) { if (error) console.warn('Reactions error:', error); return }
       const c = {}
       const mine = new Set()
       data.forEach(r => {
@@ -236,6 +247,7 @@ export function ReactionBar({ targetType, targetId }) {
       })
       setCounts(c)
       setMyReactions(mine)
+      } catch (e) { console.warn('Reactions error:', e) }
     }
     load()
     return () => { cancelled = true }

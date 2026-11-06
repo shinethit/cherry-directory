@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Phone, MessageCircle, MapPin, Star, Send, CheckCircle, ExternalLink, Bookmark, BookmarkCheck, BadgeCheck, Edit3, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
@@ -11,6 +11,8 @@ import { StarRating, ReactionBar, Skeleton } from '../components/UI'
 import MapEmbed from '../components/MapEmbed'
 import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
+import { useAuditLog } from '../hooks/useAuditLog'
+import { deleteListingWithCleanup, deleteListingConfirmMessage } from '../lib/deleteListing'
 import { showError, showSuccess } from '../lib/toast'
 import { confirmDialog } from '../lib/confirmDialog'
 import { useDeleteReview, useCreateReview } from '../hooks/useReviews'
@@ -72,6 +74,8 @@ export default function ListingDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const reviewFormRef = useRef(null)
   // v9.19: arriving from a successful edit carries the updated row in
   // router state — render it instantly instead of a full-screen
   // spinner, then refresh it softly in the background. The id check
@@ -80,6 +84,7 @@ export default function ListingDetailPage() {
   const hasStateListing = !!stateListing && String(stateListing.id) === String(id)
   const { isLoggedIn, profile, isAdmin, isModerator, user } = useAuth()
   const { t, lang } = useLang()
+  const { log } = useAuditLog()
   const { data: bookmarked = false, isError: bookmarkCheckError } = useIsBookmarked(id)
   const addBookmark = useAddBookmark()
   const removeBookmark = useRemoveBookmark()
@@ -118,6 +123,15 @@ export default function ListingDetailPage() {
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
   const [loading, setLoading] = useState(!hasStateListing)
+  // MR4 (v9.20): ?review=edit (from My Reviews) scrolls to the review
+  // form once the page has loaded — the form already shows the existing
+  // review with an "Update review" button. (Must sit after `loading`
+  // is declared: the deps array reads it during render.)
+  useEffect(() => {
+    if (searchParams.get('review') === 'edit' && !loading && reviewFormRef.current) {
+      reviewFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [loading, searchParams])
   const [notFound, setNotFound] = useState(false)
   const [loadError, setLoadError] = useState(false)
   const [hasMenu, setHasMenu] = useState(false)
@@ -188,11 +202,13 @@ export default function ListingDetailPage() {
         // and must never hold the page on skeletons.
         setLoading(false)
         // "View Menu & Prices" only when the listing actually has menu items.
+        // LD-E (v9.20): a failed check fails silent — it is non-core, and
+        // the toast was noise. hasMenu simply stays false.
         try {
           const { count: menuCount, error: menuErr } = await withTimeout(supabase.from('menu_items').select('id', { count: 'exact', head: true }).eq('listing_id', id), 30000, 'Listing menu check')
-          if (menuErr) { console.warn(menuErr); showError('Menu ရှိမရှိ စစ်မရပါ') }
+          if (menuErr) { console.warn(menuErr) }
           else setHasMenu((menuCount || 0) > 0)
-        } catch (menuEx) { console.warn(menuEx); showError('Menu ရှိမရှိ စစ်မရပါ') }
+        } catch (menuEx) { console.warn(menuEx) }
         // View count: the direct UPDATE is owner-only under RLS, so it
         // silently never worked for guests (and raced for everyone).
         // The security-definer RPC increments atomically instead. If the
@@ -299,6 +315,28 @@ export default function ListingDetailPage() {
     }
   }
 
+  // v9.20: Admin-only delete for a business that no longer exists, right
+  // where the admin sees it (next to Report — a "closed" report is the
+  // usual trigger). Same helper + full-impact confirm as the Admin panel;
+  // moderators/owners/guests never see the button, and the 9.20 RLS
+  // policy enforces Admin-only server-side too.
+  const [deletingListing, setDeletingListing] = useState(false)
+  async function handleDeleteListing() {
+    if (!isAdmin || deletingListing) return
+    if (!(await confirmDialog(deleteListingConfirmMessage(displayName), { danger: true }))) return
+    setDeletingListing(true)
+    try {
+      const { cleanupErrors } = await deleteListingWithCleanup(supabase, id, { log })
+      showSuccess(cleanupErrors.length > 0
+        ? '🗑️ ဖျက်ပြီးပါပြီ (ဆက်စပ်အချက်အလက် အချို့ ဖျက်မရပါ: ' + cleanupErrors.join('; ') + ')'
+        : '🗑️ ဖျက်ပြီးပါပြီ')
+      navigate('/directory')
+    } catch (e) {
+      showError('ဖျက်ရာတွင် အမှားတစ်ခု ဖြစ်သွားသည်: ' + e.message)
+      setDeletingListing(false)
+    }
+  }
+
   async function handleReport() {
     if (!reportReason.trim()) return
     setReportSubmitting(true)
@@ -342,7 +380,7 @@ export default function ListingDetailPage() {
     <div className="p-4 py-16 text-center space-y-3">
       <p className="text-5xl">😶</p>
       <p className="font-display font-semibold text-white/70">မတွေ့ပါ</p>
-      <p className="text-xs text-white/60 font-myanmar">ဤလုပ်ငန်း မရှိတော့ပါ (ဖျက်လိုက်ပြီ ဖြစ်နိုင်သည်)</p>
+      <p className="text-xs text-white/60 font-myanmar">အတည်ပြုမရသေးပါ သို့မဟုတ် မတွေ့ပါ</p>
       <button onClick={() => navigate('/directory')} className="btn-primary text-sm px-5 py-2.5">နောက်သို့</button>
     </div>
   )
@@ -742,7 +780,7 @@ export default function ListingDetailPage() {
           <p className="text-sm font-display font-bold text-white mb-3">{t('reviews_title')} ({listing.rating_count ?? reviews.length})</p>
 
           {isLoggedIn ? (
-            <div className="card-dark p-4 rounded-2xl mb-4 space-y-3">
+            <div ref={reviewFormRef} className="card-dark p-4 rounded-2xl mb-4 space-y-3">
               <p className="text-xs text-white/50 font-myanmar">{t('write_review')}</p>
               <div className="flex gap-1">
                 {[1,2,3,4,5].map(n => (
@@ -781,7 +819,7 @@ export default function ListingDetailPage() {
               disabled={loadingMoreReviews}
               className="w-full btn-ghost text-sm mt-2 disabled:opacity-50"
             >
-              {loadingMoreReviews ? 'တင်နေသည်...' : `Review အားလုံး ကြည့်ရန် (${listing.rating_count} ခု) — ထပ်တင်ရန် (${listing.rating_count - reviews.length} ကျန်)`}
+              {loadingMoreReviews ? 'တင်နေသည်...' : `ထပ်တင်ရန် (${listing.rating_count - reviews.length} ကျန်)`}
             </button>
           )}
         </div>
@@ -825,6 +863,25 @@ export default function ListingDetailPage() {
           </div>
         )}
       </div>
+
+      {/* v9.20: Admin-only delete — a business that no longer exists is
+          deleted from the page where the admin sees it (a "closed" report
+          is the usual trigger). Moderators, owners and guests never see
+          this button; the 9.20 RLS policy enforces Admin-only too. */}
+      {isAdmin && (
+        <div className="px-4 mt-4">
+          <button
+            onClick={handleDeleteListing}
+            disabled={deletingListing}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl btn-danger text-sm font-bold disabled:opacity-50"
+          >
+            🗑️ {deletingListing ? 'ဖျက်နေသည်…' : 'လုပ်ငန်းဖျက်မည် (Admin သာ)'}
+          </button>
+          <p className="text-center text-[10px] text-white/40 font-myanmar mt-1.5">
+            မရှိတော့သော လုပ်ငန်းအတွက်သာ — ဖျက်လိုက်လျှင် ပြန်မရနိုင်ပါ
+          </p>
+        </div>
+      )}
 
       {/* Lightbox */}
       {lightboxOpen && (

@@ -85,7 +85,7 @@ export default function AdminReportsPage() {
       }
 
       setItems((data || []).map(r => ({ ...r, _target: listingMap[r.target_id] || null })))
-    } catch (e) { console.warn(e); setLoadError(e?.message || 'Report များ ရယူမရပါ') }
+    } catch (e) { console.warn(e); setLoadError('Report များ ရယူမရပါ') }
     setLoading(false)
   }, [tab, limit, sortOrder, authLoading, isAdmin, isModerator])
 
@@ -94,26 +94,17 @@ export default function AdminReportsPage() {
   // Close the loop: reviewing a listing report also suspends the
   // reported listing (it stays suspended until an admin re-approves
   // it). Always records who reviewed it and when.
-  // Order matters: suspend FIRST, then mark reviewed. The old order
-  // marked the report reviewed first, so a suspend failure left the
-  // report in the Reviewed tab (where Resolve/Dismiss don't render)
-  // while the listing stayed live, with no retry.
+  // AR1 (v9.20): claim the report FIRST (guarded .eq('status','pending')),
+  // suspend only on a successful claim. The old order suspended first, so
+  // when another admin had already decided, the listing ended up suspended
+  // while the toast said the decision failed. If the suspend then fails,
+  // the claim is rolled back so the report stays pending and retryable.
   async function updateStatus(report, status) {
     if (status === 'reviewed') {
       if (!(await confirmDialog(lang === 'mm' ? 'ဤ Report ကို ဖြေရှင်းပြီး သတ်မှတ်မည်လား? ဆက်စပ် လုပ်ငန်းကို ဆိုင်းငံ့ထားမည်။' : 'Mark this report as resolved? The reported listing will be suspended.'))) return
     } else if (!(await confirmDialog(lang === 'mm' ? 'ဤ Report ကို ပယ်ချမည်လား?' : 'Dismiss this report?'))) return
     setActionBusy(report.id)
     try {
-      if (status === 'reviewed' && report.target_type === 'listing' && report.target_id) {
-        const { error: susErr } = await supabase
-          .from('listings')
-          .update({ status: 'suspended' })
-          .eq('id', report.target_id)
-        if (susErr) {
-          showError('လုပ်ငန်း ဆိုင်းငံ့မရပါ — Report ကို မဖြေရှင်းရသေးပါ: ' + susErr.message)
-          return
-        }
-      }
       // N11 (v9.17): only a still-pending report can be decided — two
       // admins deciding at once must not both succeed.
       const { data: updated, error } = await supabase
@@ -123,13 +114,28 @@ export default function AdminReportsPage() {
         .eq('status', 'pending')
         .select('id')
       if (error) {
-        showError('Report အပ်ဒိတ်လုပ်ရာတွင် အမှားရှိသည်: ' + error.message)
+        console.error('Report update error:', error)
+        showError('Report အပ်ဒိတ်လုပ်ရာတွင် အမှားရှိသည်')
         return
       }
       if (!updated || updated.length === 0) {
         showError('ဤ Report ကို အခြား Admin မှ ဆုံးဖြတ်ပြီးဖြစ်သည်')
         load()
         return
+      }
+      if (status === 'reviewed' && report.target_type === 'listing' && report.target_id) {
+        const { error: susErr } = await supabase
+          .from('listings')
+          .update({ status: 'suspended' })
+          .eq('id', report.target_id)
+        if (susErr) {
+          console.error('Suspend listing error:', susErr)
+          // Roll the claim back — otherwise the report sits in Reviewed
+          // while the listing stays live, with no retry.
+          await supabase.from('reports').update({ status: 'pending', reviewed_at: null, reviewed_by: null }).eq('id', report.id)
+          showError('လုပ်ငန်း ဆိုင်းငံ့မရပါ — Report ကို မဖြေရှင်းရသေးပါ')
+          return
+        }
       }
       // S14 (v9.17): review/dismiss decisions are audit-logged.
       log({ action: status === 'reviewed' ? 'review_report' : 'dismiss_report', table: 'reports', id: report.id, name: report._target?.name_mm || report._target?.name || report.target_id, before: { status: 'pending' }, after: { status } })

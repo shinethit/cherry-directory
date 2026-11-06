@@ -8,7 +8,7 @@ import { useAppConfig } from '../contexts/AppConfigContext'
 import { usePWA } from '../hooks/usePWA'
 import { useSEO } from '../hooks/useSEO'
 import { timeAgo } from '../hooks/usePresence'
-import { uploadImage } from '../lib/cloudinary'
+import { uploadImage, getOptimizedUrl } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { showError } from '../lib/toast'
@@ -75,7 +75,7 @@ export default function ProfilePage() {
         }
       } catch (err) {
         console.warn('Other profile load failed:', err)
-        if (!cancelled) setOtherError(err?.message || 'Profile မတွေ့ပါ')
+        if (!cancelled) setOtherError('Profile မတွေ့ပါ')
       } finally {
         if (!cancelled) setOtherLoading(false)
       }
@@ -439,7 +439,7 @@ export default function ProfilePage() {
                 <button key={l.id} onClick={() => navigate(`/directory/${l.id}`)} className="w-full flex items-center gap-3 p-2 rounded-2xl hover:bg-white/6 transition-colors text-left">
                   <div className="w-12 h-12 rounded-xl bg-white/5 border border-white/10 overflow-hidden flex-shrink-0 flex items-center justify-center">
                     {(l.cover_url || l.logo_url)
-                      ? <img src={l.cover_url || l.logo_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                      ? <img src={getOptimizedUrl(l.cover_url || l.logo_url, { width: 120 })} alt="" className="w-full h-full object-cover" loading="lazy" />
                       : <Building2 size={16} className="text-white/30" />}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -465,12 +465,12 @@ export default function ProfilePage() {
           { icon: Star,         label: 'Reviews',                               value: myStats.reviews,  action: () => navigate('/my-reviews') },
           { icon: BookMarked,   label: lang === 'mm' ? 'သိမ်းထားသော' : 'Saved',      value: myStats.bookmarks, action: () => navigate('/bookmarks') },
           { icon: Calendar,     label: lang === 'mm' ? 'RSVP' : 'RSVPs',       value: myStats.rsvps,    action: () => navigate('/my-rsvps') },
-        ].map(({ icon: Icon, label, value, action, highlight }) => (
+        ].map(({ icon: Icon, label, value, action }) => (
           action ? (
             <button key={label} onClick={action} className="card-dark p-3 rounded-2xl text-center hover:bg-white/8 transition-colors">
-              <Icon size={15} className={`mx-auto mb-1 ${highlight ? 'text-gold-400' : 'text-brand-300'}`} />
+              <Icon size={15} className="mx-auto mb-1 text-brand-300" />
               {/* Issue 3b (v9.17): "—" while loading, never a fake 0. */}
-              <p className={`font-display font-bold text-base ${highlight ? 'text-gold-400' : 'text-white'}`}>{statsLoading ? '—' : (value || 0).toLocaleString()}</p>
+              <p className="font-display font-bold text-base text-white">{statsLoading ? '—' : (value || 0).toLocaleString()}</p>
               {/* N9 (v9.17): labels 8px → 10px (were unreadably small). */}
               <p className="text-[10px] text-white/60">{label}</p>
             </button>

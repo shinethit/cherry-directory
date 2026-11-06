@@ -189,7 +189,10 @@ export default function MyRsvpsPage() {
             // Unknown dates are upcoming, never past (F-LOW-8).
             const isPast = eventEndMs(ev) !== null && eventEndMs(ev) < nowMs
             const isUnpublished = ev.status !== 'published'
-            const rsvpMeta = RSVP_STATUS[ev._rsvp] || RSVP_STATUS.interested
+            // RSV2 (v9.20): an unknown RSVP status used to collapse to
+            // "Interested" despite the comment above — show the raw
+            // status instead.
+            const rsvpMeta = RSVP_STATUS[ev._rsvp] || { mm: ev._rsvp || 'အခြား', en: ev._rsvp || 'Other', cls: 'bg-white/10 text-white/50 border-white/15', icon: Star }
             const RsvpIcon = rsvpMeta.icon
             return (
               <div key={ev.id} className={'card-dark rounded-2xl overflow-hidden ' + (isPast || isUnpublished ? 'opacity-60' : '')}>

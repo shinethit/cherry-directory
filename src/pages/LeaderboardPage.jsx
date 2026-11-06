@@ -10,6 +10,7 @@ import { useSEO } from '../hooks/useSEO'
 import { isOnline, timeAgo } from '../hooks/usePresence'
 import TierBadge from '../components/TierBadge'
 import { getTierProgress, POINT_ACTIONS } from '../lib/tiers'
+import { mmtParts } from '../lib/myanmarDate'
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -35,15 +36,18 @@ const RANK_GLOW = [
 // ── Helpers ───────────────────────────────────────────────────
 
 function periodLabel(id, lang) {
-  const now = new Date()
+  // LB2 (v9.20): MMT parts — the device-local date was a day behind
+  // Yangon after 17:30 UTC, so the "ဒီလ" label showed the wrong month.
+  const now = mmtParts(new Date().toISOString()) || { y: new Date().getFullYear(), m: new Date().getMonth() + 1 }
   const mmMonths = ['ဇန်','ဖေ','မတ်','ဧပြီ','မေ','ဇွန်','ဇူ','သြ','စက်','အောက်','နို','ဒီ']
+  const enMonths = ['January','February','March','April','May','June','July','August','September','October','November','December']
   if (id === 'month') {
     return lang === 'mm'
-      ? `${mmMonths[now.getMonth()]} ${now.getFullYear()} — ဒီလ`
-      : now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      ? `${mmMonths[now.m - 1]} ${now.y} — ဒီလ`
+      : `${enMonths[now.m - 1]} ${now.y}`
   }
   if (id === '6month') return lang === 'mm' ? 'ခြောက်လအတွင်း' : 'Last 6 months'
-  if (id === 'year')   return lang === 'mm' ? `${now.getFullYear()} ခုနှစ်` : `Year ${now.getFullYear()}`
+  if (id === 'year')   return lang === 'mm' ? `${now.y} ခုနှစ်` : `Year ${now.y}`
   return lang === 'mm' ? 'အချိန်ကာလ အားလုံး' : 'All time'
 }
 
@@ -206,7 +210,7 @@ export default function LeaderboardPage() {
   // Issue 4c (v9.17): useQuery — cached, so the board renders instantly
   // on revisit under VPN. v9.19: the board is deliberately NOT
   // prefetched — it is live data, fetched on demand here.
-  const { data: users = [], isLoading: loading, isError: loadFailed, error: loadErrObj, refetch: refetchBoard } = useQuery({
+  const { data: users = [], isLoading: loading, isFetching: boardFetching, isError: loadFailed, error: loadErrObj, refetch: refetchBoard } = useQuery({
     queryKey: ['leaderboard', period, tab],
     queryFn: async () => {
       const periodCfg = PERIODS.find(p => p.id === period)
@@ -268,7 +272,9 @@ export default function LeaderboardPage() {
 
   // S7 (v9.17): when the user is not in the top 100, count past their
   // own score and show the real rank instead of hiding the banner.
-  const { data: rankBeyond = null } = useQuery({
+  // LB2 (v9.20): the banner hides while either query is refetching —
+  // the cached rank from the previous period/tab used to show through.
+  const { data: rankBeyond = null, isFetching: rankFetching } = useQuery({
     queryKey: ['leaderboard-rank', period, tab, me?.id],
     queryFn: async () => {
       const orderCol = tab === 'points' ? 'period_points' : tab === 'reviews' ? 'period_reviews' : 'period_listings'
@@ -318,7 +324,7 @@ export default function LeaderboardPage() {
       </div>
 
       {/* ── My rank banner (if logged in and ranked) ── */}
-      {(myRank || rankBeyond) && !loading && profile && (
+      {(myRank || rankBeyond) && !loading && !boardFetching && !rankFetching && profile && (
         <div className="mx-4 mb-3 px-3 py-2.5 rounded-2xl bg-brand-600/15 border border-brand-400/25">
           <div className="flex items-center gap-2.5 mb-2">
             <Trophy size={14} className="text-brand-300 flex-shrink-0" />

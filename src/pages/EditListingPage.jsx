@@ -15,6 +15,8 @@ import LocationPicker from '../components/LocationPicker'
 import { showError, showSuccess } from '../lib/toast'
 import { validateListing, toLatinDigits } from '../lib/validation'
 import { draftKey, saveDraft, loadDraft, clearDraft, debounce } from '../lib/draftStorage'
+import { goBackOrHome } from '../lib/navigation'
+import { buildListingStatusUpdate } from '../lib/listingStatus'
 
 function Field({ label, children, required, error }) {
   return (
@@ -141,7 +143,14 @@ export default function EditListingPage() {
       if (draft?.form) {
         setForm(draft.form)
         setCategories([])
-        setCanEdit(true)
+        // E5 (v9.20): the server row (owner_id / submitted_by) failed to
+        // load and the draft records no author, so ownership cannot be
+        // checked here. Admins/moderators may edit any listing, so only
+        // they get the draft form; anyone else keeps the denial (with a
+        // Retry — see the !canEdit render below) until a reload proves
+        // ownership. The save itself is RLS-gated either way, but the UI
+        // must not grant edit access on an unchecked draft.
+        setCanEdit(isAdmin || isModerator)
         setDraftMode(true)
         setDraftRestored(true)
       } else {
@@ -407,7 +416,13 @@ export default function EditListingPage() {
     <div className="flex flex-col items-center justify-center min-h-[60dvh] px-8 text-center">
       <span className="text-4xl mb-4">🔒</span>
       <p className="text-white/60 font-myanmar">ဤလုပ်ငန်းကို ပြင်ဆင်ခွင့် မရှိပါ</p>
-      <button onClick={() => navigate(-1)} className="btn-ghost mt-4 text-sm">ပြန်သွားမည်</button>
+      {/* E5: in draftMode the denial may only mean ownership could not be
+          verified (server load failed) — offer a Retry that re-fetches
+          the row and decides properly, instead of a dead end. */}
+      {draftMode && (
+        <button onClick={() => load()} className="btn-primary mt-4 text-sm px-4 py-2">ပြန်ကြိုးစားမည်</button>
+      )}
+      <button onClick={() => goBackOrHome(navigate, '/directory')} className="btn-ghost mt-4 text-sm">ပြန်သွားမည်</button>
     </div>
   )
 
@@ -416,7 +431,7 @@ export default function EditListingPage() {
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-[#140020] sticky top-[var(--header-h)] z-40 border-b border-white/8">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+          <button onClick={() => goBackOrHome(navigate, '/directory')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center" aria-label="Back">
             <ArrowLeft size={18} className="text-white" />
           </button>
           <div>
@@ -582,6 +597,10 @@ export default function EditListingPage() {
                 }
                 return (
                   <optgroup key={parent.id} label={(parent.icon || '') + ' ' + (parent.name_mm || parent.name)}>
+                    {/* SB7/E9 (v9.20): the parent itself is selectable — a
+                        listing can be filed directly under a parent category,
+                        not only under its sub-categories. */}
+                    <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name} (အားလုံး)</option>
                     {subs.map(sub => (
                       <option key={sub.id} value={sub.id}>  {sub.icon} {sub.name_mm || sub.name}</option>
                     ))}
@@ -638,10 +657,13 @@ export default function EditListingPage() {
                     const newStatus = e.target.value
                     const prevStatus = original?.status
                     setOriginal(p => ({ ...p, status: newStatus }))
-                    const { error } = await supabase.from('listings').update({ status: newStatus }).eq('id', id)
+                    // E8 (v9.20): approve through the shared path — approving
+                    // here must do exactly what AdminPage handleApprove does
+                    // (status + Cherry verification), not status alone.
+                    const { error } = await supabase.from('listings').update(buildListingStatusUpdate(newStatus)).eq('id', id)
                     if (error) {
                       console.error('Status update failed:', error)
-                      showError(error.message || 'Status ပြောင်းမရပါ')
+                      showError('Status ပြောင်းမရပါ')
                       setOriginal(p => ({ ...p, status: prevStatus }))
                       setAdminFieldSaving(false)
                       return
@@ -703,6 +725,9 @@ export default function EditListingPage() {
           <div className="grid grid-cols-2 gap-3">
             <Field label="မြို့">
               <select value={form.city} onChange={e => set('city', e.target.value)} className="select-dark">
+                {/* E10 (v9.20): an empty option — a listing with no city
+                    used to render a blank select with no way back. */}
+                <option value="">— ရွေးပါ —</option>
                 {(config.cities || []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </Field>

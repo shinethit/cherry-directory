@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Search, CalendarDays, RefreshCw, Home, User, Briefcase, GraduationCap, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { PostCard, ListingCard, SectionHeader } from '../components/UI';
+import { useBookmarkedSet } from '../hooks/useBookmarksDB';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -57,6 +58,10 @@ export default function HomePage() {
   // --- Data states ---
   const [posts, setPosts] = useState([]);
   const [featured, setFeatured] = useState([]);
+  // UI4 (v9.20): one batched bookmark query per list instead of one
+  // per card.
+  const { data: featuredBookmarked } = useBookmarkedSet(featured.map(l => l.id))
+  const { data: postsBookmarked } = useBookmarkedSet(posts.map(p => p.id), 'post')
   const [homeCategories, setHomeCategories] = useState([]);
   const [allCategories, setAllCategories] = useState([]);
   const [selectedCat, setSelectedCat] = useState(null);
@@ -912,7 +917,7 @@ export default function HomePage() {
           {loading
             ? [1, 2, 3].map(n => <ShimmerSkeleton key={n} className="h-20" />)
             : featured.length > 0
-              ? featured.map(l => <ListingCard key={l.id} listing={l} compact />)
+              ? featured.map(l => <ListingCard key={l.id} listing={l} compact bookmarked={featuredBookmarked ? featuredBookmarked.has(l.id) : undefined} />)
               : <p className="text-white/50 text-sm font-myanmar text-center py-4">Featured လုပ်ငန်း မရှိသေးပါ</p>}
         </div>
       </div>
@@ -924,7 +929,7 @@ export default function HomePage() {
           {loading
             ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-48" />)
             : posts.length > 0
-              ? posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} />)
+              ? posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} bookmarked={postsBookmarked ? postsBookmarked.has(p.id) : undefined} />)
               : <p className="text-white/50 text-sm font-myanmar text-center py-4">သတင်း မရှိသေးပါ</p>}
         </div>
       </div>

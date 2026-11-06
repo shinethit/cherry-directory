@@ -9,6 +9,7 @@ import { usePoints } from '../hooks/usePoints'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
 import { formatMMTTime } from '../lib/myanmarDate'
+import { buildOptimisticMessage, appendMessageDedup } from '../lib/chatMessages'
 
 // Guest names that impersonate staff or the app itself are blocked.
 const RESERVED_GUEST_NAME = /admin|moderator|staff|cherry/i
@@ -127,10 +128,18 @@ export default function ChatPage() {
   const [editingRoom, setEditingRoom] = useState(null)
   const [roomError, setRoomError] = useState('')
   const [roomsError, setRoomsError] = useState(false)
+  // C2 (v9.20): rooms still loading — without this the empty state
+  // ("Chat room မရှိသေးပါ") flashed while the query was in flight.
+  const [roomsLoading, setRoomsLoading] = useState(true)
+  // C1 (v9.20): message-load error state + retry (was console.error only
+  // — a failed load showed a silent empty room).
+  const [messagesError, setMessagesError] = useState(false)
+  const [messagesRetryTick, setMessagesRetryTick] = useState(0)
 
   // Load rooms
   const loadRooms = async () => {
     setRoomsError(false)
+    setRoomsLoading(true)
     try {
       // chat_rooms has no sort_order column — order by created_at.
       // 30 s timeout (was none): a hung query left the room list
@@ -152,6 +161,8 @@ export default function ChatPage() {
       console.error('loadRooms error:', err?.message || err)
       setRoomsError(true)
       showError('Rooms ရယူရာတွင် အမှားရှိသည်: ' + err.message)
+    } finally {
+      setRoomsLoading(false)
     }
   }
 
@@ -169,6 +180,7 @@ export default function ChatPage() {
     // Initial load — fetch the NEWEST 100, then reverse for display
     // (oldest-first order + limit(100) used to return the oldest 100).
     const loadMessages = async () => {
+      setMessagesError(false)
       try {
         // 30 s timeout (was none): a hung query left the room showing
         // no messages with no error; realtime still delivers new ones.
@@ -198,6 +210,8 @@ export default function ChatPage() {
         }
       } catch (err) {
         console.error('loadMessages error:', err?.message || err)
+        // C1: surface the failure with a retry instead of a silent empty room.
+        if (isSubscribed) setMessagesError(true)
       }
     }
     loadMessages()
@@ -229,7 +243,10 @@ export default function ChatPage() {
             .eq('id', payload.new.id)
             .single()
           if (!error && newMsg && isSubscribed) {
-            setMessages(prev => [...prev, newMsg])
+            // Dedupe by id: the sender's optimistic append (v9.20, D1)
+            // already added this message locally; the realtime echo
+            // must not create a second copy.
+            setMessages(prev => appendMessageDedup(prev, newMsg))
             if (newMsg.reply_to) {
               const { data: quoted } = await supabase
                 .from('chat_messages')
@@ -263,7 +280,7 @@ export default function ChatPage() {
       isSubscribed = false
       if (channel) supabase.removeChannel(channel)
     }
-  }, [activeRoom])
+  }, [activeRoom, messagesRetryTick])
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -305,6 +322,25 @@ export default function ChatPage() {
       const { data: inserted, error } = await supabase.from('chat_messages').insert(messageToSend).select('id').single()
       if (error) throw error
       if (!isLoggedIn) rememberGuestMessage(inserted?.id)
+      // v9.20 (D1): optimistic local append AFTER the insert succeeds —
+      // on the live/proxied origin there is no realtime event and the
+      // next poll is up to 20 s away, so without this the sender waited
+      // up to 20 s to see their own message. A failed insert never
+      // reaches here, so no phantom message can appear. The later poll
+      // does a full setMessages(rows) replace and the realtime handler
+      // dedupes by id, so this row is never duplicated.
+      if (inserted?.id) {
+        setMessages(prev => appendMessageDedup(prev, buildOptimisticMessage({
+          id: inserted.id,
+          messageToSend,
+          profile,
+        })))
+        // If this was a reply, seed the quoted message immediately so
+        // the quote renders at once (the poll fills replyMap later).
+        if (replyTo) {
+          setReplyMap(prev => ({ ...prev, [replyTo.id]: replyTo }))
+        }
+      }
       // Clear the input ONLY after a successful insert — clearing first
       // loses the typed message forever when offline.
       setInput('')
@@ -537,7 +573,14 @@ export default function ChatPage() {
       <div className="flex items-center justify-center h-[80dvh] p-4 text-center">
         <div className="card-dark p-6 rounded-2xl max-w-sm">
           <span className="text-4xl mb-3 block">💬</span>
-          {roomsError ? (
+          {/* C2: while rooms are still loading, show a spinner — not the
+              "no rooms yet" empty state. */}
+          {roomsLoading ? (
+            <div className="flex flex-col items-center">
+              <div className="w-8 h-8 border-2 border-brand-400 border-t-transparent rounded-full animate-spin mb-3" />
+              <p className="text-white/60 font-myanmar">တင်နေသည်...</p>
+            </div>
+          ) : roomsError ? (
             <>
               <p className="text-red-400 font-myanmar mb-3">တင်မရပါ — ပြန်ကြိုးစားမည်</p>
               <button onClick={loadRooms} className="btn-primary text-sm px-4 py-3 min-h-[44px]">ပြန်ကြိုးစားမည်</button>
@@ -560,7 +603,7 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-var(--header-h)-5rem)]">
+    <div className="flex flex-col h-[calc(100dvh-var(--header-h)-var(--nav-h)-env(safe-area-inset-bottom))]">
       {/* Room tabs header */}
       <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/8">
         <div className="flex items-center justify-between px-4 py-2">
@@ -593,6 +636,13 @@ export default function ChatPage() {
 
       {/* Messages container */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-0">
+        {/* C1: a failed message load shows a banner + Retry, not a silent empty room. */}
+        {messagesError && (
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30 mb-3">
+            <p className="text-sm text-red-400 font-myanmar">မက်ဆေ့များ တင်ရာတွင် အမှားရှိသည်</p>
+            <button onClick={() => setMessagesRetryTick(t => t + 1)} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
+        )}
         {messages.map(msg => (
           <ChatBubble
             key={msg.id}
@@ -619,8 +669,10 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* Input area */}
-      <div className="px-4 pt-3 pb-4 border-t border-white/8 sticky bottom-[5rem] bg-[#140020]" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+      {/* Input area — v9.20: sticky bottom + container height both derive
+          from --nav-h (was a hard-coded 5rem that ignored safe-area, so on
+          iPhone the bottom ~30px of the composer slid under the nav). */}
+      <div className="px-4 pt-3 pb-4 border-t border-white/8 sticky bg-[#140020]" style={{ bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom))', paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
         {!isLoggedIn && guestName && (
           <p className="text-[10px] text-white/60 mb-1.5">
             Guest: {guestName} •{' '}

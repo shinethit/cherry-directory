@@ -43,19 +43,22 @@ export default function VisitorsPage() {
   useSEO({ title: lang === 'mm' ? 'လာကြည့်သူများ' : 'Visitors' })
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [statsError, setStatsError] = useState(false)
 
   // Issue 4c (v9.17): useQuery ['visit-stats'] (same fetcher as the
   // prefetch runner), so the stats render from cache instantly on
-  // revisit under VPN. An RPC failure (migration not run yet) leaves
-  // stats null and the page shows "—" as before.
-  const { data: statsData, isLoading: statsQueryLoading } = useQuery({
+  // revisit under VPN.
+  // V1 (v9.20): the query error was ignored (isError unused) — an RPC
+  // failure was indistinguishable from "no data yet" and had no retry.
+  const { data: statsData, isLoading: statsQueryLoading, isError: statsQueryError, refetch: refetchStats } = useQuery({
     queryKey: ['visit-stats'],
     queryFn: fetchVisitStats,
   })
   useEffect(() => {
-    if (statsData) setStats(statsData)
+    if (statsData) { setStats(statsData); setStatsError(false) }
+    if (statsQueryError) setStatsError(true)
     setLoading(statsQueryLoading)
-  }, [statsData, statsQueryLoading])
+  }, [statsData, statsQueryLoading, statsQueryError])
 
   const total = Number(stats?.total) || 0
   const pct = devicePercentages(stats?.by_device, total)
@@ -85,11 +88,20 @@ export default function VisitorsPage() {
         </div>
       </div>
 
-      {stats === null && !loading && (
+      {stats === null && !loading && statsError && (
+        <div className="px-4 mb-4">
+          <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+            <p className="text-sm text-red-400 font-myanmar">လာကြည့်သူ Data ရယူမရပါ</p>
+            <button onClick={() => { setStatsError(false); refetchStats() }} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
+        </div>
+      )}
+
+      {stats === null && !loading && !statsError && (
         <div className="px-4 mb-4">
           <div className="card-dark rounded-2xl p-4 text-center">
             <p className="text-sm text-white/60 font-myanmar">
-              {lang === 'mm' ? 'လာကြည့်သူ Data မရှိသေးပါ — 9.12 migration run ပြီးမှ ပေါ်မည်' : 'No visitor data yet — it appears after the 9.12 migration runs'}
+              {lang === 'mm' ? 'လာကြည့်သူ Data မရှိသေးပါ' : 'No visitor data yet'}
             </p>
           </div>
         </div>

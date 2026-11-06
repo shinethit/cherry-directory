@@ -83,11 +83,11 @@ function ContactCard({ contact, lang, isMod, onEdit, onDelete }) {
         {isMod && (
           <div className="flex gap-1 flex-shrink-0">
             <button onClick={() => onEdit(contact)}
-              className="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
+              className="min-w-[44px] min-h-[44px] rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/12 transition-colors">
               <Pencil size={11} className="text-white/50" />
             </button>
             <button onClick={() => onDelete(contact.id)}
-              className="w-7 h-7 rounded-lg btn-danger flex items-center justify-center transition-colors">
+              className="min-w-[44px] min-h-[44px] rounded-lg btn-danger flex items-center justify-center transition-colors">
               <Trash2 size={11} className="text-white" />
             </button>
           </div>
@@ -269,9 +269,9 @@ export default function EmergencyPage() {
   })
   useEffect(() => {
     if (contactsData) setContacts(contactsData)
-    setLoading(contactsQueryLoading || contactsQueryFetching)
+    setLoading(contactsQueryLoading)
     setLoadError(contactsQueryError)
-  }, [contactsData, contactsQueryLoading, contactsQueryFetching, contactsQueryError])
+  }, [contactsData, contactsQueryLoading, contactsQueryError])
 
 
   async function handleDelete(id) {

@@ -73,7 +73,9 @@ function CopyButton({ value, label, lang }) {
   const shown = maskPhone(value, isLoggedIn)
   async function handleCopy(e) {
     e.stopPropagation()
-    if (!isLoggedIn) return
+    // CopyButton (v9.20): a guest tap used to do nothing silently —
+    // say why instead of leaving them wondering.
+    if (!isLoggedIn) { showError(lang === 'mm' ? 'Login ဝင်မှ ကူးယူနိုင်မည်' : 'Log in to copy'); return }
     try {
       await navigator.clipboard.writeText(value)
       setCopied(true)
@@ -764,7 +766,9 @@ export function HealthServicePage() {
     try {
       // S22 (v9.17): hide past services — a service is past when its
       // end_date is before today, or (no end_date) its start_date is.
-      const todayStr = new Date().toISOString().slice(0, 10)
+      // H-B3 (v9.20): yangonToday() — the UTC date was a day behind
+      // Yangon after 18:30 UTC, hiding today's services.
+      const todayStr = yangonToday()
       let q = supabase.from('health_services').select('*').eq('status', 'active').or(`end_date.gte.${todayStr},and(end_date.is.null,start_date.gte.${todayStr}),and(end_date.is.null,start_date.is.null)`).order('is_urgent', { ascending: false }).order('posted_at', { ascending: false }).limit(healthLimit)
       if (typeFilter !== 'all') q = q.eq('type', typeFilter)
       // 30 s timeout (was none): a hung query left the skeletons up forever.
@@ -926,13 +930,17 @@ export function BusSchedulePage() {
   const [submitting, setSubmitting] = useState(false)
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
 
+  // B1 (v9.20): withTimeout — a hung routes query used to leave the
+  // route filter empty forever with no error.
   async function loadRoutes() {
     setRoutesError(false)
-    const { data, error } = await supabase.from('bus_routes').select('*').eq('is_active', true).order('sort_order', { ascending: true })
-    // S24 (v9.17): a failed routes load used to fail silently, leaving
-    // the filter empty with no retry.
-    if (error) { console.warn(error); setRoutesError(true); return }
-    setRoutes(data || [])
+    try {
+      const { data, error } = await withTimeout(supabase.from('bus_routes').select('*').eq('is_active', true).order('sort_order', { ascending: true }), 30000, 'Bus routes')
+      // S24 (v9.17): a failed routes load used to fail silently, leaving
+      // the filter empty with no retry.
+      if (error) throw error
+      setRoutes(data || [])
+    } catch (e) { console.warn(e); setRoutesError(true) }
   }
 
   async function load() {
@@ -1209,12 +1217,17 @@ export function ToursPage() {
   // E3: guide contact lives on tour_guides (public select, status =
   // 'active') — packages only carry guide_id, usually null. Join here
   // client-side; no guide picker is invented.
+  // B1 (v9.20): withTimeout — a hung guides query used to never settle.
+  // Guides are per-card enrichment (the tour list has its own error
+  // state), so a failure still only logs; the query now settles.
   async function loadGuides() {
-    const { data, error } = await supabase.from('tour_guides').select('id, name, name_mm, phone, facebook').eq('status', 'active')
-    if (error) { console.warn('Load guides error:', error); return }
-    const map = {}
-    ;(data || []).forEach(g => { map[g.id] = g })
-    setGuides(map)
+    try {
+      const { data, error } = await withTimeout(supabase.from('tour_guides').select('id, name, name_mm, phone, facebook').eq('status', 'active'), 30000, 'Tour guides')
+      if (error) { console.warn('Load guides error:', error); return }
+      const map = {}
+      ;(data || []).forEach(g => { map[g.id] = g })
+      setGuides(map)
+    } catch (e) { console.warn('Load guides error:', e) }
   }
 
   async function load() {

@@ -149,3 +149,23 @@ describe('prefetch writes the offline cache (v9.17 Issue 5)', () => {
     expect(panelSrc).toContain('ပြန်သိမ်းမည်')
   })
 })
+
+describe('fetchMarketPrices shape (v9.20 M-SHAPE)', () => {
+  it('returns { prices, recent } — the shape MarketPricePage reads, never a bare array', async () => {
+    const { fetchMarketPrices } = await import('./prefetch')
+    const out = await fetchMarketPrices()
+    // A bare array made setPrices(undefined) crash prices.filter(...) at render.
+    expect(Array.isArray(out)).toBe(false)
+    expect(out.prices).toEqual([{ item_id: 'i1', price: 1000 }])
+    expect(out.recent).toEqual([])
+  })
+
+  it('MarketPricePage guards the effect with || [] so prices.filter never sees undefined', () => {
+    const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'pages')
+    const src = readFileSync(join(root, 'MarketPricePage.jsx'), 'utf8')
+    expect(src).toContain('setPrices(marketData.prices || [])')
+    expect(src).toContain('setRecent(marketData.recent || [])')
+    expect(src).not.toContain('onAdded={load}')
+    expect(src).toContain('onAdded={() => refetchPrices()}')
+  })
+})

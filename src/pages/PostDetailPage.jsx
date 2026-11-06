@@ -17,7 +17,20 @@ import Thumbnails from 'yet-another-react-lightbox/plugins/thumbnails'
 import 'yet-another-react-lightbox/plugins/thumbnails.css'
 import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
-import { formatMyanmarDate, formatMyanmarDateTime } from '../lib/myanmarDate'
+import { formatMyanmarDate, formatMyanmarDateTime, mmtParts } from '../lib/myanmarDate'
+
+// PD1 (v9.20): is an event end/start in the past in Myanmar wall-clock
+// time? (mmtParts converts to Asia/Rangoon parts.)
+function mmtIsPast(iso) {
+  const p = mmtParts(iso)
+  const now = mmtParts(new Date().toISOString())
+  if (!p || !now) return false
+  if (p.y !== now.y) return p.y < now.y
+  if (p.m !== now.m) return p.m < now.m
+  if (p.d !== now.d) return p.d < now.d
+  if (p.hh !== now.hh) return p.hh < now.hh
+  return p.mm < now.mm
+}
 
 // Inline RSVP — a normal sync component (React 19 async components are not
 // relied on here).
@@ -33,10 +46,12 @@ function RsvpSection({ postId }) {
   useEffect(() => {
     async function load() {
       try {
-        const [{ data: all }, { data: mine }] = await Promise.all([
+        // K1 (v9.20): withTimeout, like CalendarPage's RsvpButton — a hung
+        // query used to leave the counts at 0 silently forever.
+        const [{ data: all }, { data: mine }] = await withTimeout(Promise.all([
           supabase.from('event_rsvps').select('status').eq('post_id', postId),
           user ? supabase.from('event_rsvps').select('status').eq('post_id', postId).eq('user_id', user.id).maybeSingle() : Promise.resolve({ data: null }),
-        ])
+        ]), 30000, 'RSVP counts')
         const c = { going: 0, interested: 0 }
         ;(all || []).forEach(r => { if (r.status in c) c[r.status]++ })
         setCounts(c)
@@ -266,7 +281,10 @@ export default function PostDetailPage() {
         )}
 
         {/* RSVP — events only */}
-        {post.type === 'event' && new Date(post.event_end || post.event_start) >= new Date() && (
+        {/* PD1 (v9.20): compare MMT wall-clock parts, not device-local
+            Dates — near midnight a device in another timezone hid the
+            RSVP buttons for an event that was still open in Yangon. */}
+        {post.type === 'event' && !mmtIsPast(post.event_end || post.event_start) && (
           <RsvpSection postId={id} />
         )}
 

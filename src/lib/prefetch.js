@@ -97,9 +97,22 @@ export async function fetchEmergencyContacts() {
 }
 
 export async function fetchMarketPrices() {
-  const { data, error } = await withTimeout(supabase.from('current_prices').select('*'), 30000, 'Market prices')
+  // M-SHAPE (v9.20): this used to return a bare ARRAY of current_prices
+  // rows, but MarketPricePage reads marketData.prices / marketData.recent
+  // — setPrices(undefined) then crashed prices.filter(...) at render.
+  // The fetcher now returns the { prices, recent } shape the page
+  // expects (recent = latest verified price_reports with item + reporter
+  // joins, as the Recent Reports section renders them).
+  const { data: prices, error } = await withTimeout(supabase.from('current_prices').select('*'), 30000, 'Market prices')
   if (error) throw error
-  return data || []
+  const { data: recent, error: recentError } = await withTimeout(supabase
+    .from('price_reports')
+    .select('id, price, reported_at, item:price_items(icon, name, name_en), reporter:profiles(nickname)')
+    .eq('is_verified', true)
+    .order('reported_at', { ascending: false })
+    .limit(8), 30000, 'Recent price reports')
+  if (recentError) throw recentError
+  return { prices: prices || [], recent: recent || [] }
 }
 
 // News: published posts (first page) + pinned, same shape as NewsPage.load.

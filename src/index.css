@@ -10,6 +10,13 @@
 /* iOS safe-area + global header height (below fixed Header) */
 :root {
   --header-h: calc(4.25rem + env(safe-area-inset-top));
+  /* v9.20: single source of truth for the bottom-nav height (excludes the
+     iOS home-indicator safe-area, which callers add separately). The nav
+     is fixed to this height in BottomNav.jsx, and the FABs, Chat composer
+     and floating banners all derive their bottom offsets from it — the
+     old hard-coded 5rem assumed a ~74px nav and broke whenever the real
+     nav grew (wrapped labels) or safe-area applied. */
+  --nav-h: 5rem;
 }
 @tailwind base;
 @tailwind components;

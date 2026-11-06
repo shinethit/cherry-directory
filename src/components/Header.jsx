@@ -6,6 +6,7 @@ import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useUnreadNotificationCount, useNotificationSubscription } from '../hooks/useNotifications'
 import { safeGet, safeSet } from '../lib/safeStorage'
+import { goBackOrHome } from '../lib/navigation'
 import { APP_VERSION } from '../lib/appVersion'
 // Main navigation pages — no back button needed
 const MAIN_NAV_PATHS = ['/', '/directory', '/community', '/calendar', '/profile']
@@ -23,6 +24,15 @@ export default function Header() {
   useNotificationSubscription()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
+
+  // v9.20: lock body scroll while the drawer is open — the drawer is its
+  // own overflow-y-auto sheet, and the page behind it must not scroll.
+  useEffect(() => {
+    if (!menuOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [menuOpen])
   // Show back button on all pages except main nav pages
   const showBack = !MAIN_NAV_PATHS.includes(location.pathname)
 
@@ -67,12 +77,10 @@ export default function Header() {
   }
 
   function handleBack() {
-    // If there's history to go back to, use it. Otherwise go home.
-    if (window.history.length > 1) {
-      navigate(-1)
-    } else {
-      navigate('/')
-    }
+    // HD1 (v9.20): shared goBackOrHome — a raw history.length check can
+    // eject a deep-link visitor out of the app (history counts external
+    // sites); the shared helper falls back to home instead.
+    goBackOrHome(navigate, '/')
   }
 
   const handleLogout = async () => {
@@ -202,14 +210,38 @@ export default function Header() {
         </div>
       </header>
 
-      {/* Menu Modal – adjusted top padding */}
+      {/* Menu Modal (drawer) — v9.20: a true full-screen sheet ABOVE all
+          page chrome (z-[60] > fixed app header z-50, FABs z-50, AdminPage
+          sticky z-50, every z-40 sticky sub-header). Previously z-40 tied
+          with the sticky category headers and lost to them in DOM order,
+          so the first menu item was half-clipped under the purple header.
+          Top padding is safe-area only now (the sheet covers the app
+          header too, so the old 4rem offset is gone) and the drawer has
+          its OWN close button, since the header's X sits underneath it. */}
       {menuOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-md overflow-y-auto"
-          style={{ paddingTop: 'calc(4rem + env(safe-area-inset-top))' }}
+          className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md overflow-y-auto"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
           onClick={() => setMenuOpen(false)}
         >
-          <div className="p-4 space-y-2" onClick={e => e.stopPropagation()}>
+          <div
+            className="p-4 space-y-2"
+            style={{ paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* v9.20: drawer header row with its own close button — the
+                fixed app header (and its X) is covered by this sheet. */}
+            <div className="flex items-center justify-between px-1 pb-1">
+              <p className="font-display font-bold text-base text-white">မီနူး</p>
+              <button
+                onClick={() => setMenuOpen(false)}
+                className="w-11 h-11 shrink-0 rounded-lg bg-white/8 flex items-center justify-center"
+                aria-label="မီနူး ပိတ်မည်"
+                title="မီနူး ပိတ်မည်"
+              >
+                <X size={20} className="text-white" />
+              </button>
+            </div>
             {isLoggedIn && profile && (
               <div className="card-dark p-4 rounded-2xl mb-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-brand-700 flex items-center justify-center overflow-hidden">
@@ -306,6 +338,7 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
+                { v: '9.20', date: '2026-11-05', items: ['မီနူး ဖွင့်ချိန် ပထမဆုံး အရာ Header အောက်မှာ ညှပ်မနေတော့ခြင်း — မီနူးက စာမျက်နှာ အပေါ်မှာ အပြည့်ပေါ်မည်', 'floating ခလုတ်များ (+ တင်မည် / Admin) အောက်ခြေ Nav ကို မဖုံးတော့ခြင်း', 'Chat စာရိုက်တဲ့ နေရာ အောက်ခြေ Nav အောက်မှာ မဝင်တော့ခြင်း', 'Update / Install banner တွေ floating ခလုတ်တွေကို မဖုံးတော့ခြင်း', 'မြန်မာလို ရှာတာ ရတော့မည် — Zawgyi နဲ့ သိမ်းထားတဲ့ လုပ်ငန်းအမည်တွေလည်း Unicode နဲ့ ရှာလို့ ရပြီ; အမျိုးအစား အမည်နဲ့ ရှာရင်လည်း ထိုအမျိုးအစားက လုပ်ငန်းတွေ ပေါ်မည်', 'မရှိတော့တဲ့ လုပ်ငန်းကို Admin က ဖျက်နိုင်ပြီ — လုပ်ငန်း စာမျက်နှာနဲ့ Admin Panel မှာ ဖျက်ရန် ခလုတ် ပါပြီ (Admin သာ; 9.20 SQL run ရမည်)', 'Chat ပို့လိုက်တဲ့ မက်ဆေ့ ချက်ချင်း ပေါ်မည် — အရင် ၂၀ စက္ကန့်ထိ စောင့်စရာ မလိုတော့ပါ', 'စာမျက်နှာ အပြည့်အဝ စစ်ဆေးမှု — ဈေးနှုန်း စာမျက်နှာ ဖွင့်ချိန် ပျက်နေတာ၊ Featured လုပ်ငန်းများ မပေါ်တာ၊ Audit Log ကြည့်ရန် မရှိတာ၊ မြန်မာလိုသာ ခေါင်းစဉ်ရှိတဲ့ Event သိမ်းမရတာ စတဲ့ ပြဿနာများ ပြင်ပြီး (စုစုပေါင်း ၆၀ ကျော်)'] },
                 { v: '9.19', date: '2026-11-05', items: ['Leaderboard မြန်လာခြင်း — SQL ပြင်ခြင်း (9.19 SQL run ရမည်; 9.18 SQL ပြန် run မလုပ်ပါနှင့်)', 'Edit လုပ်ချိန် "ပြင်ဆင်ခွင့် မရှိပါ" message လုံးဝ မပေါ်တော့ခြင်း — Profile တင်နေချိန် Loading သာ ပြမည်', 'သိမ်းပြီး လုပ်ငန်း စာမျက်နှာကို ချက်ချင်း ရောက်ခြင်း — Loading ပြန်မပေါ်တော့ပါ', 'Search ရလဒ် တစ်ခုချင်းစီ တန်းပေါ်လာခြင်း — အစောဆုံး ရလဒ် မြန်မြန် ပေါ်မည်', 'ခပ်သိမ်း / အကုန် → အားလုံး — စာသား တစ်မျိုးတည်း ဖြစ်အောင် ပြင်ခြင်း', 'Loading တွေ နေရာတကာ မပေါ်တော့ခြင်း — data ကို background မှာ ကြိုဆွဲထားမည် (သိမ်းထားတာ ရှိရင် ချက်ချင်း ပေါ်မည်)'] },
                 { v: '9.18', date: '2026-11-05', items: ['ရှာဖွေမှု ပြင်ခြင်း — "upper" လို ရှာရင် လုပ်ငန်း တန်းပေါ်မည် (အကြီးအသေး မခွဲ၊ စာလုံးအစိတ်အပိုင်း တူရင် ရ; စကားလုံး နှစ်လုံး ရှာလည်း ရ)', 'Leaderboard + Notifications ပြင်ခြင်း — 9.17 SQL run မအောင်လို့ 9.18 SQL အသစ် run ရမည် (9.17 SQL ပြန် run မလုပ်ပါနှင့်)', 'WebSocket error တွေ ပျောက် — Live update မရတဲ့ နေရာမှာ တိတ်တိတ်လေး ပြန်တင်မည် (Chat က ၂၀ စက္ကန့်တစ်ကြိမ် ပြန်စစ်မည်)', 'Profile တင်တာ ပိုခိုင်မာ — လိုင်းနှေးလည်း "Profile ရယူမရပါ" error မပြတော့ပါ', 'လိုင်းမငြိမ်ချိန် Search ဖွင့်ရင် 503 မပြတော့ပါ'] },
                 { v: '9.17', date: '2026-11-05', items: ['လုပ်ငန်းအမည် — မြန်မာ သို့မဟုတ် English တစ်ခု ရှိရင် ရပြီ (နှစ်ခုလုံး မလိုတော့ပါ)', 'Edit လုပ်နေရင်း App ပြောင်းသွားလည်း မသိမ်းရသေး draft ပြန်ရမည်', 'Offline cache အမှန်တကယ် သိမ်းတော့မည် — VPN ဖွင့်/ပိတ်လည်း စာမျက်နှာများ ချက်ချင်း ပေါ်မည်', 'အမှတ်မှတ်တမ်း အသစ် (Points စာမျက်နှာ) + Profile / Points / Leaderboard အမှတ် ညီတော့မည် — ဒီလ အမှတ်နဲ့ စုစုပေါင်း အမှတ် ခွဲပြ၊ Bulk Import အမှတ်လည်း ပုံမှန်အတိုင်း ရမည်', 'Leaderboard Tier / အဆင့် ရေတွက်မှု ပြင်ခြင်း — ကာလ အမှတ်နဲ့ စုစုပေါင်း အမှတ် နှစ်ခုလုံး ပြ', 'Admin / စာရင်း / အလုပ်အကိုင် / ဆီဆိုင် / ဈေးနှုန်း စစ်ဆေးချက် အများအပြား ပြင်ခြင်း (SQL run ရမည်)'] },

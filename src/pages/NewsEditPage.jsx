@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save, Trash2, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { withTimeout } from '../lib/withTimeout'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useSEO } from '../hooks/useSEO'
@@ -41,6 +42,7 @@ export default function NewsEditPage() {
   const isEdit = !!id
   const [original, setOriginal] = useState(null)
   const [categories, setCategories] = useState([])
+  const [catError, setCatError] = useState(false)
   const [form, setForm] = useState(BLANK)
   const [coverUploading, setCoverUploading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -48,15 +50,31 @@ export default function NewsEditPage() {
   const [canEdit, setCanEdit] = useState(false)
   const [checked, setChecked] = useState(false)
 
+  // EF5 (v9.20): the post-save navigate timer must not fire after the
+  // user navigated away — cleared on unmount.
+  const saveTimerRef = useRef(null)
+  useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }, [])
+
+  // EF4 (v9.20): the categories query used to hang silently (no timeout,
+  // no error) leaving the category select empty. withTimeout + error
+  // state + retry.
+  async function loadCategories() {
+    setCatError(false)
+    try {
+      const { data, error } = await withTimeout(supabase.from('categories').select('*').eq('type', 'news'), 30000, 'News categories')
+      if (error) throw error
+      setCategories(data || [])
+    } catch (e) {
+      console.warn('News categories error:', e)
+      setCatError(true)
+    }
+  }
+
   useEffect(() => {
     // M2 (v9.17): wait for auth to load — redirecting before it is known
     // would bounce a legitimate admin/mod to /login (EventFormPage guard).
     if (authLoading) return
-    supabase
-      .from('categories')
-      .select('*')
-      .eq('type', 'news')
-      .then(({ data }) => setCategories(data || []))
+    loadCategories()
 
     if (isEdit) {
       supabase.from('posts').select('*').eq('id', id).single().then(({ data }) => {
@@ -140,7 +158,7 @@ export default function NewsEditPage() {
     setSaved(true)
     setSaving(false)
     showSuccess('✓ သိမ်းပြီးပါပြီ')
-    setTimeout(() => navigate('/news'), 1000)
+    saveTimerRef.current = setTimeout(() => navigate('/news'), 1000)
   }
 
   async function handleDelete() {
@@ -271,6 +289,9 @@ export default function NewsEditPage() {
                   <option key={c.id} value={c.id}>{c.icon} {c.name_mm || c.name}</option>
                 ))}
               </select>
+              {catError && (
+                <p className="text-xs text-red-400 mt-1 font-myanmar">Category တင်မရပါ — <button type="button" onClick={loadCategories} className="underline text-brand-300">ပြန်ကြိုးစားမည်</button></p>
+              )}
             </Field>
             <Field label="Status">
               <select value={form.status} onChange={e => set('status', e.target.value)} className="select-dark">

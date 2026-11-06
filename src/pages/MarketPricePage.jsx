@@ -479,7 +479,7 @@ function PriceRow({ item, lang, onReport, onEdit, onDelete, onVerify, isAdmin })
         {/* Price */}
         <td className="py-3 px-1 text-right">
           {hasData ? (
-            <p className="font-display font-bold text-sm text-white">{Number(item.median_price).toLocaleString()}</p>
+            <p className="font-display font-bold text-sm text-white tabular-nums truncate">{Number(item.median_price).toLocaleString()}</p>
           ) : (
             <button onClick={() => onReport(item)} className="text-[10px] text-brand-300 font-semibold whitespace-nowrap">{lang === 'mm' ? 'တင်ပါ' : 'Report'}</button>
           )}
@@ -612,7 +612,9 @@ export default function MarketPricePage() {
   })
   useEffect(() => {
     if (marketData) {
-      setPrices(marketData.prices)
+      // M-SHAPE guard: prices/recent always arrays, never undefined —
+      // prices.filter(...) at render must never see undefined.
+      setPrices(marketData.prices || [])
       // "Updated … ago" comes from the data's own latest timestamp, never
       // from page-load time.
       const latest = (marketData.prices || [])
@@ -621,7 +623,7 @@ export default function MarketPricePage() {
         .sort()
         .pop()
       setLast(latest ? new Date(latest) : null)
-      setRecent(marketData.recent)
+      setRecent(marketData.recent || [])
     }
     setLoading(marketQueryLoading)
     setLoadError(marketQueryError)
@@ -828,7 +830,7 @@ export default function MarketPricePage() {
                           <div className="h-px flex-1 bg-white/8" />
                         </div>
                       )}
-                      <div className="card-dark rounded-2xl overflow-hidden overflow-x-auto">
+                      <div className="card-dark rounded-2xl overflow-x-auto">
                         <table className="w-full table-fixed">
                           <colgroup>
                             <col className="w-[34%]" /><col className="w-[20%]" /><col className="w-[12%]" /><col className="w-[20%]" /><col className="w-[14%]" />
@@ -897,7 +899,7 @@ export default function MarketPricePage() {
                 <span className="text-white/60">{r.reporter?.nickname ? `@${r.reporter.nickname}` : 'Guest'}</span>
                 <span className="text-white/60">{timeAgoShort(r.reported_at, lang)}</span>
                 {isModerator && (
-                  <button onClick={async () => { if (!(await confirmDialog(lang === 'mm' ? 'ဒီ Report ကို ဖျက်မည်လား?' : 'Delete this report?', { danger: true }))) return; const { error } = await supabase.from('price_reports').delete().eq('id', r.id); if (error) { showError(error.message); return } refetchPrices() }} className="w-5 h-5 flex items-center justify-center hover:text-red-400 transition-colors">
+                  <button onClick={async () => { if (!(await confirmDialog(lang === 'mm' ? 'ဒီ Report ကို ဖျက်မည်လား?' : 'Delete this report?', { danger: true }))) return; const { error } = await supabase.from('price_reports').delete().eq('id', r.id); if (error) { console.error('Delete price report error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed'); return } refetchPrices() }} className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center hover:text-red-400 transition-colors" aria-label={lang === 'mm' ? 'Report ဖျက်မည်' : 'Delete report'}>
                     <Trash2 size={10} />
                   </button>
                 )}
@@ -917,7 +919,7 @@ export default function MarketPricePage() {
       </div>
 
       {reportTarget && <ReportModal item={reportTarget} lang={lang} markets={markets} fuelStations={fuelStations} outlier={outlier} onConfirmOutlier={() => outlier && handleSubmitReport({ ...outlier, force: true })} onCancelOutlier={() => setOutlier(null)} onClose={() => { setReport(null); setOutlier(null) }} onSubmit={handleSubmitReport} />}
-      {showAddItem && <AddItemModal lang={lang} onClose={() => setShowAdd(false)} onAdded={load} />}
+      {showAddItem && <AddItemModal lang={lang} onClose={() => setShowAdd(false)} onAdded={() => refetchPrices()} />}
       {showManageMarkets && (
         <ManageMarketsModal
           lang={lang}
@@ -940,11 +942,11 @@ export default function MarketPricePage() {
       )}
 
       {toast && (
-        <div className={`fixed bottom-28 left-4 right-4 max-w-lg mx-auto z-[300] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl font-myanmar text-sm ${
+        <div className={`fixed left-4 right-4 max-w-lg mx-auto z-[300] flex items-center gap-2 px-4 py-3 rounded-2xl shadow-xl font-myanmar text-sm ${
           toast.type === 'ok'   ? 'bg-green-500/20 border border-green-500/40 text-green-300' :
           toast.type === 'warn' ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300' :
                                   'bg-red-500/20   border border-red-500/40   text-red-300'
-        }`}>
+        }`} style={{ bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom) + 5rem)' }}>
           {toast.type === 'ok' ? <CheckCircle size={14} /> : <AlertCircle size={14} />}
           {toast.msg}
         </div>

@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { 
   ArrowLeft, Check, X, Eye, Pencil, Trash2, AlertCircle, Save, 
   LayoutDashboard, List, FolderTree, Users, Link as LinkIcon, 
   UserCog, Search, RefreshCw, TrendingUp, FileText, Star,
-  EyeOff, Calendar, Megaphone, Shield, BadgeCheck, Lock, Database, Download
+  EyeOff, Calendar, Megaphone, Shield, BadgeCheck, Lock, Database, Download, ScrollText
 } from 'lucide-react'
+import { deleteListingWithCleanup, deleteListingConfirmMessage } from '../lib/deleteListing'
+import { buildListingStatusUpdate } from '../lib/listingStatus'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
+import { goBackOrHome } from '../lib/navigation'
 import CategoryManagerPage from './CategoryManagerPage'
 import { confirmDialog } from '../lib/confirmDialog'
 import { useAuth } from '../contexts/AuthContext'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { showError, showSuccess } from '../lib/toast'
-import { yangonToday, formatMyanmarDate } from '../lib/myanmarDate'
+import { yangonToday, formatMyanmarDate, formatMyanmarDateTime } from '../lib/myanmarDate'
 import { toCSV } from '../lib/csv'
 import { formatPeakHour, devicePercentages } from '../lib/visitTracking'
 import { validatePhone, validateUrl } from '../lib/validation'
@@ -31,11 +34,36 @@ const PRESET_LINKS = [
 
 export default function AdminPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user, loading: authLoading, isAdmin, isModerator, isSuperAdmin } = useAuth()
   const { log } = useAuditLog()
   const isAuthorized = isAdmin || isModerator
 
-  const [tab, setTab]                 = useState('dashboard') 
+  // E7 (v9.20): the Admin panel honours ?tab= (and ?target= for the audit
+  // tab) — the Edit page's "Audit Log →" link and Bulk Import's
+  // "Admin Panel" button deep-link here. Unknown tabs fall back to dashboard.
+  const VALID_TABS = ['dashboard', 'data', 'users', 'listings', 'claims', 'categories', 'quicklinks', 'audit']
+  const initialTab = VALID_TABS.includes(searchParams.get('tab')) ? searchParams.get('tab') : 'dashboard'
+  const [tab, setTab]                 = useState(initialTab)
+  const auditTarget = searchParams.get('target') || ''
+  function selectTab(next) {
+    setTab(next)
+    setSearchParams(prev => {
+      const params = new URLSearchParams(prev)
+      params.set('tab', next)
+      // ?target= only arrives via a deep link (Edit page → audit tab);
+      // switching tabs always clears it, including re-selecting audit.
+      params.delete('target')
+      return params
+    }, { replace: true })
+  }
+  // Follow the URL when it changes underneath us (e.g. the Edit page
+  // navigates to /admin?tab=audit while we are already on /admin).
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    if (t && VALID_TABS.includes(t) && t !== tab) setTab(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
   const [data, setData]               = useState([])
   const [loading, setLoading]         = useState(true)
   const [listingFilter, setListingFilter] = useState('all')
@@ -78,6 +106,11 @@ export default function AdminPage() {
   const [claims, setClaims] = useState([])
   const [claimsLoading, setClaimsLoading] = useState(false)
   const [claimBusy, setClaimBusy] = useState(null)
+  // E7 (v9.20): the audit log finally has a viewer — until now useAuditLog
+  // was write-only and the Edit page's "Audit Log →" link went nowhere.
+  const [auditRows, setAuditRows] = useState([])
+  const [auditLoading, setAuditLoading] = useState(false)
+  const [auditError, setAuditError] = useState(false)
   // Pending-claim count for the tab badge — loaded on mount, not only
   // when the claims tab opens (H-M1: the badge could never appear).
   const [pendingClaims, setPendingClaims] = useState(0)
@@ -293,22 +326,38 @@ export default function AdminPage() {
   // column). Visitor stats come from the get_visit_stats RPC (aggregates
   // only — raw visit rows are never exposed). Each section tolerates its
   // own failure: one failed query shows '—'/0, never blanks the tab.
+  // A3 (v9.20): the listings + users fetches are paged (1000-row pages)
+  // instead of one unbounded select — a single giant select was heavy
+  // on slow mobile and could time out. Export still covers all rows.
+  async function fetchAllPaged(buildQuery, label) {
+    const rows = []
+    let from = 0
+    const PAGE = 1000
+    for (;;) {
+      const { data, error } = await withTimeout(buildQuery().range(from, from + PAGE - 1), 30000, label)
+      if (error) throw error
+      rows.push(...(data || []))
+      if (!data || data.length < PAGE) break
+      from += PAGE
+    }
+    return rows
+  }
   async function loadDataTab() {
     setDataLoading(true)
     setVisitStatsLoading(true)
     try {
       const [listRes, userRes, visitRes] = await Promise.allSettled([
-        withTimeout(supabase
+        fetchAllPaged(() => supabase
           .from('listings')
           .select('*, category:categories(name, name_mm), submitter:profiles!submitted_by(full_name)')
-          .order('created_at', { ascending: false }), 30000, 'Admin data listings'),
-        withTimeout(supabase.from('profiles').select('*').order('created_at', { ascending: false }), 30000, 'Admin data users'),
+          .order('created_at', { ascending: false }), 'Admin data listings'),
+        fetchAllPaged(() => supabase.from('profiles').select('*').order('created_at', { ascending: false }), 'Admin data users'),
         withTimeout(supabase.rpc('get_visit_stats'), 30000, 'Admin visit stats'),
       ])
-      if (listRes.status === 'fulfilled' && !listRes.value.error) setDataRows(listRes.value.data || [])
-      else console.warn('Data listings failed:', listRes.status === 'fulfilled' ? listRes.value.error : listRes.reason)
-      if (userRes.status === 'fulfilled' && !userRes.value.error) setDataUsers(userRes.value.data || [])
-      else console.warn('Data users failed:', userRes.status === 'fulfilled' ? userRes.value.error : userRes.reason)
+      if (listRes.status === 'fulfilled') setDataRows(listRes.value || [])
+      else console.warn('Data listings failed:', listRes.reason)
+      if (userRes.status === 'fulfilled') setDataUsers(userRes.value || [])
+      else console.warn('Data users failed:', userRes.reason)
       if (visitRes.status === 'fulfilled' && !visitRes.value.error && visitRes.value.data) setVisitStats(visitRes.value.data)
       else console.warn('Visit stats failed:', visitRes.status === 'fulfilled' ? visitRes.value.error : visitRes.reason)
     } catch (e) { console.warn('Data tab load failed:', e) }
@@ -552,18 +601,41 @@ export default function AdminPage() {
     if (tab === 'users') loadUsers()
     if (tab === 'claims') loadClaims()
     if (tab === 'data') loadDataTab()
-  }, [tab, listingFilter, listingsLimit, usersLimit, authLoading, isAuthorized])
+    if (tab === 'audit') loadAudit()
+  }, [tab, listingFilter, listingsLimit, usersLimit, authLoading, isAuthorized, auditTarget])
+
+  // E7 (v9.20): audit-log viewer. ?target=<id> (from the Edit page's
+  // "Audit Log →" link) filters to that one record; otherwise the latest
+  // 100 entries. Actor names come from the profiles join.
+  async function loadAudit() {
+    setAuditLoading(true)
+    setAuditError(false)
+    try {
+      let query = supabase
+        .from('audit_logs')
+        .select('*, actor:profiles(full_name)')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (auditTarget) query = query.eq('target_id', auditTarget)
+      const { data, error } = await withTimeout(query, 30000, 'Audit log')
+      if (error) throw error
+      setAuditRows(data || [])
+    } catch (e) {
+      console.warn('Audit log load failed:', e)
+      setAuditError(true)
+    }
+    setAuditLoading(false)
+  }
 
   async function handleApprove(id) {
     setListingBusy(id)
     try {
+      // E8 (v9.20): approve through the shared path — the same update
+      // EditListingPage's Admin Controls produces (status + Cherry
+      // verification), so the outcome no longer depends on the screen.
       const { data: updated, error } = await supabase
         .from('listings')
-        .update({ 
-          status: 'approved',
-          is_verified: true,
-          verify_type: 'cherry'
-        })
+        .update(buildListingStatusUpdate('approved'))
         .eq('id', id)
         .select('name, name_mm')
       if (error) throw error
@@ -602,28 +674,20 @@ export default function AdminPage() {
     setListingBusy(null)
   }
 
+  // v9.20: Admin ONLY — moderators can open the Admin panel
+  // (RequireAdmin admits them) but must not delete listings. The 9.20
+  // migration adds the matching RLS policy; this UI gate is the
+  // first defence, the policy is the second. The confirm is a
+  // full-impact warning (points effects per the 9.17 triggers), and the
+  // delete itself lives in deleteListing.js (shared with the detail page).
   async function handleDelete(id) {
-    if (!(await confirmDialog('လုပ်ငန်းကို အမှန်ဖျက်မလား? ဒီလုပ်ငန်းကို ပြန်မရနိုင်ပါ။', { danger: true }))) return
+    if (!isAdmin) return
+    const row = data.find(l => l.id === id)
+    const label = row?.name_mm || row?.name || ''
+    if (!(await confirmDialog(deleteListingConfirmMessage(label), { danger: true }))) return
     setDeleting(id)
     try {
-      // Delete the listing FIRST, then clean up linked rows: the old
-      // order deleted reviews/reports/suggestions first, so a failure
-      // on the final listing delete left them already gone.
-      const { data: deleted, error } = await supabase.from('listings').delete().eq('id', id).select('name, name_mm')
-      if (error) throw error
-      const name = deleted?.[0]?.name_mm || deleted?.[0]?.name
-      // Best-effort cleanup of linked rows — a failure here must not
-      // silently block the delete, but it must not be hidden either.
-      const cleanupErrors = []
-      const { error: repErr } = await supabase.from('reports').delete().eq('target_type', 'listing').eq('target_id', id)
-      if (repErr) cleanupErrors.push('reports: ' + repErr.message)
-      const { error: sugErr } = await supabase.from('edit_suggestions').delete().eq('listing_id', id)
-      if (sugErr) cleanupErrors.push('edit_suggestions: ' + sugErr.message)
-      const { error: revErr } = await supabase.from('reviews').delete().eq('listing_id', id)
-      if (revErr) cleanupErrors.push('reviews: ' + revErr.message)
-      // Audit log is fire-and-forget — it must never delay the toast.
-      log({ action: 'delete', table: 'listings', id, name, before: { name } })
-        .then(ok => { if (!ok) console.warn('Audit log failed for listing delete') })
+      const { cleanupErrors } = await deleteListingWithCleanup(supabase, id, { log })
       showSuccess(cleanupErrors.length > 0
         ? '🗑️ ဖျက်ပြီးပါပြီ (ဆက်စပ်အချက်အလက် အချို့ ဖျက်မရပါ: ' + cleanupErrors.join('; ') + ')'
         : '🗑️ ဖျက်ပြီးပါပြီ')
@@ -745,36 +809,39 @@ export default function AdminPage() {
     <div className="pb-8">
       <div className="px-4 pt-4 pb-2 border-b border-white/10 mb-4 sticky top-[var(--header-h)] bg-[#140020] z-50">
         <div className="flex items-center gap-3 mb-4">
-          <button onClick={() => navigate(-1)} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center">
+          <button onClick={() => goBackOrHome(navigate, '/')} className="w-9 h-9 rounded-xl bg-white/8 flex items-center justify-center" aria-label="Back">
             <ArrowLeft size={18} className="text-white" />
           </button>
           <h1 className="font-display font-bold text-lg text-white">စီမံခန့်ခွဲမှု</h1>
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => setTab('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <LayoutDashboard size={14} /> Dashboard
           </button>
-          <button onClick={() => setTab('data')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'data' ? 'bg-teal-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('data')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'data' ? 'bg-teal-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <Database size={14} /> Data
           </button>
-          <button onClick={() => setTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'users' ? 'bg-pink-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'users' ? 'bg-pink-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <UserCog size={14} /> Users
           </button>
-          <button onClick={() => setTab('listings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('listings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <List size={14} /> Listings
           </button>
-          <button onClick={() => setTab('claims')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'claims' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('claims')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'claims' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <BadgeCheck size={14} /> ပိုင်ဆိုင်ကြောင်း
             {pendingClaims > 0 && tab !== 'claims' && (
               <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">{pendingClaims}</span>
             )}
           </button>
-          <button onClick={() => setTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <FolderTree size={14} /> Categories
           </button>
-          <button onClick={() => setTab('quicklinks')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('quicklinks')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <LinkIcon size={14} /> Quick Links
+          </button>
+          <button onClick={() => selectTab('audit')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'audit' ? 'bg-slate-600 text-white' : 'bg-white/5 text-white/60'}`}>
+            <ScrollText size={14} /> Audit Log
           </button>
         </div>
 
@@ -1131,6 +1198,47 @@ export default function AdminPage() {
         </div>
       )}
 
+      {tab === 'audit' && (
+        <div className="px-4 space-y-3 animate-fade-in">
+          <p className="text-xs text-white/50 font-myanmar">Admin / Moderator လုပ်ဆောင်ချက်များ၏ မှတ်တမ်း — အတည်ပြုခြင်း၊ ဖျက်ခြင်း၊ ပြင်ဆင်ခြင်း စသည်</p>
+          {auditTarget && (
+            <div className="card-dark rounded-2xl p-3 flex items-center justify-between gap-2">
+              <p className="text-xs text-white/70 font-myanmar">ဒီမှတ်တမ်းအတွက်သာ ပြနေသည်</p>
+              <button onClick={() => selectTab('audit')} className="text-xs text-brand-300 underline whitespace-nowrap">အားလုံး ပြမည်</button>
+            </div>
+          )}
+          {auditLoading ? (
+            [1, 2, 3].map(n => <div key={n} className="card-dark rounded-2xl p-4 h-16 animate-pulse" />)
+          ) : auditError ? (
+            <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
+              <p className="text-sm text-red-400 font-myanmar">Audit Log တင်ရာတွင် အမှားရှိသည်</p>
+              <button onClick={loadAudit} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+            </div>
+          ) : auditRows.length === 0 ? (
+            <div className="card-dark rounded-2xl p-6 text-center">
+              <p className="text-white/60 text-sm font-myanmar">{auditTarget ? 'ဒီမှတ်တမ်းအတွက် Audit Log မရှိသေးပါ' : 'Audit Log မရှိသေးပါ'}</p>
+            </div>
+          ) : (
+            auditRows.map(row => {
+              const changedKeys = row.changes && typeof row.changes === 'object' ? Object.keys(row.changes).filter(k => !k.startsWith('_')) : []
+              return (
+                <div key={row.id} className="card-dark rounded-2xl p-3 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-full bg-white/10 text-[10px] font-bold text-white">{row.action}</span>
+                    <span className="text-[10px] text-white/50">{row.target_table}</span>
+                    <span className="text-xs text-white/60 ml-auto">{row.created_at ? formatMyanmarDateTime(row.created_at) : ''}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-white truncate">{row.target_name || row.target_id || '—'}</p>
+                  <p className="text-[11px] text-white/50 font-myanmar">
+                    {row.actor?.full_name || 'အမည်မသိ'} {changedKeys.length > 0 ? `• ပြင်ခဲ့သည်: ${changedKeys.join(', ')}` : ''}
+                  </p>
+                </div>
+              )
+            })
+          )}
+        </div>
+      )}
+
       {tab === 'listings' && (
         <div className="animate-fade-in">
           <div className="px-4 mb-4 flex gap-2 flex-wrap">
@@ -1218,9 +1326,12 @@ export default function AdminPage() {
                         <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-2.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
                           <Pencil size={12} /> EDIT
                         </button>
+                        {/* v9.20: Admin only — moderators see the panel but no DELETE button. */}
+                        {isAdmin && (
                         <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex-1 min-w-[70px] px-3 py-2.5 btn-danger rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Trash2 size={12} /> {deleting === item.id ? '...' : 'DELETE'}
                         </button>
+                        )}
                         <button onClick={() => navigate(`/directory/${item.id}`)} className="flex-1 min-w-[55px] px-3 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
                           <Eye size={12} /> VIEW
                         </button>

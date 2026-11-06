@@ -327,7 +327,7 @@ function NotificationRow({ notif, lang, onOpen, onDelete }) {
       {/* Delete */}
       <button
         onClick={(e) => { e.stopPropagation(); onDelete() }}
-        className="w-7 h-7 rounded-lg btn-danger flex items-center justify-center flex-shrink-0 mt-1"
+        className="min-w-[44px] min-h-[44px] rounded-lg btn-danger flex items-center justify-center flex-shrink-0 mt-1"
         aria-label="Delete"
       >
         <Trash2 size={12} />

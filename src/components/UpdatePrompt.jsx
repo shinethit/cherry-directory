@@ -65,7 +65,7 @@ export default function UpdatePrompt() {
   if (!shown) return null
 
   return (
-    <div className="fixed bottom-[132px] left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-[100]">
+    <div className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-[100]" style={{ bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom) + 5rem)' }}>
       <div className="bg-[#1a0028]/95 backdrop-blur-md border border-brand-400/20 rounded-2xl p-3 shadow-xl shadow-black/40 flex items-center gap-3">
         <span className="text-2xl flex-shrink-0">🍒</span>
         <div className="flex-1 min-w-0">
