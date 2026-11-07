@@ -7,7 +7,7 @@ import {
   EyeOff, Calendar, Megaphone, Shield, BadgeCheck, Lock, Database, Download, ScrollText
 } from 'lucide-react'
 import { deleteListingWithCleanup, deleteListingConfirmMessage, deleteListingsBulk, deleteBulkConfirmMessage } from '../lib/deleteListing'
-import { buildListingStatusUpdate } from '../lib/listingStatus'
+import { buildListingStatusUpdate, approveListingsBulk, approveAllConfirmMessage, approveSelectedConfirmMessage } from '../lib/listingStatus'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { goBackOrHome } from '../lib/navigation'
@@ -81,6 +81,10 @@ export default function AdminPage() {
   const [selectedIds, setSelectedIds]   = useState(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
   const [bulkProgress, setBulkProgress] = useState(null) // { i, total } while bulkDeleting
+  // v9.28 (bulk approve): mirrors bulkDeleting/bulkProgress. Delete and
+  // approve are mutually exclusive and share bulkProgress — a bulk
+  // approve must never run twice concurrently, or alongside a delete.
+  const [bulkApproving, setBulkApproving] = useState(false)
   // Unfiltered pending count for the filter badge (G7) — the listing
   // list itself is server-filtered, so it can never be counted from it.
   const [pendingListingsCount, setPendingListingsCount] = useState(0)
@@ -785,6 +789,102 @@ export default function AdminPage() {
     loadDashboardStats()
   }
 
+  // v9.28 (bulk approve, Admin-only — same gate as bulk delete):
+  // approve every selected listing in one go. ONE confirm before the
+  // loop; the loop itself is the shared approveListingsBulk helper
+  // (same per-row buildListingStatusUpdate('approved') call as the
+  // single approve, so the +20 approval trigger fires per row). One
+  // summary toast only; failed ids stay selected for retry.
+  async function handleBulkApproveSelected() {
+    if (!isAdmin || bulkApproving || bulkDeleting || selectedIds.size === 0) return
+    const targets = data.filter(l => selectedIds.has(l.id))
+    if (targets.length === 0) return
+    const names = targets.map(l => l.name_mm || l.name)
+    if (!(await confirmDialog(approveSelectedConfirmMessage(names, targets.length), {
+      title: `လုပ်ငန်း ${targets.length} ခု အတည်ပြုမည်`,
+      confirmText: 'အတည်ပြုမည်',
+    }))) return
+    setBulkApproving(true)
+    setBulkProgress({ i: 0, total: targets.length })
+    const result = await approveListingsBulk(supabase, targets, {
+      log,
+      onProgress: (i, total) => { setBulkProgress({ i, total }) },
+    })
+    setBulkApproving(false)
+    setBulkProgress(null)
+    // Clear ONLY the succeeded ids — failed ids stay selected for retry.
+    const succeededIds = new Set(result.succeeded.map(r => r.id))
+    setSelectedIds(prev => new Set([...prev].filter(id => !succeededIds.has(id))))
+    if (result.failed.length === 0) {
+      showSuccess(`✓ ${result.succeeded.length} ခု အတည်ပြုပြီးပါပြီ`)
+    } else {
+      const failedNames = result.failed.slice(0, 3).map(f => f.row?.name_mm || f.row?.name || 'ဤလုပ်ငန်း')
+      showError(`အတည်ပြုမရတာ ${result.failed.length} ခု (${failedNames.join(', ')}) — ${result.succeeded.length} ခု အတည်ပြုပြီးပါပြီ`)
+    }
+    loadListings()
+    loadDashboardStats()
+  }
+
+  // v9.28 (bulk approve, Admin-only): approve ALL pending listings in
+  // the whole directory, not just the loaded page — loadListings pages
+  // with listingsLimit, so the ids are fetched paginated (500/page)
+  // before the loop. The confirm states the EXACT pending count from
+  // pendingListingsCount plus the +20-per-approval points note.
+  async function handleApproveAllPending() {
+    if (!isAdmin || bulkApproving || bulkDeleting || pendingListingsCount === 0) return
+    if (!(await confirmDialog(approveAllConfirmMessage(pendingListingsCount), {
+      title: `ဆိုင်းငံ့ထားတာ အားလုံး အတည်ပြုမည် (${pendingListingsCount} ခု)`,
+      confirmText: 'အတည်ပြုမည်',
+    }))) return
+    setBulkApproving(true)
+    setBulkProgress({ i: 0, total: pendingListingsCount })
+    let targets = []
+    try {
+      const PAGE = 500
+      let from = 0
+      for (;;) {
+        const { data: pageRows, error } = await withTimeout(supabase
+          .from('listings')
+          .select('id, name, name_mm')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .range(from, from + PAGE - 1), 30000, 'Admin pending listings')
+        if (error) throw error
+        targets = targets.concat(pageRows || [])
+        if ((pageRows || []).length < PAGE) break
+        from += PAGE
+      }
+    } catch (e) {
+      setBulkApproving(false)
+      setBulkProgress(null)
+      showError('ဆိုင်းငံ့ထားတဲ့ လုပ်ငန်းတွေ ရယူရာတွင် အမှားရှိသည်: ' + e.message)
+      return
+    }
+    if (targets.length === 0) {
+      setBulkApproving(false)
+      setBulkProgress(null)
+      showSuccess('✓ အတည်ပြုစရာ ဆိုင်းငံ့ထားတဲ့ လုပ်ငန်း မရှိပါ')
+      loadListings()
+      loadDashboardStats()
+      return
+    }
+    setBulkProgress({ i: 0, total: targets.length })
+    const result = await approveListingsBulk(supabase, targets, {
+      log,
+      onProgress: (i, total) => { setBulkProgress({ i, total }) },
+    })
+    setBulkApproving(false)
+    setBulkProgress(null)
+    if (result.failed.length === 0) {
+      showSuccess(`✓ ${result.succeeded.length} ခု အတည်ပြုပြီးပါပြီ`)
+    } else {
+      const failedNames = result.failed.slice(0, 3).map(f => f.row?.name_mm || f.row?.name || 'ဤလုပ်ငန်း')
+      showError(`အတည်ပြုမရတာ ${result.failed.length} ခု (${failedNames.join(', ')}) — ${result.succeeded.length} ခု အတည်ပြုပြီးပါပြီ`)
+    }
+    loadListings()
+    loadDashboardStats()
+  }
+
   async function handleEdit(listing) {
     setEditingId(listing.id)
     setEditForm(listing)
@@ -1331,7 +1431,7 @@ export default function AdminPage() {
         <div className="animate-fade-in">
           <div className="px-4 mb-4 flex gap-2 flex-wrap">
             {[['all', 'All'], ['approved', 'Approved'], ['pending', 'Pending'], ['suspended', 'Suspended']].map(([val, label]) => (
-              <button key={val} onClick={() => { setListingFilter(val); setSelectedIds(new Set()) }} disabled={bulkDeleting}
+              <button key={val} onClick={() => { setListingFilter(val); setSelectedIds(new Set()) }} disabled={bulkDeleting || bulkApproving}
                 className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors disabled:opacity-50 ${
                   listingFilter === val
                     ? 'bg-blue-600/30 border-blue-400/40 text-blue-200'
@@ -1347,10 +1447,14 @@ export default function AdminPage() {
             ))}
           </div>
 
-          {/* v9.25 (bulk delete, Admin-only): select-all is PAGE-LEVEL —
-              only the rows currently loaded in `data` under the current
-              filter (loadListings never counts a total). Always visible;
-              flex-wrap, no sideways scroller. */}
+          {/* v9.25 (bulk delete, Admin-only) + v9.28 (bulk approve,
+              Admin-only — same gate as bulk delete): select-all is
+              PAGE-LEVEL — only the rows currently loaded in `data`
+              under the current filter (loadListings never counts a
+              total). Always visible; flex-wrap, no sideways scroller.
+              v9.28 label fix: the delete button now reads
+              "အပြီးဖျက်မည်" with a trash icon — the old "ဖျက်မည်"
+              label was misread as bulk deselect. */}
           {isAdmin && (
             <div className="px-4 mb-4 flex gap-2 flex-wrap items-center">
               <label className="flex items-center gap-2 text-xs text-white/70 font-myanmar cursor-pointer">
@@ -1358,7 +1462,7 @@ export default function AdminPage() {
                   type="checkbox"
                   checked={data.length > 0 && data.every(l => selectedIds.has(l.id))}
                   onChange={toggleSelectAllLoaded}
-                  disabled={bulkDeleting || data.length === 0}
+                  disabled={bulkDeleting || bulkApproving || data.length === 0}
                   className="w-5 h-5"
                   aria-label="စာရင်းပါ အားလုံး ရွေးမည်"
                 />
@@ -1366,13 +1470,33 @@ export default function AdminPage() {
               </label>
               <span className="text-xs text-white/60 font-myanmar">{selectedIds.size} ခု ရွေးထားသည်</span>
               <button
+                onClick={handleBulkApproveSelected}
+                disabled={bulkApproving || bulkDeleting || selectedIds.size === 0}
+                className="px-4 py-2.5 bg-green-500 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+              >
+                {bulkApproving && bulkProgress
+                  ? `အတည်ပြုနေသည်… (${bulkProgress.i}/${bulkProgress.total})`
+                  : `✓ ရွေးထားတာ အတည်ပြုမည် (${selectedIds.size})`}
+              </button>
+              {pendingListingsCount > 0 && (
+                <button
+                  onClick={handleApproveAllPending}
+                  disabled={bulkApproving || bulkDeleting}
+                  className="px-4 py-2.5 bg-green-500 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+                >
+                  {bulkApproving && bulkProgress
+                    ? `အတည်ပြုနေသည်… (${bulkProgress.i}/${bulkProgress.total})`
+                    : `✓ ဆိုင်းငံ့ထားတာ အားလုံး အတည်ပြုမည် (${pendingListingsCount})`}
+                </button>
+              )}
+              <button
                 onClick={handleBulkDelete}
-                disabled={bulkDeleting || selectedIds.size === 0}
+                disabled={bulkDeleting || bulkApproving || selectedIds.size === 0}
                 className="px-4 py-2.5 btn-danger rounded-xl text-xs font-bold disabled:opacity-50"
               >
                 {bulkDeleting && bulkProgress
                   ? `ဖျက်နေသည်… (${bulkProgress.i}/${bulkProgress.total})`
-                  : `ရွေးထားတာ ဖျက်မည် (${selectedIds.size})`}
+                  : `🗑️ ရွေးထားတာ အပြီးဖျက်မည် (${selectedIds.size}) — ပြန်မရပါ`}
               </button>
             </div>
           )}
@@ -1417,7 +1541,7 @@ export default function AdminPage() {
                               type="checkbox"
                               checked={selectedIds.has(item.id)}
                               onChange={() => toggleSelectListing(item.id)}
-                              disabled={bulkDeleting}
+                              disabled={bulkDeleting || bulkApproving}
                               className="w-5 h-5"
                             />
                           </label>
@@ -1446,25 +1570,25 @@ export default function AdminPage() {
 
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
                         {item.status !== 'approved' && (
-                          <button onClick={() => handleApprove(item.id)} disabled={listingBusy === item.id || bulkDeleting} className="flex-1 min-w-[70px] px-3 py-2.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                          <button onClick={() => handleApprove(item.id)} disabled={listingBusy === item.id || bulkDeleting || bulkApproving} className="flex-1 min-w-[70px] px-3 py-2.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                             <Check size={12} /> {listingBusy === item.id ? '...' : 'APPROVE 🍒'}
                           </button>
                         )}
                         {item.status === 'approved' && (
-                          <button onClick={() => handleSuspend(item.id)} disabled={listingBusy === item.id || bulkDeleting} className="flex-1 min-w-[70px] px-3 py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                          <button onClick={() => handleSuspend(item.id)} disabled={listingBusy === item.id || bulkDeleting || bulkApproving} className="flex-1 min-w-[70px] px-3 py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                             <X size={12} /> {listingBusy === item.id ? '...' : 'SUSPEND'}
                           </button>
                         )}
-                        <button onClick={() => handleEdit(item)} disabled={bulkDeleting} className="flex-1 min-w-[60px] px-3 py-2.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                        <button onClick={() => handleEdit(item)} disabled={bulkDeleting || bulkApproving} className="flex-1 min-w-[60px] px-3 py-2.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Pencil size={12} /> EDIT
                         </button>
                         {/* v9.20: Admin only — moderators see the panel but no DELETE button. */}
                         {isAdmin && (
-                        <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id || bulkDeleting} className="flex-1 min-w-[70px] px-3 py-2.5 btn-danger rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                        <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id || bulkDeleting || bulkApproving} className="flex-1 min-w-[70px] px-3 py-2.5 btn-danger rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Trash2 size={12} /> {deleting === item.id ? '...' : 'DELETE'}
                         </button>
                         )}
-                        <button onClick={() => navigate(`/directory/${item.id}`)} disabled={bulkDeleting} className="flex-1 min-w-[55px] px-3 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                        <button onClick={() => navigate(`/directory/${item.id}`)} disabled={bulkDeleting || bulkApproving} className="flex-1 min-w-[55px] px-3 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Eye size={12} /> VIEW
                         </button>
                       </div>
@@ -1474,7 +1598,7 @@ export default function AdminPage() {
               ))
             )}
             {listingsHasMore && !loading && (
-              <button onClick={() => setListingsLimit(l => l + 50)} disabled={bulkDeleting} className="w-full px-3 py-2.5 bg-white/5 border border-white/10 text-white/70 rounded-xl text-xs font-bold disabled:opacity-50">ထပ်တင်ရန် • Load more</button>
+              <button onClick={() => setListingsLimit(l => l + 50)} disabled={bulkDeleting || bulkApproving} className="w-full px-3 py-2.5 bg-white/5 border border-white/10 text-white/70 rounded-xl text-xs font-bold disabled:opacity-50">ထပ်တင်ရန် • Load more</button>
             )}
           </div>
         </div>

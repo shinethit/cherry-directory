@@ -99,7 +99,7 @@ describe('v9.25 delete: bulk delete — AdminPage', () => {
     expect(admin).not.toContain('overflow-x-auto')
     expect(admin).toContain('စာရင်းပါ {data.length} ခု အားလုံး ရွေးမည်')
     expect(admin).toContain('{selectedIds.size} ခု ရွေးထားသည်')
-    expect(admin).toContain('ရွေးထားတာ ဖျက်မည် (${selectedIds.size})')
+    expect(admin).toContain('ရွေးထားတာ အပြီးဖျက်မည် (${selectedIds.size})')
     expect(admin).toContain('ဖျက်နေသည်… (${bulkProgress.i}/${bulkProgress.total})')
     const barIdx = admin.indexOf('စာရင်းပါ {data.length} ခု အားလုံး ရွေးမည်')
     expect(admin.lastIndexOf('{isAdmin && (', barIdx)).toBeGreaterThan(0)
@@ -126,11 +126,11 @@ describe('v9.25 delete: bulk delete — AdminPage', () => {
     expect(fn).toContain('succeededIds')
   })
 
-  it('filter chips, row buttons and Load more disable while bulkDeleting; selection clears on filter change', () => {
+  it('filter chips, row buttons and Load more disable while bulkDeleting/bulkApproving; selection clears on filter change', () => {
     const admin = read('pages/AdminPage.jsx')
-    expect(admin).toContain('disabled={bulkDeleting}')
-    expect(admin).toContain('disabled={listingBusy === item.id || bulkDeleting}')
-    expect(admin).toContain('disabled={deleting === item.id || bulkDeleting}')
+    expect(admin).toContain('disabled={bulkDeleting || bulkApproving}')
+    expect(admin).toContain('disabled={listingBusy === item.id || bulkDeleting || bulkApproving}')
+    expect(admin).toContain('disabled={deleting === item.id || bulkDeleting || bulkApproving}')
     expect(admin).toContain('setListingFilter(val); setSelectedIds(new Set())')
   })
 
