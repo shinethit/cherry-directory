@@ -50,9 +50,9 @@ function filesContaining(needle) {
 }
 
 describe('v9.25: version + Change Log Admin rule', () => {
-  it('package.json is 9.26', () => {
+  it('package.json is 9.27', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.26')
+    expect(pkg.version).toBe('9.27')
   })
 
   it('the 9.25 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {
@@ -80,6 +80,22 @@ describe('v9.25: version + Change Log Admin rule', () => {
     expect(entry).toContain('Import ပြီးမှ အပ်ဒိတ်လုပ်မည်')
     expect(entry).toContain('ဗလာ ဖြစ်မသွားတော့ပါ')
     expect(entry).toContain('ဆိုင်အမျိုးအစား အသစ်တွေ')
+  })
+
+  it('the 9.27 entry is on top, dated 2026-11-07, with zero Admin mentions', () => {
+    const header = read('components/Header.jsx')
+    expect(header).toContain("{ v: '9.27', date: '2026-11-07'")
+    expect(header.match(/v: '9\.27'/g).length).toBe(1)
+    expect(header.indexOf("v: '9.27'")).toBeLessThan(header.indexOf("v: '9.26'"))
+    const entry = changelogEntry(header, '9.27', '9.26')
+    expect(entry).not.toMatch(/admin/i)
+    expect(entry).toContain('၂၂၅ ဆိုင်')
+    expect(entry).toContain('အလိုလို ပြန်ကြိုးစားပေးမယ်')
+    expect(entry).toContain('ဘာကြောင့် မရလဲ')
+    expect(entry).toContain('ထပ်မထည့်တော့ဘူး')
+    expect(entry).toContain('Cancel နှိပ်ပြီးရင် ထပ်မပေါ်တော့ဘူး')
+    expect(entry).toContain('အင်္ဂလိပ်/မြန်မာ မှန်အောင်')
+    expect(entry).toContain('category အသစ် ၁၃ ခု')
   })
 })
 

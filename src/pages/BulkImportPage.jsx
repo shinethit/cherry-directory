@@ -55,6 +55,10 @@ function dedupeKey(name, phone, township, address) {
   // second was skipped as a duplicate. With a phone, name + phone is
   // the key; without one, township + address discriminate. With no
   // discriminator at all, there is no key — the row is not deduped.
+  // v9.27: that "no key" case is now covered by dedupeKeyWithFallback
+  // below (name + city) for the dedupe SET only. This strict function
+  // still returns null, and the pre-retry live check uses it: only a
+  // strict key can prove the FIRST attempt actually committed.
   const n = (name || '').trim().toLowerCase()
   const p = normPhone(phone)
   if (p) return n + '|' + p
@@ -64,12 +68,52 @@ function dedupeKey(name, phone, township, address) {
   return n + '|' + t + '|' + a
 }
 
+// v9.27 — name+city fallback key for the dedupe SET (see dedupeKey
+// above for the strict key). A row with no phone, no township and no
+// address has no strict key, so a fresh re-import of the same file
+// used to insert it AGAIN — 12 such rows in the 874-row sm3 import
+// (file rows 3, 4, 6, 8, 9, 10, 11, 12, 13, 15, 634, 635) went live
+// with nothing to dedupe them against. The fallback keys them by
+// normalised name + effective city (the same city the insert stores:
+// row.city, else the first configured city, else 'Taunggyi').
+// TRADEOFF (BI2, accepted): two genuinely distinct same-name,
+// no-phone businesses in the same city now collide and the second is
+// skipped as a duplicate — visible in the Skipped list, where the
+// user can see it — versus the certain live duplicates on re-import
+// without it. Verified against the sm3 CSV: no two null-key rows share
+// name+city, and no null-key row shares name+city with a
+// phone-carrying row, so the fallback skips nothing it should not.
+export function fallbackDedupeKey(name, city) {
+  const n = (name || '').trim().toLowerCase()
+  const c = (city || '').trim().toLowerCase()
+  return n + '|' + c
+}
+
+export function dedupeKeyWithFallback(name, phone, township, address, city) {
+  return dedupeKey(name, phone, township, address) ?? fallbackDedupeKey(name, city)
+}
+
+// v9.27: human-readable detail for a failed insert, for the per-row
+// error line. Supabase errors carry message + code (e.g. RLS '42501',
+// unique-violation '23505'); a thrown fetch abort carries only a
+// message. The old code swallowed both behind a fixed string.
+export function describeInsertError(err) {
+  if (err == null) return 'Insert failed'
+  if (typeof err === 'string') return err
+  const msg = err.message || String(err)
+  return err.code ? msg + ' [code ' + err.code + ']' : msg
+}
+
+const RETRY_DELAY_MS = 500 // v9.27: pause before the single retry of a thrown insert
+
 // v9.26: import checkpoint — persisted to localStorage after every chunk
 // so a reload mid-import can resume instead of starting over or
-// duplicating rows. Rows are skipped BY INDEX on resume: the dedupe key
-// alone cannot protect rows with no phone and no township/address
-// (dedupeKey returns null for those), so index skipping is the primary
-// guard and dedupe is only a second layer.
+// duplicating rows. Rows are skipped BY INDEX on resume: index skipping
+// is the primary guard and dedupe is only a second layer. (v9.27: the
+// dedupe layer now also covers rows with no phone and no
+// township/address, via the name+city fallback key — but index skipping
+// stays primary, because the fallback key cannot tell two same-name
+// same-city businesses apart.)
 export const BULK_IMPORT_CHECKPOINT_KEY = 'cherry-bulk-import-checkpoint'
 const CHECKPOINT_LIST_LIMIT = 50
 
@@ -243,10 +287,10 @@ export default function BulkImportPage() {
     setImporting(true)
 
     // v9.26: resume — a checkpoint from an interrupted run restores the
-    // counters and the next row index. Rows are skipped BY INDEX: the
-    // dedupe key alone cannot protect rows with no phone and no
-    // township/address (dedupeKey returns null for those), so index
-    // skipping is the primary guard and dedupe is only a second layer.
+    // counters and the next row index. Rows are skipped BY INDEX: index
+    // skipping is the primary guard and dedupe is only a second layer
+    // (v9.27: dedupe now also covers no-phone rows via the name+city
+    // fallback key, but index skipping stays primary).
     const resuming = resumeFromIndex !== null && checkpoint?.nextIndex === resumeFromIndex
     const startIndex = resuming ? resumeFromIndex : 0
     const activeFileName = fileMetaRef.current?.name || fileName
@@ -309,17 +353,21 @@ export default function BulkImportPage() {
     // 1,000 — PostgREST's default page size is 1,000, so a single
     // select() silently covered only the first 1,000 rows and
     // duplicates of older listings sailed through as new rows.
+    // v9.27: `city` is selected too, so live rows with no phone and no
+    // township/address get the same name+city fallback key as the
+    // incoming row (dedupeKeyWithFallback) — otherwise a re-import
+    // would duplicate them.
     const seenKeys = new Set()
     try {
       const PAGE = 1000
       for (let from = 0; ; from += PAGE) {
         const { data: existing, error: dedupeErr } = await supabase
           .from('listings')
-          .select('name, phone_1, township, address_mm')
+          .select('name, phone_1, township, address_mm, city')
           .order('id')
           .range(from, from + PAGE - 1)
         if (dedupeErr) throw dedupeErr
-        ;(existing || []).forEach(l => { const k = dedupeKey(l.name, l.phone_1, l.township, l.address_mm); if (k) seenKeys.add(k) })
+        ;(existing || []).forEach(l => { const k = dedupeKeyWithFallback(l.name, l.phone_1, l.township, l.address_mm, l.city?.trim() || (config.cities?.[0] || 'Taunggyi')); if (k) seenKeys.add(k) })
         if ((existing || []).length < PAGE) break
       }
     } catch (e) {
@@ -374,7 +422,15 @@ export default function BulkImportPage() {
           continue;
         }
 
-        const key = dedupeKey(row.name, row.phone_1, row.township, row.address_mm)
+        // v9.27: the effective city is computed once — the insert
+        // stores it, and the name+city fallback dedupe key uses the
+        // same value, so the two can never disagree.
+        const effectiveCity = row.city?.trim() || (config.cities?.[0] || 'Taunggyi')
+        // v9.27: strictKey (phone / township+address) is kept for the
+        // pre-retry live check; key is the dedupe key actually used,
+        // falling back to name+city when there is no strict key.
+        const strictKey = dedupeKey(row.name, row.phone_1, row.township, row.address_mm)
+        const key = strictKey ?? fallbackDedupeKey(row.name, effectiveCity)
         if (key && seenKeys.has(key)) {
           skipped.push({ row: rowNum, field: 'duplicate', message: '"' + row.name.trim() + '" ထပ်နေသည် — ကျော်လိုက်သည်' });
           continue;
@@ -392,7 +448,7 @@ export default function BulkImportPage() {
             // display name ('တောင်ကြီးမြို့'), which does not match the
             // Latin city column — the default is the first configured
             // city (the primary city), falling back to 'Taunggyi'.
-            city: row.city?.trim() || (config.cities?.[0] || 'Taunggyi'),
+            city: effectiveCity,
             township: row.township?.trim() || null,
             ward: row.ward?.trim() || null,
             address_mm: row.address_mm?.trim() || null,
@@ -409,6 +465,7 @@ export default function BulkImportPage() {
             status: 'pending',
           },
           rowNum,
+          strictKey,
         });
       }
 
@@ -418,21 +475,81 @@ export default function BulkImportPage() {
         const settled = await Promise.allSettled(
           inserts.map(({ record }) => supabase.from('listings').insert(record))
         )
+        // v9.27: thrown (rejected) inserts are retried ONCE below.
+        // Fulfilled-with-error inserts are NOT retried — the DB
+        // rejected the row (RLS / constraint / bad value) and a second
+        // identical insert cannot succeed. The 874-row sm3 import lost
+        // 23 rows to a transient window (chunk 27 all 17 insertable
+        // rows, chunk 28's first 6) with no retry at all.
+        const thrown = []
         settled.forEach((res, idx) => {
           const rowNum = inserts[idx].rowNum
           if (res.status === 'fulfilled' && !res.value.error) {
             success++
+          } else if (res.status === 'rejected') {
+            thrown.push({ ...inserts[idx], reason: res.reason })
           } else {
-            // Insert failures render a fixed Myanmar string — the raw
-            // Supabase message (e.g. constraint text) used to show here.
-            const msg = res.status === 'rejected'
-              ? (res.reason?.message || String(res.reason))
-              : (res.value.error?.message || 'Insert failed')
-            console.warn('Bulk import row insert failed:', rowNum, msg)
-            errors.push({ row: rowNum, field: '-', message: 'ထည့်သွင်းမရပါ' })
+            // v9.27: surface the real error — the fixed string alone
+            // ('ထည့်သွင်းမရပါ') told the user nothing about WHY the
+            // row failed, so a transient outage looked identical to a
+            // bad row. Other error kinds (name/category/location)
+            // keep their existing messages unchanged.
+            const detail = describeInsertError(res.value.error)
+            console.warn('Bulk import row insert failed:', rowNum, detail)
+            errors.push({ row: rowNum, field: '-', message: 'ထည့်သွင်းမရပါ (' + detail + ')' })
             failed++
           }
         })
+        for (const item of thrown) {
+          const { record, rowNum, strictKey } = item
+          // The first attempt may have committed while its response
+          // was lost (20 s fetch timeout / dropped connection). Before
+          // retrying, re-check live by the strict dedupe key (one
+          // SELECT by name, keyed in JS): if the row is now live,
+          // count it as success instead of re-inserting it.
+          let alreadyLive = false
+          if (strictKey) {
+            try {
+              const { data: candidates, error: lookupErr } = await supabase
+                .from('listings')
+                .select('name, phone_1, township, address_mm')
+                .eq('name', record.name)
+              if (!lookupErr) {
+                alreadyLive = (candidates || []).some(l => dedupeKey(l.name, l.phone_1, l.township, l.address_mm) === strictKey)
+              }
+            } catch (e) {
+              console.warn('Bulk import retry lookup failed — retrying anyway:', rowNum, e?.message || e)
+            }
+          }
+          // No strict key (no phone, township or address): the live
+          // check cannot tell this row from another same-name row, so
+          // it cannot run — retry anyway. Residual risk: if the first
+          // attempt actually committed and only its response was lost,
+          // the retry inserts a duplicate. Those rows are a small
+          // minority, and the name+city fallback dedupe still
+          // protects a later re-import of the same file.
+          if (alreadyLive) {
+            success++
+            continue
+          }
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS))
+          try {
+            const { error } = await supabase.from('listings').insert(record)
+            if (!error) {
+              success++
+            } else {
+              const detail = describeInsertError(error)
+              console.warn('Bulk import row insert failed on retry:', rowNum, detail)
+              errors.push({ row: rowNum, field: '-', message: 'ထည့်သွင်းမရပါ (' + detail + ')' })
+              failed++
+            }
+          } catch (e) {
+            const detail = describeInsertError(e)
+            console.warn('Bulk import row insert failed on retry:', rowNum, detail)
+            errors.push({ row: rowNum, field: '-', message: 'ထည့်သွင်းမရပါ (' + detail + ')' })
+            failed++
+          }
+        }
       }
       
       setProgress(Math.round(((i + chunk.length) / totalRows) * 100));

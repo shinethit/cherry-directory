@@ -114,7 +114,14 @@ export const SM3_CATEGORY_MAP = [
 // are NOT listed here — the import's own catMap lookup covers those.
 // ---------------------------------------------------------------------------
 export const EXISTING_CATEGORY_PASSTHROUGH = [
-  { name: 'Restaurant & Food', nameMm: 'စားသောက်ဆိုင်' },
+  // v9.27: 'Restaurant & Food' is the OLD seed name — it does not exist
+  // live (the 9.27 migration renames that category to name='Restaurant',
+  // name_mm stays 'စားသောက်ဆိုင်'). Mapping the Myanmar name to the dead
+  // seed name made CSV rows carrying 'စားသောက်ဆိုင်' fail as "not found",
+  // where the BulkImportPage catMap fallback (by name_mm) would have
+  // resolved them. Both the live name and the old seed name now map to
+  // 'Restaurant', so old-seed-named rows still resolve.
+  { name: 'Restaurant', nameMm: 'စားသောက်ဆိုင်', aliases: ['Restaurant & Food'] },
   { name: 'Hotel & Accommodation', nameMm: 'တည်းခိုရေး' },
   { name: 'Hospital & Clinic', nameMm: 'ဆေးရုံ/ကလင်းနစ်' },
   { name: 'Education & School', nameMm: 'ကျောင်း/ပညာရေး' },
@@ -156,6 +163,10 @@ function buildLookup() {
   for (const entry of EXISTING_CATEGORY_PASSTHROUGH) {
     add(entry.name, entry.name)
     add(entry.nameMm, entry.name)
+    // v9.27: old names kept as aliases (e.g. 'Restaurant & Food' →
+    // 'Restaurant' after the live rename) so rows carrying the old
+    // seed name still resolve instead of failing as "not found".
+    for (const alias of entry.aliases || []) add(alias, entry.name)
     add(zg2uni(entry.nameMm), entry.name)
     add(uni2zg(entry.nameMm), entry.name)
   }

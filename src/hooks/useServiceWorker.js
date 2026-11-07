@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { safeGet } from '../lib/safeStorage'
 import { APP_VERSION } from '../lib/appVersion'
+import { isServerVersionNewer } from '../lib/versionCompare'
 import { isLongTaskRunning } from '../lib/longTask'
 
 // Single registration point for the service worker (C-L1 — the duplicate
@@ -19,6 +20,11 @@ import { isLongTaskRunning } from '../lib/longTask'
 // cadence; on a mismatch the prompt means "the server has a newer
 // version", whether or not a waiting worker downloaded.
 
+// v9.27: checkServerVersion only prompts when the server version is
+// numerically newer (a rollback never prompts); focus/visibility checks
+// are throttled to one per 5 min; the hook exposes serverVersion so
+// UpdatePrompt can apply the same newer-check and the 24 h dismissal
+// backstop.
 const UPDATE_POLL_MS = 60 * 60 * 1000
 const APPLY_TIMEOUT_MS = 4000
 const NO_WAITING_RELOAD_KEY = 'cherry_sw_no_waiting_reload'
@@ -31,6 +37,10 @@ const REG_UPDATE_TIMEOUT_MS = 5000
 // v9.26: how often a deferred update reload re-checks whether the long
 // task that blocked it has finished.
 const LONG_TASK_POLL_MS = 5000
+// v9.27: focus/visibility checks fire at most once per 5 min — every
+// app-switch used to fire a /version.json fetch (in addition to the
+// in-flight versionCheckRef guard). Detection semantics unchanged.
+const FOCUS_CHECK_MIN_MS = 5 * 60 * 1000
 
 export function useServiceWorker() {
   const [ready, setReady] = useState(false)
@@ -41,6 +51,8 @@ export function useServiceWorker() {
   const updatingRef = useRef(false)
   const serverVersionRef = useRef(null)
   const versionCheckRef = useRef(false)
+  // v9.27: last time a focus/visibility check ran (throttle, see below).
+  const lastFocusCheckRef = useRef(0)
   // v9.26: timer for a reload deferred while a long task runs.
   const deferTimerRef = useRef(null)
 
@@ -117,9 +129,15 @@ export function useServiceWorker() {
         if (!res.ok) return
         const data = await res.json().catch(() => null)
         const serverVersion = data?.version
-        if (!serverVersion || serverVersion === APP_VERSION) return
+        if (!serverVersion) return
         if (serverVersionRef.current === serverVersion) return
         serverVersionRef.current = serverVersion
+        // v9.27: only a numerically NEWER server version prompts — a
+        // rollback (server older than running) must never show as an
+        // update. Unparseable versions fall back to exact inequality.
+        // The ref is set before this check so UpdatePrompt can also
+        // suppress a waiting-worker prompt after a rollback.
+        if (!isServerVersionNewer(serverVersion, APP_VERSION)) return
         console.log('[SW] Server version', serverVersion, 'is newer than running', APP_VERSION)
         try {
           await reg.update()
@@ -149,6 +167,16 @@ export function useServiceWorker() {
       checkServerVersion(regRef)
     }
 
+    // v9.27: throttle focus/visibility-triggered checks to at most one
+    // per 5 min (the registration-time check above and the 60 min poll
+    // are unaffected).
+    const throttledFocusCheck = () => {
+      const now = Date.now()
+      if (now - lastFocusCheckRef.current < FOCUS_CHECK_MIN_MS) return
+      lastFocusCheckRef.current = now
+      pollForUpdate()
+    }
+
     navigator.serviceWorker
       .register('/sw.js')
       .then((reg) => {
@@ -165,8 +193,8 @@ export function useServiceWorker() {
         // Periodic + focus/visibility polling so a new build is noticed
         // without waiting for a full reload cycle.
         pollTimer = setInterval(pollForUpdate, UPDATE_POLL_MS)
-        const onFocus = () => pollForUpdate()
-        const onVisible = () => { if (!document.hidden) pollForUpdate() }
+        const onFocus = () => throttledFocusCheck()
+        const onVisible = () => { if (!document.hidden) throttledFocusCheck() }
         window.addEventListener('focus', onFocus)
         document.addEventListener('visibilitychange', onVisible)
         // Keep the listeners alive for cleanup below.
@@ -293,5 +321,5 @@ export function useServiceWorker() {
     }
   }
 
-  return { ready, swState, updateAvailable, updating, applyUpdate: reloadForUpdate }
+  return { ready, swState, updateAvailable, updating, serverVersion: serverVersionRef.current, applyUpdate: reloadForUpdate }
 }

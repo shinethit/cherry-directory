@@ -79,14 +79,21 @@ describe('sm3CategoryMap: Myanmar names in Unicode or Zawgyi', () => {
 
 describe('sm3CategoryMap: existing categories pass through', () => {
   it('seeded English names pass through (any case)', () => {
-    expect(mapSm3Category('Restaurant & Food')).toBe('Restaurant & Food')
     expect(mapSm3Category('taxi & transport')).toBe('Taxi & Transport')
     expect(mapSm3Category('Finance & Banking')).toBe('Finance & Banking')
   })
 
-  it('seeded Myanmar names pass through to the canonical English name', () => {
-    expect(mapSm3Category('စားသောက်ဆိုင်')).toBe('Restaurant & Food')
-    expect(mapSm3Category(uni2zg('စားသောက်ဆိုင်'))).toBe('Restaurant & Food')
+  // v9.27: the live category was renamed 'Restaurant & Food' →
+  // 'Restaurant' (9.27 migration); the old seed name is kept as an
+  // alias so rows carrying it still resolve, and the Myanmar name maps
+  // to the LIVE name — the old mapping sent 'စားသောက်ဆိုင်' rows to a
+  // category that does not exist live, so they failed as "not found".
+  it("'စားသောက်ဆိုင်' and the old seed name map to the live 'Restaurant'", () => {
+    expect(mapSm3Category('စားသောက်ဆိုင်')).toBe('Restaurant')
+    expect(mapSm3Category(uni2zg('စားသောက်ဆိုင်'))).toBe('Restaurant')
+    expect(mapSm3Category('Restaurant & Food')).toBe('Restaurant')
+    expect(mapSm3Category('restaurant & food')).toBe('Restaurant')
+    expect(mapSm3Category('Restaurant')).toBe('Restaurant')
   })
 })
 
