@@ -12,7 +12,7 @@ import {
   subscribeToNotifications,
 } from '../lib/notificationService'
 import { confirmDialog } from '../lib/confirmDialog'
-import { showError } from '../lib/toast'
+import { showError, showSuccess } from '../lib/toast'
 import { withTimeout } from '../lib/withTimeout'
 import { formatMyanmarDate } from '../lib/myanmarDate'
 import { goBackOrHome } from '../lib/navigation'
@@ -55,6 +55,10 @@ export default function NotificationsPage() {
   const [filter, setFilter] = useState('all') // 'all' | 'unread'
   const [pageSize, setPageSize] = useState(50)
   const [hasMore, setHasMore] = useState(false)
+  // v9.29 (bulk delete): ids selected on this page + bulk state.
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState(null) // { i, total } while bulkDeleting
 
   const load = useCallback(async () => {
     if (!user) { setLoading(false); return }
@@ -127,6 +131,70 @@ export default function NotificationsPage() {
     }
   }
 
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllVisible() {
+    const visible = notifications.filter(n => filter === 'unread' ? !n.is_read : true)
+    setSelectedIds(prev => {
+      const allSelected = visible.length > 0 && visible.every(n => prev.has(n.id))
+      const next = new Set(prev)
+      if (allSelected) visible.forEach(n => next.delete(n.id))
+      else visible.forEach(n => next.add(n.id))
+      return next
+    })
+  }
+
+  // v9.29 (bulk delete): delete every selected notification in one go.
+  // Sequential deletes through the existing deleteNotification helper
+  // (the same single-row delete as handleDelete) — no bulk SQL path.
+  // ONE confirm before the loop; failed ids stay selected for retry.
+  async function handleBulkDelete() {
+    if (bulkDeleting || selectedIds.size === 0) return
+    const targets = notifications.filter(n => (filter === 'unread' ? !n.is_read : true) && selectedIds.has(n.id))
+    if (targets.length === 0) return
+    const names = targets.map(n => n.title).filter(Boolean)
+    const shown = names.slice(0, 5)
+    const msg = `အသိပေးချက် ${targets.length} ခု ဖျက်မလား? ပြန်မရနိုင်ပါ။\n${shown.map(n => `• ${n}`).join('\n')}${targets.length > 5 ? `\n…နောက်ထပ် ${targets.length - 5} ခု` : ''}`
+    if (!(await confirmDialog(msg, {
+      title: `အသိပေးချက် ${targets.length} ခု အပြီးဖျက်မည်`,
+      confirmText: 'အပြီးဖျက်မည်',
+      danger: true,
+    }))) return
+    setBulkDeleting(true)
+    setBulkProgress({ i: 0, total: targets.length })
+    const succeeded = []
+    const failed = []
+    for (let i = 0; i < targets.length; i++) {
+      try {
+        await deleteNotification(targets[i].id)
+        succeeded.push(targets[i])
+      } catch (err) {
+        console.warn('Bulk delete notification failed:', targets[i].id, err)
+        failed.push(targets[i])
+      }
+      setBulkProgress({ i: i + 1, total: targets.length })
+    }
+    setBulkDeleting(false)
+    setBulkProgress(null)
+    const succeededIds = new Set(succeeded.map(n => n.id))
+    setNotifications(prev => prev.filter(n => !succeededIds.has(n.id)))
+    // Clear ONLY the succeeded ids — failed ids stay selected for retry.
+    setSelectedIds(prev => new Set([...prev].filter(id => !succeededIds.has(id))))
+    if (failed.length === 0) {
+      showSuccess(`✓ အသိပေးချက် ${succeeded.length} ခု ဖျက်ပြီးပါပြီ`)
+    } else {
+      const failedNames = failed.slice(0, 3).map(f => f.title || 'ဤအသိပေးချက်')
+      showError(`ဖျက်မရတာ ${failed.length} ခု (${failedNames.join(', ')}) — ${succeeded.length} ခု ဖျက်ပြီးပါပြီ`)
+    }
+  }
+
   function handleOpen(notif) {
     handleMarkRead(notif)
     // Navigate based on notification type
@@ -193,15 +261,17 @@ export default function NotificationsPage() {
             </p>
           </div>
         </div>
-        {unreadCount > 0 && (
-          <button
-            onClick={handleMarkAll}
-            className="flex items-center gap-1.5 text-[10px] text-brand-300 hover:text-brand-200 transition-colors px-3 py-2 rounded-xl bg-brand-600/15 border border-brand-400/25"
-          >
-            <CheckCheck size={12} />
-            {lang === 'mm' ? 'အားလုံးဖတ်ပြီးဟု မှတ်မည်' : 'Mark all read'}
-          </button>
-        )}
+        {/* v9.29: "Mark all read" is ALWAYS visible (disabled at 0
+            unread) — it used to render only when unreadCount > 0, so
+            with everything read it looked like the button was missing. */}
+        <button
+          onClick={handleMarkAll}
+          disabled={unreadCount === 0}
+          className="flex items-center gap-1.5 text-[10px] text-brand-300 hover:text-brand-200 transition-colors px-3 py-2 rounded-xl bg-brand-600/15 border border-brand-400/25 disabled:opacity-50"
+        >
+          <CheckCheck size={12} />
+          {lang === 'mm' ? 'အားလုံးဖတ်ပြီးဟု မှတ်မည်' : 'Mark all read'}
+        </button>
       </div>
 
       {/* Filter tabs */}
@@ -214,7 +284,7 @@ export default function NotificationsPage() {
             ].map(t => (
               <button
                 key={t.id}
-                onClick={() => setFilter(t.id)}
+                onClick={() => { setFilter(t.id); setSelectedIds(new Set()) }}
                 className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                   filter === t.id
                     ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
@@ -226,6 +296,37 @@ export default function NotificationsPage() {
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* v9.29 (bulk delete): select-all is PAGE-LEVEL — only the rows
+          currently shown under the current filter. Always visible when
+          there are rows; flex-wrap, no sideways scroller. The delete
+          label says "အပြီးဖျက်မည် — ပြန်မရပါ" so it cannot be misread
+          as deselect (9.28 lesson). */}
+      {filtered.length > 0 && (
+        <div className="px-4 mb-3 flex gap-2 flex-wrap items-center">
+          <label className="flex items-center gap-2 text-xs text-white/70 font-myanmar cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filtered.length > 0 && filtered.every(n => selectedIds.has(n.id))}
+              onChange={toggleSelectAllVisible}
+              disabled={bulkDeleting}
+              className="w-5 h-5"
+              aria-label="စာရင်းပါ အားလုံး ရွေးမည်"
+            />
+            <span>စာရင်းပါ {filtered.length} ခု အားလုံး ရွေးမည်</span>
+          </label>
+          <span className="text-xs text-white/60 font-myanmar">{selectedIds.size} ခု ရွေးထားသည်</span>
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkDeleting || selectedIds.size === 0}
+            className="px-4 py-2.5 btn-danger rounded-xl text-xs font-bold disabled:opacity-50"
+          >
+            {bulkDeleting && bulkProgress
+              ? `ဖျက်နေသည်… (${bulkProgress.i}/${bulkProgress.total})`
+              : `🗑️ ရွေးထားတာ အပြီးဖျက်မည် (${selectedIds.size}) — ပြန်မရပါ`}
+          </button>
         </div>
       )}
 
@@ -268,6 +369,9 @@ export default function NotificationsPage() {
               key={notif.id}
               notif={notif}
               lang={lang}
+              selected={selectedIds.has(notif.id)}
+              selectDisabled={bulkDeleting}
+              onToggleSelect={() => toggleSelect(notif.id)}
               onOpen={() => handleOpen(notif)}
               onDelete={() => handleDelete(notif.id)}
             />
@@ -286,7 +390,7 @@ export default function NotificationsPage() {
   )
 }
 
-function NotificationRow({ notif, lang, onOpen, onDelete }) {
+function NotificationRow({ notif, lang, selected, selectDisabled, onToggleSelect, onOpen, onDelete }) {
   const cfg = TYPE_CFG[notif.type] || TYPE_CFG.system_alert
   const Icon = cfg.icon
 
@@ -299,6 +403,17 @@ function NotificationRow({ notif, lang, onOpen, onDelete }) {
           : 'bg-brand-600/10 border-brand-400/25 hover:bg-brand-600/15'
       }`}
     >
+      {/* v9.29 (bulk delete): per-row checkbox — stopPropagation so
+          ticking a row never opens it. */}
+      <input
+        type="checkbox"
+        checked={!!selected}
+        onChange={(e) => { e.stopPropagation(); onToggleSelect() }}
+        onClick={(e) => e.stopPropagation()}
+        disabled={selectDisabled}
+        className="w-5 h-5 mt-2 flex-shrink-0"
+        aria-label="ရွေးမည်"
+      />
       {/* Unread indicator */}
       {!notif.is_read && (
         <span className="absolute top-3 right-3 w-2 h-2 rounded-full bg-brand-400 animate-pulse pointer-events-none" />
