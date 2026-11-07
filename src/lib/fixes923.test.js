@@ -23,9 +23,9 @@ function changelogEntry(header, v, nextV) {
 }
 
 describe('v9.23: version + Change Log Admin rule', () => {
-  it('package.json is 9.23', () => {
+  it('package.json is 9.25', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.23')
+    expect(pkg.version).toBe('9.25')
   })
 
   it('the 9.23 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {

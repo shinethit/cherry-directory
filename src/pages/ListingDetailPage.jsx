@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Phone, MessageCircle, MapPin, Star, Send, CheckCircle, ExternalLink, Bookmark, BookmarkCheck, BadgeCheck, Edit3, UtensilsCrossed } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -13,6 +13,7 @@ import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { deleteListingWithCleanup, deleteListingConfirmMessage } from '../lib/deleteListing'
+import { goBackOrHome } from '../lib/navigation'
 import { showError, showSuccess } from '../lib/toast'
 import { confirmDialog } from '../lib/confirmDialog'
 import { useDeleteReview, useCreateReview } from '../hooks/useReviews'
@@ -156,19 +157,22 @@ export default function ListingDetailPage() {
     type: 'business.business',
   })
 
-  useEffect(() => {
-    async function load() {
-      // v9.19: only show the full-screen spinner when there is no
-      // listing yet (fresh navigation). With a row already on screen
-      // (post-save router state) this is a soft background refresh —
-      // the effect re-runs when the profile arrives, and that must
-      // never re-show the spinner either. A failed background refresh
-      // likewise must not swap a good listing for the error screen.
-      const hadListing = !!listing
-      if (!hadListing) setLoading(true)
-      setNotFound(false)
-      setLoadError(false)
-      try {
+  // v9.25 regen #2: load() is a useCallback so the error screen's
+  // retry button can soft re-run it — the old full-page reload threw
+  // away the whole page state (and the cached data) on every
+  // slow-network failure.
+  const load = useCallback(async () => {
+    // v9.19: only show the full-screen spinner when there is no
+    // listing yet (fresh navigation). With a row already on screen
+    // (post-save router state) this is a soft background refresh —
+    // the effect re-runs when the profile arrives, and that must
+    // never re-show the spinner either. A failed background refresh
+    // likewise must not swap a good listing for the error screen.
+    const hadListing = !!listing
+    if (!hadListing) setLoading(true)
+    setNotFound(false)
+    setLoadError(false)
+    try {
         // 30 s timeout (was none — a hung query left the skeletons up
         // forever). allSettled: the listing is core, reviews are not —
         // a failed reviews query used to blank the whole page.
@@ -225,9 +229,11 @@ export default function ListingDetailPage() {
         }
       } catch (e) { console.warn(e); if (!hadListing) setLoadError(true) }
       finally { setLoading(false) }
-    }
-    load()
   }, [id, profile])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   // S6 (v9.17): claim/vote load in a separate effect keyed on
   // profile?.id — a profile refresh must not re-fetch the listing or
@@ -330,7 +336,13 @@ export default function ListingDetailPage() {
       showSuccess(cleanupErrors.length > 0
         ? '🗑️ ဖျက်ပြီးပါပြီ (ဆက်စပ်အချက်အလက် အချို့ ဖျက်မရပါ: ' + cleanupErrors.join('; ') + ')'
         : '🗑️ ဖျက်ပြီးပါပြီ')
-      navigate('/directory')
+      // v9.25: one step back to the list the admin came from (subcategory
+      // list / Admin listings / Home / Search / Saved) — the old absolute
+      // push to the top-level list dropped ?cat= and mounted it instead.
+      // NOTE: scroll position is NOT preserved — ScrollToTop resets to
+      // (0,0) and DirectoryPage remounts at page 1 — but the next delete
+      // is one tap away, no re-tapping category/subcategory.
+      goBackOrHome(navigate, '/directory')
     } catch (e) {
       showError('ဖျက်ရာတွင် အမှားတစ်ခု ဖြစ်သွားသည်: ' + e.message)
       setDeletingListing(false)
@@ -388,7 +400,7 @@ export default function ListingDetailPage() {
   if (loadError) return (
     <div className="p-4 py-16 text-center space-y-3">
       <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
-      <button onClick={() => window.location.reload()} className="btn-primary text-sm px-5 py-2.5">ပြန်ကြိုးစားမည်</button>
+      <button onClick={() => load()} className="btn-primary text-sm px-5 py-2.5">ပြန်ကြိုးစားမည်</button>
     </div>
   )
 
@@ -533,7 +545,7 @@ export default function ListingDetailPage() {
           <div className="flex items-start gap-3 card-dark p-4 rounded-2xl">
             <MapPin size={18} className="text-brand-300 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm text-white/80 font-myanmar">
+              <p className="text-sm text-white/80 font-myanmar break-words">
                 {lang === 'mm' ? (listing.address_mm || listing.address) : (listing.address || listing.address_mm)}
               </p>
               <p className="text-xs text-white/60 mt-0.5">{[listing.ward, listing.township, listing.city].filter(Boolean).join(' • ')}</p>

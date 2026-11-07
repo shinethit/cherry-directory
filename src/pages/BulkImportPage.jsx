@@ -498,19 +498,19 @@ export default function BulkImportPage() {
             </p>
             <div className="grid grid-cols-4 gap-2">
               <div className="bg-white/5 rounded-xl p-3 text-center">
-                <p className="font-display font-bold text-xl text-white">{results.total}</p>
+                <p className="font-display font-bold text-xl text-white truncate">{results.total}</p>
                 <p className="text-[9px] text-white/60">Total</p>
               </div>
               <div className="bg-green-500/10 rounded-xl p-3 text-center border border-green-500/20">
-                <p className="font-display font-bold text-xl text-green-400">{results.success}</p>
+                <p className="font-display font-bold text-xl text-green-400 truncate">{results.success}</p>
                 <p className="text-[9px] text-green-400/60">Success</p>
               </div>
               <div className={'rounded-xl p-3 text-center border ' + (results.failed > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-white/5 border-white/5')}>
-                <p className={'font-display font-bold text-xl ' + (results.failed > 0 ? 'text-red-400' : 'text-white/60')}>{results.failed}</p>
+                <p className={'truncate font-display font-bold text-xl ' + (results.failed > 0 ? 'text-red-400' : 'text-white/60')}>{results.failed}</p>
                 <p className={'text-[9px] ' + (results.failed > 0 ? 'text-red-400/60' : 'text-white/60')}>Failed</p>
               </div>
               <div className={'rounded-xl p-3 text-center border ' + (results.skipped.length > 0 ? 'bg-amber-500/10 border-amber-500/20' : 'bg-white/5 border-white/5')}>
-                <p className={'font-display font-bold text-xl ' + (results.skipped.length > 0 ? 'text-amber-400' : 'text-white/60')}>{results.skipped.length}</p>
+                <p className={'truncate font-display font-bold text-xl ' + (results.skipped.length > 0 ? 'text-amber-400' : 'text-white/60')}>{results.skipped.length}</p>
                 <p className={'text-[9px] ' + (results.skipped.length > 0 ? 'text-amber-400/60' : 'text-white/60')}>Skipped</p>
               </div>
             </div>

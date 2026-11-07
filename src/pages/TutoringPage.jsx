@@ -143,9 +143,9 @@ function TutoringCard({ post, lang, isLoggedIn, userId, isModerator, onEdit, onD
                 <p className="text-xs text-white/60 leading-relaxed whitespace-pre-wrap">{post.description}</p>
               )}
               {post.images?.length > 1 && (
-                <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+                <div className="flex flex-wrap gap-1.5">
                   {post.images.slice(1).map((img, i) => (
-                    <img key={i} src={getOptimizedUrl(img, { width: 160 })} alt={post.title_mm || post.title || 'ပုံ'} loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10 flex-shrink-0" />
+                    <img key={i} src={getOptimizedUrl(img, { width: 160 })} alt={post.title_mm || post.title || 'ပုံ'} loading="lazy" onError={e => { e.currentTarget.style.display = 'none' }} className="w-16 h-16 rounded-lg object-cover border border-white/10" />
                   ))}
                 </div>
               )}

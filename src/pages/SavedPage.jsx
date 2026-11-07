@@ -191,12 +191,12 @@ export default function SavedPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 px-4 mb-4 overflow-x-auto scrollbar-hide">
+      <div className="flex flex-wrap gap-2 px-4 mb-4">
         {TABS.map(({ id, label, icon: Icon, count }) => (
           <button
             key={id}
             onClick={() => switchTab(id)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-colors ${
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-colors ${
               tab === id
                 ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
                 : 'bg-white/5 text-white/50 border border-white/10'
@@ -210,10 +210,10 @@ export default function SavedPage() {
 
       {/* Places category filter */}
       {tab === 'places' && places.length > 0 && (
-        <div className="px-4 mb-3 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+        <div className="px-4 mb-3 flex flex-wrap gap-2 pb-1">
           <button
             onClick={() => setPlaceFilter('all')}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
               placeFilter === 'all'
                 ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
                 : 'bg-white/5 text-white/50 border border-white/10'
@@ -228,7 +228,7 @@ export default function SavedPage() {
               <button
                 key={cat.id}
                 onClick={() => setPlaceFilter(cat.id)}
-                className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                   placeFilter === cat.id
                     ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
                     : 'bg-white/5 text-white/50 border border-white/10'

@@ -6,7 +6,7 @@ import {
   UserCog, Search, RefreshCw, TrendingUp, FileText, Star,
   EyeOff, Calendar, Megaphone, Shield, BadgeCheck, Lock, Database, Download, ScrollText
 } from 'lucide-react'
-import { deleteListingWithCleanup, deleteListingConfirmMessage } from '../lib/deleteListing'
+import { deleteListingWithCleanup, deleteListingConfirmMessage, deleteListingsBulk, deleteBulkConfirmMessage } from '../lib/deleteListing'
 import { buildListingStatusUpdate } from '../lib/listingStatus'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
@@ -76,6 +76,11 @@ export default function AdminPage() {
   const [usersHasMore, setUsersHasMore] = useState(false)
   const [reports, setReports]         = useState({})
   const [deleting, setDeleting]       = useState(null)
+  // v9.25 (bulk delete): ids selected on the listings tab + bulk state.
+  // `deleting` stays the single-row busy id — it is NOT overloaded.
+  const [selectedIds, setSelectedIds]   = useState(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState(null) // { i, total } while bulkDeleting
   // Unfiltered pending count for the filter badge (G7) — the listing
   // list itself is server-filtered, so it can never be counted from it.
   const [pendingListingsCount, setPendingListingsCount] = useState(0)
@@ -147,6 +152,14 @@ export default function AdminPage() {
       if (error) throw error
       setListingsHasMore((rows || []).length > listingsLimit)
       setData((rows || []).slice(0, listingsLimit))
+      // v9.25 (bulk delete): prune selections for rows no longer loaded
+      // (deleted rows, or a filter change that reloaded the list).
+      setSelectedIds(prev => {
+        if (prev.size === 0) return prev
+        const loaded = new Set((rows || []).map(r => r.id))
+        const next = new Set([...prev].filter(id => loaded.has(id)))
+        return next.size === prev.size ? prev : next
+      })
       // The rows are visible now. The badge/report counts below are
       // secondary: each has its own timeout and must never gate the
       // list (a hung count query used to hold loading=true).
@@ -155,10 +168,13 @@ export default function AdminPage() {
       // Pending badge count (G7) — counted from ALL listings, never
       // from the filtered list above.
       try {
-        const { count: pendingCount } = await withTimeout(supabase
+        const { count: pendingCount, error: countErr } = await withTimeout(supabase
           .from('listings')
           .select('*', { count: 'exact', head: true })
           .eq('status', 'pending'), 30000, 'Admin pending count')
+        // v9.25 regen #5: a resolve-with-error count read as 0 and
+        // wiped the badge. Throw so the catch keeps the old count.
+        if (countErr) throw countErr
         setPendingListingsCount(pendingCount || 0)
       } catch (countErr) { console.warn('Pending count failed:', countErr) }
 
@@ -166,10 +182,13 @@ export default function AdminPage() {
         // One query for all report counts (was N+1 sequential
         // per-listing count queries) — tally client-side.
         try {
-          const { data: repRows } = await withTimeout(supabase
+          const { data: repRows, error: repErr } = await withTimeout(supabase
             .from('listing_reports')
             .select('listing_id')
             .in('listing_id', rows.map(r => r.id)), 30000, 'Admin report counts')
+          // v9.25 regen #5: a resolve-with-error here zeroed every
+          // report count. Throw so the catch keeps the old counts.
+          if (repErr) throw repErr
           const reportCounts = {}
           rows.forEach(r => { reportCounts[r.id] = 0 })
           ;(repRows || []).forEach(rr => {
@@ -311,10 +330,13 @@ export default function AdminPage() {
     // N1 (v9.17): a hung/failed count must not crash the tab — the badge
     // simply keeps its previous value.
     try {
-      const { count } = await withTimeout(supabase
+      const { count, error: claimsErr } = await withTimeout(supabase
         .from('listing_claims')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending'), 30000, 'Admin pending claims')
+      // v9.25 regen #5: a resolve-with-error count read as 0 and hid
+      // the claims badge. Throw so the catch keeps the old value.
+      if (claimsErr) throw claimsErr
       setPendingClaims(count || 0)
     } catch (e) { console.warn('Pending claim count failed:', e) }
   }
@@ -678,7 +700,8 @@ export default function AdminPage() {
   // (RequireAdmin admits them) but must not delete listings. The 9.20
   // migration adds the matching RLS policy; this UI gate is the
   // first defence, the policy is the second. The confirm is a
-  // full-impact warning (points effects per the 9.17 triggers), and the
+  // full-impact warning (v9.25: deleting keeps earned points — no
+  // -10/-20/-5 reversal rows; counters still decrement), and the
   // delete itself lives in deleteListing.js (shared with the detail page).
   async function handleDelete(id) {
     if (!isAdmin) return
@@ -695,6 +718,71 @@ export default function AdminPage() {
       loadDashboardStats()
     } catch (e) { showError('ဖျက်ရာတွင် အမှားတစ်ခု ဖြစ်သွားသည်: ' + e.message) }
     setDeleting(null)
+  }
+
+  // v9.25 (bulk delete, Admin-only): delete every selected listing in
+  // one go. ONE confirm before the loop; the loop itself is the shared
+  // deleteListingsBulk helper (same deleteListingWithCleanup call per
+  // row as the single delete, so RLS / audit / cleanup / invalidation
+  // are identical). One summary toast only; failed ids stay selected
+  // for retry. The admin stays on the tab — no navigation.
+  function toggleSelectListing(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAllLoaded() {
+    // PAGE-LEVEL select-all: only the rows currently loaded in `data`
+    // under the current filter — loadListings never counts a total, so
+    // "all filtered results in the DB" cannot be selected.
+    setSelectedIds(prev => {
+      const allSelected = data.length > 0 && data.every(l => prev.has(l.id))
+      if (allSelected) return new Set()
+      return new Set(data.map(l => l.id))
+    })
+  }
+
+  async function handleBulkDelete() {
+    if (!isAdmin || bulkDeleting || selectedIds.size === 0) return
+    // Snapshot the targets ONCE before the loop — the list refreshes
+    // only after the loop, so `data` cannot change underneath it.
+    const targets = data.filter(l => selectedIds.has(l.id))
+    if (targets.length === 0) return
+    const names = targets.map(l => l.name_mm || l.name)
+    if (!(await confirmDialog(deleteBulkConfirmMessage(names, targets.length), {
+      danger: true,
+      title: `လုပ်ငန်း ${targets.length} ခု ဖျက်မည်`,
+      confirmText: 'ဖျက်မည်',
+    }))) return
+    setBulkDeleting(true)
+    setBulkProgress({ i: 0, total: targets.length })
+    const result = await deleteListingsBulk(supabase, targets, {
+      log,
+      onProgress: (i, total, row) => {
+        setDeleting(row?.id || null)
+        setBulkProgress({ i, total })
+      },
+    })
+    setDeleting(null)
+    setBulkDeleting(false)
+    setBulkProgress(null)
+    // Clear ONLY the succeeded ids — failed ids stay selected for retry.
+    const succeededIds = new Set(result.succeeded.map(r => r.id))
+    setSelectedIds(prev => new Set([...prev].filter(id => !succeededIds.has(id))))
+    if (result.failed.length === 0) {
+      showSuccess(result.cleanupWarnings.length > 0
+        ? `🗑️ ${result.succeeded.length} ခု ဖျက်ပြီးပါပြီ (ဆက်စပ်အချက်အလက် အချို့ ဖျက်မရပါ)`
+        : `🗑️ ${result.succeeded.length} ခု ဖျက်ပြီးပါပြီ`)
+    } else {
+      const failedNames = result.failed.slice(0, 3).map(f => f.row?.name_mm || f.row?.name || 'ဤလုပ်ငန်း')
+      showError(`ဖျက်မရတာ ${result.failed.length} ခု (${failedNames.join(', ')}) — ${result.succeeded.length} ခု ဖျက်ပြီးပါပြီ`)
+    }
+    loadListings()
+    loadDashboardStats()
   }
 
   async function handleEdit(listing) {
@@ -815,45 +903,45 @@ export default function AdminPage() {
           <h1 className="font-display font-bold text-lg text-white">စီမံခန့်ခွဲမှု</h1>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => selectTab('dashboard')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/60'}`}>
+        <div className="flex flex-wrap gap-2 pb-2">
+          <button onClick={() => selectTab('dashboard')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${tab === 'dashboard' ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <LayoutDashboard size={14} /> Dashboard
           </button>
-          <button onClick={() => selectTab('data')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'data' ? 'bg-teal-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('data')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${tab === 'data' ? 'bg-teal-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <Database size={14} /> Data
           </button>
-          <button onClick={() => selectTab('users')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'users' ? 'bg-pink-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('users')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${tab === 'users' ? 'bg-pink-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <UserCog size={14} /> Users
           </button>
-          <button onClick={() => selectTab('listings')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('listings')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${tab === 'listings' ? 'bg-blue-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <List size={14} /> Listings
           </button>
-          <button onClick={() => selectTab('claims')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'claims' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('claims')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${tab === 'claims' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <BadgeCheck size={14} /> ပိုင်ဆိုင်ကြောင်း
             {pendingClaims > 0 && tab !== 'claims' && (
               <span className="ml-1 px-1.5 py-0.5 rounded-full bg-amber-500 text-[8px] text-white">{pendingClaims}</span>
             )}
           </button>
-          <button onClick={() => selectTab('categories')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('categories')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${tab === 'categories' ? 'bg-amber-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <FolderTree size={14} /> Categories
           </button>
-          <button onClick={() => selectTab('quicklinks')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('quicklinks')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${tab === 'quicklinks' ? 'bg-purple-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <LinkIcon size={14} /> Quick Links
           </button>
-          <button onClick={() => selectTab('audit')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${tab === 'audit' ? 'bg-slate-600 text-white' : 'bg-white/5 text-white/60'}`}>
+          <button onClick={() => selectTab('audit')} className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${tab === 'audit' ? 'bg-slate-600 text-white' : 'bg-white/5 text-white/60'}`}>
             <ScrollText size={14} /> Audit Log
           </button>
         </div>
 
         {/* Admin tools — Reports / Bulk Import / Settings (G3) */}
-        <div className="flex gap-2 pb-2">
-          <button onClick={() => navigate('/admin/reports')} className="flex-1 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors whitespace-nowrap">
+        <div className="grid grid-cols-3 gap-2 pb-2">
+          <button onClick={() => navigate('/admin/reports')} className="min-w-0 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors text-center">
             🚩 Reports
           </button>
-          <button onClick={() => navigate('/admin/bulk-import')} className="flex-1 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors whitespace-nowrap">
+          <button onClick={() => navigate('/admin/bulk-import')} className="min-w-0 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors text-center">
             📥 Bulk Import
           </button>
-          <button onClick={() => navigate('/admin/settings')} className="flex-1 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors whitespace-nowrap">
+          <button onClick={() => navigate('/admin/settings')} className="min-w-0 px-3 py-2 rounded-xl text-xs font-bold bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 transition-colors text-center">
             ⚙️ Settings
           </button>
         </div>
@@ -971,7 +1059,7 @@ export default function AdminPage() {
               placeholder="နာမည်ဖြင့် ရှာရန်..." 
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
-              className="bg-transparent border-none outline-none text-sm text-white w-full font-myanmar placeholder:text-white/30"
+              className="bg-transparent border-none outline-none text-sm text-white w-full min-w-0 font-myanmar placeholder:text-white/30"
             />
           </div>
 
@@ -1071,22 +1159,22 @@ export default function AdminPage() {
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border bg-amber-500/20 border-amber-500/30 text-amber-400 flex-shrink-0">PENDING</span>
                 </div>
-                <div className="flex gap-2 pt-1">
+                <div className="flex flex-wrap gap-2 pt-1">
                   <button
                     onClick={() => handleClaimDecision(claim, true)}
                     disabled={claimBusy === claim.id}
-                    className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"
+                    className="flex-1 min-w-0 px-3 py-2 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"
                   >
-                    <Check size={12} /> {claimBusy === claim.id ? '...' : 'APPROVE (+30 အမှတ်)'}
+                    <Check size={12} /> {claimBusy === claim.id ? '...' : 'APPROVE (+30)'}
                   </button>
                   <button
                     onClick={() => handleClaimDecision(claim, false)}
                     disabled={claimBusy === claim.id}
-                    className="flex-1 px-3 py-2 bg-white/8 border border-white/10 text-white/60 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"
+                    className="flex-1 min-w-0 px-3 py-2 bg-white/8 border border-white/10 text-white/60 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50"
                   >
                     <X size={12} /> REJECT
                   </button>
-                  <button onClick={() => navigate(`/directory/${claim.listing_id}`)} className="px-3 py-2 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                  <button onClick={() => navigate(`/directory/${claim.listing_id}`)} className="min-w-0 px-3 py-2 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
                     <Eye size={12} /> VIEW
                   </button>
                 </div>
@@ -1243,8 +1331,8 @@ export default function AdminPage() {
         <div className="animate-fade-in">
           <div className="px-4 mb-4 flex gap-2 flex-wrap">
             {[['all', 'All'], ['approved', 'Approved'], ['pending', 'Pending'], ['suspended', 'Suspended']].map(([val, label]) => (
-              <button key={val} onClick={() => setListingFilter(val)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors ${
+              <button key={val} onClick={() => { setListingFilter(val); setSelectedIds(new Set()) }} disabled={bulkDeleting}
+                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-colors disabled:opacity-50 ${
                   listingFilter === val
                     ? 'bg-blue-600/30 border-blue-400/40 text-blue-200'
                     : 'bg-white/5 border-white/10 text-white/60'
@@ -1258,6 +1346,36 @@ export default function AdminPage() {
               </button>
             ))}
           </div>
+
+          {/* v9.25 (bulk delete, Admin-only): select-all is PAGE-LEVEL —
+              only the rows currently loaded in `data` under the current
+              filter (loadListings never counts a total). Always visible;
+              flex-wrap, no sideways scroller. */}
+          {isAdmin && (
+            <div className="px-4 mb-4 flex gap-2 flex-wrap items-center">
+              <label className="flex items-center gap-2 text-xs text-white/70 font-myanmar cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={data.length > 0 && data.every(l => selectedIds.has(l.id))}
+                  onChange={toggleSelectAllLoaded}
+                  disabled={bulkDeleting || data.length === 0}
+                  className="w-5 h-5"
+                  aria-label="စာရင်းပါ အားလုံး ရွေးမည်"
+                />
+                <span>စာရင်းပါ {data.length} ခု အားလုံး ရွေးမည်</span>
+              </label>
+              <span className="text-xs text-white/60 font-myanmar">{selectedIds.size} ခု ရွေးထားသည်</span>
+              <button
+                onClick={handleBulkDelete}
+                disabled={bulkDeleting || selectedIds.size === 0}
+                className="px-4 py-2.5 btn-danger rounded-xl text-xs font-bold disabled:opacity-50"
+              >
+                {bulkDeleting && bulkProgress
+                  ? `ဖျက်နေသည်… (${bulkProgress.i}/${bulkProgress.total})`
+                  : `ရွေးထားတာ ဖျက်မည် (${selectedIds.size})`}
+              </button>
+            </div>
+          )}
 
           <div className="px-4 space-y-2">
             {loading ? (
@@ -1290,10 +1408,24 @@ export default function AdminPage() {
                   ) : (
                     <>
                       <div className="flex items-start justify-between gap-3 mb-3">
+                        {/* v9.25 (bulk delete, Admin-only): per-row checkbox,
+                            ~44px hit area. Hidden while the row is being
+                            edited — the edit form replaces this whole row. */}
+                        {isAdmin && (
+                          <label className="w-11 h-11 flex items-center justify-center flex-shrink-0 cursor-pointer" aria-label="ရွေးမည်">
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(item.id)}
+                              onChange={() => toggleSelectListing(item.id)}
+                              disabled={bulkDeleting}
+                              className="w-5 h-5"
+                            />
+                          </label>
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-white truncate">{item.name_mm || item.name}</p>
-                          <p className="text-[10px] text-white/60">{item.category?.name_mm || item.category?.name} • {item.city}</p>
-                          <p className="text-[10px] text-white/60 mt-0.5">{item.address}</p>
+                          <p className="text-[10px] text-white/60 break-words">{item.category?.name_mm || item.category?.name} • {item.city}</p>
+                          <p className="text-[10px] text-white/60 mt-0.5 break-words">{item.address}</p>
                           {item.submitter && <p className="text-[9px] text-white/60 mt-0.5">တင်သွင်းသူ: {item.submitter.full_name}</p>}
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border flex-shrink-0 ${
@@ -1314,25 +1446,25 @@ export default function AdminPage() {
 
                       <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
                         {item.status !== 'approved' && (
-                          <button onClick={() => handleApprove(item.id)} disabled={listingBusy === item.id} className="flex-1 min-w-[70px] px-3 py-2.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                          <button onClick={() => handleApprove(item.id)} disabled={listingBusy === item.id || bulkDeleting} className="flex-1 min-w-[70px] px-3 py-2.5 bg-green-500 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                             <Check size={12} /> {listingBusy === item.id ? '...' : 'APPROVE 🍒'}
                           </button>
                         )}
                         {item.status === 'approved' && (
-                          <button onClick={() => handleSuspend(item.id)} disabled={listingBusy === item.id} className="flex-1 min-w-[70px] px-3 py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                          <button onClick={() => handleSuspend(item.id)} disabled={listingBusy === item.id || bulkDeleting} className="flex-1 min-w-[70px] px-3 py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                             <X size={12} /> {listingBusy === item.id ? '...' : 'SUSPEND'}
                           </button>
                         )}
-                        <button onClick={() => handleEdit(item)} className="flex-1 min-w-[60px] px-3 py-2.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                        <button onClick={() => handleEdit(item)} disabled={bulkDeleting} className="flex-1 min-w-[60px] px-3 py-2.5 bg-blue-500/20 border border-blue-500/30 text-blue-400 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Pencil size={12} /> EDIT
                         </button>
                         {/* v9.20: Admin only — moderators see the panel but no DELETE button. */}
                         {isAdmin && (
-                        <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id} className="flex-1 min-w-[70px] px-3 py-2.5 btn-danger rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
+                        <button onClick={() => handleDelete(item.id)} disabled={deleting === item.id || bulkDeleting} className="flex-1 min-w-[70px] px-3 py-2.5 btn-danger rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Trash2 size={12} /> {deleting === item.id ? '...' : 'DELETE'}
                         </button>
                         )}
-                        <button onClick={() => navigate(`/directory/${item.id}`)} className="flex-1 min-w-[55px] px-3 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1">
+                        <button onClick={() => navigate(`/directory/${item.id}`)} disabled={bulkDeleting} className="flex-1 min-w-[55px] px-3 py-2.5 bg-white/5 border border-white/10 text-white/50 rounded-lg text-xs font-bold flex items-center justify-center gap-1 disabled:opacity-50">
                           <Eye size={12} /> VIEW
                         </button>
                       </div>
@@ -1342,7 +1474,7 @@ export default function AdminPage() {
               ))
             )}
             {listingsHasMore && !loading && (
-              <button onClick={() => setListingsLimit(l => l + 50)} className="w-full px-3 py-2.5 bg-white/5 border border-white/10 text-white/70 rounded-xl text-xs font-bold">ထပ်တင်ရန် • Load more</button>
+              <button onClick={() => setListingsLimit(l => l + 50)} disabled={bulkDeleting} className="w-full px-3 py-2.5 bg-white/5 border border-white/10 text-white/70 rounded-xl text-xs font-bold disabled:opacity-50">ထပ်တင်ရန် • Load more</button>
             )}
           </div>
         </div>
@@ -1358,7 +1490,7 @@ function StatCard({ title, value, icon: Icon, color, pulse = false, size = 'norm
       <div className="flex items-center justify-between">
         <div>
           <p className={`${size === 'small' ? 'text-[9px]' : 'text-[10px]'} text-white/60 uppercase tracking-wider font-bold`}>{title}</p>
-          <p className={`font-display font-bold ${size === 'small' ? 'text-lg' : 'text-xl'} text-white`}>{value.toLocaleString()}</p>
+          <p className={`truncate font-display font-bold ${size === 'small' ? 'text-lg' : 'text-xl'} text-white`}>{value.toLocaleString()}</p>
         </div>
         <Icon size={size === 'small' ? 16 : 20} className={`${color} ${pulse ? 'animate-pulse' : ''}`} />
       </div>

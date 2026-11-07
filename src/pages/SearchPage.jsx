@@ -126,6 +126,9 @@ export default function SearchPage() {
   const [allSourcesDone, setAllSourcesDone] = useState(true)
   // Request guard: a slow earlier keystroke must never overwrite newer results.
   const searchTokenRef = useRef(0)
+  // v9.25 regen #2: the last GOOD results — a failed/slow run restores
+  // these instead of wiping the previous query's rows with empty arrays.
+  const lastGoodResultsRef = useRef({})
   // v9.18: abort the previous search's requests when a new one starts —
   // the 400 ms debounce alone still fires 9 parallel requests per pause.
   const searchAbortRef = useRef(null)
@@ -244,7 +247,10 @@ export default function SearchPage() {
         } else {
           hadError = true
           newResults[source.id] = []
-          streamResult(source.id, [])
+          // v9.25 regen #2: do NOT stream the empty array on error —
+          // that wiped the previous query's rows for this source while
+          // the run was still going. The final block below restores
+          // the last good results instead.
         }
       } catch (e) {
         // v9.18: an aborted (superseded) request is not an error — a
@@ -255,7 +261,9 @@ export default function SearchPage() {
         }
         hadError = true
         newResults[source.id] = []
-        streamResult(source.id, [])
+        // v9.25 regen #2: same as the error branch above — do not
+        // stream [] on failure; the previous query's rows stay until
+        // the final block restores the last good results.
       }
     })
 
@@ -274,7 +282,20 @@ export default function SearchPage() {
     }
     // A newer keystroke may have started since — never let stale results win.
     if (token !== searchTokenRef.current) return
-    setResults(newResults)
+    // v9.25 regen #2: a failed run restores the last good results
+    // instead of setResults(newResults) with empty arrays — the
+    // previous query's rows stay on screen with the error status.
+    // A clean run becomes the new last-good snapshot.
+    if (hadError) {
+      if (Object.keys(lastGoodResultsRef.current).length > 0) {
+        setResults(lastGoodResultsRef.current)
+      } else {
+        setResults(newResults)
+      }
+    } else {
+      lastGoodResultsRef.current = newResults
+      setResults(newResults)
+    }
     setSearchError(hadError)
     setLoading(false)
     setAllSourcesDone(true)
@@ -348,8 +369,13 @@ export default function SearchPage() {
               {lang === 'mm' ? 'ရှာနေသည်...' : 'Searching...'}
             </span>
           ) : searchError && !loading ? (
-            <span className="text-red-400 font-myanmar">
-              {lang === 'mm' ? 'ရှာဖွေရာတွင် အမှားဖြစ်သွားသည် — ပြန်ကြိုးစားပါ' : 'Search failed — please try again'}
+            <span className="flex items-center gap-2">
+              <span className="text-red-400 font-myanmar">
+                {lang === 'mm' ? 'ရှာဖွေရာတွင် အမှားဖြစ်သွားသည် — ပြန်ကြိုးစားပါ' : 'Search failed — please try again'}
+              </span>
+              <button onClick={() => runSearch(query)} className="text-[10px] text-brand-300 underline font-myanmar flex-shrink-0">
+                {lang === 'mm' ? 'ပြန်ကြိုးစားမည်' : 'Retry'}
+              </button>
             </span>
           ) : searched && query.length >= 2 ? (
             <span>
@@ -368,10 +394,10 @@ export default function SearchPage() {
       {/* Tabs */}
       {searched && sourcesWithResults.length > 0 && (
         <div className="px-4 mb-3">
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+          <div className="flex flex-wrap gap-2 pb-1">
             <button
               onClick={() => setActiveTab('all')}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                 activeTab === 'all'
                   ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
                   : 'bg-white/5 text-white/50 border border-white/10'
@@ -383,7 +409,7 @@ export default function SearchPage() {
               <button
                 key={source.id}
                 onClick={() => setActiveTab(source.id)}
-                className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                   activeTab === source.id
                     ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
                     : 'bg-white/5 text-white/50 border border-white/10'

@@ -305,9 +305,12 @@ describe('route audit v9.20: cosmetics', () => {
     expect(read('lib/tiers.js')).toContain("id: 'write_review'")
   })
 
-  it('LB2: rank banner hides while refetching', () => {
+  it('LB2: rank banner keeps cached rank during refetch (9.25 supersedes the v9.20 hide)', () => {
     const page = read('pages/LeaderboardPage.jsx')
-    expect(page).toContain('!boardFetching && !rankFetching')
+    expect(page).not.toContain('!boardFetching && !rankFetching')
+    expect(page).toContain("(myRank || rankBeyond) && !loading && profile")
+    // stale pill shows while the refetch is in flight, banner stays put
+    expect(page).toContain('အသစ်ရယူနေသည်…')
   })
 
   it('LF2: lost & found search uses buildOrFilter (Zawgyi variants)', () => {

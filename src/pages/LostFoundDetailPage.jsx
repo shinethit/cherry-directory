@@ -155,9 +155,14 @@ export default function LostFoundDetailPage() {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const coolMsg = lang === 'mm' ? 'ဤ Post ကို ၂၄ နာရီအတွင်း Report တင်ပြီးဖြစ်သည်' : 'You already reported this post in the last 24 hours'
     if (user?.id) {
-      const { data: existing } = await supabase.from('reports')
+      const { data: existing, error: existingErr } = await supabase.from('reports')
         .select('id').eq('target_type', 'lost_found').eq('target_id', id)
         .eq('reporter_id', user.id).gte('created_at', since).limit(1)
+      // v9.25 regen #5: a resolve-with-error dup check used to pass
+      // (existing null) and let a duplicate report through. Fail
+      // closed — the user can retry; the insert below would fail
+      // on a dead connection anyway.
+      if (existingErr) { showError(lang === 'mm' ? 'Report တင်မရပါ' : 'Report failed'); return }
       if (existing && existing.length > 0) { showError(coolMsg); return }
     } else {
       try {

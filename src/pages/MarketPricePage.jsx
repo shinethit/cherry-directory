@@ -291,8 +291,10 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
     const { error } = await supabase.from('markets').insert({ name: newName.trim(), city: '', sort_order: list.length + 1, is_active: true })
     if (error) { showError(error.message); setSaving(false); return }
     setNewName('')
-    const { data } = await supabase.from('markets').select('*').order('sort_order')
-    setList(data || [])
+    const { data, error: refetchErr } = await supabase.from('markets').select('*').order('sort_order')
+    // v9.25 regen #5: a resolve-with-error re-fetch wiped the modal
+    // list with []. Keep the last good list on failure.
+    if (!refetchErr) setList(data || [])
     setSaving(false)
     onUpdated()
   }
@@ -387,8 +389,11 @@ function AddItemModal({ onClose, onAdded, lang }) {
     if (!form.name) return
     // N13 (v9.17): same name in the same category already exists — the
     // list used to grow a silent duplicate.
-    const { data: siblings } = await supabase.from('price_items')
+    const { data: siblings, error: sibErr } = await supabase.from('price_items')
       .select('name, name_en').eq('category', form.category)
+    // v9.25 regen #5: a resolve-with-error dup check used to pass
+    // (siblings null → no dup) and insert a duplicate. Fail closed.
+    if (sibErr) { showError(sibErr.message); return }
     const dup = (siblings || []).some(x =>
       (x.name || '').trim().toLowerCase() === form.name.trim().toLowerCase() ||
       (form.name_en && (x.name_en || '').trim().toLowerCase() === form.name_en.trim().toLowerCase()))
@@ -678,8 +683,11 @@ export default function MarketPricePage() {
 
   async function handleVerify(item) {
     if (!item.median_price) return
-    const { data: latest } = await supabase.from('verified_prices')
+    const { data: latest, error: latestErr } = await supabase.from('verified_prices')
       .select('price').eq('item_id', item.id).order('created_at', { ascending: false }).limit(1)
+    // v9.25 regen #5: a resolve-with-error here skipped the
+    // already-verified check and inserted a duplicate verify row.
+    if (latestErr) { showError(latestErr.message); return }
     if (latest && latest.length > 0 && Number(latest[0].price) === Number(item.median_price)) {
       showToast('ok', lang === 'mm' ? `✓ ${item.name} ဈေးနှုန်း Verify ပြီးသား ဖြစ်သည်` : `✓ ${item.name} price already verified`)
       return
@@ -745,7 +753,9 @@ export default function MarketPricePage() {
           </div>
           <button onClick={() => refetchPrices()} disabled={marketQueryFetching} className="flex items-center gap-1 text-[10px] text-brand-300 mt-1">
             <RefreshCw size={12} className={marketQueryFetching ? 'animate-spin' : ''} />
-            {lastUpdate && !loading ? timeAgoShort(lastUpdate.toISOString(), lang) : '...'}
+            {/* 9.25 slow-network: name the background refetch instead of
+                showing the old "last updated" time while it runs. */}
+            {marketQueryFetching ? 'အသစ်ရယူနေသည်…' : (lastUpdate && !loading ? timeAgoShort(lastUpdate.toISOString(), lang) : '...')}
           </button>
         </div>
       </div>
@@ -799,13 +809,22 @@ export default function MarketPricePage() {
       {/* Grouped price list — Category → Sub-category */}
       <div className="px-4 space-y-4 mb-4">
         {loading ? [1,2,3,4,5].map(n => <div key={n} className="h-14 rounded-2xl shimmer" />) :
-          loadError ? (
+          loadError && prices.length === 0 ? (
             <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
               <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
               <button onClick={() => refetchPrices()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
             </div>
-          ) :
-          displayed.map(group => (
+          ) : (
+          <>
+            {/* 9.25 slow-network: error with cached prices — keep the
+                list, show the small amber strip above it. */}
+            {loadError && (
+              <div className="py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2">
+                <p className="text-xs text-amber-300 font-myanmar">အဟောင်းပြထားသည် — အင်တာနက် နှေးနေသည်</p>
+                <button onClick={() => refetchPrices()} className="text-xs font-bold text-amber-300 underline whitespace-nowrap">ပြန်ကြိုးစားမည်</button>
+              </div>
+            )}
+            {displayed.map(group => (
             <div key={group.id}>
               {/* Category header */}
               <button
@@ -870,8 +889,9 @@ export default function MarketPricePage() {
                 </div>
               )}
             </div>
-          ))
-        }
+          ))}
+          </>
+          )}
       </div>
 
       {/* Admin action buttons */}
@@ -896,12 +916,12 @@ export default function MarketPricePage() {
           <p className="text-[10px] text-white/60 font-display font-bold uppercase tracking-wider mb-2">{lang === 'mm' ? 'နောက်ဆုံး Report များ' : 'Recent Reports'}</p>
           <div className="space-y-1.5">
             {recentReports.map(r => (
-              <div key={r.id} className="flex items-center gap-2 text-[10px] text-white/60">
+              <div key={r.id} className="flex flex-wrap items-center gap-2 text-[10px] text-white/60">
                 <span className="text-sm">{r.item?.icon}</span>
-                <span className="font-myanmar flex-1 truncate">{lang === 'mm' ? r.item?.name : (r.item?.name_en || r.item?.name)}</span>
+                <span className="font-myanmar flex-1 min-w-0 truncate">{lang === 'mm' ? r.item?.name : (r.item?.name_en || r.item?.name)}</span>
                 <span className="font-mono font-bold text-white/60">{Number(r.price).toLocaleString()} Ks</span>
                 <span className="text-white/60">•</span>
-                <span className="text-white/60">{r.reporter?.nickname ? `@${r.reporter.nickname}` : 'Guest'}</span>
+                <span className="text-white/60 truncate max-w-[120px]">{r.reporter?.nickname ? `@${r.reporter.nickname}` : 'Guest'}</span>
                 <span className="text-white/60">{timeAgoShort(r.reported_at, lang)}</span>
                 {isModerator && (
                   <button onClick={async () => { if (!(await confirmDialog(lang === 'mm' ? 'ဒီ Report ကို ဖျက်မည်လား?' : 'Delete this report?', { danger: true }))) return; const { error } = await supabase.from('price_reports').delete().eq('id', r.id); if (error) { console.error('Delete price report error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed'); return } refetchPrices() }} className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center hover:text-red-400 transition-colors" aria-label={lang === 'mm' ? 'Report ဖျက်မည်' : 'Delete report'}>

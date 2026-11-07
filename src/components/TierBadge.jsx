@@ -32,7 +32,7 @@ export default function TierBadge({ points = 0, size = 'sm', showLabel = false, 
         {showLabel && <span>{lang === 'mm' ? tier.mm : tier.en}</span>}
       </button>
       {showTip && (
-        <span className="absolute top-full left-0 mt-1.5 z-50 w-56 rounded-xl bg-[#1a0030] border border-white/15 p-3 text-left shadow-xl shadow-black/50 normal-case">
+        <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-50 w-56 max-w-[calc(100vw-2rem)] rounded-xl bg-[#1a0030] border border-white/15 p-3 text-left shadow-xl shadow-black/50 normal-case">
           <span className="block text-xs font-bold text-white font-myanmar">
             {tier.emoji} {lang === 'mm' ? tier.mm : tier.en} {lang === 'mm' ? 'အဆင့်' : 'Tier'} · {range}
           </span>

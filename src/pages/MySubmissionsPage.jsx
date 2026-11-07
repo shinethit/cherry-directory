@@ -112,12 +112,12 @@ export default function MySubmissionsPage() {
 
       {/* Tabs */}
       {items.length > 0 && (
-        <div className="flex gap-2 px-4 mb-3 overflow-x-auto scrollbar-hide pb-1">
+        <div className="flex flex-wrap gap-2 px-4 mb-3 pb-1">
           {TABS.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={'flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (
+              className={'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (
                 tab === t.id
                   ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
                   : 'bg-white/5 text-white/50 border border-white/10'

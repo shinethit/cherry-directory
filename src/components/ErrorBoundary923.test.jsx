@@ -31,6 +31,27 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+// v9.24: the 2nd-trip button label was too long and wrapped to two lines
+// inside the purple button — shortened to 'Profile ရှင်းမည်'.
+// v9.25 (A-7): whitespace-nowrap was REMOVED from the crash-screen buttons
+// (a 320px screen overflowed the card by ~1px per button); the short label
+// stays, but it may now wrap to two lines instead of overflowing. min-w-0
+// lets both flex-1 buttons shrink. 2nd trip = sessionStorage already holds
+// 1 trip; the boundary increments it to 2 in componentDidCatch and shows
+// the clear-profile button instead of plain Retry.
+describe('ErrorBoundary 2nd-trip button (v9.24)', () => {
+  it('2nd trip shows the short label, buttons shrinkable (no whitespace-nowrap)', () => {
+    setUA(DESKTOP_UA)
+    window.sessionStorage.setItem('cherry-error-boundary-trips', '1')
+    render(<ErrorBoundary><Thrower /></ErrorBoundary>)
+    const btn = screen.getByText('Profile ရှင်းမည်')
+    expect(btn).toBeTruthy()
+    expect(btn.className).toContain('min-w-0')
+    expect(btn.className).not.toContain('whitespace-nowrap')
+    expect(screen.queryByText('ပြန်ကြိုးစားမည်')).toBeNull()
+  })
+})
+
 describe('ErrorBoundary recovery steps (v9.23)', () => {
   it('iOS shows only the Shortcut line', () => {
     setUA(IPHONE_UA)

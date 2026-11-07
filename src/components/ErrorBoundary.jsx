@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import * as Sentry from '@sentry/react'
 import { safeRemove } from '../lib/safeStorage'
+import { clearCache } from '../lib/cacheStatus'
 import { getRecoveryLines } from '../lib/recoverySteps'
 
 // v9.22: Retry used to be a plain reload — correct for a transient chunk
@@ -53,9 +54,13 @@ export class ErrorBoundary extends Component {
   // 2nd+ trip in the same session → the throw is deterministic, so clear
   // the cached profile (the usual suspect: a stale/bad cached row) and
   // go Home instead of reloading into the same crash.
+  // v9.25: ALSO clear the persisted query cache ('cherry-directory-cache')
+  // — a poisoned entry there re-crashes the app on the next load, and the
+  // profile clear alone never touched it, so the user crashed a 3rd time.
   handleRetry() {
     if (this.state.crashCount >= 2) {
       safeRemove(PROFILE_CACHE_KEY)
+      clearCache()
       window.location.href = '/'
       return
     }
@@ -90,13 +95,13 @@ export class ErrorBoundary extends Component {
             <div className="flex gap-2">
               <button
                 onClick={() => this.handleRetry()}
-                className="flex-1 btn-primary text-sm py-3 min-h-[44px]"
+                className="flex-1 min-w-0 btn-primary text-sm py-3 min-h-[44px]"
               >
-                {this.state.crashCount >= 2 ? 'Profile ရှင်းပြီး ပင်မသို့ သွားမည်' : 'ပြန်ကြိုးစားမည်'}
+                {this.state.crashCount >= 2 ? 'Profile ရှင်းမည်' : 'ပြန်ကြိုးစားမည်'}
               </button>
               <button 
                 onClick={() => window.location.href = '/'} 
-                className="flex-1 btn-ghost text-sm py-3 min-h-[44px]"
+                className="flex-1 min-w-0 btn-ghost text-sm py-3 min-h-[44px]"
               >
                 ပင်မသို့ သွားမည်
               </button>

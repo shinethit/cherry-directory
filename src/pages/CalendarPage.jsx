@@ -338,7 +338,10 @@ export default function CalendarPage() {
       const catIds = [...new Set((data || []).map(e => e.category_id).filter(Boolean))]
       if (catIds.length > 0) {
         try {
-          const { data: cats } = await withTimeout(supabase.from('categories').select('id, name, name_mm, icon').in('id', catIds), 30000, 'Calendar event categories')
+          const { data: cats, error: catError } = await withTimeout(supabase.from('categories').select('id, name, name_mm, icon').in('id', catIds), 30000, 'Calendar event categories')
+          // v9.25 regen #5: a resolve-with-error here wiped the filter
+          // options with []. Throw so the catch keeps the last good cats.
+          if (catError) throw catError
           setEventCats(cats || [])
         } catch (catErr) { console.warn(catErr) }
       } else {
@@ -470,10 +473,10 @@ export default function CalendarPage() {
 
       {/* ── Category filter ── */}
       {eventCats.length > 0 && (
-        <div className="px-4 mb-3 flex gap-2 overflow-x-auto scrollbar-hide pb-1">
+        <div className="px-4 mb-3 flex flex-wrap gap-2 pb-1">
           <button
             onClick={() => setSelEventCat(null)}
-            className={'flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (selEventCat === null ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40' : 'bg-white/5 text-white/50 border border-white/10')}
+            className={'px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (selEventCat === null ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40' : 'bg-white/5 text-white/50 border border-white/10')}
           >
             {lang === 'mm' ? 'အားလုံး' : 'All'}
           </button>
@@ -481,7 +484,7 @@ export default function CalendarPage() {
             <button
               key={cat.id}
               onClick={() => setSelEventCat(cat.id === selEventCat ? null : cat.id)}
-              className={'flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (selEventCat === cat.id ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40' : 'bg-white/5 text-white/50 border border-white/10')}
+              className={'flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ' + (selEventCat === cat.id ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40' : 'bg-white/5 text-white/50 border border-white/10')}
             >
               {cat.icon} {lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}
             </button>

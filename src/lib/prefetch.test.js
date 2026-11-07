@@ -35,13 +35,22 @@ vi.mock('./supabase', () => {
   }
   function builderFor(table) {
     const rows = ROWS[table] || []
-    const b = {}
-    for (const m of ['select', 'eq', 'neq', 'is', 'order', 'limit', 'range', 'gte', 'lte', 'gt', 'lt', 'in', 'or', 'ilike', 'not', 'like']) {
+    const b = { _isCount: false }
+    for (const m of ['eq', 'neq', 'is', 'order', 'limit', 'range', 'gte', 'lte', 'gt', 'lt', 'in', 'or', 'ilike', 'not', 'like']) {
       b[m] = () => b
     }
+    // select() records a head-count query so a test can force ONLY the
+    // count to resolve-with-error (v9.25 regen #5) via
+    // globalThis.__prefetchCountError, leaving the data queries healthy.
+    b.select = (_cols, opts) => { if (opts?.count) b._isCount = true; return b }
     b.single = () => Promise.resolve({ data: rows[0] ?? null, error: null })
     b.maybeSingle = () => Promise.resolve({ data: rows[0] ?? null, error: null })
-    b.then = (onF, onR) => Promise.resolve({ data: rows, error: null, count: rows.length }).then(onF, onR)
+    b.then = (onF, onR) => {
+      const p = (b._isCount && globalThis.__prefetchCountError)
+        ? Promise.resolve({ data: null, error: { message: 'count failed' }, count: null })
+        : Promise.resolve({ data: rows, error: null, count: rows.length })
+      return p.then(onF, onR)
+    }
     return b
   }
   return {
@@ -94,7 +103,7 @@ describe('prefetch writes the offline cache (v9.17 Issue 5)', () => {
     delete globalThis.localStorage
   })
 
-  it('runPrefetch fills all 6 keys and inspectLocalStorage reads them back non-zero', async () => {
+  it('runPrefetch fills all 7 keys and inspectLocalStorage reads them back non-zero', async () => {
     const ran = await runPrefetch({ force: true })
     expect(ran).toBe(true)
     // Persister throttle (1000 ms, trailing) — wait for the write to land.
@@ -107,9 +116,9 @@ describe('prefetch writes the offline cache (v9.17 Issue 5)', () => {
     const info = inspectLocalStorage()
     expect(info.exists).toBe(true)
     expect(info.size).toBeGreaterThan(0)
-    expect(info.queryCount).toBe(6)
+    expect(info.queryCount).toBe(7)
     const keys = info.keys.map(k => k.key)
-    for (const k of ['categories', 'fuel-stations', 'emergency-contacts', 'market-prices', 'news//30', 'visit-stats']) {
+    for (const k of ['categories', 'category-map', 'fuel-stations', 'emergency-contacts', 'market-prices', 'news//30', 'visit-stats']) {
       expect(keys).toContain(k)
     }
     expect(info.keys.every(k => k.hasData)).toBe(true)
@@ -147,6 +156,26 @@ describe('prefetch writes the offline cache (v9.17 Issue 5)', () => {
     expect(panelSrc).toContain('runPrefetch')
     expect(panelSrc).toContain('inspectLocalStorage()')
     expect(panelSrc).toContain('ပြန်သိမ်းမည်')
+  })
+})
+
+describe('fetchCategories count resolve-with-error (v9.25 regen #5)', () => {
+  it('a count that resolves with { data: null, error } settles as listing_count null, not 0', async () => {
+    const { fetchCategories } = await import('./prefetch')
+    // Happy path first: counts land as real numbers.
+    const ok = await fetchCategories()
+    expect(ok.map(c => c.listing_count)).toEqual([2, 2])
+    // Now ONLY the count queries resolve-with-error; the category rows
+    // themselves still arrive. A null count must not become 0 — 0 would
+    // disable a good category button in DirectoryPage.
+    globalThis.__prefetchCountError = true
+    try {
+      const out = await fetchCategories()
+      expect(out.map(c => c.id)).toEqual(['c1', 'c2'])
+      expect(out.map(c => c.listing_count)).toEqual([null, null])
+    } finally {
+      delete globalThis.__prefetchCountError
+    }
   })
 })
 

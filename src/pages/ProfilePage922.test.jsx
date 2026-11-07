@@ -132,13 +132,13 @@ describe('FIX 4: ErrorBoundary stops the reload loop on the 2nd trip', () => {
       <ErrorBoundary><Thrower /></ErrorBoundary>
     )
     expect(screen.getByText('ပြန်ကြိုးစားမည်')).toBeTruthy()
-    expect(screen.queryByText('Profile ရှင်းပြီး ပင်မသို့ သွားမည်')).toBeNull()
+    expect(screen.queryByText('Profile ရှင်းမည်')).toBeNull()
     unmount()
 
     render(
       <ErrorBoundary><Thrower /></ErrorBoundary>
     )
-    expect(screen.getByText('Profile ရှင်းပြီး ပင်မသို့ သွားမည်')).toBeTruthy()
+    expect(screen.getByText('Profile ရှင်းမည်')).toBeTruthy()
     expect(screen.queryByText('ပြန်ကြိုးစားမည်')).toBeNull()
   })
 })

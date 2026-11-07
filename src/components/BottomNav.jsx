@@ -80,7 +80,7 @@ export default function BottomNav() {
                         : 'text-white/60 hover:text-white/80 border-transparent'
                     }`}>
                       <Icon size={28} strokeWidth={active ? 2.5 : 1.8} />
-                      <span className={`text-xs font-medium mt-0.5 whitespace-nowrap shrink-0 ${active ? 'font-bold' : ''}`}>{item.label}</span>
+                      <span className={`text-nav text-xs font-medium mt-0.5 whitespace-nowrap shrink-0 ${active ? 'font-bold' : ''}`}>{item.label}</span>
                     </div>
                   </NavLink>
                 )
@@ -99,7 +99,7 @@ export default function BottomNav() {
                   }
                 >
                   <Icon size={20} strokeWidth={active ? 2.5 : 1.8} />
-                  <span className={`text-xs font-medium whitespace-nowrap shrink-0 ${active ? 'font-bold' : ''}`}>{item.label}</span>
+                  <span className={`text-nav text-xs font-medium whitespace-nowrap shrink-0 ${active ? 'font-bold' : ''}`}>{item.label}</span>
                 </NavLink>
               )
             })}

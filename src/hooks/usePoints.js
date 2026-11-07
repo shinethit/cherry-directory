@@ -60,22 +60,30 @@ export function usePoints() {
 
   const getMyPoints = useCallback(async () => {
     if (!user) return 0
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('points')
       .eq('id', user.id)
       .single()
+    // v9.25 regen #5: a resolve-with-error used to read as 0 points.
+    // Return null on failure (unknown, never a wrong 0) — same
+    // convention as getMonthlyPoints/fetchMonthlyPoints.
+    if (error) { console.warn('getMyPoints failed:', error); return null }
     return data?.points || 0
   }, [user])
 
   const getHistory = useCallback(async (limit = 20) => {
     if (!user) return []
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_points')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(limit)
+    // v9.25 regen #5: a resolve-with-error used to return [] — the
+    // caller (PointsGuidePage) rendered a silent empty ledger with no
+    // error and no retry. Throw so its catch shows the error + retry.
+    if (error) throw error
     return data || []
   }, [user])
 

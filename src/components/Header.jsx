@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Info, Siren, LayoutGrid, Upload, BarChart3 } from 'lucide-react'
+import { ArrowLeft, Menu, X, User, LogOut, Settings, Shield, Bell, Home, Bookmark, Trophy, MessageCircle, Calendar, Users, Search, Info, Siren, LayoutGrid, Upload, BarChart3, RefreshCw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useLang } from '../contexts/LangContext'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useUnreadNotificationCount, useNotificationSubscription } from '../hooks/useNotifications'
+import { useManualSync } from '../lib/manualSync'
 import { safeGet, safeSet } from '../lib/safeStorage'
 import { goBackOrHome } from '../lib/navigation'
 import { APP_VERSION } from '../lib/appVersion'
@@ -22,6 +23,11 @@ export default function Header() {
   // so the badge only refreshed on the 60 s React Query staleTime. Calling
   // it here keeps the badge live.
   useNotificationSubscription()
+  // v9.25: manual sync — re-download data by hand after a slow-network
+  // load left it stale. Self-contained in this header button (its own
+  // progress % + status pill); the Home load-progress bar is separate
+  // and shares no state with this.
+  const manualSync = useManualSync()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
 
@@ -178,6 +184,30 @@ export default function Header() {
             </button>
 
 
+            {/* v9.25: manual sync — tap to re-download/sync data by hand
+                (e.g. after a slow-network load left it stale). While
+                syncing the button shows the REAL progress % (queries
+                settled / total). Disabled while a sync or any in-flight
+                refetch is running, so it can never double-fetch against
+                auto-refresh. On failure the cached data stays visible
+                and the button stays usable to retry. */}
+            <button
+              onClick={manualSync.sync}
+              disabled={manualSync.busy}
+              className="w-11 h-11 shrink-0 rounded-lg bg-white/8 flex flex-col items-center justify-center text-white/60 hover:text-white/90 transition-colors disabled:opacity-50"
+              aria-label="ဒေတာ ပြန်ဆွဲမည်"
+              title={manualSync.syncing ? `ပြန်ဆွဲနေသည်… ${manualSync.progress ?? 0}%` : 'ဒေတာ ပြန်ဆွဲမည်'}
+            >
+              {manualSync.syncing ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  <span className="text-[9px] font-bold leading-none mt-0.5">{manualSync.progress ?? 0}%</span>
+                </>
+              ) : (
+                <RefreshCw size={16} />
+              )}
+            </button>
+
             <button
               onClick={toggleLang}
               className="w-11 h-11 shrink-0 rounded-lg bg-white/8 flex items-center justify-center text-xs font-bold text-white/60 hover:text-white/90"
@@ -209,6 +239,26 @@ export default function Header() {
           </div>
         </div>
       </header>
+
+      {/* v9.25: manual-sync result — plain success/failure text, clears
+          itself after ~4 s (see useManualSync). Never a crash screen. */}
+      {manualSync.status && (
+        <div
+          className={`fixed right-3 z-50 rounded-full px-3 py-2 text-xs font-myanmar shadow-lg ${
+            manualSync.status === 'ok'
+              ? 'bg-emerald-600 text-white'
+              : 'bg-red-600 text-white'
+          }`}
+          style={{ top: 'calc(4.25rem + env(safe-area-inset-top) + 0.5rem)' }}
+          role="status"
+        >
+          {manualSync.status === 'ok'
+            ? '✓ ဒေတာ အသစ် ရပြီ'
+            : manualSync.status === 'partial'
+              ? '⚠ တချို့ ဒေတာ ပြန်ဆွဲမရပါ'
+              : '✗ ပြန်ဆွဲမရပါ — ထပ်ကြိုးစားပါ'}
+        </div>
+      )}
 
       {/* Menu Modal (drawer) — v9.20: a true full-screen sheet ABOVE all
           page chrome (z-[60] > fixed app header z-50, FABs z-50, AdminPage
@@ -338,6 +388,7 @@ export default function Header() {
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
               {[
+                { v: '9.25', date: '2026-11-06', items: ['Home ဖွင့်ရင် ပျက်နေတာ ပြင်ပြီး — အကောင့်ဝင်ထားရင် တချို့အချိန်မှာ စာမျက်နှာ မှားသွားတတ်တာ', 'အမှားစာမျက်နှာက Profile ရှင်းတဲ့ ခလုတ် စာသား တိုသွားမည်', 'အလျားလိုက် scroll ပျောက် — Tab / Filter တန်းတွေ ဘေးတိုက် ပွတ်စရာ မလိုတော့ဘဲ အောက်ကို ခေါက်ကျမည်; ဆီဆိုင် Filter လည်း 360px မှာ မလျှံတော့ပါ', 'Directory မှာ လုပ်ငန်းအမည် ရှာတဲ့ ဘားတန်း scroll ဆွဲလည်း ပျောက်မသွားတော့ဘဲ အမြဲ ပေါ်နေမည်', 'ဖျက်လိုက်တဲ့ လုပ်ငန်း အရေအတွက် + စာရင်းတွေ ချက်ချင်း ပြောင်းမည် — ဖျက်ပြီး ပြန်ဝင်စရာ မလိုတော့ပါ', 'ဖျက်လိုက်ရင် အမှတ် ပြန်မနှုတ်တော့ပါ — တင်သွင်းသူနဲ့ review ရေးသူတွေ ရပြီးသား အမှတ် ဆက်ရှိမည်', 'ဖျက်ပြီးရင် အရင်ကြည့်နေတဲ့ စာရင်းဆီ တစ်ဆင့်တည်း ပြန်ရောက်မည်', 'လုပ်ငန်း အများကြီး တစ်ခါတည်း ဖျက်လို့ရပြီ', 'လိုင်းနှေးလည်း ဒေါင်းထားပြီးသား ဒေတာ အရင် ပေါ်မည် — အသစ်ရယူနေချိန် အဟောင်းကို ဆက်ပြမည်၊ ဒေတာ မရှိမှသာ အမှား ပြမည်', 'ဒေတာ ဒေါင်းနေချိန် ဘယ်လောက် ပြီးပြီလဲ % နဲ့ ပြမည်', 'ဒေတာ ကိုယ်တိုင် ပြန်ဒေါင်းလို့ရပြီ — Header က ခလုတ် နှိပ်ရုံနဲ့ အသစ် ပြန်ရယူမည်', 'မျှဝေထားတဲ့ အမျိုးအစား လင့်ခ် ဖွင့်ရင် အဲဒီ အမျိုးအစားရဲ့ စာရင်း မှန်မှန် ပေါ်မည်'] },
                 { v: '9.23', date: '2026-11-06', items: ['တစ်ခုခု ပျက်ရင် အမှားစာမျက်နှာမှာ ဘာလုပ်ရမယ် ရှင်းရှင်းပြမည် — Android ဆိုရင် Cache ရှင်းပြီး ပြန်ဖွင့်ရန်၊ iPhone/iPad ဆိုရင် Shortcut ဖျက်ပြီး ပြန်ထည့်ရန်', 'Home data တင်မရရင် အဲဒီအကြံပြုချက်ကို အမှားဘန်းနားမှာပါ ပြမည်', 'Version အသစ် ရရင် ပိုမြန်မြန် အပ်ဒိတ်လုပ်မည် — Service Worker အသစ်က ချက်ချင်း စတင်အလုပ်လုပ်မည်'] },
                 { v: '9.22', date: '2026-11-06', items: ['Tab နှစ်ခု ဖွင့်ထားရင် Home ပျက်နေတာ ပြင်ပြီး — လိုင်းနှေးလည်း နှစ်ခုလုံး သုံးလို့ ရပြီ', 'အကောင့် တင်တာ ကြာနေတာ ပြင်ပြီး — Login ဝင်ချိန် ချိတ်ဆက်မရရင် ချက်ချင်း သိရမည်', 'ရှာဖွေချိန် ရလဒ် အားလုံး မစုံသေးဘဲ "၀ ရလဒ်" လို့ ပြနေတာ ပြင်ပြီး — ရလဒ် အပြည့်ရမှ အရေအတွက် ပြမည်', 'ရှာပြီး ရလဒ် အရေအတွက် နဲ့ လိပ်စာ တစ်ခါတည်း အမှန် ပြမည်', 'Profile ဖွင့်ရင် ပျက်နေတာ ပြင်ပြီး — အကောင့် စာမျက်နှာ ဖွင့်လို့ ရပြီ', 'Version အသစ် ရရင် အသိပေးချက် ပေါ်မည် — ဆာဗာက ဗားရှင်းအသစ် စစ်ပြီး နှိပ်လိုက်တာနဲ့ အပ်ဒိတ်လုပ်မည်'] },
                 { v: '9.21', date: '2026-11-06', items: ['Home data တင်မရရင် သူ့အလိုလို ပြန်ကြိုးစားမည် — လိုင်းနှေးလို့ ပျက်ရင်လည်း အလိုအလျောက် တစ်ကြိမ် ထပ်တင်မည်', 'Home ဖွင့်ချိန် တခြား tab နဲ့ တိုက်မိလို့ ပျက်နေရင် သူ့အလိုလို ပြန်တက်လာမည်', 'Featured လုပ်ငန်းများ "အားလုံး" နှိပ်ရင် လုပ်ငန်းတွေ တန်းပေါ်မည် — အရင် ၀ ခု ပြနေတာ ပြင်ပြီး', 'ဈေးနှုန်း စာမျက်နှာ အောက်ဆုံး စာသား floating ခလုတ်အောက် မဝင်တော့ခြင်း'] },

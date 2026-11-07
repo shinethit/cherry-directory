@@ -52,21 +52,26 @@ describe('Bug D: auth lock (two tabs) — supabase client', () => {
 })
 
 describe('Bug D: HomePage auto-retry on FAST core failure', () => {
+  // v9.25 regen #2: the main load is useQuery now — a fast core failure
+  // retries per-section via react-query (client default retry: 1,
+  // retryDelay: 2000 on every home query), not via a whole-page guard
+  // gated on timedOut. There is no timedOut state or guard any more.
   it('the auto-retry is no longer gated on timedOut — a fast core failure retries too', () => {
     const home = read('pages/HomePage.jsx')
     // The old `if (timedOut) { ... }` wrapper around the retry is gone.
     expect(home).not.toContain('if (timedOut)')
-    // The retry condition covers rejected core sections and error values.
-    expect(home).toContain("const coreMissing = [0, 1, 2].some(i => results[i].status !== 'fulfilled' || results[i].value?.error)")
-    expect(home).toContain('autoRetryGuardRef.current.shouldRetry()')
-    // Timeout state is still tracked (banner + slow-load copy use it).
-    expect(home).toContain('setLoadTimedOut(timedOut)')
+    // No whole-page retry guard or timeout state remains.
+    expect(home).not.toContain('autoRetryGuardRef')
+    expect(home).not.toContain('setLoadTimedOut')
+    // Each home section retries once after a 2 s delay.
+    expect(home).toContain('retryDelay: 2000')
   })
 
   it('manual Retry still resets the guard and re-runs the load', () => {
     const home = read('pages/HomePage.jsx')
-    expect(home).toContain('autoRetryGuardRef.current.reset()')
-    expect(home).toContain('loadData()')
+    expect(home).toContain("invalidateQueries({ queryKey: ['home'] })")
+    expect(home).toContain('loadCommunityStats()')
+    expect(home).toContain('loadFavorites()')
   })
 })
 
@@ -162,9 +167,9 @@ describe('Bug C: /prices last content clears the Submit FAB', () => {
 })
 
 describe('v9.21: version + Change Log Admin rule', () => {
-  it('package.json is 9.23 (work copy bumped; the 9.21 entry below is still the 9.21 record)', () => {
+  it('package.json is 9.25 (work copy bumped; the 9.21 entry below is still the 9.21 record)', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.23')
+    expect(pkg.version).toBe('9.25')
   })
 
   it('the 9.21 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {

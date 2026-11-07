@@ -180,8 +180,10 @@ export default function SubmitListingPage() {
         is_active: true,
       }).select().single()
       if (error) throw error
-      const { data: cats } = await supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order')
-      setCategories(cats || [])
+      const { data: cats, error: catsErr } = await supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('sort_order')
+      // v9.25 regen #5: a resolve-with-error re-fetch wiped the
+      // category picker with []. Keep the last good list on failure.
+      if (!catsErr) setCategories(cats || [])
       if (newCat) setFormField('category_id', newCat.id)
       setQuickCat({ name_mm: '', name: '', icon: '📦', parent_id: '' })
       setShowQuickCat(false)

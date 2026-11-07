@@ -87,3 +87,19 @@ describe('every points display shows monthly AND total, labelled', () => {
     expect(s).toContain('all_time_points')
   })
 })
+
+describe('usePoints resolve-with-error (v9.25 regen #5)', () => {
+  // The hook needs AuthContext + a live supabase mock to render, so the
+  // error paths are asserted on the source. getHistory's caller
+  // (PointsGuidePage) already renders an error + retry on a throw.
+  const s = src('hooks/usePoints.js')
+
+  it('getHistory throws on error instead of returning a silent []', () => {
+    expect(s).toContain('const { data, error } = await supabase')
+    expect(s).toContain('if (error) throw error')
+  })
+
+  it('getMyPoints returns null (unknown) on error, never a wrong 0', () => {
+    expect(s).toContain("if (error) { console.warn('getMyPoints failed:', error); return null }")
+  })
+})

@@ -123,20 +123,27 @@ describe('HomePage timeout wiring (v9.7)', () => {
     expect(homeSrc).toMatch(/loadPartial\(\[/)
   })
 
-  it('schedules exactly one auto-retry after a 2 s delay, guarded', () => {
-    expect(homeSrc).toMatch(/setTimeout\(\(\) => \{\s*setAutoRetrying\(false\);\s*loadData\(\);\s*\}, 2000\)/)
-    expect(homeSrc).toContain('autoRetryGuardRef.current.shouldRetry()')
+  // v9.25 regen #2: the main load is useQuery now — the auto-retry is
+  // react-query's per-section retry (client default retry: 1) with a
+  // 2 s delay on every home query, instead of one whole-page guarded
+  // retry. The old guard / banner / loadData wiring is gone.
+  it('retries each home section once after a 2 s delay (per-section, not whole-page)', () => {
+    const delays = homeSrc.match(/retryDelay: 2000/g) || []
+    expect(delays.length).toBe(6)
+    expect(homeSrc).not.toContain('createAutoRetryGuard')
+    expect(homeSrc).not.toContain('autoRetryGuardRef')
+    expect(homeSrc).not.toContain('setAutoRetrying')
+    expect(homeSrc).not.toContain('loadData()')
   })
 
   it('never tells an online user to check the internet', () => {
     expect(homeSrc).not.toContain('အင်တာနက် စစ်ပြီး ပြန်ကြိုးစားပါ')
     expect(homeSrc).toContain('Data အချို့ တင်မရသေးပါ — ပြန်ကြိုးစားမည်')
-    expect(homeSrc).toContain('Data တင်တာ ကြာနေသည် — ထပ်ကြိုးစားနေသည်')
     // The genuine offline notice stays untouched.
     expect(homeSrc).toContain('အင်တာနက် မရှိပါ — Offline ဖြစ်နေသည်')
   })
 
-  it('manual refresh resets the auto-retry guard', () => {
-    expect(homeSrc).toContain('autoRetryGuardRef.current.reset()')
+  it('manual refresh invalidates the home queries (cached data stays on screen)', () => {
+    expect(homeSrc).toContain("invalidateQueries({ queryKey: ['home'] })")
   })
 })

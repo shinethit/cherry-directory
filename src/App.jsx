@@ -21,19 +21,43 @@ import { usePresence } from './hooks/usePresence'
 // times (first try + 2 retries), then throws — the ErrorBoundary shows a
 // Myanmar error screen with a retry button. It NEVER reloads the page
 // itself: an unconditional reload here used to loop forever.
-function lazyWithRetry(importFn) {
-  return lazy(async () => {
-    let lastErr
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        return await importFn()
-      } catch (err) {
-        lastErr = err
-        console.warn(`[chunk] Load failed (attempt ${attempt + 1}/3):`, err)
+// v9.25: the retries now back off (1 s, then 3 s) instead of firing three
+// times back-to-back into the same slow network, and a chunk that still
+// fails NEVER throws into the ErrorBoundary — the factory resolves to a
+// component rendering the ErrorScreen-style retry UI (variant "chunk"),
+// so the user gets a Retry button instead of a crash screen. (The SW can
+// serve a synthetic 503 for an uncached chunk on slow data.) TimedSuspense
+// below still covers the hang case (30 s stall → one guarded reload, then
+// the same "chunk" screen).
+export const CHUNK_RETRY_DELAYS_MS = [1000, 3000]
+
+export async function loadChunkWithRetry(importFn, delays = CHUNK_RETRY_DELAYS_MS) {
+  let lastErr
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      return await importFn()
+    } catch (err) {
+      lastErr = err
+      console.warn(`[chunk] Load failed (attempt ${attempt + 1}/${delays.length + 1}):`, err)
+      if (attempt < delays.length) {
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]))
       }
     }
-    throw lastErr
-  })
+  }
+  console.error('[chunk] Load failed after all retries — showing retry screen instead of throwing:', lastErr)
+  return { default: ChunkLoadFailed }
+}
+
+export function lazyWithRetry(importFn) {
+  return lazy(() => loadChunkWithRetry(importFn))
+}
+
+// Rendered when a chunk can never load. Same screen TimedSuspense shows
+// for a stalled chunk — Retry reloads the page and the chunk is tried
+// again from scratch. ErrorScreen is a hoisted function declaration
+// below, so referencing it here is safe.
+function ChunkLoadFailed() {
+  return <ErrorScreen onRetry={() => window.location.reload()} variant="chunk" />
 }
 
 const HomePage            = lazyWithRetry(() => import('./pages/HomePage'))

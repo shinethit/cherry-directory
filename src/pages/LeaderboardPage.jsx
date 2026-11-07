@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Trophy, Star, Building2, Medal } from 'lucide-react'
+import { Trophy, Star, Building2, Medal, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useLang } from '../contexts/LangContext'
@@ -272,8 +272,12 @@ export default function LeaderboardPage() {
 
   // S7 (v9.17): when the user is not in the top 100, count past their
   // own score and show the real rank instead of hiding the banner.
-  // LB2 (v9.20): the banner hides while either query is refetching —
+  // LB2 (v9.20): the banner hid while either query was refetching —
   // the cached rank from the previous period/tab used to show through.
+  // 9.25 slow-network: LB2 superseded — the banner now KEEPS the cached
+  // rank during a refetch (with the stale pill under the H1) instead of
+  // vanishing; hiding it was the same bug shape as the error card
+  // replacing a cached list.
   const { data: rankBeyond = null, isFetching: rankFetching } = useQuery({
     queryKey: ['leaderboard-rank', period, tab, me?.id],
     queryFn: async () => {
@@ -282,13 +286,20 @@ export default function LeaderboardPage() {
       let myScore = 0
       if (period === 'all') {
         myScore = tab === 'points' ? (profile?.points || 0) : tab === 'reviews' ? (profile?.total_reviews || 0) : (profile?.total_listings || 0)
-        const { count } = await withTimeout(supabase.from('profiles').select('*', { count: 'exact', head: true }).gt(allOrderCol, myScore), 30000, 'Leaderboard rank')
+        const { count, error: rankErr } = await withTimeout(supabase.from('profiles').select('*', { count: 'exact', head: true }).gt(allOrderCol, myScore), 30000, 'Leaderboard rank')
+        // v9.25 regen #5: a resolve-with-error count used to read as
+        // rank #1 (count undefined → 0 + 1). Throw so the query errors
+        // and the banner hides instead of showing a false #1.
+        if (rankErr) throw rankErr
         return { rank: (count || 0) + 1, score: myScore }
       }
       const periodCfg = PERIODS.find(p => p.id === period)
-      const { data: mine } = await withTimeout(supabase.from(periodCfg.view).select(orderCol).eq('id', me.id).maybeSingle(), 30000, 'Leaderboard rank')
+      const { data: mine, error: mineErr } = await withTimeout(supabase.from(periodCfg.view).select(orderCol).eq('id', me.id).maybeSingle(), 30000, 'Leaderboard rank')
+      // v9.25 regen #5: resolve-with-error left myScore 0 → false #1.
+      if (mineErr) throw mineErr
       myScore = mine?.[orderCol] || 0
-      const { count } = await withTimeout(supabase.from(periodCfg.view).select('*', { count: 'exact', head: true }).gt(orderCol, myScore), 30000, 'Leaderboard rank')
+      const { count, error: rankErr } = await withTimeout(supabase.from(periodCfg.view).select('*', { count: 'exact', head: true }).gt(orderCol, myScore), 30000, 'Leaderboard rank')
+      if (rankErr) throw rankErr
       return { rank: (count || 0) + 1, score: myScore }
     },
     enabled: !!me && !loading && myRank === null,
@@ -306,6 +317,13 @@ export default function LeaderboardPage() {
           <h1 className="font-display font-bold text-xl text-white">Top Contributors</h1>
         </div>
         <p className="text-xs text-white/60 font-myanmar">{periodLabel(period, lang)}</p>
+        {/* 9.25 slow-network: stale pill — background refetch in flight
+            with the cached board still on screen. */}
+        {(boardFetching || rankFetching) && !loading && users.length > 0 && (
+          <p className="text-[11px] text-white/50 flex items-center gap-1 mt-1">
+            <RefreshCw size={12} className="animate-spin" /> အသစ်ရယူနေသည်…
+          </p>
+        )}
       </div>
 
       {/* ── Period dropdown ── */}
@@ -324,7 +342,7 @@ export default function LeaderboardPage() {
       </div>
 
       {/* ── My rank banner (if logged in and ranked) ── */}
-      {(myRank || rankBeyond) && !loading && !boardFetching && !rankFetching && profile && (
+      {(myRank || rankBeyond) && !loading && profile && (
         <div className="mx-4 mb-3 px-3 py-2.5 rounded-2xl bg-brand-600/15 border border-brand-400/25">
           <div className="flex items-center gap-2.5 mb-2">
             <Trophy size={14} className="text-brand-300 flex-shrink-0" />
@@ -390,7 +408,7 @@ export default function LeaderboardPage() {
       <div className="px-4 space-y-2">
         {loading
           ? [1,2,3,4,5,6].map(n => <div key={n} className="h-16 rounded-2xl shimmer" />)
-          : loadError
+          : loadError && users.length === 0
           ? (
             <div className="flex flex-col items-center py-14 text-center px-6">
               <Medal size={44} className="text-white/15 mb-3" />
@@ -428,6 +446,14 @@ export default function LeaderboardPage() {
           )
           : (
             <>
+              {/* 9.25 slow-network: error with a cached board — keep the
+                  podium + list, show the small amber strip above it. */}
+              {loadError && (
+                <div className="py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2">
+                  <p className="text-xs text-amber-300 font-myanmar">အဟောင်းပြထားသည် — အင်တာနက် နှေးနေသည်</p>
+                  <button onClick={() => refetchBoard()} className="text-xs font-bold text-amber-300 underline whitespace-nowrap">ပြန်ကြိုးစားမည်</button>
+                </div>
+              )}
               {/* E15 (v9.5): the podium holds ranks 1–3, so this list
                   starts at rank 4 — labelled, never silently dropped. */}
               {users.length > 3 && (

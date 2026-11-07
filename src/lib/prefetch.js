@@ -32,9 +32,22 @@ export async function fetchCategories() {
   if (error) throw error
   const { data: allCats } = await withTimeout(supabase
     .from('categories')
-    .select('id, parent_id')
+    .select('id, parent_id, name, name_mm, icon')
     .eq('type', 'directory')
-    .eq('is_active', true), 30000, 'Directory category tree').catch(() => ({ data: [] }))
+    .eq('is_active', true)
+    .order('sort_order'), 30000, 'Directory category tree').catch(() => ({ data: [] }))
+  // v9.25 regen #4: the tree fetch already pulls the FULL directory
+  // table's id/parent_id — cache it as ['category-map'] so a
+  // ?cat=<subcategory> deep link can resolve offline. The
+  // ['categories'] entry holds top-level rows only, so a subcategory
+  // id is a cache miss there by construction and the fetch path needs
+  // the network to learn target.parent_id. The map is warmed whenever
+  // ['categories'] is (same prefetch task, same staleTime/gcTime via
+  // the shared queryClient defaults, same 24 h persister) — no second
+  // query and no new TASKS entry for rows this fetch already has.
+  // Guarded: a failed tree fetch yields [] and must NOT wipe a good
+  // cached map.
+  if (allCats?.length) queryClient.setQueryData(['category-map'], allCats)
   const collectDescendantIds = (all, rootId) => {
     const ids = [rootId]
     let frontier = [rootId]
@@ -48,11 +61,16 @@ export async function fetchCategories() {
   const countResults = await Promise.allSettled(
     (data || []).map(async (cat) => {
       const ids = collectDescendantIds(allCats || [], cat.id)
-      const { count } = await withTimeout(supabase
+      const { count, error: countError } = await withTimeout(supabase
         .from('listings')
         .select('*', { count: 'exact', head: true })
         .in('category_id', ids)
         .eq('status', 'approved'), 30000, 'Directory category count')
+      // v9.25 regen #5: a resolve-with-error count must fail this
+      // settled entry (listing_count null, button stays enabled)
+      // exactly like a rejection does — count null must not become
+      // 0, which would disable a good category button.
+      if (countError) throw countError
       return { ...cat, listing_count: count || 0 }
     })
   )
@@ -164,6 +182,10 @@ export async function fetchVisitStats() {
 // migration), and its 15 s prefetch timeout fired on every boot
 // while the view timed out. Prefetch failure is log-only
 // (console.warn below, no toast/UI) — keep it that way.
+// v9.25 regen #4: ['category-map'] is NOT a separate task —
+// fetchCategories' tree fetch already pulls the full directory
+// table, and fetchCategories writes it to ['category-map'] itself
+// (see above). A separate task would re-fetch rows already in hand.
 // v9.19: NO directory-listings task either — nothing reads the exact
 // ['listings','directory'] key. DirectoryPage's listings are
 // per-subcategory queries (['listings','directory', subId, ...],

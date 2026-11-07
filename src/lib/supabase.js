@@ -69,9 +69,15 @@ const LOCK_RELOAD_MIN_GAP_MS = 10000
 
 export function isLockError(err) {
   const msg = err?.message || String(err || '')
+  // v9.25: narrowed to the two lock-STEAL shapes only. The old
+  // msg.includes('Lock') matched ANY message containing 'Lock' — e.g. the
+  // 'was not released within 5000ms' warning text from a two-tab
+  // slow-refresh race — and the unhandledrejection handler below then
+  // fired a page reload for a non-poison error. The name / isAcquireTimeout
+  // checks stay: they identify the LockAcquireTimeoutError class itself
+  // (the class that throws the steal message), not a substring.
   return msg.includes('was released because another request stole it')
-    || msg.includes('Lock broken by another request')
-    || msg.includes('Lock')
+    || msg.includes("Lock broken by another request with the 'steal' option")
     || err?.name === 'LockAcquireTimeoutError'
     || err?.isAcquireTimeout === true
 }

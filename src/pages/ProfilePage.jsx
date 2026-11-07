@@ -477,7 +477,7 @@ export default function ProfilePage() {
             <button key={label} onClick={action} className="card-dark p-3 rounded-2xl text-center hover:bg-white/8 transition-colors">
               <Icon size={15} className="mx-auto mb-1 text-brand-300" />
               {/* Issue 3b (v9.17): "—" while loading, never a fake 0. */}
-              <p className="font-display font-bold text-base text-white">{statsLoading ? '—' : (value || 0).toLocaleString()}</p>
+              <p className="font-display font-bold text-base text-white truncate">{statsLoading ? '—' : (value || 0).toLocaleString()}</p>
               {/* N9 (v9.17): labels 8px → 10px (were unreadably small). */}
               <p className="text-[10px] text-white/60">{label}</p>
             </button>
@@ -486,7 +486,7 @@ export default function ProfilePage() {
             // so the stat is a button like the others.
             <div key={label} className="card-dark p-3 rounded-2xl text-center">
               <Icon size={15} className="mx-auto mb-1 text-brand-300" />
-              <p className="font-display font-bold text-base text-white">{statsLoading ? '—' : (value || 0).toLocaleString()}</p>
+              <p className="font-display font-bold text-base text-white truncate">{statsLoading ? '—' : (value || 0).toLocaleString()}</p>
               <p className="text-[10px] text-white/60">{label}</p>
             </div>
           )

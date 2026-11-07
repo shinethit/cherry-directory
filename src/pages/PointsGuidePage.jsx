@@ -10,7 +10,10 @@ import { TIERS, getTier, getNextTier, getTierProgress, POINT_ACTIONS } from '../
 
 // Ledger action → human label (same values as POINT_ACTIONS). Reversal
 // rows share the action with negative points — the sign comes from the
-// row itself, so a -5 Review row reads as a removed review.
+// row itself, so a -2 RSVP row reads as a cancelled RSVP. (v9.25:
+// listing/review deletes no longer write reversal rows — earned points
+// are kept — so only RSVP reversals still occur; the history renderer
+// below is unchanged.)
 const HISTORY_LABELS = {
   write_review:     { mm: 'Review',   en: 'Review' },
   submit_listing:   { mm: 'တင်ပြခြင်း', en: 'Submit' },

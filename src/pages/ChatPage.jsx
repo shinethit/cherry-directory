@@ -607,12 +607,12 @@ export default function ChatPage() {
       {/* Room tabs header */}
       <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/8">
         <div className="flex items-center justify-between px-4 py-2">
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide flex-1">
+          <div className="flex flex-wrap gap-2 flex-1">
             {rooms.map(room => (
               <button
                 key={room.id}
                 onClick={() => setActiveRoom(room)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                   activeRoom?.id === room.id
                     ? 'bg-brand-600/60 text-brand-200 border border-brand-400/40'
                     : 'text-white/50 hover:text-white/80'

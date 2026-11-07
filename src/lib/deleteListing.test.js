@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { deleteListingWithCleanup, deleteListingConfirmMessage } from './deleteListing'
+import { deleteListingWithCleanup, deleteListingConfirmMessage, deleteBulkConfirmMessage, deleteListingsBulk } from './deleteListing'
 
 // Admin-only listing delete (v9.20). The helper is tested with a mock
 // Supabase client that records the call order — the listing MUST be
@@ -13,15 +13,17 @@ import { deleteListingWithCleanup, deleteListingConfirmMessage } from './deleteL
 const srcDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (rel) => readFileSync(join(srcDir, rel), 'utf8')
 
-function createMock({ failListing = false, failTables = {} } = {}) {
+function createMock({ failListing = false, failTables = {}, failIds = [] } = {}) {
   const calls = []
   const client = {
     calls,
     from(table) {
       return {
         delete() {
+          let eqId = null
           const chain = {
             eq(k, v) {
+              if (k === 'id') eqId = v
               calls.push({ table, op: 'eq', k, v })
               return chain
             },
@@ -32,7 +34,7 @@ function createMock({ failListing = false, failTables = {} } = {}) {
             },
             select(cols) {
               calls.push({ table, op: 'select', cols })
-              if (failListing) return Promise.resolve({ data: null, error: { message: 'RLS denied' } })
+              if (failListing || failIds.includes(eqId)) return Promise.resolve({ data: null, error: { message: 'RLS denied' } })
               return Promise.resolve({ data: [{ name: 'Test', name_mm: 'စမ်းသပ်' }], error: null })
             },
           }
@@ -84,14 +86,113 @@ describe('deleteListingWithCleanup', () => {
 })
 
 describe('deleteListingConfirmMessage (full-impact warning)', () => {
-  it('states the points effects accurately per the 9.17 triggers', () => {
+  it('states the v9.25 kept-points behaviour — no deduction bullets', () => {
     const msg = deleteListingConfirmMessage('စမ်းသပ်')
     expect(msg).toContain('စမ်းသပ်')
-    expect(msg).toContain('+10')
-    expect(msg).toContain('+20')
-    expect(msg).toContain('+5')
+    expect(msg).toContain('တင်သွင်းသူနှင့် review ရေးသူများ၏ ရပြီးသား အမှတ် မနှုတ်ပါ — အမှတ် ဆက်လက်ရှိမည်')
+    expect(msg).not.toContain('ပြန်နှုတ်မည်')
+    expect(msg).not.toContain('+10')
+    expect(msg).not.toContain('+20')
+    expect(msg).not.toContain('+5')
     expect(msg).toContain('ပြန်မရနိုင်ပါ')
     expect(msg).toContain('Admin')
+  })
+
+  it('falls back to ဤလုပ်ငန်း for an empty name', () => {
+    expect(deleteListingConfirmMessage('')).toContain('ဤလုပ်ငန်း')
+  })
+})
+
+describe('deleteBulkConfirmMessage (v9.25)', () => {
+  it('N=1 lists the one name and the count', () => {
+    const msg = deleteBulkConfirmMessage(['ဆိုင်တစ်ခု'], 1)
+    expect(msg).toContain('ဆိုင်တစ်ခု')
+    expect(msg).toContain('လုပ်ငန်း 1 ခု')
+    expect(msg).not.toContain('နောက်ထပ်')
+  })
+
+  it('N=3 lists all three names', () => {
+    const msg = deleteBulkConfirmMessage(['တစ်', 'နှစ်', 'သုံး'], 3)
+    expect(msg).toContain('တစ်')
+    expect(msg).toContain('နှစ်')
+    expect(msg).toContain('သုံး')
+    expect(msg).toContain('လုပ်ငန်း 3 ခု')
+  })
+
+  it('N=8 lists 5 names + "နောက်ထပ် 3 ခု"', () => {
+    const msg = deleteBulkConfirmMessage(['၁', '၂', '၃', '၄', '၅', '၆', '၇', '၈'], 8)
+    for (const n of ['၁', '၂', '၃', '၄', '၅']) expect(msg).toContain(n)
+    expect(msg).not.toContain('• ၆')
+    expect(msg).toContain('နောက်ထပ် 3 ခု')
+  })
+
+  it('carries the kept-points line, NOT the deduction bullets', () => {
+    const msg = deleteBulkConfirmMessage(['ဆိုင်တစ်ခု'], 1)
+    expect(msg).toContain('တင်သွင်းသူနှင့် review ရေးသူများ၏ ရပြီးသား အမှတ် မနှုတ်ပါ — အမှတ် ဆက်လက်ရှိမည်')
+    expect(msg).not.toContain('ပြန်နှုတ်မည်')
+    expect(msg).not.toContain('+10')
+    expect(msg).not.toContain('+20')
+    expect(msg).not.toContain('+5')
+  })
+
+  it('empty-name fallback is ဤလုပ်ငန်း, and rows work as input too', () => {
+    expect(deleteBulkConfirmMessage([''], 1)).toContain('ဤလုပ်ငန်း')
+    expect(deleteBulkConfirmMessage([{ name_mm: 'မြန်မာ', name: 'English' }], 1)).toContain('မြန်မာ')
+    expect(deleteBulkConfirmMessage([{ name: 'English Only' }], 1)).toContain('English Only')
+  })
+})
+
+describe('deleteListingsBulk (v9.25)', () => {
+  const rows = (n) => Array.from({ length: n }, (_, i) => ({ id: `id-${i + 1}`, name_mm: `ဆိုင် ${i + 1}` }))
+
+  it('all succeed: N deletes in order, one log call per item, onProgress N times', async () => {
+    const client = createMock()
+    const logs = []
+    const progress = []
+    const res = await deleteListingsBulk(client, rows(5), {
+      log: async (e) => { logs.push(e) },
+      onProgress: (i, total, row) => { progress.push([i, total, row.id]) },
+    })
+    expect(res.succeeded.map(r => r.id)).toEqual(['id-1', 'id-2', 'id-3', 'id-4', 'id-5'])
+    expect(res.failed).toEqual([])
+    expect(res.cleanupWarnings).toEqual([])
+    // Listing deletes happen in row order (eq calls for listings only).
+    expect(client.calls.filter(c => c.table === 'listings' && c.op === 'eq').map(c => c.v))
+      .toEqual(['id-1', 'id-2', 'id-3', 'id-4', 'id-5'])
+    expect(logs).toHaveLength(5)
+    expect(logs.map(l => l.id)).toEqual(['id-1', 'id-2', 'id-3', 'id-4', 'id-5'])
+    expect(progress).toEqual([[1, 5, 'id-1'], [2, 5, 'id-2'], [3, 5, 'id-3'], [4, 5, 'id-4'], [5, 5, 'id-5']])
+  })
+
+  it('partial failure: the 2nd item failing does not lose items 1, 3-5', async () => {
+    const client = createMock({ failIds: ['id-2'] })
+    const progress = []
+    const res = await deleteListingsBulk(client, rows(5), {
+      onProgress: (i, total) => { progress.push([i, total]) },
+    })
+    expect(res.succeeded.map(r => r.id)).toEqual(['id-1', 'id-3', 'id-4', 'id-5'])
+    expect(res.failed).toHaveLength(1)
+    expect(res.failed[0].row.id).toBe('id-2')
+    expect(res.failed[0].error.message).toBe('RLS denied')
+    expect(progress).toHaveLength(5)
+    expect(client.calls.filter(c => c.table === 'listings' && c.op === 'eq').map(c => c.v))
+      .toEqual(['id-1', 'id-2', 'id-3', 'id-4', 'id-5'])
+  })
+
+  it('a cleanup failure is a warning, not a bulk failure', async () => {
+    const client = createMock({ failTables: { reviews: 'boom' } })
+    const res = await deleteListingsBulk(client, rows(2), {})
+    expect(res.succeeded).toHaveLength(2)
+    expect(res.failed).toEqual([])
+    expect(res.cleanupWarnings).toHaveLength(2)
+    expect(res.cleanupWarnings[0]).toEqual({ id: 'id-1', cleanupErrors: ['reviews: boom'] })
+  })
+
+  it('empty input makes zero client calls', async () => {
+    const client = createMock()
+    const res = await deleteListingsBulk(client, [], {})
+    expect(res).toEqual({ succeeded: [], failed: [], cleanupWarnings: [] })
+    expect(client.calls).toEqual([])
   })
 })
 

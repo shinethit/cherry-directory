@@ -24,7 +24,7 @@ export const useBookmarkedSet = (ids, targetType = 'listing') => {
   return useQuery({
     queryKey: [BOOKMARKS_QUERY_KEY, user?.id, 'set', targetType, sortedIds.join(',')],
     queryFn: async () => {
-      if (!user || sortedIds.length === 0) return new Set();
+      if (!user || sortedIds.length === 0) return [];
 
       const { data, error } = await supabase
         .from('bookmarks')
@@ -34,8 +34,18 @@ export const useBookmarkedSet = (ids, targetType = 'listing') => {
         .in('target_id', sortedIds);
 
       if (error) throw error;
-      return new Set((data || []).map(r => r.target_id));
+      return (data || []).map(r => r.target_id);
     },
+    // v9.24: the query cache is persisted to localStorage as JSON
+    // (PersistQueryClientProvider, main.jsx — the persister's default
+    // serialize is JSON.stringify). A Set serializes to '{}', so a
+    // restored entry was a plain object with no .has — Home crashed
+    // with "ne.has is not a function" on every load until the entry
+    // went stale (staleTime 5 min, so even Retry re-crashed). Store an
+    // ARRAY (JSON-safe) and convert to a Set here; the select also
+    // normalizes legacy '{}' entries (and any other non-array) to an
+    // empty Set, so the failing stored state can never throw again.
+    select: (data) => new Set(Array.isArray(data) ? data : []),
     enabled: !!user && sortedIds.length > 0,
   });
 };

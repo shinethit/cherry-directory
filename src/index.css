@@ -537,6 +537,15 @@ nav > div > div {
 }
 
 
+/* v9.25: BottomNav labels — 11px via a custom class. The global overrides
+   below force .text-xs / .text-[11px] to 13px, so a Tailwind size utility
+   cannot shrink the nav labels; .text-nav is the only way they fit at
+   <=320px without wrapping the nav. */
+.text-nav { font-size: 11px !important; line-height: 1.4 !important; }
+
+/* v9.25 (G-08): a very long toast can never exceed a narrow viewport. */
+.Toastify__toast-container { max-width: calc(100vw - 2rem) !important; }
+
 /* Global Font Scale Adjustments */
 /* Makes small text (text-[10px], text-xs) slightly larger for better mobile readability */
 html {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { Search, X, ShieldCheck, ChevronDown, ChevronRight } from 'lucide-react'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { Search, X, ShieldCheck, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { fetchCategories } from '../lib/prefetch'
@@ -13,6 +13,7 @@ import { buildOrFilter } from '../lib/myanmarSearch'
 
 export default function DirectoryPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const config = useAppConfig()
   const { lang } = useLang()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -54,9 +55,6 @@ export default function DirectoryPage() {
   const [verifiedOnly, setVerifiedOnly] = useState(searchParams.get('verified') === 'true')
   // B7: user-chosen sort (rating / newest / name)
   const [sort, setSort] = useState('rating')
-  // B8: collapse the search/filter rows once the user scrolls down, so
-  // the sticky header stops eating ~1/3 of a phone screen.
-  const [headerCollapsed, setHeaderCollapsed] = useState(false)
   
   // Debounced search
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '')
@@ -103,13 +101,6 @@ export default function DirectoryPage() {
     }, { replace: true })
   }, [city, verifiedOnly])
 
-  // B8: collapse the listings-level header on scroll down, restore on scroll up.
-  useEffect(() => {
-    function onScroll() { setHeaderCollapsed(window.scrollY > 140) }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    onScroll()
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
   
   const cities = ['All', ...(config.cities || [])]
   const cityLabels = {
@@ -162,7 +153,10 @@ export default function DirectoryPage() {
   })
   useEffect(() => {
     if (categoriesData) setCategories(categoriesData)
-    setCategoryLoading(categoryQueryLoading || categoryQueryFetching)
+    // v9.25 regen #2: skeletons only on the FIRST load (no cached data
+    // yet). isFetching alone must not re-show them — every background
+    // refetch used to flash skeletons over the cached categories.
+    setCategoryLoading(categoryQueryLoading && !categoriesData)
     setCategoryError(categoryQueryError)
     // D1 (v9.20): a failed categories query used to leave a ?cat= deep
     // link on the infinite spinner forever — categoriesLoadedRef never
@@ -179,13 +173,143 @@ export default function DirectoryPage() {
   // Single-pass: fetch target category + its listings directly
   useEffect(() => {
     if (!urlCatId) return
-    if (!categoriesLoadedRef.current) return
+    // v9.25 regen #2: the gate also passes when the ['categories']
+    // query-cache entry exists (persisted cache) even if the local
+    // categories state has not been populated yet — offline, the
+    // directNavigate cache-first path below can then resolve ?cat=
+    // without any network.
+    // v9.25 regen #4: the ['category-map'] entry passes the gate too
+    // — it alone is enough for directNavigate's map-first path.
+    if (!categoriesLoadedRef.current && !(queryClient.getQueryData(['categories']) || []).length && !(queryClient.getQueryData(['category-map']) || []).length) return
     if (processedUrlRef.current === urlCatId) return
 
     processedUrlRef.current = urlCatId
 
     async function directNavigate() {
       try {
+        // v9.25 regen #2: resolve ?cat= from the cached ['categories']
+        // entry first — offline the direct fetch below can never run,
+        // so the deep link used to sit on the spinner forever and the
+        // cached listings were never read. Only fetch on a cache miss
+        // (e.g. a subcategory id — the cache holds top-level only).
+        const cachedCats = queryClient.getQueryData(['categories']) || []
+        // v9.25 regen #4: resolve ?cat= from the cached
+        // ['category-map'] entry FIRST. The ['categories'] cache holds
+        // top-level rows only, so a subcategory id is a cache miss
+        // there by construction and the fetch path below needs the
+        // network to learn target.parent_id — offline it never
+        // resolves. The map holds the FULL table's id/parent_id
+        // (written by fetchCategories' tree fetch, warmed alongside
+        // ['categories']), so a subcategory id resolves offline to
+        // parent + subcategory and its cached listings render. Never
+        // guess from a missing map entry: on a map miss, fall through
+        // to the existing cache-first / fetch paths below.
+        const mapRows = queryClient.getQueryData(['category-map']) || []
+        const mapTarget = mapRows.find(c => String(c.id) === String(urlCatId))
+        if (mapTarget) {
+          if (mapTarget.parent_id) {
+            const parent = mapRows.find(c => c.id === mapTarget.parent_id)
+              || cachedCats.find(c => c.id === mapTarget.parent_id)
+              || categories.find(c => c.id === mapTarget.parent_id)
+            if (parent) {
+              setSelectedCategory(parent)
+              setSelectedSubcategory(mapTarget)
+              pageRef.current = 0
+              setPage(0)
+              return
+            }
+            // Parent in no cached source — fall through to the fetch
+            // path, which can fetch it directly (healthy network).
+          } else {
+            // Top-level: children come from the map, so the picker
+            // renders offline too — no network head-count to decide
+            // direct vs picker (counts unknown offline: null → '–').
+            const children = mapRows
+              .filter(c => c.parent_id === mapTarget.id)
+              .map(c => ({ ...c, listing_count: null }))
+            setSelectedCategory(mapTarget)
+            if (children.length === 0) {
+              // No children → show listings directly
+              setSelectedSubcategory({
+                id: mapTarget.id,
+                icon: mapTarget.icon,
+                name_mm: mapTarget.name_mm,
+                name: mapTarget.name,
+                is_direct: true,
+              })
+              pageRef.current = 0
+              setPage(0)
+            } else {
+              setSubcategories(children)
+            }
+            return
+          }
+        }
+
+        const cachedTarget = cachedCats.find(c => String(c.id) === String(urlCatId))
+        if (cachedTarget) {
+          if (cachedTarget.parent_id) {
+            // It's a subcategory → set parent + sub, show listings
+            const parent = cachedCats.find(c => c.id === cachedTarget.parent_id)
+              || categories.find(c => c.id === cachedTarget.parent_id)
+            // v9.25 regen #3: never set a subcategory without its
+            // parent — without setSelectedCategory the page renders
+            // the top-level picker and the reset effect then wipes
+            // the subcategory, stranding the deep link. No parent
+            // here means the cache is partial; leave the link
+            // unresolved so the top-level picker renders instead.
+            if (!parent) return
+            setSelectedCategory(parent)
+            setSelectedSubcategory(cachedTarget)
+            pageRef.current = 0
+            setPage(0)
+          } else {
+            // Top-level → count children with a real query.
+            // v9.25 regen #3: the ['categories'] cache holds
+            // top-level rows ONLY (fetchCategories filters
+            // parent_id null), so counting children in it was
+            // ALWAYS 0 and every top-level ?cat= jumped to
+            // direct listings with the parent id (0 rows). Same
+            // head-count query as the fetch path below.
+            let childCount = null
+            try {
+              const { count, error: countError } = await withTimeout(supabase
+                .from('categories')
+                .select('*', { count: 'exact', head: true })
+                .eq('parent_id', cachedTarget.id), 30000, 'Directory direct link')
+              // v9.25 regen #5: supabase-js resolves with { error }
+              // on a dead connection — count null must stay "unknown"
+              // (subcategory picker), never become 0 (direct jump to
+              // the parent's own empty listings).
+              if (countError) throw countError
+              childCount = count || 0
+            } catch (e) {
+              // Offline / slow: count unknown — show the
+              // subcategory picker and let loadSubcategories try
+              // (it has its own error state). Never guess "no
+              // children": that renders the parent's own (empty)
+              // direct listings as 0 results.
+              console.warn('Direct navigate child count failed:', e)
+            }
+            setSelectedCategory(cachedTarget)
+            if (childCount === 0) {
+              // No children → show listings directly
+              setSelectedSubcategory({
+                id: cachedTarget.id,
+                icon: cachedTarget.icon,
+                name_mm: cachedTarget.name_mm,
+                name: cachedTarget.name,
+                is_direct: true,
+              })
+              pageRef.current = 0
+              setPage(0)
+            }
+            // If it has children (or the count is unknown), the
+            // subcategory picker will show
+          }
+          return
+        }
+
         // Fetch the target category with full info (30 s timeout: a
         // hung fetch used to leave the ?cat= spinner up forever).
         const { data: target } = await withTimeout(supabase
@@ -198,21 +322,46 @@ export default function DirectoryPage() {
 
         if (target.parent_id) {
           // It's a subcategory → set parent + sub, show listings
-          const parent = categories.find(c => c.id === target.parent_id)
-          if (parent) setSelectedCategory(parent)
+          // v9.25 regen #3: resolve the parent from the cached
+          // ['categories'] entry — the populated source the gate
+          // above already verified — NOT the local `categories`
+          // state, whose closure is still empty when the gate
+          // fires on a warm cache. The old state-only lookup
+          // skipped setSelectedCategory, and the reset effect
+          // then wiped the subcategory: stranded picker. Fall
+          // back to a direct parent fetch if neither source has
+          // it; without a parent, leave the link unresolved
+          // (top-level picker) rather than strand it.
+          let parent = cachedCats.find(c => c.id === target.parent_id)
+            || categories.find(c => c.id === target.parent_id)
+          if (!parent) {
+            const { data: parentRow } = await withTimeout(supabase
+              .from('categories')
+              .select('*')
+              .eq('id', target.parent_id)
+              .single(), 30000, 'Directory direct link')
+            parent = parentRow
+          }
+          if (!parent) return
+          setSelectedCategory(parent)
           setSelectedSubcategory(target)
           pageRef.current = 0
           setPage(0)
         } else {
           // Top-level → check if it has children
-          const { count } = await withTimeout(supabase
+          const { count, error: countError } = await withTimeout(supabase
             .from('categories')
             .select('*', { count: 'exact', head: true })
             .eq('parent_id', target.id), 30000, 'Directory direct link')
 
           setSelectedCategory(target)
 
-          if ((count || 0) === 0) {
+          // v9.25 regen #5: on a count error (supabase-js resolves
+          // with { error } on a dead connection), show the subcategory
+          // picker — the count is unknown, so never guess "no
+          // children" and jump to the parent's own (empty) direct
+          // listings. loadSubcategories has its own error state.
+          if (!countError && (count || 0) === 0) {
             // No children → show listings directly
             setSelectedSubcategory({
               id: target.id,
@@ -252,30 +401,44 @@ export default function DirectoryPage() {
     // Don't clear listings if we already have a subcategory selected (direct nav)
     if (!selectedSubcategory) setListings([])
     try {
-      const { data } = await withTimeout(supabase
+      const { data, error } = await withTimeout(supabase
         .from('categories')
         .select('*')
         .eq('type', 'directory')
         .eq('is_active', true)
         .eq('parent_id', categoryId)
         .order('sort_order'), 30000, 'Directory subcategories')
+      // v9.25 regen #5: supabase-js RESOLVES with { data: null,
+      // error } on a dead connection instead of throwing — without
+      // this check the success path below ran with data null and
+      // setSubcategories([]) wiped the map-seeded children.
+      if (error) throw error
 
       // Counts include 3rd-level listings: count the subcategory AND all
       // of its descendants, not just listings filed directly under it.
       // The tree fetch is best-effort (see fetchCategories in src/lib/prefetch.js).
-      const { data: allCats } = await withTimeout(supabase
+      const { data: allCats, error: treeError } = await withTimeout(supabase
         .from('categories')
         .select('id, parent_id')
         .eq('type', 'directory')
         .eq('is_active', true), 30000, 'Directory category tree').catch(() => ({ data: [] }))
+      // v9.25 regen #5: a resolve-with-error tree fetch yields null
+      // data, not a rejection — treat it as the empty best-effort
+      // tree the .catch above already yields on a throw.
+      const treeCats = treeError ? [] : (allCats || [])
       const countResults = await Promise.allSettled(
         (data || []).map(async (sub) => {
-          const ids = collectDescendantIds(allCats || [], sub.id)
-          const { count } = await withTimeout(supabase
+          const ids = collectDescendantIds(treeCats, sub.id)
+          const { count, error: countError } = await withTimeout(supabase
             .from('listings')
             .select('*', { count: 'exact', head: true })
             .in('category_id', ids)
             .eq('status', 'approved'), 30000, 'Directory subcategory count')
+          // v9.25 regen #5: a resolve-with-error count must fail this
+          // settled entry (listing_count null, button stays enabled)
+          // exactly like a rejection does — count null must not
+          // become 0, which would disable the button on good data.
+          if (countError) throw countError
           return { ...sub, listing_count: count || 0 }
         })
       )
@@ -285,6 +448,16 @@ export default function DirectoryPage() {
       setSubcategories(subcatsWithCount)
     } catch (e) {
       console.warn('loadSubcategories error:', e)
+      // v9.25 regen #4: offline, seed the picker from the cached
+      // ['category-map'] (full id/parent_id table, warmed alongside
+      // ['categories']) instead of leaving it empty — a warm cache
+      // still shows the children (counts unknown, null → '–'), with
+      // the amber strip below from subcategoryError. A genuinely
+      // empty category has no map children either, so nothing is
+      // hallucinated. Tap navigation hits this too, not just ?cat=.
+      const mapRows = queryClient.getQueryData(['category-map']) || []
+      const mapKids = mapRows.filter(c => c.parent_id === categoryId)
+      if (mapKids.length) setSubcategories(mapKids.map(c => ({ ...c, listing_count: null })))
       setSubcategoryError(true)
     }
     setSubcategoryLoading(false)
@@ -322,6 +495,14 @@ export default function DirectoryPage() {
       loadSubcategories(selectedCategory.id)
       checkDirectListings(selectedCategory.id)
     } else if (!featuredOnly) {
+      // v9.25 regen #2: while a ?cat= deep link is still resolving,
+      // directNavigate (same commit, cache-first) may have just set
+      // the category + subcategory — this reset's
+      // setSelectedSubcategory(null) used to clobber it and strand
+      // the page on the subcategory picker. Skip the reset until the
+      // link resolves; by then the state is either set (this effect
+      // re-runs on selectedCategory) or still empty (nothing to reset).
+      if (urlCatId && !urlResolved) return
       setSubcategories([])
       setSelectedSubcategory(null)
       setListings([])
@@ -374,6 +555,9 @@ export default function DirectoryPage() {
       return { rows: data || [], total: count || 0, page: pageF, filterKey: `${subId}|${cityF}|${verifiedF}|${qF}|${sortF}` }
     },
     enabled: !!selectedSubcategory,
+    // v9.25 regen #2: changing filter/page keeps the previous list
+    // visible while the new page fetches, instead of emptying it.
+    placeholderData: keepPreviousData,
   })
 
   // Apply query results: page 0 (or a new filter) replaces, later pages
@@ -540,7 +724,7 @@ export default function DirectoryPage() {
         <div className="px-4 py-4 space-y-2 pb-24">
           {categoryLoading ? (
             [1,2,3,4,5,6].map(n => <Skeleton key={n} className="h-16 rounded-2xl" />)
-          ) : categoryError ? (
+          ) : categoryError && categories.length === 0 ? (
             <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
               <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
               <button onClick={() => refetchCategories()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
@@ -548,7 +732,17 @@ export default function DirectoryPage() {
           ) : categories.length === 0 ? (
             <EmptyState icon="📂" title="Category မရှိသေး" message="မရှိသေးပါ" />
           ) : (
-            categories.map(cat => (
+            <>
+              {/* v9.25 regen #2: a failed background refetch must not
+                  replace cached categories with the error card — show
+                  the small amber strip above the old list instead. */}
+              {categoryError && (
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-center justify-between gap-2">
+                  <p className="text-xs text-amber-300 font-myanmar">အဟောင်းပြထားသည် — အင်တာနက် နှေးနေသည်</p>
+                  <button onClick={() => refetchCategories()} className="text-xs text-amber-200 underline font-myanmar flex-shrink-0">ပြန်ကြိုးစားမည်</button>
+                </div>
+              )}
+              {categories.map(cat => (
               <button
                 key={cat.id}
                 onClick={() => handleCategorySelect(cat)}
@@ -573,7 +767,8 @@ export default function DirectoryPage() {
                   <ChevronRight size={18} className="text-white/30 flex-shrink-0" />
                 </div>
               </button>
-            ))
+              ))}
+            </>
           )}
         </div>
       </div>
@@ -601,13 +796,22 @@ export default function DirectoryPage() {
         <div className="px-4 py-4 space-y-2 pb-24">
           {subcategoryLoading ? (
             [1,2,3,4].map(n => <Skeleton key={n} className="h-16 rounded-2xl" />)
-          ) : subcategoryError ? (
+          ) : subcategoryError && subcategories.length === 0 && !hasDirectListings ? (
             <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
               <p className="text-sm text-red-400 font-myanmar">Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
               <button onClick={() => loadSubcategories(selectedCategory.id)} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
             </div>
           ) : (
             <>
+              {/* v9.25 regen #2: a failed reload must not replace cached
+                  subcategories with the error card — amber strip above
+                  the old list, same pattern as the categories level. */}
+              {subcategoryError && (
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-center justify-between gap-2">
+                  <p className="text-xs text-amber-300 font-myanmar">အဟောင်းပြထားသည် — အင်တာနက် နှေးနေသည်</p>
+                  <button onClick={() => loadSubcategories(selectedCategory.id)} className="text-xs text-amber-200 underline font-myanmar flex-shrink-0">ပြန်ကြိုးစားမည်</button>
+                </div>
+              )}
               {hasDirectListings && (
                 <button
                   onClick={handleDirectListings}
@@ -683,14 +887,10 @@ export default function DirectoryPage() {
           </h1>
         </div>
 
-        {/* B8: search + filters collapse away on scroll down, return on scroll up.
-            Animated collapse (grid-rows) — the rows stay mounted so the header
-            height animates instead of jumping ~110px when the rows unmount. */}
-        <div
-          className={`grid transition-all duration-300 ease-in-out ${headerCollapsed ? 'grid-rows-[0fr] opacity-0' : 'grid-rows-[1fr] opacity-100'}`}
-          style={headerCollapsed ? { marginTop: 0 } : undefined}
-        >
-        <div className="overflow-hidden min-h-0">
+        {/* v9.25: search + filters stay pinned — the old B8 collapse
+            hid them once scrolled past 140px and flickered on iPhone:
+            the bar appeared and disappeared while scrolling.
+            No hide/show any more. */}
         <div className="space-y-3">
         {/* Search input with debounce */}
         <div className="relative">
@@ -710,7 +910,7 @@ export default function DirectoryPage() {
         </div>
 
         {/* Quick filter row */}
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 w-full">
+        <div className="flex flex-wrap items-center gap-2 pb-1 w-full">
           <button
             onClick={() => setVerifiedOnly(v => !v)}
             className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-semibold border transition-all ${
@@ -769,15 +969,22 @@ export default function DirectoryPage() {
           )}
         </div>
         </div>
-        </div>
-        </div>
       </div>
 
       {/* Results count */}
       <div className="px-4 py-2 flex items-center justify-between flex-wrap gap-1">
         <p className="text-[11px] text-white/60">
-          {listingsLoading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ရလဒ်`}
+          {listings.length === 0 && listingsLoading ? 'ရှာဖွေနေသည်...' : `${total.toLocaleString()} ရလဒ်`}
         </p>
+        {/* v9.25 regen #2: while a background refetch is in flight with
+            cached rows visible, show the stale pill instead of swapping
+            the count line back to "ရှာဖွေနေသည်..." — the old rows stay. */}
+        {listings.length > 0 && listingsQueryFetching && (
+          <span className="flex items-center gap-1 text-[11px] text-white/50">
+            <RefreshCw size={12} className="animate-spin" />
+            အသစ်ရယူနေသည်…
+          </span>
+        )}
       </div>
 
       {/* Listings */}
@@ -792,7 +999,7 @@ export default function DirectoryPage() {
           ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
           : listings.length === 0
           ? <EmptyState icon="🔍" title="လုပ်ငန်း မတွေ့ပါ" message="ရှာဖွေမှုကို ပြောင်းလဲကြည့်ပါ" />
-          : listings.map(l => <ListingCard key={l.id} listing={l} bookmarked={bookmarkedSet ? bookmarkedSet.has(l.id) : undefined} />)
+          : listings.map(l => <ListingCard key={l.id} listing={l} bookmarked={bookmarkedSet?.has?.(l.id)} />)
         }
 
         {listings.length < total && !listingsLoading && (

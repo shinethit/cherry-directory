@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, Edit2, Trash2 } from 'lucide-react'
+import { Plus, Edit2, Trash2, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { fetchNews } from '../lib/prefetch'
 import { useAuth } from '../contexts/AuthContext'
@@ -59,8 +59,10 @@ export default function NewsPage() {
   })
   useEffect(() => {
     if (newsData) {
-      setPinned(newsData.pinned)
-      setPosts(newsData.posts)
+      // 9.25 slow-network: shape guards — a restored cache entry may
+      // lack these fields; setPosts(undefined) crashed posts.map below.
+      setPinned(newsData.pinned || [])
+      setPosts(newsData.posts || [])
       setHasMore(newsData.hasMore)
     }
     // Load-more fetches (pageSize > 30) keep the current list visible
@@ -117,6 +119,14 @@ export default function NewsPage() {
         )}
       </div>
 
+      {/* 9.25 slow-network: stale pill — background refetch in flight
+          with cached posts still on screen. */}
+      {newsQueryFetching && !loading && (posts.length > 0 || pinned.length > 0) && (
+        <p className="px-4 mb-2 text-[11px] text-white/50 flex items-center gap-1">
+          <RefreshCw size={12} className="animate-spin" /> အသစ်ရယူနေသည်…
+        </p>
+      )}
+
       <div className="px-4 mb-3">
         <div className="relative">
           <select
@@ -143,7 +153,7 @@ export default function NewsPage() {
             {pinned.map(p => (
               <div key={p.id} className="relative transition-transform hover:-translate-y-0.5">
                 <div onClick={() => navigate(`/news/${p.id}`)} className="cursor-pointer">
-                  <PostCard post={p} bookmarked={bookmarkedSet ? bookmarkedSet.has(p.id) : undefined} />
+                  <PostCard post={p} bookmarked={bookmarkedSet?.has?.(p.id)} />
                   <p className="text-right text-[11px] text-brand-300 font-semibold mt-1.5 pr-1">{lang === 'mm' ? 'ဆက်ဖတ်ရန် →' : 'Read more →'}</p>
                 </div>
                 {canEdit && (
@@ -176,7 +186,7 @@ export default function NewsPage() {
       <div className="px-4 space-y-3 pb-24">
         {loading ? (
           [1,2,3].map(n => <Skeleton key={n} className="h-48" />)
-        ) : loadError ? (
+        ) : loadError && posts.length === 0 ? (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
             <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
             <button onClick={() => refetchNews()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
@@ -193,10 +203,18 @@ export default function NewsPage() {
           />
         ) : (
           <>
+          {/* 9.25 slow-network: error with cached posts — keep the list,
+              show the small amber strip above it instead of the card. */}
+          {loadError && (
+            <div className="py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2">
+              <p className="text-xs text-amber-300 font-myanmar">အဟောင်းပြထားသည် — အင်တာနက် နှေးနေသည်</p>
+              <button onClick={() => refetchNews()} className="text-xs font-bold text-amber-300 underline whitespace-nowrap">ပြန်ကြိုးစားမည်</button>
+            </div>
+          )}
           {posts.map(p => (
             <div key={p.id} className="relative group transition-transform hover:-translate-y-0.5">
               <div onClick={() => navigate(`/news/${p.id}`)} className="cursor-pointer">
-                <PostCard post={p} bookmarked={bookmarkedSet ? bookmarkedSet.has(p.id) : undefined} />
+                <PostCard post={p} bookmarked={bookmarkedSet?.has?.(p.id)} />
                 <p className="text-right text-[11px] text-brand-300 font-semibold mt-1.5 pr-1">{lang === 'mm' ? 'ဆက်ဖတ်ရန် →' : 'Read more →'}</p>
               </div>
               {canEdit && (

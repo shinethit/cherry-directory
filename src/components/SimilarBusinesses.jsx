@@ -41,7 +41,7 @@ export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }
         )}
       </div>
       <div className="relative">
-        <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4">
+        <div className="grid grid-cols-3 gap-3 pb-2">
         {items.map(l => {
           const img = l.logo_url || l.cover_url
           const displayName = lang === 'mm' ? (l.name_mm || l.name) : l.name
@@ -49,7 +49,7 @@ export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }
             <button
               key={l.id}
               onClick={() => navigate('/directory/' + l.id)}
-              className="flex-shrink-0 w-36 card-dark rounded-2xl p-3 text-left hover:border-brand-400/30 transition-colors"
+              className="w-full min-w-0 card-dark rounded-2xl p-3 text-left hover:border-brand-400/30 transition-colors"
             >
               <div className="w-full h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mb-2">
                 {img ? (

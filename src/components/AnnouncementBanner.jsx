@@ -16,6 +16,9 @@ export default function AnnouncementBanner() {
       .then(({ data }) => {
         if (data?.length) setAnnouncements(data)
       })
+      // v9.25: a slow-network rejection used to be an unhandled rejection
+      // (no .catch, no timeout) — swallow it; no announcements is fine.
+      .catch(() => {})
   }, [])
 
   // A5: no auto-rotate and no marquee — the text stays still so it can be

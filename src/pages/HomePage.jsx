@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { Search, CalendarDays, RefreshCw, Home, User, Briefcase, GraduationCap, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -8,11 +9,12 @@ import { useAppConfig } from '../contexts/AppConfigContext';
 import { useLang } from '../contexts/LangContext';
 import { useAuth } from '../contexts/AuthContext';
 import SplashScreen from '../components/SplashScreen';
+import LoadProgress from '../components/LoadProgress';
 import ShareButton from '../components/ShareButton';
 import { usePWA } from '../hooks/usePWA'
 import { yangonToday, formatMyanmarDateTime, mmtParts, MY_MONTHS } from '../lib/myanmarDate';
 import { safeGet, safeSet } from '../lib/safeStorage';
-import { loadPartial, createAutoRetryGuard } from '../lib/loadPartial';
+import { loadPartial } from '../lib/loadPartial';
 import { formatPeakHour, devicePercentages } from '../lib/visitTracking';
 import { subscribeUpdateToastVisible } from '../lib/floatingBanners';
 import { showError } from '../lib/toast';
@@ -34,6 +36,25 @@ const ShimmerSkeleton = ({ className }) => (
   </div>
 );
 
+// Per-section failed state (v9.25 regen #2): a failed section says
+// "တင်မရသေးပါ" with a small retry — never "မရှိသေး".
+const SectionFailed = ({ onRetry }) => (
+  <div className="py-4 text-center space-y-2">
+    <p className="text-white/60 text-sm font-myanmar">တင်မရသေးပါ</p>
+    <button onClick={onRetry} className="text-xs text-brand-300 font-myanmar underline min-h-[44px] px-4">ပြန်ကြိုးစားမည်</button>
+  </div>
+);
+
+// Stale-data strip (v9.25 regen #2): shown above a section whose refetch
+// failed while cached data is still on screen — the old data stays
+// visible, with a small retry. Only renders when data exists.
+const StaleStrip = ({ onRetry }) => (
+  <div className="py-2 px-3 flex items-center justify-between gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+    <p className="text-xs text-amber-300 font-myanmar">အဟောင်းပြထားသည် — အင်တာနက် နှေးနေသည်</p>
+    <button onClick={onRetry} className="text-xs text-amber-200 font-myanmar underline flex-shrink-0 min-h-[32px] px-2">ပြန်ကြိုးစားမည်</button>
+  </div>
+);
+
 export default function HomePage() {
   const navigate = useNavigate();
   const config = useAppConfig();
@@ -45,10 +66,6 @@ export default function HomePage() {
   const [updateToastVisible, setUpdateToastVisible] = useState(false)
   useEffect(() => subscribeUpdateToastVisible(setUpdateToastVisible), [])
 
-  // V2: after 5 s of loading, show a progress hint so the user knows the
-  // app is still working instead of staring at skeletons in silence.
-  const [slowLoad, setSlowLoad] = useState(false)
-
   // --- Splash consent: daily check (safe storage — never throws, H-2) ---
   const [consentGiven, setConsentGiven] = useState(() => {
     const lastShown = safeGet('cherry_consent_date');
@@ -56,37 +73,111 @@ export default function HomePage() {
     return lastShown === yangonToday();
   });
 
-  // --- Data states ---
-  const [posts, setPosts] = useState([]);
-  const [featured, setFeatured] = useState([]);
+  // --- Home data via useQuery (v9.25 regen #2) ---
+  // The 7 loadPartial entries are now 6 persisted queries (same fetchers
+  // as the old loadPartial array), so a revisit renders instantly from
+  // the PersistQueryClientProvider cache (localStorage
+  // 'cherry-directory-cache', 24 h) while a background refetch updates
+  // it. The two count queries share one ['home','counts'] key. Each query
+  // retries once after 2 s (react-query retry: the old whole-page
+  // guarded retry behaviour — one retry, 2 s delay — now scoped
+  // per section instead of whole-page).
+  const queryClient = useQueryClient();
+  const throwIfError = (res) => {
+    if (res.error) throw res.error;
+    return res.data;
+  };
+  const postsQ = useQuery({
+    queryKey: ['home', 'posts'],
+    queryFn: async () => throwIfError(await supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4)) || [],
+    enabled: consentGiven,
+    retryDelay: 2000,
+  });
+  const featuredQ = useQuery({
+    queryKey: ['home', 'featured'],
+    queryFn: async () => throwIfError(await supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4)) || [],
+    enabled: consentGiven,
+    retryDelay: 2000,
+  });
+  const categoriesQ = useQuery({
+    queryKey: ['home', 'categories'],
+    queryFn: async () => throwIfError(await supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order')) || [],
+    enabled: consentGiven,
+    retryDelay: 2000,
+  });
+  const countsQ = useQuery({
+    queryKey: ['home', 'counts'],
+    queryFn: async () => {
+      const [l, p] = await Promise.all([
+        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'published').neq('type', 'event'),
+      ]);
+      if (l.error) throw l.error;
+      if (p.error) throw p.error;
+      return { listings: l.count ?? 0, posts: p.count ?? 0 };
+    },
+    enabled: consentGiven,
+    retryDelay: 2000,
+  });
+  const eventsQ = useQuery({
+    queryKey: ['home', 'events'],
+    queryFn: async () => throwIfError(await supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3)) || [],
+    enabled: consentGiven,
+    retryDelay: 2000,
+  });
+  const quickLinksQ = useQuery({
+    queryKey: ['home', 'quick-links'],
+    queryFn: async () => throwIfError(await supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order')) || [],
+    enabled: consentGiven,
+    retryDelay: 2000,
+  });
+
+  // Derived data — data is undefined until the first fetch settles, so a
+  // revisit renders the cached rows immediately (isLoading is false when
+  // cache exists; only isFetching is true during the background refetch).
+  const posts = postsQ.data ?? [];
+  const featured = featuredQ.data ?? [];
+  const allCategories = categoriesQ.data ?? [];
+  const homeCategories = allCategories.filter(c => !c.parent_id);
+  const upcomingEvents = eventsQ.data ?? [];
+  const quickLinks = quickLinksQ.data ?? [];
+  // A3: a null count means the count query failed — render "—", never a
+  // misleading "0". (Initial 0 is only shown while loading, as "…".)
+  const stats = countsQ.isError
+    ? { listings: null, posts: null }
+    : (countsQ.data ?? { listings: 0, posts: 0 });
+  // Any section still waiting on its FIRST fetch (no cached data yet).
+  const loading = postsQ.isLoading || featuredQ.isLoading || categoriesQ.isLoading
+    || countsQ.isLoading || eventsQ.isLoading || quickLinksQ.isLoading;
+  // Whether any section has data on screen (cached or fresh).
+  const hasAnyData = postsQ.data !== undefined || featuredQ.data !== undefined
+    || categoriesQ.data !== undefined || countsQ.data !== undefined
+    || eventsQ.data !== undefined || quickLinksQ.data !== undefined;
+  // Background refetch in progress while data is already on screen.
+  const isRefetching = (postsQ.isFetching || featuredQ.isFetching || categoriesQ.isFetching
+    || countsQ.isFetching || eventsQ.isFetching || quickLinksQ.isFetching) && hasAnyData;
+  // The red error card may render ONLY when there is no data at all
+  // (B-M1). A core section failing while other data is on screen shows
+  // the amber stale strip above that section instead.
+  const coreError = postsQ.isError || featuredQ.isError || categoriesQ.isError;
+  const dataError = coreError && !hasAnyData && isOnline;
+
+  // Real load progress (v9.25 regen #2): sections settled / 7 total —
+  // the 6 home queries + the community-counts group (still loadPartial).
+  // A section counts as settled once it has data OR has errored, so a
+  // failed section still completes the bar instead of hanging it at 86%.
+  const [communitySettled, setCommunitySettled] = useState(false);
+  const sectionsDone = [postsQ, featuredQ, categoriesQ, countsQ, eventsQ, quickLinksQ]
+    .filter(q => q.data !== undefined || q.isError).length + (communitySettled ? 1 : 0);
+  const sectionsTotal = 7;
+
+  const [selectedCat, setSelectedCat] = useState(null);
+  const [selectedSub, setSelectedSub] = useState(null);
+  const [recentFavorites, setRecentFavorites] = useState([]);
   // UI4 (v9.20): one batched bookmark query per list instead of one
   // per card.
   const { data: featuredBookmarked } = useBookmarkedSet(featured.map(l => l.id))
   const { data: postsBookmarked } = useBookmarkedSet(posts.map(p => p.id), 'post')
-  const [homeCategories, setHomeCategories] = useState([]);
-  const [allCategories, setAllCategories] = useState([]);
-  const [selectedCat, setSelectedCat] = useState(null);
-  const [selectedSub, setSelectedSub] = useState(null);
-  const [upcomingEvents, setUpcomingEvents] = useState([]);
-  // A3: a null count means the count query failed — render "—", never a
-  // misleading "0". (Initial 0 is only shown while loading, as "…".)
-  const [stats, setStats] = useState({ listings: 0, posts: 0 });
-  const [quickLinks, setQuickLinks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  // Per-section errors: one failed query no longer marks the whole page as
-  // errored (B-M1). dataError is set only when a core query fails or the
-  // load times out; sectionErrors records which sections failed.
-  const [dataError, setDataError] = useState(false);
-  const [sectionErrors, setSectionErrors] = useState({});
-  const [loadTimedOut, setLoadTimedOut] = useState(false);
-  // v9.7: one automatic retry after a timed-out load (2 s delay), then stop.
-  const [autoRetrying, setAutoRetrying] = useState(false);
-  const autoRetryGuardRef = useRef(createAutoRetryGuard());
-  const autoRetryTimerRef = useRef(null);
-  // v9.7: attempt id — a late arrival from an older attempt must never
-  // overwrite a newer attempt's state (auto-retry overlaps the first run).
-  const loadAttemptRef = useRef(0);
-  const [recentFavorites, setRecentFavorites] = useState([]);
 
   const [isOnline, setIsOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
 
@@ -122,129 +213,6 @@ export default function HomePage() {
 
 
 
-  // v9.7: never let a pending auto-retry timer fire after unmount.
-  useEffect(() => () => {
-    if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current);
-  }, []);
-
-  // --- Main data loading (listings, posts, categories, quick links) ---
-  // 30 s timeout (v9.7, was 10 s): results stream in as they resolve —
-  // a slow/failed query can no longer blank the whole page. On timeout
-  // whatever arrived stays rendered, pending sections are marked failed,
-  // and one auto-retry fires if a core section is still missing. Offline
-  // (B-M3): skip Supabase entirely, clear loading, show the offline notice.
-  // Only core sections (posts / featured / categories) set dataError (B-M1).
-  const loadData = useCallback(async () => {
-    const attempt = ++loadAttemptRef.current;
-    // Offline: don't fire 7 queries that can only fail.
-    if (!navigator.onLine) {
-      setLoading(false);
-      setDataError(false);
-      setLoadTimedOut(false);
-      setSlowLoad(false);
-      return;
-    }
-    setLoading(true);
-    setDataError(false);
-    setLoadTimedOut(false);
-    setSectionErrors({});
-    setSlowLoad(false);
-    const slowTimer = setTimeout(() => setSlowLoad(true), 5000);
-    // Per-section streaming apply: each query's result is written to state
-    // as soon as it resolves, so fast sections render while slow ones wait.
-    const sectionNames = ['posts', 'featured', 'categories', 'listingsCount', 'events', 'quickLinks', 'postsCount'];
-    const failed = {};
-    const applySection = (i, r) => {
-      // Ignore late arrivals from an older attempt (see loadAttemptRef).
-      if (attempt !== loadAttemptRef.current) return;
-      const name = sectionNames[i];
-      const failedThis = r.status === 'rejected' || r.value?.error;
-      if (failedThis) failed[name] = true;
-      else delete failed[name];
-      setSectionErrors({ ...failed });
-      // Only core sections fail the whole page; the rest render empty.
-      setDataError(['posts', 'featured', 'categories'].some(k => failed[k]));
-      if (failedThis) {
-        // A failed count is null ("—"), never a misleading "0" (A3).
-        if (i === 3) setStats(prev => ({ ...prev, listings: null }));
-        if (i === 6) setStats(prev => ({ ...prev, posts: null }));
-        return;
-      }
-      if (r.status !== 'fulfilled') return;
-      const data = r.value.data;
-      switch (i) {
-        case 0: setPosts(data || []); break;
-        case 1: setFeatured(data || []); break;
-        case 2: {
-          const all = data || [];
-          setAllCategories(all);
-          setHomeCategories(all.filter(c => !c.parent_id));
-          break;
-        }
-        case 3: setStats(prev => ({ ...prev, listings: r.value.count ?? 0 })); break;
-        case 4: setUpcomingEvents(data || []); break;
-        case 5: setQuickLinks(data || []); break;
-        case 6: setStats(prev => ({ ...prev, posts: r.value.count ?? 0 })); break;
-        default: break;
-      }
-    };
-    try {
-      const { results, timedOut } = await loadPartial([
-        supabase.from('posts').select('*, author:profiles(full_name), category:categories(name, name_mm, icon)').eq('status', 'published').neq('type', 'event').order('created_at', { ascending: false }).limit(4),
-        supabase.from('listings').select('*, category:categories(name, name_mm, icon)').eq('status', 'approved').eq('is_featured', true).limit(4),
-        supabase.from('categories').select('*').eq('type', 'directory').eq('is_active', true).order('is_featured', { ascending: false }).order('sort_order'),
-        supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
-        supabase.from('posts').select('id, title, title_mm, event_start, event_end, event_location, cover_url').eq('type', 'event').eq('status', 'published').gte('event_start', new Date().toISOString()).order('event_start').limit(3),
-        supabase.from('quick_links').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('status', 'published').neq('type', 'event')
-      ], LOAD_TIMEOUT_MS, applySection);
-
-      if (attempt !== loadAttemptRef.current) return;
-      // Sections still pending at the timeout are marked failed so they
-      // show their own empty/failed state, never skeletons forever.
-      results.forEach((r, i) => {
-        if (r.status === 'pending') {
-          failed[sectionNames[i]] = true;
-          if (i === 3) setStats(prev => ({ ...prev, listings: null }));
-          if (i === 6) setStats(prev => ({ ...prev, posts: null }));
-        }
-      });
-      setSectionErrors({ ...failed });
-      setDataError(['posts', 'featured', 'categories'].some(k => failed[k]));
-      setLoadTimedOut(timedOut);
-      // Auto-retry once (2 s delay) if a core section is still missing;
-      // the guard guarantees it never loops.
-      // v9.21 (Bug D): the retry used to fire ONLY on timedOut — a core
-      // section failing FAST (proxy error, not a timeout) showed the red
-      // banner with no auto-retry at all. A fast failure is the same
-      // "core missing" state, so it retries too.
-      const coreMissing = [0, 1, 2].some(i => results[i].status !== 'fulfilled' || results[i].value?.error);
-      if (coreMissing && autoRetryGuardRef.current.shouldRetry()) {
-        setAutoRetrying(true);
-        autoRetryTimerRef.current = setTimeout(() => {
-          setAutoRetrying(false);
-          loadData();
-        }, 2000);
-      }
-    } catch (err) {
-      // loadPartial never rejects on timeout; this is only for an
-      // unexpected failure of the loader itself.
-      console.error('Data load error:', err);
-      if (attempt === loadAttemptRef.current) setDataError(true);
-    } finally {
-      clearTimeout(slowTimer);
-      if (attempt === loadAttemptRef.current) {
-        setSlowLoad(false);
-        setLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (consentGiven) {
-      loadData();
-    }
-  }, [consentGiven, loadData]);
 
   // --- Community stats (silent fail) ---
   // Same 30 s timeout as the main load (v9.7, was 10 s): each count is
@@ -253,6 +221,7 @@ export default function HomePage() {
   // here (non-core section; a manual refresh re-runs it).
   const loadCommunityStats = useCallback(async () => {
     setCommunityStatsLoading(true);
+    setCommunitySettled(false);
     try {
       // Helper: run a count query silently — null on failure (FB-5), so a
       // failed load shows "—" instead of a misleading "0".
@@ -295,6 +264,7 @@ export default function HomePage() {
       console.warn('Community stats load failed:', e)
     } finally {
       setCommunityStatsLoading(false)
+      setCommunitySettled(true)
     }
   }, [])
 
@@ -302,7 +272,7 @@ export default function HomePage() {
   // 6 community counts follow once the browser is idle.
   useEffect(() => {
     if (!consentGiven) return
-    if (!navigator.onLine) { setCommunityStatsLoading(false); return }
+    if (!navigator.onLine) { setCommunityStatsLoading(false); setCommunitySettled(true); return }
     let timer
     if (typeof window.requestIdleCallback === 'function') {
       const id = window.requestIdleCallback(() => loadCommunityStats(), { timeout: 2000 })
@@ -342,26 +312,36 @@ export default function HomePage() {
   const loadFavorites = useCallback(async () => {
     if (!isLoggedIn || !user) { setRecentFavorites([]); return; }
     try {
-      const { data: bmarks } = await supabase
+      const { data: bmarks, error: bmarksError } = await supabase
         .from('bookmarks')
         .select('target_id')
         .eq('user_id', user.id)
         .eq('target_type', 'listing')
         .order('created_at', { ascending: false })
         .limit(6);
+      // v9.25 regen #5: supabase-js RESOLVES with { data: null,
+      // error } on a dead connection instead of throwing — without
+      // this check the empty branch below ran and setRecentFavorites([])
+      // wiped the last good favourites, against the catch below
+      // ("keep the last good favourites on a failed load").
+      if (bmarksError) return
       if (!bmarks?.length) { setRecentFavorites([]); return; }
       const ids = bmarks.map(b => b.target_id);
-      const { data } = await supabase
+      const { data, error: listingsError } = await supabase
         .from('listings')
         .select('id, name, name_mm, logo_url, cover_url, rating_avg, rating_count, category:categories(icon)')
         .in('id', ids)
         .eq('status', 'approved');
+      // v9.25 regen #5: same trap — a resolve-with-error listings
+      // fetch yields null data, and the map below would wipe the
+      // favourites with []. Return and keep the last good list.
+      if (listingsError) return
       const map = Object.fromEntries((data || []).map(l => [l.id, l]));
       setRecentFavorites(ids.map(id => map[id]).filter(Boolean).slice(0, 4));
     } catch (e) {
       console.warn('favorites load:', e);
-      // Don't leave stale favourites on screen after a failed load (B-M4).
-      setRecentFavorites([]);
+      // v9.25 regen #2: keep the last good favourites on a failed load —
+      // clearing them blanked a good list on every slow-network retry.
     }
   }, [isLoggedIn, user]);
 
@@ -370,13 +350,9 @@ export default function HomePage() {
   }, [consentGiven, loadFavorites]);
 
   const handleRefresh = () => {
-    // Manual retry: cancel any pending auto-retry and reset its guard so
-    // this retry can auto-retry once again if it also times out (v9.7).
-    if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current);
-    autoRetryTimerRef.current = null;
-    autoRetryGuardRef.current.reset();
-    setAutoRetrying(false);
-    loadData();
+    // Manual retry: invalidate the home queries (background refetch,
+    // cached data stays on screen) and re-run the non-query loads.
+    queryClient.invalidateQueries({ queryKey: ['home'] });
     loadCommunityStats();
     loadFavorites();
   };
@@ -421,6 +397,13 @@ export default function HomePage() {
           <p className="text-xs text-white/60 font-myanmar">{cityName}</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* v9.25 regen #2: stale pill — background refetch in progress
+              while cached data is on screen. Only when data exists. */}
+          {isRefetching && (
+            <span className="flex items-center gap-1 text-[11px] text-white/50 font-myanmar">
+              <RefreshCw size={12} className="animate-spin" /> အသစ်ရယူနေသည်…
+            </span>
+          )}
           <ShareButton
             variant="prominent"
             customUrl="https://cutt.ly/cherrydir"
@@ -437,9 +420,10 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* V2: loading for more than 5 s — show a progress hint. */}
-      {loading && slowLoad && (
-        <p className="px-4 text-center text-xs text-white/60 font-myanmar">တင်နေသည်… ခဏစောင့်ပါ</p>
+      {/* Real load progress (v9.25 regen #2): sections settled / total —
+          real % only, never a fake spinner. Disappears when all 7 settle. */}
+      {sectionsDone < sectionsTotal && (
+        <LoadProgress done={sectionsDone} total={sectionsTotal} />
       )}
 
       {/* Offline notice (B-M3): shown instead of a silent empty page when
@@ -451,10 +435,12 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Data error banner — shown when a core query fails or the load times out.
+      {/* Data error card — v9.25 regen #2: renders ONLY when a core query
+          failed AND there is no data at all on screen. With cached data
+          the amber stale strip above the section is shown instead.
           v9.7: never tells an online user to "check internet" — slowness is
           not no-internet (the offline notice above already covers that). */}
-      {dataError && !loading && !autoRetrying && (
+      {dataError && (
         <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
           <p className="text-sm text-red-400 font-myanmar">Data အချို့ တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
           <button onClick={handleRefresh} className="btn-primary text-sm px-6 py-3 min-h-[44px]">ပြန်ကြိုးစားမည်</button>
@@ -463,14 +449,6 @@ export default function HomePage() {
           {getRecoveryLines().map((line) => (
             <p key={line} className="text-xs text-white/50 font-myanmar">{line}</p>
           ))}
-        </div>
-      )}
-
-      {/* v9.7: auto-retry in progress — honest in-progress notice while the
-          single automatic retry is pending/running. */}
-      {autoRetrying && !loading && (
-        <div className="mx-4 card-dark rounded-2xl p-4 text-center space-y-2 border border-amber-500/30">
-          <p className="text-sm text-amber-400 font-myanmar">Data တင်တာ ကြာနေသည် — ထပ်ကြိုးစားနေသည်</p>
         </div>
       )}
 
@@ -503,11 +481,11 @@ export default function HomePage() {
             {/* RIGHT: Vertical stats — 1 col x 3 rows */}
             <div className="flex flex-col gap-1.5 flex-shrink-0 w-[70px]">
               <div className="glass rounded-lg px-2 py-1.5 text-center">
-                <p className="font-display font-bold text-sm text-white leading-none">{loading ? '…' : stats.listings == null ? '—' : stats.listings.toLocaleString()}</p>
+                <p className="font-display font-bold text-sm text-white leading-none">{countsQ.isLoading ? '…' : stats.listings == null ? '—' : stats.listings.toLocaleString()}</p>
                 <p className="text-[8px] text-white/60 mt-0.5 leading-tight">{lang === 'mm' ? 'လုပ်ငန်း' : 'Listings'}</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
-                <p className="font-display font-bold text-sm text-white leading-none">{loading ? '…' : stats.posts == null ? '—' : stats.posts.toLocaleString()}</p>
+                <p className="font-display font-bold text-sm text-white leading-none">{countsQ.isLoading ? '…' : stats.posts == null ? '—' : stats.posts.toLocaleString()}</p>
                 <p className="text-[8px] text-white/60 mt-0.5 leading-tight">{lang === 'mm' ? 'သတင်း' : 'News'}</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
@@ -571,11 +549,16 @@ export default function HomePage() {
 
       {/* Quick Actions */}
       <div className="px-4">
-        <div className="grid grid-cols-3 gap-1.5">
-          {loading ? (
-            [1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)
-          ) : (
-            quickLinks.map(link => (
+        {quickLinksQ.isError && quickLinks.length > 0 && (
+          <div className="mb-1.5"><StaleStrip onRetry={() => quickLinksQ.refetch()} /></div>
+        )}
+        {quickLinksQ.isLoading ? (
+          <div className="grid grid-cols-3 gap-1.5">
+            {[1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)}
+          </div>
+        ) : quickLinks.length > 0 ? (
+          <div className="grid grid-cols-3 gap-1.5">
+            {quickLinks.map(link => (
               <button
                 key={link.id}
                 // N3 (v9.17): noopener so an opened page cannot reach back via window.opener.
@@ -587,9 +570,11 @@ export default function HomePage() {
                   <p className="text-[10px] font-display font-semibold leading-tight line-clamp-2">{lang === 'mm' ? (link.title_mm || link.title) : link.title}</p>
                 </div>
               </button>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        ) : quickLinksQ.isError ? (
+          <SectionFailed onRetry={() => quickLinksQ.refetch()} />
+        ) : null}
       </div>
 
       {/* Community Stats Row — Grouped */}
@@ -696,17 +681,24 @@ export default function HomePage() {
       </div>
 
       {/* Category Grid */}
-      {loading ? (
+      {categoriesQ.isLoading ? (
         <div className="px-4 grid grid-cols-4 gap-1.5">
           {[1, 2, 3, 4, 5, 6, 7, 8].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)}
         </div>
       ) : homeCategories.length === 0 ? (
-        <div className="px-4 py-8 text-center">
-          <p className="text-white/60 text-sm font-myanmar">Category မရှိသေး</p>
-        </div>
+        categoriesQ.isError ? (
+          <div className="px-4"><SectionFailed onRetry={() => categoriesQ.refetch()} /></div>
+        ) : (
+          <div className="px-4 py-8 text-center">
+            <p className="text-white/60 text-sm font-myanmar">Category မရှိသေး</p>
+          </div>
+        )
       ) : (
         <div>
           <SectionHeader title="အမျိုးအစားများ" subtitle="Category" action="အားလုံး" onAction={() => navigate('/directory')} />
+          {categoriesQ.isError && (
+            <div className="px-4 mb-1.5"><StaleStrip onRetry={() => categoriesQ.refetch()} /></div>
+          )}
           <div className="px-4 grid grid-cols-4 gap-1.5">
             {homeCategories.map(cat => {
               const subs = allCategories.filter(c => c.parent_id === cat.id);
@@ -874,7 +866,7 @@ export default function HomePage() {
             action={lang === 'mm' ? 'အားလုံး' : 'View all'}
             onAction={() => navigate('/saved')}
           />
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1 px-4">
+          <div className="grid grid-cols-3 gap-2 px-4 pb-1">
             {recentFavorites.map(l => {
               const img = l.cover_url || l.logo_url;
               const displayName = lang === 'mm' ? (l.name_mm || l.name) : l.name;
@@ -882,7 +874,7 @@ export default function HomePage() {
                 <button
                   key={l.id}
                   onClick={() => navigate('/directory/' + l.id)}
-                  className="flex-shrink-0 w-32 card-dark rounded-2xl p-2 text-left hover:border-brand-400/30 transition-colors"
+                  className="w-full min-w-0 card-dark rounded-2xl p-2 text-left hover:border-brand-400/30 transition-colors"
                 >
                   <div className="w-full h-20 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden mb-2">
                     {img ? (
@@ -922,11 +914,16 @@ export default function HomePage() {
       <div>
         <SectionHeader title="Featured လုပ်ငန်းများ" subtitle="Highlighted businesses" action="အားလုံး" onAction={() => navigate('/directory?featured=true')} />
         <div className="px-4 space-y-2">
-          {loading
+          {featuredQ.isError && featured.length > 0 && (
+            <StaleStrip onRetry={() => featuredQ.refetch()} />
+          )}
+          {featuredQ.isLoading
             ? [1, 2, 3].map(n => <ShimmerSkeleton key={n} className="h-20" />)
             : featured.length > 0
-              ? featured.map(l => <ListingCard key={l.id} listing={l} compact bookmarked={featuredBookmarked ? featuredBookmarked.has(l.id) : undefined} />)
-              : <p className="text-white/50 text-sm font-myanmar text-center py-4">Featured လုပ်ငန်း မရှိသေးပါ</p>}
+              ? featured.map(l => <ListingCard key={l.id} listing={l} compact bookmarked={featuredBookmarked?.has?.(l.id)} />)
+              : featuredQ.isError
+                ? <SectionFailed onRetry={() => featuredQ.refetch()} />
+                : <p className="text-white/50 text-sm font-myanmar text-center py-4">Featured လုပ်ငန်း မရှိသေးပါ</p>}
         </div>
       </div>
 
@@ -934,11 +931,16 @@ export default function HomePage() {
       <div>
         <SectionHeader title="သတင်းနှင့် ဖြစ်ရပ်များ" subtitle="News & Events" action="အားလုံး" onAction={() => navigate('/news')} />
         <div className="px-4 space-y-3">
-          {loading
+          {postsQ.isError && posts.length > 0 && (
+            <StaleStrip onRetry={() => postsQ.refetch()} />
+          )}
+          {postsQ.isLoading
             ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-48" />)
             : posts.length > 0
-              ? posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} bookmarked={postsBookmarked ? postsBookmarked.has(p.id) : undefined} />)
-              : <p className="text-white/50 text-sm font-myanmar text-center py-4">သတင်း မရှိသေးပါ</p>}
+              ? posts.slice(0, 4).map(p => <PostCard key={p.id} post={p} bookmarked={postsBookmarked?.has?.(p.id)} />)
+              : postsQ.isError
+                ? <SectionFailed onRetry={() => postsQ.refetch()} />
+                : <p className="text-white/50 text-sm font-myanmar text-center py-4">သတင်း မရှိသေးပါ</p>}
         </div>
       </div>
 
@@ -951,7 +953,10 @@ export default function HomePage() {
           onAction={() => navigate('/calendar')}
         />
         <div className="px-4 space-y-2">
-          {loading
+          {eventsQ.isError && upcomingEvents.length > 0 && (
+            <StaleStrip onRetry={() => eventsQ.refetch()} />
+          )}
+          {eventsQ.isLoading
             ? [1, 2].map(n => <ShimmerSkeleton key={n} className="h-16" />)
             : upcomingEvents.length > 0
               ? upcomingEvents.map(ev => {
@@ -985,7 +990,9 @@ export default function HomePage() {
                   </div>
                 )
               })
-              : <p className="text-white/50 text-sm font-myanmar text-center py-4">လာမည့် ဖြစ်ရပ် မရှိသေးပါ</p>}
+              : eventsQ.isError
+                ? <SectionFailed onRetry={() => eventsQ.refetch()} />
+                : <p className="text-white/50 text-sm font-myanmar text-center py-4">လာမည့် ဖြစ်ရပ် မရှိသေးပါ</p>}
           </div>
         </div>
 

@@ -336,9 +336,9 @@ export function DonationPage() {
 
                {/* Images gallery */}
                {d.images?.length > 0 && (
-                 <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+                 <div className="flex flex-wrap gap-1.5">
                    {d.images.slice(0, 4).map((img, i) => (
-                     <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-white/10">
+                     <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="w-16 h-16 rounded-lg overflow-hidden border border-white/10">
                        <img src={img} alt={d.title_mm || 'လှူဒါန်းမှု ပုံ'} className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
                      </a>
                    ))}
@@ -545,9 +545,9 @@ function HealthCard({ service, lang, isModerator, userId, onEdit, onDelete }) {
 
       {/* S20 (v9.17): the gallery was never rendered (Donations pattern). */}
       {service.images?.length > 0 && (
-        <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
+        <div className="flex flex-wrap gap-1.5">
           {service.images.slice(0, 4).map((img, i) => (
-            <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-white/10">
+            <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="w-16 h-16 rounded-lg overflow-hidden border border-white/10">
               <img src={img} alt={service.title_mm || 'ဝန်ဆောင်မှု ပုံ'} className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
             </a>
           ))}
@@ -982,7 +982,11 @@ export function BusSchedulePage() {
       // S23 (v9.17): warn on a duplicate departure (same route + date +
       // time) — the reporter confirms before a second row is added.
       const depDate = form.departure_date || dateFilter
-      const { data: dup } = await supabase.from('bus_departures').select('id').eq('route_id', form.route_id).eq('departure_date', depDate).eq('departure_time', form.departure_time).limit(1).maybeSingle()
+      const { data: dup, error: dupErr } = await supabase.from('bus_departures').select('id').eq('route_id', form.route_id).eq('departure_date', depDate).eq('departure_time', form.departure_time).limit(1).maybeSingle()
+      // v9.25 regen #5: a resolve-with-error dup check used to pass
+      // (dup null) and add a duplicate departure. Throw into the
+      // catch below, which toasts and keeps the form open to retry.
+      if (dupErr) throw dupErr
       if (dup) {
         if (!(await confirmDialog(lang === 'mm' ? 'ဒီလမ်းကြောင်း/နေ့/အချိန် အတွက် report ရှိပြီးသားဖြစ်သည် — ထပ်ထည့်မည်လား?' : 'A report for this route, date and time already exists — add another?', { danger: true }))) { setSubmitting(false); return }
       }
@@ -1375,9 +1379,9 @@ export function ToursPage() {
                  <div className="flex-1 min-w-0">
                    {/* Gallery preview */}
                    {t.images?.length > 0 && (
-                     <div className="flex gap-1 mb-2 overflow-x-auto scrollbar-hide">
+                     <div className="flex flex-wrap gap-1 mb-2">
                        {t.images.slice(0, 3).map((img, i) => (
-                         <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-white/10">
+                         <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="w-14 h-14 rounded-lg overflow-hidden border border-white/10">
                            <img src={img} alt={t.name_mm || 'ခရီးစဉ် ပုံ'} className="w-full h-full object-cover hover:scale-105 transition-transform" loading="lazy" />
                          </a>
                        ))}

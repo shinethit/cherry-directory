@@ -10,6 +10,9 @@ export const queryClient = new QueryClient({
       // before the user ever goes offline.
       gcTime: 1000 * 60 * 60 * 24, // 24 hours
       retry: 1,
+      // v9.25: space the single retry out (1 s) instead of firing it
+      // immediately into the same slow network that just failed.
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
       refetchOnWindowFocus: false,
     },
     mutations: {

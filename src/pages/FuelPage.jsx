@@ -102,7 +102,11 @@ function FuelTypesTab({ onChanged }) {
     setLoading(true)
     // 30 s timeout (was none): a hung query left the modal spinner up forever.
     try {
-      const { data } = await withTimeout(supabase.from('fuel_types').select('*').order('sort_order'), 30000, 'Fuel types')
+      const { data, error } = await withTimeout(supabase.from('fuel_types').select('*').order('sort_order'), 30000, 'Fuel types')
+      // v9.25 regen #5: supabase-js RESOLVES with { data: null, error }
+      // on a dead connection — setList([]) here wiped the last good
+      // types. Throw so the catch keeps the last good list.
+      if (error) throw error
       setList(data || [])
     } catch (e) { console.warn(e) }
     setLoading(false)
@@ -287,7 +291,10 @@ function ManageFuelStationsModal({ onClose, onUpdated, lang, allFuelTypes, onFue
     setLoading(true)
     // 30 s timeout (was none): a hung query left the modal spinner up forever.
     try {
-      const { data } = await withTimeout(supabase.from('fuel_stations').select('*').order('sort_order'), 30000, 'Fuel stations')
+      const { data, error } = await withTimeout(supabase.from('fuel_stations').select('*').order('sort_order'), 30000, 'Fuel stations')
+      // v9.25 regen #5: resolve-with-error must not wipe the last good
+      // stations (same trap as the fuel-types load above).
+      if (error) throw error
       setList(data || [])
     } catch (e) { console.warn(e) }
     setLoading(false)
@@ -561,8 +568,11 @@ export default function FuelPage() {
   })
   useEffect(() => {
     if (fuelData) {
-      setAllFuelTypes(fuelData.types)
-      setStations(fuelData.stations)
+      // 9.25 slow-network: shape guards — a restored cache entry may
+      // lack these fields; setStations(undefined) crashed stations.map
+      // below (townships) at render.
+      setAllFuelTypes(fuelData.types || [])
+      setStations(fuelData.stations || [])
     }
     setLoading(fuelQueryLoading)
     setLoadError(fuelQueryError)
@@ -611,12 +621,12 @@ export default function FuelPage() {
           placeholder={lang === 'mm' ? '🔍 ဆိုင်အမည် / လိပ်စာ ရှာမည်' : '🔍 Search name / address'}
           className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white placeholder:text-white/40 outline-none"
         />
-        <div className="flex gap-2">
-          <select value={townshipFilter} onChange={e => setTownshipFilter(e.target.value)} className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white outline-none">
+        <div className="flex flex-wrap gap-2">
+          <select value={townshipFilter} onChange={e => setTownshipFilter(e.target.value)} className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white outline-none">
             <option value="All">{lang === 'mm' ? 'မြို့နယ် အားလုံး' : 'All townships'}</option>
             {townships.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={fuelTypeFilter} onChange={e => setFuelTypeFilter(e.target.value)} className="flex-1 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white outline-none">
+          <select value={fuelTypeFilter} onChange={e => setFuelTypeFilter(e.target.value)} className="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-white outline-none">
             <option value="All">{lang === 'mm' ? 'ဆီ အမျိုးအစား အားလုံး' : 'All fuel types'}</option>
             {allFuelTypes.map(ft => <option key={ft.id} value={ft.name}>{lang === 'mm' ? (ft.name_mm || ft.name) : ft.name}</option>)}
           </select>
@@ -625,7 +635,7 @@ export default function FuelPage() {
 
       {loading ? (
         <div className="px-4 py-8 text-center text-white/60 text-sm">ဖွင့်နေသည်...</div>
-      ) : loadError ? (
+      ) : loadError && stations.length === 0 ? (
         <div className="px-4 py-8 text-center space-y-3">
           <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
           <button onClick={() => refetchFuel()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
@@ -635,16 +645,26 @@ export default function FuelPage() {
       ) : filteredStations.length === 0 ? (
         <div className="px-4 py-8 text-center text-white/60 text-sm">{lang === 'mm' ? 'ရှာမတွေ့ပါ' : 'No stations match'}</div>
       ) : (
-        <div className="px-4 space-y-2">
-          {filteredStations.map(s => (
-            <StationCard
-              key={s.id}
-              station={s}
-              lang={lang}
-              allFuelTypes={allFuelTypes}
-            />
-          ))}
-        </div>
+        <>
+          {/* 9.25 slow-network: error with cached stations — keep the
+              list, show the small amber strip above it. */}
+          {loadError && (
+            <div className="mx-4 mb-2 py-2 px-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2">
+              <p className="text-xs text-amber-300 font-myanmar">အဟောင်းပြထားသည် — အင်တာနက် နှေးနေသည်</p>
+              <button onClick={() => refetchFuel()} className="text-xs font-bold text-amber-300 underline whitespace-nowrap">ပြန်ကြိုးစားမည်</button>
+            </div>
+          )}
+          <div className="px-4 space-y-2">
+            {filteredStations.map(s => (
+              <StationCard
+                key={s.id}
+                station={s}
+                lang={lang}
+                allFuelTypes={allFuelTypes}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {/* About this page */}
