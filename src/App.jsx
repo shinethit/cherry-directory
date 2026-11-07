@@ -139,8 +139,14 @@ function LoadingSpinner() {
 // is still loading we show a spinner — NOT the lock message. If the profile
 // failed to load for a logged-in user, offer a Retry that re-fetches it
 // (refreshProfile, Track 3's AuthContext interface).
-function RequireAdmin({ children }) {
-  const { loading, profileLoading, profile, isAdmin, isModerator, isLoggedIn, refreshProfile } = useAuth()
+// v9.26: the spinner is BOOT-ONLY (profileLoading && !profileBooted). A
+// background refetch — e.g. the hourly TOKEN_REFRESHED with
+// autoRefreshToken — used to unmount the admin page (BulkImportPage lost
+// its in-progress import state) and remount it fresh. Now the last good
+// profile keeps the page mounted through the refetch.
+// Exported for tests (AuthContext926.test.jsx renders the gate directly).
+export function RequireAdmin({ children }) {
+  const { loading, profileLoading, profileBooted, profile, isAdmin, isModerator, isLoggedIn, refreshProfile } = useAuth()
   const [profileFailed, setProfileFailed] = useState(false)
   const [retrying, setRetrying] = useState(false)
 
@@ -151,7 +157,7 @@ function RequireAdmin({ children }) {
     else if (profile) setProfileFailed(false)
   }, [loading, profileLoading, isLoggedIn, profile])
 
-  if (loading || profileLoading) return <LoadingSpinner />
+  if (loading || (profileLoading && !profileBooted)) return <LoadingSpinner />
   if (!isAdmin && !isModerator) {
     return (
       <div className="flex items-center justify-center min-h-[60dvh] px-8 text-center">

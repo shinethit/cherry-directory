@@ -4,6 +4,7 @@ import { useServiceWorker } from '../hooks/useServiceWorker'
 import { safeGet, safeSet } from '../lib/safeStorage'
 import { APP_VERSION } from '../lib/appVersion'
 import { setUpdateToastVisible } from '../lib/floatingBanners'
+import { isLongTaskRunning } from '../lib/longTask'
 
 // Shows a real update prompt when the service worker reports a new version
 // waiting (useServiceWorker detects it via onupdatefound, an already-waiting
@@ -31,8 +32,21 @@ const DISMISSED_KEY = `cherry_update_dismissed_${APP_VERSION}`
 export default function UpdatePrompt() {
   const { updateAvailable, updating, applyUpdate } = useServiceWorker()
   const [dismissed, setDismissed] = useState(() => safeGet(DISMISSED_KEY) !== null)
+  // v9.26: while a long task (e.g. a CSV import) is running, the
+  // "ပြန်ဖွင့်မည်" button must not reload — a reload would wipe the
+  // task's in-progress state. Polled every 1 s while the prompt is
+  // visible; the click handler re-checks the flag as well.
+  const [longTaskBusy, setLongTaskBusy] = useState(false)
 
   const shown = updateAvailable && !dismissed
+
+  useEffect(() => {
+    if (!shown) return
+    const check = () => setLongTaskBusy(isLongTaskRunning())
+    check()
+    const t = setInterval(check, 1000)
+    return () => clearInterval(t)
+  }, [shown])
 
   // (d) Publish visibility so the install banner / pill can suppress
   // themselves — at most one floating banner at a time.
@@ -48,6 +62,17 @@ export default function UpdatePrompt() {
     setDismissed(true)
   }
 
+  // v9.26: re-check the flag on click (the 1 s poll above can lag a
+  // task that started a moment ago) — while busy, do nothing except
+  // make sure the note shows.
+  function handleApply() {
+    if (isLongTaskRunning()) {
+      setLongTaskBusy(true)
+      return
+    }
+    applyUpdate()
+  }
+
   if (!shown) return null
 
   return (
@@ -56,14 +81,14 @@ export default function UpdatePrompt() {
         <span className="text-2xl flex-shrink-0">🍒</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-display font-bold text-white leading-tight">အသစ်ထွက်ပြီ</p>
-          <p className="text-[10px] text-white/50 font-myanmar">Version အသစ် ရနေပြီ — ပြန်ဖွင့်ပြီး အပ်ဒိတ်လုပ်မည်</p>
+          <p className="text-[10px] text-white/50 font-myanmar">{longTaskBusy ? 'လက်ရှိ လုပ်ငန်း ပြီးသွားမှ အပ်ဒိတ် အလိုအလျောက် ပြောင်းသွားမည်' : 'Version အသစ် ရနေပြီ — ပြန်ဖွင့်ပြီး အပ်ဒိတ်လုပ်မည်'}</p>
         </div>
         <button
-          onClick={applyUpdate}
-          disabled={updating}
+          onClick={handleApply}
+          disabled={updating || longTaskBusy}
           className="flex-shrink-0 px-3 py-2 bg-brand-600 rounded-xl text-white text-xs font-display font-semibold disabled:opacity-50"
         >
-          {updating ? 'အပ်ဒိတ်လုပ်နေသည်…' : 'ပြန်ဖွင့်မည်'}
+          {updating ? 'အပ်ဒိတ်လုပ်နေသည်…' : longTaskBusy ? 'စောင့်နေသည်…' : 'ပြန်ဖွင့်မည်'}
         </button>
         <button
           onClick={dismiss}

@@ -37,8 +37,17 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   // Profile loading is separate from auth loading: the session can be
   // known while the profile row is still in flight. Admin gates must wait
-  // for profileLoading === false before judging role (H-3).
+  // for the profile before judging role (H-3) — but only at boot
+  // (profileBooted, v9.26): a background refetch keeps the last good
+  // profile on screen instead of swapping in a spinner.
   const [profileLoading, setProfileLoading] = useState(false)
+  // v9.26: boot-only gate — true once the FIRST profile load for the
+  // current user has settled (success or failure). A background refetch
+  // (e.g. the hourly TOKEN_REFRESHED) must never swap a mounted admin
+  // page for a spinner: RequireAdmin gates on profileLoading only while
+  // profileBooted is false, and otherwise keeps rendering with the last
+  // good profile. Reset on sign-out / user switch (see below).
+  const [profileBooted, setProfileBooted] = useState(false)
   const [profileError, setProfileError] = useState('')
   const initialized = useRef(false)
   // v9.22: set at the end of loadSession — the onAuthStateChange handler
@@ -49,6 +58,11 @@ export function AuthProvider({ children }) {
   // onAuthStateChange INITIAL_SESSION event fired the same query twice,
   // so one stall produced two timeouts and two identical toasts.
   const pendingProfile = useRef(null) // { userId, promise } while in flight
+  // v9.26: id of the user whose profile is held (or loading). A fetch
+  // for a DIFFERENT user resets the held profile + profileBooted, so a
+  // user switch never judges the new user by the old user's role while
+  // the spinner no longer covers refetches.
+  const profileOwnerId = useRef(null)
 
   async function fetchProfileOnce(userId) {
     // v9.17 (Issue 2b): 10 s timeout — the profiles select used to hang
@@ -68,6 +82,14 @@ export function AuthProvider({ children }) {
   }
 
   async function doFetchProfile(userId) {
+    // v9.26: a fetch for a different user discards the previous user's
+    // profile + boot flag first — the gate must not judge the new user
+    // by the old role. Same-user refetches keep the last good profile.
+    if (profileOwnerId.current && profileOwnerId.current !== userId) {
+      setProfile(null)
+      setProfileBooted(false)
+    }
+    profileOwnerId.current = userId
     profileInFlight.current += 1
     setProfileLoading(true)
     setProfileError('')
@@ -111,6 +133,10 @@ export function AuthProvider({ children }) {
       if (profileInFlight.current <= 0) {
         profileInFlight.current = 0
         setProfileLoading(false)
+        // v9.26: the first load for the current user has settled —
+        // later refetches leave this true. Guarded on owner: a fetch
+        // for a superseded user must not mark the new user booted.
+        if (profileOwnerId.current === userId) setProfileBooted(true)
       }
     }
   }
@@ -236,6 +262,10 @@ export function AuthProvider({ children }) {
         setProfile(null)
         setProfileError('')
         setProfileLoading(false)
+        // v9.26: session ended — the next sign-in boots its profile
+        // from scratch (spinner until its first load settles).
+        setProfileBooted(false)
+        profileOwnerId.current = null
       }
       // v9.22: only clear loading once boot has finished — otherwise
       // loading can go false while loadSession's own fetch is still in
@@ -303,6 +333,10 @@ export function AuthProvider({ children }) {
     setProfile(null)
     setProfileError('')
     setProfileLoading(false)
+    // v9.26: session ended — the next sign-in boots its profile
+    // from scratch (spinner until its first load settles).
+    setProfileBooted(false)
+    profileOwnerId.current = null
     safeRemove(PROFILE_CACHE_KEY)
     return { error: null }
   }
@@ -351,6 +385,7 @@ export function AuthProvider({ children }) {
       profile,
       loading,
       profileLoading,
+      profileBooted,
       profileError,
       isSuperAdmin,
       isAdmin, 

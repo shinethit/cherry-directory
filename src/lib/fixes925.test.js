@@ -50,9 +50,9 @@ function filesContaining(needle) {
 }
 
 describe('v9.25: version + Change Log Admin rule', () => {
-  it('package.json is 9.25', () => {
+  it('package.json is 9.26', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.25')
+    expect(pkg.version).toBe('9.26')
   })
 
   it('the 9.25 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {
@@ -66,6 +66,20 @@ describe('v9.25: version + Change Log Admin rule', () => {
     // Covers BOTH the carried Home-crash fix and the scroll sweep.
     expect(entry).toContain('Home')
     expect(entry).toContain('scroll')
+  })
+
+  it('the 9.26 entry is on top, dated 2026-11-07, with zero Admin mentions', () => {
+    const header = read('components/Header.jsx')
+    expect(header).toContain("{ v: '9.26', date: '2026-11-07'")
+    expect(header.match(/v: '9\.26'/g).length).toBe(1)
+    expect(header.indexOf("v: '9.26'")).toBeLessThan(header.indexOf("v: '9.25'"))
+    const entry = changelogEntry(header, '9.26', '9.25')
+    expect(entry).not.toMatch(/admin/i)
+    expect(entry).toContain('အမှတ်')
+    expect(entry).toContain('ရပ်သွားတဲ့ နေရာကနေ ဆက်လုပ်မည်')
+    expect(entry).toContain('Import ပြီးမှ အပ်ဒိတ်လုပ်မည်')
+    expect(entry).toContain('ဗလာ ဖြစ်မသွားတော့ပါ')
+    expect(entry).toContain('ဆိုင်အမျိုးအစား အသစ်တွေ')
   })
 })
 

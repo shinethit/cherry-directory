@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { safeGet } from '../lib/safeStorage'
 import { APP_VERSION } from '../lib/appVersion'
+import { isLongTaskRunning } from '../lib/longTask'
 
 // Single registration point for the service worker (C-L1 — the duplicate
 // registration in main.jsx was removed in v9.3).
@@ -27,6 +28,9 @@ const NO_WAITING_RELOAD_KEY = 'cherry_sw_no_waiting_reload'
 const VERSION_WAIT_MS = 20000
 const VERSION_WAIT_STEP_MS = 1000
 const REG_UPDATE_TIMEOUT_MS = 5000
+// v9.26: how often a deferred update reload re-checks whether the long
+// task that blocked it has finished.
+const LONG_TASK_POLL_MS = 5000
 
 export function useServiceWorker() {
   const [ready, setReady] = useState(false)
@@ -37,6 +41,24 @@ export function useServiceWorker() {
   const updatingRef = useRef(false)
   const serverVersionRef = useRef(null)
   const versionCheckRef = useRef(false)
+  // v9.26: timer for a reload deferred while a long task runs.
+  const deferTimerRef = useRef(null)
+
+  // v9.26: schedule a deferred reload — poll every 5 s until no long
+  // task is running, then run `action` once. A pending deferral is
+  // never duplicated (a second call while one is pending is a no-op)
+  // and never lost: the update stays pending (updateAvailable stays
+  // true) until the reload actually happens. If the tab closes first,
+  // the update simply applies on the next visit.
+  function deferReload(action) {
+    if (deferTimerRef.current) return
+    deferTimerRef.current = setInterval(() => {
+      if (isLongTaskRunning()) return
+      clearInterval(deferTimerRef.current)
+      deferTimerRef.current = null
+      action()
+    }, LONG_TASK_POLL_MS)
+  }
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) {
@@ -157,6 +179,7 @@ export function useServiceWorker() {
 
     return () => {
       if (pollTimer) clearInterval(pollTimer)
+      if (deferTimerRef.current) clearInterval(deferTimerRef.current)
       if (regRef?._swListeners) {
         window.removeEventListener('focus', regRef._swListeners.onFocus)
         document.removeEventListener('visibilitychange', regRef._swListeners.onVisible)
@@ -173,8 +196,23 @@ export function useServiceWorker() {
   // network-first navigation fetches the new bundle. The once-per-session
   // guard on the no-waiting branch stays, so an offline reload serving
   // the old cached shell cannot loop.
+  // v9.26: every reload above is gated on isLongTaskRunning() — while a
+  // long task (e.g. CSV import) runs, the reload is deferred (5 s poll,
+  // then the reload path runs once) instead of wiping the task's state.
   async function reloadForUpdate() {
     if (updatingRef.current) return
+    // v9.26: NEVER reload while a long task (e.g. a CSV import) is
+    // running — the reload would wipe its in-progress state. Defer
+    // instead: poll every 5 s and run the reload path once the task
+    // finishes. Deliberately set nothing here (no updatingRef /
+    // setUpdating): the deferred retry must be able to re-enter, and
+    // the button must not spin "updating…" for the whole import.
+    // Detection keeps running — only the reload is deferred.
+    if (isLongTaskRunning()) {
+      console.log('[SW] Long task running — deferring update reload')
+      deferReload(reloadForUpdate)
+      return
+    }
     updatingRef.current = true
     setUpdating(true)
     try {
@@ -192,6 +230,15 @@ export function useServiceWorker() {
       }
       const waiting = waitingRef.current || reg?.waiting
       if (!waiting) {
+        // v9.26: the bounded reg.update() above can take seconds — a
+        // long task may have started meanwhile. Check again before
+        // reloading, and defer WITHOUT consuming the once-per-session
+        // reload (the sessionStorage flag is only written below).
+        if (isLongTaskRunning()) {
+          console.log('[SW] Long task running — deferring update reload')
+          deferReload(reloadForUpdate)
+          return
+        }
         // No worker waiting: reload once per session at most — an
         // unconditional reload here used to loop forever.
         let reloaded = false
@@ -208,6 +255,15 @@ export function useServiceWorker() {
       let reloaded = false
       const doReload = () => {
         if (reloaded) return
+        // v9.26: the worker may take control (or the 4 s fallback may
+        // fire) while a long task started after applyUpdate began.
+        // Defer the reload itself — do NOT mark reloaded, so the
+        // deferred call below still reloads once the task finishes.
+        if (isLongTaskRunning()) {
+          console.log('[SW] Long task running — deferring update reload')
+          deferReload(doReload)
+          return
+        }
         reloaded = true
         window.location.reload()
       }
@@ -221,7 +277,12 @@ export function useServiceWorker() {
       }, APPLY_TIMEOUT_MS)
     } catch (err) {
       console.warn('[SW] Apply update failed:', err)
-      window.location.reload()
+      // v9.26: even the last-resort reload must not fire mid-task.
+      if (isLongTaskRunning()) {
+        deferReload(() => { try { window.location.reload() } catch { /* ignore */ } })
+      } else {
+        window.location.reload()
+      }
     } finally {
       // updating stays true until the reload happens; reset only if we
       // are still on the page (no-waiting path when already reloaded).

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { navigatorLock } from '@supabase/auth-js'
+import { isLongTaskRunning } from './longTask'
 
 const envUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -105,7 +106,12 @@ export function lockReloadAllowed() {
 // Single shared lock-poison recovery: backoff-guarded reload. Returns
 // true when a reload was scheduled, false when the guard blocked it
 // (the caller then proceeds as guest instead of looping).
+// v9.26: never reload while a long task (e.g. a CSV import) is running
+// — a reload would wipe its in-progress state. Skipping here consumes
+// NO attempt: the lock error re-fires later if the lock is still
+// poisoned, so the recovery is deferred, not lost.
 export function handleLockPoison() {
+  if (isLongTaskRunning()) return false
   if (!lockReloadAllowed()) return false
   try {
     const { count } = readLockReloadState()

@@ -8,6 +8,8 @@ import { useAppConfig } from '../contexts/AppConfigContext'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { showError, showSuccess } from '../lib/toast'
 import { parseCSV } from '../lib/csv'
+import { mapSm3Category } from '../lib/sm3CategoryMap.js'
+import { beginLongTask, endLongTask } from '../lib/longTask.js'
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024 // 2MB
 
@@ -62,6 +64,57 @@ function dedupeKey(name, phone, township, address) {
   return n + '|' + t + '|' + a
 }
 
+// v9.26: import checkpoint — persisted to localStorage after every chunk
+// so a reload mid-import can resume instead of starting over or
+// duplicating rows. Rows are skipped BY INDEX on resume: the dedupe key
+// alone cannot protect rows with no phone and no township/address
+// (dedupeKey returns null for those), so index skipping is the primary
+// guard and dedupe is only a second layer.
+export const BULK_IMPORT_CHECKPOINT_KEY = 'cherry-bulk-import-checkpoint'
+const CHECKPOINT_LIST_LIMIT = 50
+
+export function loadBulkImportCheckpoint() {
+  try {
+    const raw = localStorage.getItem(BULK_IMPORT_CHECKPOINT_KEY)
+    if (!raw) return null
+    const cp = JSON.parse(raw)
+    if (!cp || cp.version !== 1 || typeof cp.nextIndex !== 'number' || !cp.fileName) return null
+    return cp
+  } catch {
+    return null
+  }
+}
+
+export function saveBulkImportCheckpoint(cp) {
+  try {
+    // Errors/skipped lists are bounded — a 1,000-row file must not grow
+    // the stored checkpoint without limit.
+    const bounded = {
+      ...cp,
+      errors: (cp.errors || []).slice(0, CHECKPOINT_LIST_LIMIT),
+      skipped: (cp.skipped || []).slice(0, CHECKPOINT_LIST_LIMIT),
+    }
+    localStorage.setItem(BULK_IMPORT_CHECKPOINT_KEY, JSON.stringify(bounded))
+  } catch {
+    // Storage unavailable/full — the import still proceeds in memory.
+  }
+}
+
+export function clearBulkImportCheckpoint() {
+  try {
+    localStorage.removeItem(BULK_IMPORT_CHECKPOINT_KEY)
+  } catch {
+    // Ignore — nothing to resume from either way.
+  }
+}
+
+export function checkpointFileMatches(cp, file) {
+  return !!cp && !!file
+    && cp.fileName === file.name
+    && cp.fileSize === file.size
+    && cp.fileLastModified === file.lastModified
+}
+
 export default function BulkImportPage() {
   const navigate = useNavigate()
   const { profile, isAdmin, isModerator, loading: authLoading } = useAuth()
@@ -71,6 +124,12 @@ export default function BulkImportPage() {
 
   const fileRef = useRef(null)
   const cancelRef = useRef(false)
+  // v9.26: checkpoint of an interrupted import (localStorage) + the row
+  // index a matching re-selected file resumes from.
+  const [checkpoint, setCheckpoint] = useState(() => loadBulkImportCheckpoint())
+  const [resumeFrom, setResumeFrom] = useState(null)
+  const fileMetaRef = useRef(null)
+  const longTaskRef = useRef(false)
   const [preview, setPreview] = useState(null)
   const [fileName, setFileName] = useState('')
   const [results, setResults] = useState(null)
@@ -89,6 +148,24 @@ export default function BulkImportPage() {
     })
   }, [])
 
+  // v9.26: warn before leaving mid-import — a reload aborts the loop
+  // part-way (the checkpoint lets it resume, but the user should know).
+  useEffect(() => {
+    if (!importing) return undefined
+    const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [importing])
+
+  // v9.26: if the component unmounts mid-import (e.g. a service-worker
+  // reload), release the long-task hold so the app can update.
+  useEffect(() => () => {
+    if (longTaskRef.current) {
+      longTaskRef.current = false
+      endLongTask()
+    }
+  }, [])
+
   function handleFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -101,6 +178,8 @@ export default function BulkImportPage() {
     setResults(null)
     setCancelled(false)
     cancelRef.current = false
+    // v9.26: file identity for the checkpoint (name + size + lastModified).
+    fileMetaRef.current = { name: file.name, size: file.size, lastModified: file.lastModified }
     const reader = new FileReader()
     reader.onload = ev => {
       const parsed = parseCSV(ev.target.result)
@@ -131,6 +210,15 @@ export default function BulkImportPage() {
         setPreview(null)
         return
       }
+      // v9.26: the same file as an interrupted import — offer resume
+      // from the checkpoint's next row instead of starting over.
+      const cp = loadBulkImportCheckpoint()
+      if (cp && checkpointFileMatches(cp, file) && cp.nextIndex > 0 && cp.nextIndex < parsed.rows.length) {
+        setCheckpoint(cp)
+        setResumeFrom(cp.nextIndex)
+      } else {
+        setResumeFrom(null)
+      }
       setPreview(parsed)
     }
     reader.onerror = () => {
@@ -142,8 +230,9 @@ export default function BulkImportPage() {
     reader.readAsText(file, 'UTF-8')
   }
 
-  async function handleImport() {
-    if (!preview?.rows?.length) return
+  async function handleImport(resumeFromIndex = null) {
+    const rows = preview?.rows
+    if (!rows?.length) return
     if (!profile?.id) {
       showError('Login ဝင်ပြီးမှ Import လုပ်နိုင်သည်')
       return
@@ -152,12 +241,33 @@ export default function BulkImportPage() {
     cancelRef.current = false
     setCancelled(false)
     setImporting(true)
-    setProgress(0)
 
-    const batchId = crypto.randomUUID()
-    let success = 0, failed = 0
-    let errors = []
-    let skipped = []
+    // v9.26: resume — a checkpoint from an interrupted run restores the
+    // counters and the next row index. Rows are skipped BY INDEX: the
+    // dedupe key alone cannot protect rows with no phone and no
+    // township/address (dedupeKey returns null for those), so index
+    // skipping is the primary guard and dedupe is only a second layer.
+    const resuming = resumeFromIndex !== null && checkpoint?.nextIndex === resumeFromIndex
+    const startIndex = resuming ? resumeFromIndex : 0
+    const activeFileName = fileMetaRef.current?.name || fileName
+    const batchId = resuming && checkpoint.batchId ? checkpoint.batchId : crypto.randomUUID()
+    let success = resuming ? (checkpoint.success || 0) : 0
+    let failed = resuming ? (checkpoint.failed || 0) : 0
+    let errors = resuming ? [...(checkpoint.errors || [])] : []
+    let skipped = resuming ? [...(checkpoint.skipped || [])] : []
+    setProgress(Math.round((startIndex / rows.length) * 100))
+
+    // A fresh import supersedes any stale checkpoint for another file.
+    if (!resuming) {
+      clearBulkImportCheckpoint()
+      setCheckpoint(null)
+      setResumeFrom(null)
+    }
+
+    // v9.26: hold service-worker updates until this import finishes so
+    // a deploy cannot reload the page mid-loop (longTask.js contract).
+    beginLongTask()
+    longTaskRef.current = true
 
     const catMap = {}
     categories.forEach(c => {
@@ -165,12 +275,22 @@ export default function BulkImportPage() {
       if (c.name_mm) catMap[c.name_mm.trim()] = c.id
     })
 
-    const { data: importRec, error: importRecError } = await supabase.from('bulk_imports').insert({
-      user_id: profile.id,
-      file_name: fileName,
-      row_total: preview.rows.length,
-      status: 'processing',
-    }).select().single()
+    // A resumed run reuses the 'processing' bulk_imports row from the
+    // interrupted run instead of opening a second one.
+    let importRec = null
+    let importRecError = null
+    if (resuming && checkpoint.importId) {
+      importRec = { id: checkpoint.importId }
+    } else {
+      const created = await supabase.from('bulk_imports').insert({
+        user_id: profile.id,
+        file_name: activeFileName,
+        row_total: rows.length,
+        status: 'processing',
+      }).select().single()
+      importRec = created.data
+      importRecError = created.error
+    }
 
     // The bulk_imports insert can fail (e.g. RLS) — without a batch
     // record there is nothing to update later, so stop honestly
@@ -179,6 +299,8 @@ export default function BulkImportPage() {
       console.warn('Bulk import record failed:', importRecError)
       showError('Import မှတ်တမ်း ဖန်တီးမရပါ')
       setImporting(false)
+      endLongTask()
+      longTaskRef.current = false
       return
     }
 
@@ -205,14 +327,14 @@ export default function BulkImportPage() {
     }
 
     const BATCH_SIZE = 20;
-    const totalRows = preview.rows.length;
-    
-    for (let i = 0; i < totalRows; i += BATCH_SIZE) {
+    const totalRows = rows.length;
+
+    for (let i = startIndex; i < totalRows; i += BATCH_SIZE) {
       // Cancel is checked between batches — closing the tab mid-run
       // still leaves a 'processing' row (unavoidable client-side), but
       // cancelling in-app now marks the row instead of abandoning it.
       if (cancelRef.current) break
-      const chunk = preview.rows.slice(i, i + BATCH_SIZE);
+      const chunk = rows.slice(i, i + BATCH_SIZE);
       const inserts = [];
 
       for (let j = 0; j < chunk.length; j++) {
@@ -225,7 +347,14 @@ export default function BulkImportPage() {
           continue;
         }
 
-        const catId = catMap[row.category?.toLowerCase().trim()] || catMap[row.category?.trim()] || null;
+        // v9.26: sm3 categories — map the raw value first ('Insurance
+        // Agent' → 'Insurance'); a null map falls back to the live
+        // catMap lookup, so Admin-added categories still resolve.
+        // Unmapped values still fail per-row below — never a silent
+        // အထွေထွေ fallback.
+        const mappedCategory = mapSm3Category(row.category)
+        const categoryName = mappedCategory ?? row.category
+        const catId = catMap[categoryName?.toLowerCase().trim()] || catMap[categoryName?.trim()] || null;
         // M5 (v9.17): an empty category is an error like a missing name —
         // it used to import with category_id null and vanish from the
         // Directory (which filters by category).
@@ -307,6 +436,21 @@ export default function BulkImportPage() {
       }
       
       setProgress(Math.round(((i + chunk.length) / totalRows) * 100));
+      // v9.26: checkpoint after every chunk — a reload mid-import
+      // resumes from here instead of starting over or duplicating rows.
+      const nextIndex = i + chunk.length
+      if (nextIndex < totalRows) {
+        saveBulkImportCheckpoint({
+          version: 1,
+          fileName: activeFileName,
+          fileSize: fileMetaRef.current?.size ?? null,
+          fileLastModified: fileMetaRef.current?.lastModified ?? null,
+          nextIndex,
+          total: totalRows,
+          success, failed, errors, skipped,
+          importId: importRec.id, batchId,
+        })
+      }
       // delay to avoid rate limit
       await new Promise(r => setTimeout(r, 500));
     }
@@ -343,11 +487,20 @@ export default function BulkImportPage() {
     }
     if (updateErr) console.warn('Failed to update bulk_imports record:', updateErr)
 
+    // v9.26: the run finished (or was cancelled) and the bulk_imports
+    // row now carries its final status — no checkpoint to resume from.
+    // A cancelled run is NOT resumed: the user chose to stop it.
+    clearBulkImportCheckpoint()
+    setCheckpoint(null)
+    setResumeFrom(null)
+    endLongTask()
+    longTaskRef.current = false
+
     // Audit log is fire-and-forget — it must never delay the result.
     log({
       action: 'bulk_import',
       table: 'listings',
-      name: fileName,
+      name: activeFileName,
       meta: { batch_id: batchId, total: totalRows, success, failed, skipped: skipped.length, cancelled: wasCancelled },
     }).then(ok => { if (!ok) console.warn('Audit log failed for bulk import') })
 
@@ -359,6 +512,26 @@ export default function BulkImportPage() {
 
   function handleCancelImport() {
     cancelRef.current = true
+  }
+
+  // v9.26: resume an interrupted import from its checkpoint.
+  function handleResumeClick() {
+    // A matching file is already loaded — resume straight away.
+    if (preview?.rows?.length && resumeFrom !== null) {
+      handleImport(resumeFrom)
+      return
+    }
+    // Otherwise the user must re-select the same file first; the
+    // preview then offers "Resume import — row N" (no auto-start:
+    // starting from the file-reader callback could run before the
+    // categories have loaded and fail every row).
+    fileRef.current?.click()
+  }
+
+  function handleDiscardCheckpoint() {
+    clearBulkImportCheckpoint()
+    setCheckpoint(null)
+    setResumeFrom(null)
   }
 
   // Admin/mod-only: guests (profile === null) used to crash at
@@ -434,6 +607,24 @@ export default function BulkImportPage() {
           </label>
         </div>
 
+        {/* v9.26: interrupted import — resume from the checkpoint
+            instead of starting over. */}
+        {checkpoint && !results && !importing && (
+          <div className="card-dark rounded-2xl p-4 space-y-3 border border-amber-500/30">
+            <p className="text-sm font-display font-semibold text-amber-300">⏸ Import တစ်ဝက် ရပ်နေသည်</p>
+            <p className="text-xs text-white/70 font-myanmar leading-relaxed">
+              {checkpoint.fileName} — row {checkpoint.nextIndex + 1} မှ {checkpoint.total} အထိ ကျန်နေသည် (ထည့်ပြီး {checkpoint.success || 0} ခု)
+            </p>
+            <p className="text-[11px] text-white/60 font-myanmar leading-relaxed">
+              ဖိုင်ကို ပြန်ရွေးပြီး Resume နှိပ်ပါ — ထည့်ပြီးသား row များ ထပ်မထည့်ပါ
+            </p>
+            <div className="flex gap-2">
+              <button onClick={handleResumeClick} className="btn-primary flex-1 text-sm">Resume import</button>
+              <button onClick={handleDiscardCheckpoint} className="btn-ghost flex-1 text-sm">Discard</button>
+            </div>
+          </div>
+        )}
+
         {preview && preview.rows.length > 0 && !results && (
           <div className="card-dark rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -468,20 +659,22 @@ export default function BulkImportPage() {
               )}
             </div>
 
-            <button onClick={handleImport} disabled={importing} className="btn-primary w-full text-sm flex items-center justify-center gap-2 relative overflow-hidden">
+            <button onClick={() => handleImport(resumeFrom)} disabled={importing} className="btn-primary w-full text-sm flex items-center justify-center gap-2 relative overflow-hidden">
               {importing ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   Import လုပ်နေသည်... {progress}%
                   <div className="absolute bottom-0 left-0 h-1 bg-white/30 transition-all" style={{ width: progress + '%' }} />
                 </>
+              ) : resumeFrom !== null ? (
+                <><Upload size={15} /> Resume import — row {resumeFrom + 1} မှ {preview.rows.length} အထိ</>
               ) : (
                 <><Upload size={15} /> {preview.rows.length} လုပ်ငန်း Import လုပ်မည်</>
               )}
             </button>
-            {/* Issue 3a (v9.17): imported shops earn no points — they are
-                seed data, not the importer's personal submissions. */}
-            <p className="text-[10px] text-white/60 font-myanmar text-center">Import လုပ်တဲ့ ဆိုင်တွေအတွက် အမှတ် မရပါ</p>
+            {/* v9.26: imported shops DO earn points — +10 on import via
+                the submit trigger, +20 more when an admin approves them. */}
+            <p className="text-[10px] text-white/60 font-myanmar text-center">Import လုပ်တဲ့ ဆိုင်တိုင်းအတွက် အမှတ် +10 ရပြီး၊ Admin အတည်ပြုပြီးရင် +20 ထပ်ရမည်</p>
             {importing && (
               <button onClick={handleCancelImport} className="btn-ghost w-full text-sm">
                 Import ရပ်မည် (ထည့်ပြီးသားများ ကျန်မည်)
