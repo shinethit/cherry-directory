@@ -11,6 +11,30 @@ import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
 import { buildOrFilter } from '../lib/myanmarSearch'
 
+// v9.30: group the LOADED listings by town for the Directory page.
+// Grouping is over the loaded rows only — NOT the whole DB: a town's
+// count is its loaded-row count, and a town appears only once its rows
+// are loaded (load-more appends rows into their town's group). Order:
+// most loaded rows first; Taunggyi first on a tie; then town name A-Z,
+// so the order is deterministic. Rows with no city fall under 'Other'.
+// Within a group the query's sort order (rating / newest / name) is kept.
+export function groupListingsByCity(rows) {
+  const byCity = new Map()
+  for (const l of rows || []) {
+    const key = l.city || 'Other'
+    if (!byCity.has(key)) byCity.set(key, [])
+    byCity.get(key).push(l)
+  }
+  return [...byCity.entries()]
+    .map(([city, items]) => ({ city, items }))
+    .sort((a, b) => {
+      if (b.items.length !== a.items.length) return b.items.length - a.items.length
+      if (a.city === 'Taunggyi') return -1
+      if (b.city === 'Taunggyi') return 1
+      return a.city.localeCompare(b.city)
+    })
+}
+
 export default function DirectoryPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -112,7 +136,8 @@ export default function DirectoryPage() {
     'Loikaw': { mm: 'လွိုင်ကော်', en: 'Loikaw' },
     'Hopong': { mm: 'ဟိုပုံး', en: 'Hopong' },
     'Aungban': { mm: 'အောင်ပန်း', en: 'Aungban' },
-    'Ywangan': { mm: 'ရွာငံ', en: 'Ywangan' }
+    'Ywangan': { mm: 'ရွာငံ', en: 'Ywangan' },
+    'Other': { mm: 'အခြား', en: 'Other' }
   }
 
   // Descendant ids (ALL levels, not just children) of a category, from a
@@ -999,6 +1024,16 @@ export default function DirectoryPage() {
           ? [1,2,3,4,5].map(n => <Skeleton key={n} className="h-24" />)
           : listings.length === 0
           ? <EmptyState icon="🔍" title="လုပ်ငန်း မတွေ့ပါ" message="ရှာဖွေမှုကို ပြောင်းလဲကြည့်ပါ" />
+          : city === 'All'
+          ? groupListingsByCity(listings).map(g => (
+              <div key={g.city} className="space-y-2">
+                <h2 className="flex flex-wrap items-baseline gap-x-2 pt-3 pb-1 text-sm font-bold text-white">
+                  <span className="min-w-0 break-words">{lang === 'mm' ? (cityLabels[g.city]?.mm || g.city) : (cityLabels[g.city]?.en || g.city)}</span>{' '}
+                  <span className="text-xs font-semibold text-white/50">({g.items.length})</span>
+                </h2>
+                {g.items.map(l => <ListingCard key={l.id} listing={l} bookmarked={bookmarkedSet?.has?.(l.id)} />)}
+              </div>
+            ))
           : listings.map(l => <ListingCard key={l.id} listing={l} bookmarked={bookmarkedSet?.has?.(l.id)} />)
         }
 
