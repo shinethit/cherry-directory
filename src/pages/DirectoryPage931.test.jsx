@@ -27,8 +27,8 @@ const CAR_CAT = { id: CAR_ID, icon: '🚗', name: 'Car Rental', name_mm: 'ကာ
 // child-count query must see a child — a 0 there would jump straight
 // to the parent's direct listings and the picker would never show.
 const SUB_CAT = { id: 'sub1', icon: '🚗', name: 'Car Hire', name_mm: 'ကားငှားဝန်ဆောင်မှု', listing_count: 173, parent_id: CAR_ID }
-const LISTINGS_KEY = ['listings', 'directory', CAR_ID, 'All', false, '', 'rating', 0, false]
-const FILTER_KEY = `${CAR_ID}|All|false||rating`
+const LISTINGS_KEY = ['listings', 'directory', CAR_ID, CAR_ID, 'All', false, '', 'rating', 0, false]
+const FILTER_KEY = `${CAR_ID}|${CAR_ID}|All|false||rating`
 
 const { mockFetchCategories, mockDB } = vi.hoisted(() => ({
   mockFetchCategories: vi.fn(),
@@ -83,8 +83,17 @@ vi.mock('../lib/supabase', () => ({
             if (state.eqs.parent_id) resolve({ data: mockDB.cats.filter(c => c.parent_id === state.eqs.parent_id), error: null })
             else resolve({ data: mockDB.cats, error: null })
           } else if (state.table === 'listings') {
-            const page = Math.floor(state.rangeStart / 20)
-            resolve({ data: mockDB.pages[page] || [], count: mockDB.total, error: null })
+            // v9.32: the listings query now filters with .in('category_id',
+            // ids) — return the mock pages only when the requested id set
+            // covers this test's category (direct "အားလုံး" path, or the
+            // subcategory); any other id set is a different view: 0 rows.
+            const allowed = state.inVals || (state.eqs.category_id ? [state.eqs.category_id] : null)
+            if (allowed && !allowed.includes(CAR_ID) && !allowed.includes(SUB_CAT.id)) {
+              resolve({ data: [], count: 0, error: null })
+            } else {
+              const page = Math.floor(state.rangeStart / 20)
+              resolve({ data: mockDB.pages[page] || [], count: mockDB.total, error: null })
+            }
           } else {
             resolve({ data: [], error: null })
           }

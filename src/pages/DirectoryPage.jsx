@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Search, X, ShieldCheck, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
@@ -7,6 +7,7 @@ import { withTimeout } from '../lib/withTimeout'
 import { fetchCategories } from '../lib/prefetch'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useBookmarkedSet } from '../hooks/useBookmarksDB'
+import { collectDescendantIds, resolveListingCategoryIds } from '../lib/categoryTree'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
 import { buildOrFilter } from '../lib/myanmarSearch'
@@ -143,20 +144,6 @@ export default function DirectoryPage() {
     'Aungban': { mm: 'အောင်ပန်း', en: 'Aungban' },
     'Ywangan': { mm: 'ရွာငံ', en: 'Ywangan' },
     'Other': { mm: 'အခြား', en: 'Other' }
-  }
-
-  // Descendant ids (ALL levels, not just children) of a category, from a
-  // flat id/parent_id list. The old version only included 1st-level children,
-  // so 3rd-level listings were missing from top-level counts.
-  function collectDescendantIds(allCats, rootId) {
-    const ids = [rootId]
-    let frontier = [rootId]
-    while (frontier.length) {
-      const next = (allCats || []).filter(c => frontier.includes(c.parent_id)).map(c => c.id)
-      ids.push(...next)
-      frontier = next
-    }
-    return ids
   }
 
   // ── Auto-select from ?cat= (single-pass, no loops) ──
@@ -456,6 +443,13 @@ export default function DirectoryPage() {
       // data, not a rejection — treat it as the empty best-effort
       // tree the .catch above already yields on a throw.
       const treeCats = treeError ? [] : (allCats || [])
+      // v9.32: cache the tree fetch (id/parent_id only) under its own
+      // key so the listings query can derive descendant ids from the
+      // SAME tree the badge counts above were computed from — even
+      // before fetchCategories' ['category-map'] arrives. Never write
+      // these minimal rows to ['category-map']: they would strip the
+      // name_mm/icon directNavigate's map-first path renders.
+      if (treeCats.length) queryClient.setQueryData(['category-tree'], treeCats)
       const countResults = await Promise.allSettled(
         (data || []).map(async (sub) => {
           const ids = collectDescendantIds(treeCats, sub.id)
@@ -541,23 +535,51 @@ export default function DirectoryPage() {
     }
   }, [selectedCategory, featuredOnly])
 
+  // v9.32: subscribe to both tree sources WITHOUT fetching (enabled:
+  // false — the observers exist only so this component re-renders when
+  // fetchCategories writes ['category-map'] or loadSubcategories
+  // writes ['category-tree']). The descendant ids below are derived
+  // from these and baked into the listings query key, so a tree that
+  // arrives after the subcategory was tapped changes the key and the
+  // query refetches with the full id set — the badge and the list can
+  // never strand apart.
+  const { data: categoryMap } = useQuery({ queryKey: ['category-map'], queryFn: () => queryClient.getQueryData(['category-map']) ?? [], enabled: false })
+  const { data: categoryTree } = useQuery({ queryKey: ['category-tree'], queryFn: () => queryClient.getQueryData(['category-tree']) ?? [], enabled: false })
+
+  // v9.32: ids for the listings query — subcategory + all descendants
+  // (what the picker badge counts); [subId] alone for the direct
+  // ("အားလုံး") pseudo-subcategory and the featured pseudo-subcategory.
+  // The joined string is part of the query key (see below).
+  const listingCategoryIds = useMemo(() => {
+    const sub = selectedSubcategory
+    if (!sub) return []
+    return resolveListingCategoryIds({
+      subId: sub.id,
+      isDirect: !!sub.is_direct,
+      isFeatured: !!sub.is_featured_view || (featuredOnly && sub.id === FEATURED_PSEUDO_ID),
+      mapRows: categoryMap ?? [],
+      treeRows: categoryTree ?? [],
+    })
+  }, [selectedSubcategory, categoryMap, categoryTree, featuredOnly])
+  const listingCategoryIdsKey = listingCategoryIds.join(',')
+
   // Listings — Issue 4c (v9.17): useQuery ['listings','directory', ...].
   // One query per (subcategory, filters, page); the apply effect below
   // replaces on page 0 / filter change and appends on Load more.
   // A stale page (superseded by a filter change that reset page to 0)
   // is dropped by the page guard in the apply effect — the old
   // requestIdRef machinery is no longer needed.
-  const filterKey = selectedSubcategory ? `${selectedSubcategory.id}|${city}|${verifiedOnly}|${q}|${sort}` : ''
+  const filterKey = selectedSubcategory ? `${selectedSubcategory.id}|${listingCategoryIdsKey}|${city}|${verifiedOnly}|${q}|${sort}` : ''
   const { data: listingsData, isLoading: listingsQueryLoading, isFetching: listingsQueryFetching, isError: listingsQueryError, refetch: refetchListings } = useQuery({
-    queryKey: ['listings', 'directory', selectedSubcategory?.id, city, verifiedOnly, q, sort, page, featuredOnly],
-    queryFn: async ({ queryKey: [, , subId, cityF, verifiedF, qF, sortF, pageF, featuredF] }) => {
+    queryKey: ['listings', 'directory', selectedSubcategory?.id, listingCategoryIdsKey, city, verifiedOnly, q, sort, page, featuredOnly],
+    queryFn: async ({ queryKey: [, , subId, idsKey, cityF, verifiedF, qF, sortF, pageF, featuredF] }) => {
       let query = supabase
         .from('listings')
         .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
         .eq('status', 'approved')
       // H1: the featured pseudo-subcategory filters is_featured, not a category.
       if (featuredF && subId === FEATURED_PSEUDO_ID) query = query.eq('is_featured', true)
-      else query = query.eq('category_id', subId)
+      else query = query.in('category_id', idsKey ? idsKey.split(',') : [subId])
 
       // B7: sort chosen by the user — rating (default), newest, or name.
       if (sortF === 'newest') query = query.order('created_at', { ascending: false })
@@ -582,7 +604,7 @@ export default function DirectoryPage() {
       // A hung query used to spin the skeletons forever with no retry.
       const { data, count, error } = await withTimeout(query, LOAD_TIMEOUT_MS, 'Directory listings')
       if (error) throw error
-      return { rows: data || [], total: count || 0, page: pageF, filterKey: `${subId}|${cityF}|${verifiedF}|${qF}|${sortF}` }
+      return { rows: data || [], total: count || 0, page: pageF, filterKey: `${subId}|${idsKey}|${cityF}|${verifiedF}|${qF}|${sortF}` }
     },
     enabled: !!selectedSubcategory,
     // v9.31 (B): a FRESH (<5 min) cached 0 entry would otherwise be

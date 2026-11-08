@@ -188,7 +188,7 @@ export async function fetchVisitStats() {
 // (see above). A separate task would re-fetch rows already in hand.
 // v9.19: NO directory-listings task either — nothing reads the exact
 // ['listings','directory'] key. DirectoryPage's listings are
-// per-subcategory queries (['listings','directory', subId, ...],
+// per-subcategory queries (['listings','directory', subId, idsKey, ...],
 // enabled only once a subcategory is picked) that no generic warm
 // can serve; the page keeps old rows visible and shows skeletons
 // only when empty. Same for events: CalendarPage never used

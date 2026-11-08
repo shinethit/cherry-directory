@@ -198,10 +198,10 @@ describe('v9.25 slow: ?cat= deep link resolves from cache', () => {
     // the ['category-map'] entry instead.
     client.setQueryData(['categories'], [CATS[0]])
     client.setQueryData(['category-map'], CATS)
-    client.setQueryData(['listings', 'directory', 'c2', 'All', false, '', 'rating', 0, false],
+    client.setQueryData(['listings', 'directory', 'c2', 'c2', 'All', false, '', 'rating', 0, false],
       { rows: [
         { id: 'l1', name: 'Shop 1', name_mm: 'ဆိုင် ၁', city: 'Taunggyi', rating_avg: 4.5, rating_count: 2, category: { name: 'Noodles', name_mm: 'ခေါက်ဆွဲ', icon: '🍜' } },
-      ], total: 1, page: 0, filterKey: 'c2|All|false||rating' })
+      ], total: 1, page: 0, filterKey: 'c2|c2|All|false||rating' })
     mockFetchCategories.mockRejectedValue(new Error('offline'))
     mockDB.offline = true
     mockDB.listings = [
@@ -295,8 +295,8 @@ describe('v9.25 regen #3: ?cat= deep-link root causes', () => {
     client.setQueryData(['categories'], TOP_ONLY)
     client.setQueryData(['category-map'], CATS)
     // Warm listings cache for the exact query key the page reads.
-    client.setQueryData(['listings', 'directory', 'c2', 'All', false, '', 'rating', 0, false],
-      { rows: [LISTING], total: 1, page: 0, filterKey: 'c2|All|false||rating' })
+    client.setQueryData(['listings', 'directory', 'c2', 'c2', 'All', false, '', 'rating', 0, false],
+      { rows: [LISTING], total: 1, page: 0, filterKey: 'c2|c2|All|false||rating' })
     // Offline: every fetch fails — the deep link must still resolve
     // from the map + cache, with no direct category fetch.
     mockFetchCategories.mockRejectedValue(new Error('offline'))
