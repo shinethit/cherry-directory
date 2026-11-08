@@ -15,6 +15,7 @@ import { usePWA } from '../hooks/usePWA'
 import { yangonToday, formatMyanmarDateTime, mmtParts, MY_MONTHS } from '../lib/myanmarDate';
 import { safeGet, safeSet } from '../lib/safeStorage';
 import { loadPartial } from '../lib/loadPartial';
+import { fetchCategories } from '../lib/prefetch';
 import { formatPeakHour, devicePercentages } from '../lib/visitTracking';
 import { subscribeUpdateToastVisible } from '../lib/floatingBanners';
 import { showError } from '../lib/toast';
@@ -105,6 +106,23 @@ export default function HomePage() {
     enabled: consentGiven,
     retryDelay: 2000,
   });
+  // v9.31 (A): per-category listing counts for the Home Category grid
+  // tiles — the SAME ['categories'] data the Directory page reads
+  // (fetchCategories: top-level rows + descendant-inclusive counts,
+  // listing_count null on a failed count, never a fake 0 — S17).
+  // Warmed by the prefetch runner on boot, so on the common path this
+  // reads cache and adds no network query. Kept out of the 7-section
+  // progress / core-error set: a failed count must never blank Home.
+  // No retryDelay here (unlike the 6 section queries): the client
+  // default retry covers it, exactly like DirectoryPage's own
+  // ['categories'] query — and the loadPartial source-guard pins the
+  // section count at 6.
+  const categoryCountsQ = useQuery({
+    queryKey: ['categories'],
+    queryFn: fetchCategories,
+    enabled: consentGiven,
+  });
+  const categoryCountById = new Map((categoryCountsQ.data ?? []).map(c => [c.id, c.listing_count]));
   const countsQ = useQuery({
     queryKey: ['home', 'counts'],
     queryFn: async () => {
@@ -353,6 +371,9 @@ export default function HomePage() {
     // Manual retry: invalidate the home queries (background refetch,
     // cached data stays on screen) and re-run the non-query loads.
     queryClient.invalidateQueries({ queryKey: ['home'] });
+    // v9.31 (A): the category counts live under ['categories'], not
+    // ['home'] — refresh them too so a tile count recovers on retry.
+    queryClient.invalidateQueries({ queryKey: ['categories'] });
     loadCommunityStats();
     loadFavorites();
   };
@@ -702,14 +723,20 @@ export default function HomePage() {
           <div className="px-4 grid grid-cols-4 gap-1.5">
             {homeCategories.map(cat => {
               const subs = allCategories.filter(c => c.parent_id === cat.id);
+              // v9.31 (A): listing count under the tile name — '–' while
+              // unknown, never a fake 0 (S17); 0 renders 'မရှိသေး' exactly
+              // like the Directory page's category list.
+              const count = categoryCountById.get(cat.id);
+              const countText = count == null ? '–' : count === 0 ? 'မရှိသေး' : `${count} လုပ်ငန်း`;
               return (
                 <button
                   key={cat.id}
                   onClick={() => subs.length > 0 ? setSelectedCat(cat) : navigate(`/directory?cat=${cat.id}`)}
-                  className={`flex flex-col items-center gap-0.5 py-2 px-1 card-dark hover:bg-white/8 transition-colors rounded-lg ${cat.is_featured ? 'border border-amber-500/20' : ''}`}
+                  className={`flex flex-col items-center gap-0.5 py-2 px-1 min-w-0 card-dark hover:bg-white/8 transition-colors rounded-lg ${cat.is_featured ? 'border border-amber-500/20' : ''}`}
                 >
                   <span className="text-xl">{cat.icon}</span>
                   <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar line-clamp-2">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</span>
+                  <span className="text-[9px] text-white/40 text-center leading-tight font-myanmar truncate w-full">{countText}</span>
                 </button>
               );
             })}

@@ -66,7 +66,12 @@ export default function DirectoryPage() {
   // Pagination is driven ONLY by the effect below (see listings query).
   const pageRef = useRef(0)
   const lastFilterKeyRef = useRef('')
-  const appliedKeyRef = useRef('')
+  // v9.31 (B): dedupe by DATA IDENTITY, not by filterKey+page. A
+  // background refetch delivers a NEW listingsData object for the SAME
+  // key (e.g. a stale cached {rows: [], total: 0} entry followed by a
+  // fresh 173-row refetch) — the old key guard dropped that refetch
+  // and the page stayed at "0 ရလဒ်". A new object always applies.
+  const appliedDataRef = useRef(null)
   const LOAD_TIMEOUT_MS = 30000
   const PAGE_SIZE = 20
   
@@ -580,6 +585,19 @@ export default function DirectoryPage() {
       return { rows: data || [], total: count || 0, page: pageF, filterKey: `${subId}|${cityF}|${verifiedF}|${qF}|${sortF}` }
     },
     enabled: !!selectedSubcategory,
+    // v9.31 (B): a FRESH (<5 min) cached 0 entry would otherwise be
+    // shown with no refetch attempt at all. refetchOnMount: 'always'
+    // alone does NOT do it here: this observer subscribes on first
+    // render while the query is still disabled, so tapping a
+    // subcategory takes the disabled->enabled path
+    // (shouldFetchOptionally in query-core), which ignores
+    // refetchOnMount and only fetches when the entry is stale.
+    // staleTime: 0 makes every cached entry stale, so the tap always
+    // revalidates; the cached rows still render instantly meanwhile
+    // (keepPreviousData + the listings state below) with the stale
+    // pill while the refetch is in flight.
+    refetchOnMount: 'always',
+    staleTime: 0,
     // v9.25 regen #2: changing filter/page keeps the previous list
     // visible while the new page fetches, instead of emptying it.
     placeholderData: keepPreviousData,
@@ -587,13 +605,14 @@ export default function DirectoryPage() {
 
   // Apply query results: page 0 (or a new filter) replaces, later pages
   // append. The page guard drops a stale page fetched before a filter
-  // change reset page to 0; appliedKeyRef dedupes StrictMode double-run.
+  // change reset page to 0; appliedDataRef dedupes the same object
+  // (main.jsx renders no <StrictMode>, so there is no double-run to
+  // guard against — the old key guard only dropped real refetches).
   useEffect(() => {
     if (!listingsData) return
     if (listingsData.page !== page) return
-    const key = listingsData.filterKey + '|p' + listingsData.page
-    if (appliedKeyRef.current === key) return
-    appliedKeyRef.current = key
+    if (appliedDataRef.current === listingsData) return
+    appliedDataRef.current = listingsData
     if (listingsData.page === 0 || lastFilterKeyRef.current !== listingsData.filterKey) {
       lastFilterKeyRef.current = listingsData.filterKey
       setListings(listingsData.rows)
@@ -628,7 +647,7 @@ export default function DirectoryPage() {
     if (!selectedSubcategory) {
       setListings([])
       setTotal(0)
-      appliedKeyRef.current = ''
+      appliedDataRef.current = null
       lastFilterKeyRef.current = ''
     }
   }, [selectedSubcategory])
@@ -661,6 +680,10 @@ export default function DirectoryPage() {
   }
 
   function handleDirectListings() {
+    // v9.31 (B): reset the page like handleSubcategorySelect does —
+    // tapping "အားလုံး" after a Load more must start at page 0.
+    pageRef.current = 0
+    setPage(0)
     setSelectedSubcategory({
       id: selectedCategory.id,
       icon: selectedCategory.icon,
