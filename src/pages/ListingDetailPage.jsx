@@ -10,6 +10,7 @@ import { useIsBookmarked, useAddBookmark, useRemoveBookmark } from '../hooks/use
 import { StarRating, ReactionBar, Skeleton } from '../components/UI'
 import MapEmbed from '../components/MapEmbed'
 import VerifiedOwnerBadge from '../components/VerifiedOwnerBadge'
+import VerificationBadge from '../components/VerificationBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { useAuditLog } from '../hooks/useAuditLog'
 import { deleteListingWithCleanup, deleteListingConfirmMessage } from '../lib/deleteListing'
@@ -488,21 +489,7 @@ export default function ListingDetailPage() {
 
               {listing.is_verified && (
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
-                  {listing.verify_type === 'owner' || (!listing.verify_type && listing.is_verified) ? (
-                    <VerifiedOwnerBadge />
-                  ) : listing.verify_type === 'cherry' ? (
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gradient-to-r from-brand-600/30 to-brand-700/30 border border-brand-400/40">
-                      <span className="text-sm">🍒</span>
-                      <span className="text-xs font-semibold text-brand-300">Cherry အတည်ပြု ✓</span>
-                    </span>
-                  ) : listing.verify_type === 'community' ? (
-                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs font-semibold">
-                      👥 Community အတည်ပြု ✓
-                      {listing.community_votes > 0 && <span className="text-blue-300/60">({listing.community_votes})</span>}
-                    </span>
-                  ) : (
-                    <VerifiedOwnerBadge />
-                  )}
+                  <VerificationBadge verifyType={listing.verify_type} communityVotes={listing.community_votes} />
                 </div>
               )}
 
@@ -648,10 +635,14 @@ export default function ListingDetailPage() {
             </div>
           </div>
         ) : listing.is_verified ? (
-          <div className="flex items-center gap-2.5 p-3.5 rounded-2xl border border-gold-500/25 bg-gold-500/8">
-            <VerifiedOwnerBadge />
+          <div className="flex items-center gap-2.5 p-3.5 rounded-2xl border border-white/10 bg-white/5">
+            <VerificationBadge verifyType={listing.verify_type} communityVotes={listing.community_votes} />
             <span className="text-xs text-white/50 font-myanmar">
-              {lang === 'mm' ? 'ဆိုင်ရှင်မှ Verify ပြုလုပ်ပြီး' : 'Ownership has been verified'}
+              {listing.verify_type === 'owner'
+                ? (lang === 'mm' ? 'ဆိုင်ရှင်မှ Verify ပြုလုပ်ပြီး' : 'Ownership has been verified')
+                : listing.verify_type === 'community'
+                  ? (lang === 'mm' ? 'Community မှ စစ်ဆေးပြီး အတည်ပြုထားသည်' : 'Verified by the community')
+                  : (lang === 'mm' ? 'Cherry မှ စစ်ဆေးပြီး အတည်ပြုထားသည်' : 'Verified by Cherry')}
             </span>
           </div>
         ) : isLoggedIn && listing.owner_id !== profile?.id ? (

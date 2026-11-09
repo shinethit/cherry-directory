@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import VerifiedOwnerBadge from './VerifiedOwnerBadge'
+import VerificationBadge from './VerificationBadge'
 import { useIsBookmarked, useAddBookmark, useRemoveBookmark } from '../hooks/useBookmarksDB'
 import { showError } from '../lib/toast'
 import { formatMyanmarDate } from '../lib/myanmarDate'
@@ -76,7 +76,7 @@ export function ListingCard({ listing, compact = false, bookmarked: bookmarkedPr
               <h3 className="font-display font-semibold text-sm text-white truncate font-myanmar">
                 {listing.name_mm || listing.name}
               </h3>
-              {listing.is_verified && <VerifiedOwnerBadge small />}
+              {listing.is_verified && <VerificationBadge verifyType={listing.verify_type} communityVotes={listing.community_votes} small />}
             </div>
             {listing.name_mm && listing.name && listing.name_mm !== listing.name && (
               <p className="text-[10px] text-white/60 truncate">{listing.name}</p>

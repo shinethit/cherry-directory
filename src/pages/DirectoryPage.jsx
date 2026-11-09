@@ -469,6 +469,14 @@ export default function DirectoryPage() {
       const subcatsWithCount = countResults.map((r, i) =>
         r.status === 'fulfilled' ? r.value : { ...(data || [])[i], listing_count: null }
       )
+      // v9.34: per-count failures were swallowed by allSettled into
+      // listing_count null WITHOUT setting the error flag, so the
+      // retry strip never appeared for a first-entry count failure
+      // (setSubcategoryError(true) only ran when the subcategory LIST
+      // fetch failed). When every count failed, surface the retry UI.
+      if ((data || []).length > 0 && countResults.every(r => r.status === 'rejected')) {
+        setSubcategoryError(true)
+      }
       setSubcategories(subcatsWithCount)
     } catch (e) {
       console.warn('loadSubcategories error:', e)
@@ -514,10 +522,22 @@ export default function DirectoryPage() {
   // non-featured view; featuredOnly in deps re-runs the cleanup when
   // the param is removed (goBack deletes it) so leaving the featured
   // view still clears the pseudo.
+  // v9.34 (Bug 2): reload whenever the PICKER is shown, not only when
+  // the category changes. Back (in-app goBack, or browser/device Back
+  // via the ?cat= change) clears selectedSubcategory while keeping
+  // the SAME selectedCategory object, so the old [selectedCategory,
+  // featuredOnly] deps never re-ran — and directNavigate's map-first
+  // branch had just overwritten the good counts with listing_count
+  // null, stranding the picker on '–' with no retry. Adding
+  // selectedSubcategory re-runs the load on every return to the
+  // picker; the !selectedSubcategory guard keeps it a no-op while a
+  // subcategory's listings (or a direct link) are showing.
   useEffect(() => {
     if (selectedCategory) {
-      loadSubcategories(selectedCategory.id)
-      checkDirectListings(selectedCategory.id)
+      if (!selectedSubcategory) {
+        loadSubcategories(selectedCategory.id)
+        checkDirectListings(selectedCategory.id)
+      }
     } else if (!featuredOnly) {
       // v9.25 regen #2: while a ?cat= deep link is still resolving,
       // directNavigate (same commit, cache-first) may have just set
@@ -533,7 +553,7 @@ export default function DirectoryPage() {
       setHasDirectListings(false)
       setDirectCount(0)
     }
-  }, [selectedCategory, featuredOnly])
+  }, [selectedCategory, selectedSubcategory, featuredOnly])
 
   // v9.32: subscribe to both tree sources WITHOUT fetching (enabled:
   // false — the observers exist only so this component re-renders when

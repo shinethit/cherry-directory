@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getOptimizedUrl } from '../lib/cloudinary'
+import VerificationBadge from './VerificationBadge'
 
 export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }) {
   const navigate = useNavigate()
@@ -14,7 +15,7 @@ export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }
       try {
         const { data } = await supabase
           .from('listings')
-          .select('id, name, name_mm, logo_url, cover_url, rating_avg, rating_count, is_verified, is_featured, category:categories(icon)')
+          .select('id, name, name_mm, logo_url, cover_url, rating_avg, rating_count, is_verified, verify_type, community_votes, is_featured, category:categories(icon)')
           .eq('category_id', categoryId)
           .eq('status', 'approved')
           .neq('id', listingId)
@@ -80,7 +81,9 @@ export default function SimilarBusinesses({ listingId, categoryId, lang = 'mm' }
                   </span>
                 )}
                 {l.is_verified && (
-                  <span className="text-[9px] text-gold-400 ml-auto">✓</span>
+                  <span className="ml-auto">
+                    <VerificationBadge verifyType={l.verify_type} communityVotes={l.community_votes} small />
+                  </span>
                 )}
               </div>
             </button>

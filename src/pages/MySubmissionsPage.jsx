@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
 import { useSEO } from '../hooks/useSEO'
 import { EmptyState } from '../components/UI'
+import VerificationBadge from '../components/VerificationBadge'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { displayName } from '../lib/displayName'
 
@@ -36,7 +37,7 @@ export default function MySubmissionsPage() {
       // 30 s timeout (was none): a hung query left the list on skeletons forever.
       const { data, error } = await withTimeout(supabase
         .from('listings')
-        .select('id, name, name_mm, status, cover_url, logo_url, is_verified, is_featured, view_count, rating_avg, rating_count, category:categories(icon, name, name_mm), created_at, updated_at')
+        .select('id, name, name_mm, status, cover_url, logo_url, is_verified, verify_type, community_votes, is_featured, view_count, rating_avg, rating_count, category:categories(icon, name, name_mm), created_at, updated_at')
         .or(`submitted_by.eq.${user.id},owner_id.eq.${user.id}`)
         .order('created_at', { ascending: false }), 30000, 'My submissions')
       if (error) throw error
@@ -182,7 +183,7 @@ export default function MySubmissionsPage() {
                         {name}
                       </p>
                       {item.is_featured && <span className="text-[10px] text-gold-400 flex-shrink-0">⭐</span>}
-                      {item.is_verified && <span className="text-[10px] text-gold-400 flex-shrink-0">✓</span>}
+                      {item.is_verified && <VerificationBadge verifyType={item.verify_type} communityVotes={item.community_votes} small />}
                     </div>
                     <p className="text-[10px] text-white/60 mt-0.5 truncate font-myanmar">
                       {item.category?.icon} {item.category ? displayName(item.category, lang) : ''}
