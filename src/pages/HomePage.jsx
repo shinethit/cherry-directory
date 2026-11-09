@@ -20,6 +20,7 @@ import { formatPeakHour, devicePercentages } from '../lib/visitTracking';
 import { subscribeUpdateToastVisible } from '../lib/floatingBanners';
 import { showError } from '../lib/toast';
 import { getRecoveryLines } from '../lib/recoverySteps';
+import { APP_VERSION } from '../lib/appVersion';
 
 // How long the main Home queries may run before the page stops waiting
 // (v9.7: 30 s, was 10 s — slow mobile data needs the headroom). 30 s is
@@ -159,6 +160,15 @@ export default function HomePage() {
   const homeCategories = allCategories.filter(c => !c.parent_id);
   const upcomingEvents = eventsQ.data ?? [];
   const quickLinks = quickLinksQ.data ?? [];
+  // v9.33: Home quick access is 3 tiles in ONE row only — News, Market
+  // Prices, Public Chat. The Emergency (/emergency) and Add Business
+  // (/submit) tiles are NOT rendered here: Emergency stays one tap away
+  // in the header menu (Header.jsx menuItems) + the Hero 🆘 button +
+  // Community, and Submit stays on the global floating "တင်မည်" button
+  // (BottomNav, every route except /chat). The rows are admin-managed DB
+  // data (quick_links), so filter at render time — deleting the rows
+  // would need a DB step and they could be re-added.
+  const visibleQuickLinks = quickLinks.filter(l => l.url !== '/emergency' && l.url !== '/submit');
   // A3: a null count means the count query failed — render "—", never a
   // misleading "0". (Initial 0 is only shown while loading, as "…".)
   const stats = countsQ.isError
@@ -413,9 +423,15 @@ export default function HomePage() {
     <div className="space-y-3 py-3 pb-24">
       {/* Header with Share & Refresh */}
       <div className="px-4 flex justify-between items-center mb-1">
-        <div>
+        <div className="min-w-0">
           <h1 className="font-display font-bold text-xl text-white">Cherry Directory</h1>
           <p className="text-xs text-white/60 font-myanmar">{cityName}</p>
+          {/* v9.33: running-bundle version, always visible — zero taps.
+              APP_VERSION is the build-time package.json version (see
+              src/lib/appVersion.js), so a stale PWA shows its own
+              version (e.g. v9.30) and it auto-updates each release.
+              Plain text, never a button — no onClick. */}
+          <p data-testid="home-version-label" className="text-[10px] text-white/40 font-myanmar truncate">v{APP_VERSION}</p>
         </div>
         <div className="flex items-center gap-3">
           {/* v9.25 regen #2: stale pill — background refetch in progress
@@ -568,18 +584,19 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions — v9.33: 3 tiles in one row (visibleQuickLinks);
+          the Emergency + Add Business rows are filtered out above. */}
       <div className="px-4">
-        {quickLinksQ.isError && quickLinks.length > 0 && (
+        {quickLinksQ.isError && visibleQuickLinks.length > 0 && (
           <div className="mb-1.5"><StaleStrip onRetry={() => quickLinksQ.refetch()} /></div>
         )}
         {quickLinksQ.isLoading ? (
           <div className="grid grid-cols-3 gap-1.5">
-            {[1, 2, 3, 4].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)}
+            {[1, 2, 3].map(n => <ShimmerSkeleton key={n} className="h-20 rounded-2xl" />)}
           </div>
-        ) : quickLinks.length > 0 ? (
-          <div className="grid grid-cols-3 gap-1.5">
-            {quickLinks.map(link => (
+        ) : visibleQuickLinks.length > 0 ? (
+          <div className="grid grid-cols-3 gap-1.5" data-testid="home-quick-access">
+            {visibleQuickLinks.map(link => (
               <button
                 key={link.id}
                 // N3 (v9.17): noopener so an opened page cannot reach back via window.opener.
