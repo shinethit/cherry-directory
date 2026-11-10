@@ -69,16 +69,13 @@ export default function DirectoryPage() {
   const [page, setPage] = useState(0)
   const [listingsError, setListingsError] = useState(false)
   // v9.35: a background page (page > 0) failed — the loaded rows stay
-  // and the retry affordance shows; the sentinel must not auto-advance
-  // past the failed page (it would re-fire the same failing fetch in
-  // a loop). Cleared on a successful page apply, on retry, and on any
-  // filter change. Page-0 failures keep the existing full error card
-  // (listings.length === 0) and never set this.
+  // and the retry affordance shows; the chain (v9.37) must not
+  // auto-advance past the failed page (it would re-fire the same
+  // failing fetch in a loop). Cleared on a successful page apply, on
+  // retry, and on any filter change. Page-0 failures keep the
+  // existing full error card (listings.length === 0) and never set
+  // this.
   const [pageFailed, setPageFailed] = useState(false)
-  // v9.35: IntersectionObserver sentinel for auto background loading
-  // (no tap). One page in flight at a time — the observer only
-  // advances when nothing is fetching.
-  const sentinelRef = useRef(null)
   const [categoryError, setCategoryError] = useState(false)
   // Pagination is driven ONLY by the effect below (see listings query).
   const pageRef = useRef(0)
@@ -91,6 +88,12 @@ export default function DirectoryPage() {
   const appliedDataRef = useRef(null)
   const LOAD_TIMEOUT_MS = 30000
   const PAGE_SIZE = 20
+  // v9.37: rows in the last applied page. A short page (< PAGE_SIZE)
+  // means the server has no more rows even if `total` still claims
+  // more (stale count) — the chain stops instead of fetching empty
+  // pages forever. Reset on filter change (below) so an old short
+  // page cannot block a new filter's chain.
+  const lastPageRowCountRef = useRef(PAGE_SIZE)
   
   // Direct listings state
   const [hasDirectListings, setHasDirectListings] = useState(false)
@@ -678,8 +681,9 @@ export default function DirectoryPage() {
     if (listingsData.page !== page) return
     if (appliedDataRef.current === listingsData) return
     appliedDataRef.current = listingsData
+    lastPageRowCountRef.current = listingsData.rows.length
     // v9.35: a page landed — any earlier background-page failure is
-    // over (the retry worked, or the sentinel moved on), so the amber
+    // over (the retry worked, or the chain moved on), so the amber
     // strip + retry button go away.
     setPageFailed(false)
     if (listingsData.page === 0 || lastFilterKeyRef.current !== listingsData.filterKey) {
@@ -715,6 +719,7 @@ export default function DirectoryPage() {
       setTotal(0)
       setPageFailed(false)
       appliedDataRef.current = null
+      lastPageRowCountRef.current = PAGE_SIZE
       lastFilterKeyRef.current = ''
     }
     filterKeyStateRef.current = filterKey
@@ -728,34 +733,41 @@ export default function DirectoryPage() {
     if (listingsQueryError && page > 0 && listings.length > 0) setPageFailed(true)
   }, [listingsQueryError, page, listings.length])
 
-  // v9.35: AUTO background loading — no tap. An IntersectionObserver
-  // watches a sentinel just past the last card; a generous 800px
-  // rootMargin prefetches the next page BEFORE the user reaches the
-  // bottom, so the list grows by itself as they scroll. Sequential
-  // only: one page in flight at a time (guarded by
-  // listingsQueryFetching), never a parallel page storm, and never a
-  // fetch-all — only the next page is requested, so a 2,186-row
-  // "အားလုံး" list still fetches page 0 only until the user scrolls.
-  // The pageRef guard stops a double-fire in the same tick (the
-  // observer can fire again before setPage re-renders): advance only
-  // when pageRef still equals the rendered page. A failed page blocks
-  // auto-advance until the user retries — the sentinel never loops
-  // on a failing fetch.
+  // v9.37: CONTINUOUS background loading — no scroll, no tap, no
+  // sentinel. After a page lands and applies, the chain immediately
+  // requests the next page (sequential, one in flight) until loaded
+  // == total, so the ring climbs by itself (20/172 → 40/172 → …
+  // → 172/172) and ends at 100% — the same 100% the Home tile
+  // shows. The 9.35 sentinel only advanced when the user scrolled
+  // near the bottom, so a list opened and left alone sat at 20/172
+  // forever while the tile outside said 100%.
+  // Guards (each page requested exactly once):
+  //  - advance only once the current page's data has applied
+  //    (appliedDataRef) — never while a fetch is in flight, and
+  //    never twice for the same page (the applied-page guard also
+  //    blocks the render between setPage and the new fetch starting);
+  //  - a failed page blocks the chain until the user retries
+  //    (pageFailed) — the chain never loops on a failing fetch;
+  //  - a short last page (< PAGE_SIZE rows) stops the chain even if
+  //    `total` still claims more rows (stale count);
+  //  - the pageRef guard stops a double-advance in the same tick:
+  //    advance only when pageRef still equals the rendered page.
+  // A filter/sort/category/city change resets page to 0 and clears
+  // the applied data (effect above), which restarts the chain from
+  // the new filter's page 0; React Query aborts the old key's
+  // in-flight fetch. Uniform, no cap: the same chain runs every
+  // list, including the 2,186-row "အားလုံး" list.
   const hasMore = total > 0 && listings.length < total
   useEffect(() => {
-    const el = sentinelRef.current
-    if (!el || !selectedSubcategory) return
-    if (typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some(e => e.isIntersecting)) return
-      if (!hasMore || pageFailed || listingsQueryError || listingsQueryFetching) return
-      if (pageRef.current !== page) return
-      pageRef.current += 1
-      setPage(pageRef.current)
-    }, { rootMargin: '800px 0px' })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [hasMore, pageFailed, listingsQueryError, listingsQueryFetching, page, selectedSubcategory])
+    if (!selectedSubcategory) return
+    if (!hasMore || pageFailed || listingsQueryError) return
+    if (listingsQueryFetching) return
+    if (appliedDataRef.current?.page !== page) return
+    if (lastPageRowCountRef.current < PAGE_SIZE) return
+    if (pageRef.current !== page) return
+    pageRef.current += 1
+    setPage(pageRef.current)
+  }, [hasMore, pageFailed, listingsQueryError, listingsQueryFetching, page, selectedSubcategory, listingsData])
 
   // Clear the list when no subcategory is selected.
   useEffect(() => {
@@ -1180,8 +1192,8 @@ export default function DirectoryPage() {
         {/* v9.35: failed background page — loaded rows stay, amber
             strip + retry (same 9.25 pattern as the category levels).
             The strip's retry refetches the SAME failed page; on
-            success the apply effect clears pageFailed and the
-            sentinel resumes auto-loading. */}
+            success the apply effect clears pageFailed and the chain
+            (v9.37) resumes from the next page. */}
         {pageFailed && listings.length > 0 && (
           <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-center justify-between gap-2">
             <p className="text-xs text-amber-300 font-myanmar">စာရင်း တစ်ချို့ တင်မရသေးပါ — အဟောင်းပြထားသည်</p>
@@ -1212,7 +1224,8 @@ export default function DirectoryPage() {
 
         {/* v9.35: the manual "ထပ်တင်ရန်" button survives ONLY as the
             retry control for a failed background page — normal loading
-            is automatic via the sentinel below, no tap required. */}
+            is automatic via the background chain (v9.37), no tap or
+            scroll required. */}
         {pageFailed && listings.length < total && (
           <button
             onClick={() => { setPageFailed(false); refetchListings() }}
@@ -1221,12 +1234,12 @@ export default function DirectoryPage() {
             ထပ်တင်ရန် ({total - listings.length} ကျန်)
           </button>
         )}
-        {/* v9.35: auto-load sentinel — the observer (above) watches
-            this element and prefetches the next page 800px before the
-            user reaches it. While a background page is fetching, a
-            small line shows under the list; the ring at the top of
-            the list area carries the real X / total · Y%. */}
-        <div ref={sentinelRef} data-testid="load-more-sentinel" aria-hidden="true" className="h-1" />
+        {/* v9.37: no sentinel any more — the background chain above
+            loads the next page as soon as the previous one lands, so
+            the list fills itself with no scroll and no tap. While a
+            background page is fetching, a small line shows under the
+            list; the ring at the top of the list area carries the
+            real X / total · Y%. */}
         {hasMore && listingsQueryFetching && !pageFailed && (
           <p className="text-center text-[11px] text-white/50 font-myanmar py-2">တင်နေသည်…</p>
         )}

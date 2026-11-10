@@ -301,7 +301,7 @@ describe('FIX 3: Bug A — search spinner stays until all sources settle (source
 describe('v9.22: version + Change Log Admin rule', () => {
   it('package.json is 9.28', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.36')
+    expect(pkg.version).toBe('9.37')
   })
 
   it('the 9.22 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {

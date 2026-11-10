@@ -6,18 +6,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { LangProvider } from '../contexts/LangContext'
 import DirectoryPage, { groupListingsByCity } from './DirectoryPage'
 
-// v9.35 (A): Directory list auto background loading — no tap.
-// User report 2026-11-10 (iOS, Car Rental "ကားငှားဝန်ဆောင်မှု", 173
-// total): the list showed "ထပ်တင်ရန် (112 ကျန်)" and only grew 20
-// rows per tap. Now pages load themselves as the user scrolls
-// (IntersectionObserver sentinel + 800px prefetch rootMargin), the
-// shared LoadRing shows the real X / total at the top of the
-// list area and STAYS visible at 100% (user correction 2026-11-10:
-// "why would it disappear?"), a failed background page keeps the
-// loaded rows with an amber strip + retry, and the manual button
-// survives ONLY as that retry control. Sequential pages only — a
-// 2,186-row "အားလုံး" list still fetches page 0 only until the
-// sentinel fires.
+// v9.37: CONTINUOUS background loading — no scroll, no tap, no
+// sentinel. After each page lands the chain immediately fetches the
+// next one until loaded == total, so the ring climbs by itself
+// (20/173 → 40/173 → … → 173/173) and ends at 100% — the same 100%
+// the Home tile shows. The 9.35 sentinel only advanced on scroll,
+// so a list opened and left alone sat at 20/173 forever while the
+// tile outside said 100% (user report 2026-11-10, second report of
+// the same stall).
+//
+// The old no-eager-fetch-all test ("a 2,186-row list fetches page 0
+// only until the sentinel fires") is WRONG BY DESIGN under the
+// chain and is REPLACED below: the chain advances to the next page
+// with NO scroll and NO sentinel trigger, and stops exactly at
+// total (no over-fetch — request count == ceil(total / 20)).
 //
 // v9.36: the percentage now lives INSIDE the ring (innerText, e.g.
 // "12%") and the beside label is "20 / 173" with no "%" in it.
@@ -56,21 +58,9 @@ const { mockFetchCategories, mockDB } = vi.hoisted(() => ({
   },
 }))
 
-// Controllable IntersectionObserver: every instance's callback is
-// recorded; triggerSentinel() fires all of them (the component's own
-// guards — fetching / failed / pageRef — make sure one trigger can
-// only advance one page).
-const ioCallbacks = []
-class MockIntersectionObserver {
-  constructor(cb) { this.cb = cb; ioCallbacks.push(cb) }
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
-function triggerSentinel() {
-  act(() => { for (const cb of [...ioCallbacks]) cb([{ isIntersecting: true }]) })
-}
+// v9.37: no IntersectionObserver stub any more — the component must
+// not need one. (A dedicated test in DirectoryPage937.test.jsx
+// asserts the observer is never constructed.)
 
 vi.mock('../lib/prefetch', () => ({ fetchCategories: mockFetchCategories }))
 
@@ -137,6 +127,12 @@ vi.mock('../lib/supabase', () => ({
             mockDB.listingsCalls.push(page)
             const payload = { data: filtered.slice(state.rangeStart, state.rangeStart + 20), count: filtered.length, error: null }
             if (mockDB.hangPages.has(page)) {
+              // Hang only the FIRST fetch of this page: a later
+              // fetch of the same page number (e.g. after a filter
+              // change starts a new list) resolves normally. The
+              // first fetch's resolver is kept so the test can
+              // release it on purpose.
+              mockDB.hangPages.delete(page)
               mockDB.pendingResolves[page] = () => resolve(payload)
               return
             }
@@ -190,7 +186,6 @@ async function openCarRental() {
 
 beforeEach(() => {
   cleanup()
-  ioCallbacks.length = 0
   mockFetchCategories.mockReset()
   mockFetchCategories.mockResolvedValue([CAT])
   mockDB.cats = [...ALL_CATS]
@@ -203,12 +198,20 @@ beforeEach(() => {
 
 afterEach(() => { cleanup() })
 
-describe('v9.35 (A) auto background loading — no tap', () => {
-  it('(a) the next page appends when the sentinel intersects — no tap, no "ထပ်တင်ရန်" button on the normal path', async () => {
+describe('v9.37 continuous background loading — no scroll, no tap', () => {
+  it('(a) the next page appends by itself — no tap, no scroll, no "ထပ်တင်ရန်" button on the normal path', async () => {
     const client = makeClient()
     client.setQueryData(['category-map'], ALL_CATS)
     renderDirectory(client)
+    // Hang pages 1 AND 2 so the 20 / 173 starting state — and then
+    // the 40 / 173 state — are deterministic: without the hangs the
+    // chain would already be past them.
+    mockDB.hangPages.add(1)
+    mockDB.hangPages.add(2)
     await openCarRental()
+    // The chain starts page 1 by itself — wait until it is actually
+    // hung in flight before asserting the frozen 20 / 173 state.
+    await waitFor(() => expect(mockDB.listingsCalls).toContain(1), { timeout: 5000 })
 
     // Page 0: 20 rows, ring at 20 / 173.
     expect(screen.getByText('Car Rental 1')).toBeTruthy()
@@ -218,9 +221,11 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     expect(screen.getByText('12%').closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(screen.getByText('20 / 173').textContent).not.toContain('%')
     expect(screen.queryByText(/ထပ်တင်ရန်/)).toBeNull()
-    expect(screen.getByTestId('load-more-sentinel')).toBeTruthy()
+    // v9.37: the sentinel element is gone — nothing to scroll to.
+    expect(screen.queryByTestId('load-more-sentinel')).toBeNull()
 
-    triggerSentinel()
+    // Release page 1: it lands with NO trigger of any kind.
+    await act(async () => { mockDB.pendingResolves[1]() })
     await waitFor(() => expect(screen.getByText('40 / 173')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText('23%').closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(screen.getByText('Car Rental 21')).toBeTruthy()
@@ -235,25 +240,9 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     renderDirectory(client)
     await openCarRental()
 
-    const ring = screen.getByTestId('load-ring')
-    expect(ring.getAttribute('aria-valuenow')).toBe('12')
-    // The arc starts empty and sweeps to the real fill (animated on
-    // load): after settling, its dashoffset is > 0 at 12%.
-    await waitFor(() => {
-      const arc = screen.getByTestId('load-ring-arc')
-      expect(parseFloat(arc.getAttribute('stroke-dashoffset'))).toBeGreaterThan(0)
-    }, { timeout: 5000 })
-
-    // Drive all 9 pages (20, 40, …, 160, 173) via the sentinel only.
-    // v9.36: each step's % is inside the ring, the beside label is
-    // "N / 173" with no "%".
-    const expected = [['40 / 173', '23%'], ['60 / 173', '35%'], ['80 / 173', '46%'], ['100 / 173', '58%'], ['120 / 173', '69%'], ['140 / 173', '81%'], ['160 / 173', '92%'], ['173 / 173', '100%']]
-    for (const [label, pct] of expected) {
-      triggerSentinel()
-      await waitFor(() => expect(screen.getByText(label)).toBeTruthy(), { timeout: 5000 })
-      expect(screen.getByText(pct).closest('[data-testid="load-ring"]')).toBeTruthy()
-      expect(screen.getByText(label).textContent).not.toContain('%')
-    }
+    // The chain runs the whole list by itself — no sentinel trigger,
+    // no tap. Wait for the end: 173 / 173.
+    await waitFor(() => expect(screen.getByText('173 / 173')).toBeTruthy(), { timeout: 20000 })
     // 100% — the ring AND the final count REMAIN visible (user
     // correction 2026-11-10: it must not disappear). Full ring:
     // dashoffset 0, aria-valuenow 100.
@@ -267,18 +256,20 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     }, { timeout: 5000 })
     expect(screen.getByTestId('load-ring').getAttribute('aria-valuenow')).toBe('100')
     expect(screen.queryByText(/ထပ်တင်ရန်/)).toBeNull()
+    // Exactly 9 requests (ceil(173 / 20)) — the chain stopped at
+    // total, it did not over-fetch.
+    expect(mockDB.listingsCalls).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
   }, 30000)
 
   it('(c) changing the filter aborts the in-flight page and resets progress to the new filter', async () => {
     const client = makeClient()
     client.setQueryData(['category-map'], ALL_CATS)
     renderDirectory(client)
+    // Page 1 hangs in flight (the chain starts it by itself as soon
+    // as page 0 lands — no trigger needed).
+    mockDB.hangPages.add(1)
     await openCarRental()
     expect(screen.getByText('20 / 173')).toBeTruthy()
-
-    // Page 1 hangs in flight…
-    mockDB.hangPages.add(1)
-    triggerSentinel()
     await waitFor(() => expect(mockDB.listingsCalls).toContain(1), { timeout: 5000 })
 
     // …then the user switches city to Kalaw: progress resets (the
@@ -288,51 +279,62 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     await waitFor(() => expect(screen.getByText('20 / 58')).toBeTruthy(), { timeout: 5000 })
     expect(screen.queryByText('20 / 173')).toBeNull()
 
+    // The new filter's own chain runs to the end by itself: 58 / 58.
+    await waitFor(() => expect(screen.getByText('58 / 58')).toBeTruthy(), { timeout: 10000 })
+
     // The hung old-filter page 1 finally resolves — it must NOT land
     // on the new filter's list (page guard / key change drops it).
     await act(async () => { mockDB.pendingResolves[1]() })
-    await waitFor(() => expect(screen.getByText('20 / 58')).toBeTruthy(), { timeout: 5000 })
-    // Still 20 Kalaw rows only: no Taunggyi row from the stale page,
-    // and no append to 40.
+    await waitFor(() => expect(screen.getByText('58 / 58')).toBeTruthy(), { timeout: 5000 })
+    // Still Kalaw rows only: no Taunggyi row from the stale page.
     expect(screen.queryByText('Car Rental 1')).toBeNull() // row 1 is Taunggyi
     expect(screen.getByText('Car Rental 2')).toBeTruthy() // row 2 is Kalaw
-    expect(screen.queryByText('40 / 58')).toBeNull()
   }, 20000)
 
   it('(d) a failed background page keeps the loaded rows and offers retry — and does not auto-retry in a loop', async () => {
     const client = makeClient()
     client.setQueryData(['category-map'], ALL_CATS)
     renderDirectory(client)
-    await openCarRental()
-    expect(screen.getByText('20 / 173')).toBeTruthy()
-
+    // Page 1 fails once; the chain fetches it by itself.
     mockDB.failPages = { 1: 1 }
-    triggerSentinel()
+    await openCarRental()
     await waitFor(() => expect(screen.getByText('စာရင်း တစ်ချို့ တင်မရသေးပါ — အဟောင်းပြထားသည်')).toBeTruthy(), { timeout: 5000 })
     // Loaded rows stay; ring stays at the real 20 / 173.
     expect(screen.getByText('Car Rental 1')).toBeTruthy()
     expect(screen.getByText('20 / 173')).toBeTruthy()
     // The manual button survives ONLY as the retry control.
     expect(screen.getByText('ထပ်တင်ရန် (153 ကျန်)')).toBeTruthy()
-    // The sentinel must not loop on the failing page.
+    // The chain must not loop on the failing page: no further
+    // request for page 1 while the strip is up (no trigger exists
+    // any more — the chain itself is what must stay quiet).
     const callsBefore = mockDB.listingsCalls.filter(p => p === 1).length
-    triggerSentinel()
-    await act(async () => { await new Promise(r => setTimeout(r, 200)) })
-    expect(mockDB.listingsCalls.filter(p => p === 1).length).toBe(callsBefore)
+    expect(callsBefore).toBe(1)
+    await act(async () => { await new Promise(r => setTimeout(r, 300)) })
+    expect(mockDB.listingsCalls.filter(p => p === 1).length).toBe(1)
 
-    // Retry from the amber strip: the page lands, strip + button go.
+    // Retry from the amber strip: the page lands, strip + button go,
+    // and the chain RESUMES past the retried page by itself.
     fireEvent.click(screen.getByText('ပြန်ကြိုးစားမည်'))
     await waitFor(() => expect(screen.getByText('40 / 173')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText('Car Rental 21')).toBeTruthy()
     expect(screen.queryByText('စာရင်း တစ်ချို့ တင်မရသေးပါ — အဟောင်းပြထားသည်')).toBeNull()
     expect(screen.queryByText(/ထပ်တင်ရန်/)).toBeNull()
+    await waitFor(() => expect(screen.getByText('60 / 173')).toBeTruthy(), { timeout: 5000 })
   }, 20000)
 
   it('(e) town groups stay correct as pages append', async () => {
     const client = makeClient()
     client.setQueryData(['category-map'], ALL_CATS)
     renderDirectory(client)
+    // Hang pages 1 and 2 so the page-0 groups — and then the
+    // pages-0+1 groups — are deterministic (otherwise the chain
+    // would run on to 60 rows before the assertions land).
+    mockDB.hangPages.add(1)
+    mockDB.hangPages.add(2)
     await openCarRental()
+    // Wait until page 1 is hung in flight (the chain starts it by
+    // itself) so the page-0 groups below are deterministic.
+    await waitFor(() => expect(mockDB.listingsCalls).toContain(1), { timeout: 5000 })
 
     const headings = () =>
       screen.getAllByRole('heading')
@@ -342,7 +344,7 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     // Taunggyi 7, Kalaw 7, Heho 6. (Heho has no cityLabels entry, so
     // its heading renders the raw name 'Heho', not 'ဟဲဟိုး'.)
     expect(headings()).toEqual(['တောင်ကြီး (7)', 'ကလော (7)', 'Heho (6)'])
-    triggerSentinel()
+    await act(async () => { mockDB.pendingResolves[1]() })
     await waitFor(() => expect(screen.getByText('40 / 173')).toBeTruthy(), { timeout: 5000 })
     // Pages 0+1: Taunggyi 14, Kalaw 13, Heho 13 — groups grow in place.
     // (Tie at 13 sorts by raw city code A-Z: 'Heho' before 'Kalaw'.)
@@ -350,31 +352,22 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     expect(screen.getByText('Car Rental 40')).toBeTruthy()
   }, 20000)
 
-  it('no-eager-fetch-all: a 2,186-row "အားလုံး" list fetches page 0 only until the sentinel fires', async () => {
-    // Direct ("အားလုံး") rows live under the PARENT category id, so
-    // all 2,186 rows are filed there for this test.
-    mockDB.rows = makeRows(2186).map(r => ({ ...r, category_id: CAT_ID }))
+  it('chain replaces no-eager-fetch-all: a 173-row list advances with NO scroll/sentinel trigger and stops exactly at total', async () => {
     const client = makeClient()
     client.setQueryData(['category-map'], ALL_CATS)
     renderDirectory(client)
-    // The "အားလုံး" view is the direct path: open the category, tap
-    // "အားလုံး" (direct listings under the parent).
-    await waitFor(() => expect(screen.getByText('ကားငှားဝန်ဆောင်မှု')).toBeTruthy(), { timeout: 5000 })
-    fireEvent.click(screen.getByText('ကားငှားဝန်ဆောင်မှု'))
-    await waitFor(() => expect(screen.getByRole('button', { name: /အားလုံး/ })).toBeTruthy(), { timeout: 5000 })
-    fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
-    await waitFor(() => expect(screen.getByText('20 / 2186')).toBeTruthy(), { timeout: 10000 })
-    expect(screen.getByText('1%').closest('[data-testid="load-ring"]')).toBeTruthy()
-    // Only page 0 was ever requested — no page 1, 2, … storm, and no
-    // attempt to fetch/render thousands of cards at once.
-    expect(mockDB.listingsCalls.length).toBeGreaterThanOrEqual(1)
-    expect(mockDB.listingsCalls.every(p => p === 0)).toBe(true)
-    // The sentinel is the only thing that may fetch page 1.
-    triggerSentinel()
-    await waitFor(() => expect(screen.getByText('40 / 2186')).toBeTruthy(), { timeout: 10000 })
-    expect(screen.getByText('2%').closest('[data-testid="load-ring"]')).toBeTruthy()
-    expect(mockDB.listingsCalls).toContain(1)
-  }, 20000)
+    await openCarRental()
+
+    // No scroll, no tap, no sentinel trigger anywhere in this test —
+    // the chain alone must carry the list to the end.
+    await waitFor(() => expect(screen.getByText('173 / 173')).toBeTruthy(), { timeout: 20000 })
+    expect(screen.getByText('Car Rental 173')).toBeTruthy()
+    // Stops exactly at total: 9 requests, one per page, no
+    // over-fetch — and quiet afterwards.
+    expect(mockDB.listingsCalls).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    await act(async () => { await new Promise(r => setTimeout(r, 300)) })
+    expect(mockDB.listingsCalls).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+  }, 30000)
 })
 
 describe('v9.35 groupListingsByCity still holds (regression pin)', () => {
