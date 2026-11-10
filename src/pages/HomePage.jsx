@@ -803,11 +803,11 @@ export default function HomePage() {
           <div className="px-4 grid grid-cols-4 gap-1.5">
             {homeCategories.map(cat => {
               const subs = allCategories.filter(c => c.parent_id === cat.id);
-              // v9.31 (A): listing count under the tile name — '–' while
-              // unknown, never a fake 0 (S17); 0 renders 'မရှိသေး' exactly
-              // like the Directory page's category list.
+              // v9.38: listing count lives INSIDE the ring only — the
+              // redundant count line below the tile is gone ('–' while
+              // unknown, never a fake 0 (S17); 0 renders "0" inside
+              // the ring).
               const count = categoryCountById.get(cat.id);
-              const countText = count == null ? '–' : count === 0 ? 'မရှိသေး' : `${count} လုပ်ငန်း`;
               return (
                 <button
                   key={cat.id}
@@ -831,10 +831,9 @@ export default function HomePage() {
                       ring from this same map, no hardcoded list. The
                       count is now INSIDE the ring (innerText: '–' while
                       unknown, "0" for an empty category, else the
-                      count); the count text below stays as the 9.31
-                      wording ('–' / 'မရှိသေး' / 'N လုပ်ငန်း'). */}
+                      count); the 9.31 count line below the tile was
+                      removed in v9.38 — the ring carries the number. */}
                   <LoadRing done={count == null ? 0 : 1} total={1} size={30} text={false} innerText={count == null ? '–' : String(count)} />
-                  <span className="text-[9px] text-white/40 text-center leading-tight font-myanmar truncate w-full">{countText}</span>
                 </button>
               );
             })}

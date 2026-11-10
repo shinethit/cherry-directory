@@ -61,13 +61,11 @@ export default function DirectoryPage() {
   
   // Level 3: Listings
   const [listings, setListings] = useState([])
-  const [listingsLoading, setListingsLoading] = useState(false)
   // UI4 (v9.20): one batched bookmark query for the whole list instead
   // of one per card.
   const { data: bookmarkedSet } = useBookmarkedSet(listings.map(l => l.id))
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
-  const [listingsError, setListingsError] = useState(false)
   // v9.35: a background page (page > 0) failed — the loaded rows stay
   // and the retry affordance shows; the chain (v9.37) must not
   // auto-advance past the failed page (it would re-fire the same
@@ -75,6 +73,11 @@ export default function DirectoryPage() {
   // retry, and on any filter change. Page-0 failures keep the
   // existing full error card (listings.length === 0) and never set
   // this.
+  // v9.38: "failed" means the page has NO APPLIED DATA. A background
+  // refetch that fails AFTER its page's cached data applied is not a
+  // failure — the chain keeps advancing through the cache (see the
+  // pageFailed effect below); only a fetch with no data behind it
+  // sets this.
   const [pageFailed, setPageFailed] = useState(false)
   const [categoryError, setCategoryError] = useState(false)
   // Pagination is driven ONLY by the effect below (see listings query).
@@ -698,10 +701,20 @@ export default function DirectoryPage() {
     setTotal(listingsData.total)
   }, [listingsData, page])
 
-  useEffect(() => {
-    setListingsLoading(listingsQueryLoading || listingsQueryFetching)
-    setListingsError(listingsQueryError)
-  }, [listingsQueryLoading, listingsQueryFetching, listingsQueryError])
+  // v9.38: listingsLoading / listingsError are DERIVED during render,
+  // not mirrored into state by an effect. The old sync effect ran on
+  // every listingsQueryFetching toggle — twice per chain page — and
+  // called setListingsLoading/setListingsError each time, so every
+  // passive-effect flush in a long chain scheduled another update
+  // and React logged "Maximum update depth exceeded" past ~27 pages
+  // (4 times on the 110-page list). Deriving them here removes that
+  // scheduling flush entirely: the fetch-start commit now has a
+  // passive flush that schedules nothing, which resets React's
+  // nested-passive-update counter every page. Behaviour is identical
+  // (same values, one render sooner — no flash of "0 ရလဒ်" on first
+  // load); the two names are used only in the render below.
+  const listingsLoading = listingsQueryLoading || listingsQueryFetching
+  const listingsError = listingsQueryError
 
   // A filter change resets to page 0 — otherwise the query would fetch
   // page N of the new filter and the list would start mid-way.
@@ -729,8 +742,16 @@ export default function DirectoryPage() {
   // on screen — mark it failed (amber strip + retry) instead of
   // letting the full error card replace the list. Page-0 failures
   // (no rows yet) keep the existing card and never set this.
+  // v9.38: only a page with NO APPLIED DATA counts as failed. A
+  // background refetch that errors AFTER its page's cached data
+  // applied (appliedDataRef.page === page) is not a display failure
+  // — the chain keeps advancing through the cache, and no strip
+  // shows. The applied-data check is the discriminator, and it is
+  // current here: the apply effect above runs first in the same
+  // commit, so by the time this effect runs, appliedDataRef already
+  // reflects any data that landed in this commit.
   useEffect(() => {
-    if (listingsQueryError && page > 0 && listings.length > 0) setPageFailed(true)
+    if (listingsQueryError && page > 0 && listings.length > 0 && appliedDataRef.current?.page !== page) setPageFailed(true)
   }, [listingsQueryError, page, listings.length])
 
   // v9.37: CONTINUOUS background loading — no scroll, no tap, no
@@ -746,12 +767,29 @@ export default function DirectoryPage() {
   //    (appliedDataRef) — never while a fetch is in flight, and
   //    never twice for the same page (the applied-page guard also
   //    blocks the render between setPage and the new fetch starting);
-  //  - a failed page blocks the chain until the user retries
-  //    (pageFailed) — the chain never loops on a failing fetch;
+  //  - a failed page WITH NO APPLIED DATA blocks the chain until the
+  //    user retries (pageFailed) — the chain never loops on a failing
+  //    fetch. A background refetch that fails AFTER its page applied
+  //    from cache does NOT block: the applied-data guard above
+  //    already covers the true no-data case, so listingsQueryError
+  //    is not a chain guard any more — on 9.37 it blocked the chain
+  //    on every failed refetch and stuck warm-cache lists at 20/172
+  //    with no error card, no strip and no retry;
   //  - a short last page (< PAGE_SIZE rows) stops the chain even if
   //    `total` still claims more rows (stale count);
   //  - the pageRef guard stops a double-advance in the same tick:
   //    advance only when pageRef still equals the rendered page.
+  // v9.38: the dep is listingsData?.page, NOT the listingsData object
+  // identity — the chain advances on the page NUMBER, and a new
+  // object for the same page does not need a re-run of this effect
+  // on its own. A same-page refetch still re-runs the effect via the
+  // listingsQueryFetching toggle (fetch start/end), so the chain
+  // still advances past a refetched page (proved by the v9.38
+  // same-page-refetch test). NOTE: this dep change alone did NOT
+  // silence the "Maximum update depth exceeded" warnings (verified
+  // on a 30-page scratch chain — still 1 warning); those came from
+  // the listingsLoading/listingsError sync effect, which is now
+  // derived during render instead (see above).
   // A filter/sort/category/city change resets page to 0 and clears
   // the applied data (effect above), which restarts the chain from
   // the new filter's page 0; React Query aborts the old key's
@@ -760,14 +798,14 @@ export default function DirectoryPage() {
   const hasMore = total > 0 && listings.length < total
   useEffect(() => {
     if (!selectedSubcategory) return
-    if (!hasMore || pageFailed || listingsQueryError) return
+    if (!hasMore || pageFailed) return
     if (listingsQueryFetching) return
     if (appliedDataRef.current?.page !== page) return
     if (lastPageRowCountRef.current < PAGE_SIZE) return
     if (pageRef.current !== page) return
     pageRef.current += 1
     setPage(pageRef.current)
-  }, [hasMore, pageFailed, listingsQueryError, listingsQueryFetching, page, selectedSubcategory, listingsData])
+  }, [hasMore, pageFailed, listingsQueryFetching, page, selectedSubcategory, listingsData?.page])
 
   // Clear the list when no subcategory is selected.
   useEffect(() => {

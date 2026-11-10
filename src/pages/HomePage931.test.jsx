@@ -6,8 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import HomePage from './HomePage'
 import { yangonToday } from '../lib/myanmarDate'
 
-// v9.31 (A): the Home Category grid tiles show a listing count under the
-// tile name, wired from the SAME ['categories'] data the Directory page
+// v9.31 (A): the Home Category grid tiles show a listing count inside
+// the tile's ring (v9.38 — the 9.31 count line under the tile name is
+// gone), wired from the SAME ['categories'] data the Directory page
 // reads (fetchCategories — top-level rows + descendant-inclusive
 // listing_count, null on a failed count, never a fake 0 — S17).
 // The supabase mock hangs (never settles) so the seeded cache is what
@@ -117,7 +118,7 @@ afterEach(() => {
 })
 
 describe('v9.31 (A): Home Category grid tiles show listing counts', () => {
-  it('a tile shows its count under the name ("173 လုပ်ငန်း"), 0 shows "မရှိသေး"', async () => {
+  it('a tile shows its count inside the ring ("173"), 0 shows "0" inside the ring', async () => {
     mockFetchCategories.mockResolvedValue([
       { id: 'c1', listing_count: 173 },
       { id: 'c2', listing_count: 0 },
@@ -127,14 +128,23 @@ describe('v9.31 (A): Home Category grid tiles show listing counts', () => {
     renderHome(client)
     // Tile renders from the seeded ['home','categories'] rows; the count
     // arrives from the mocked ['categories'] (fetchCategories) data.
-    const countEl = await waitFor(() => screen.getByText('173 လုပ်ငန်း'))
-    // The count sits inside the same tile button as the category name.
+    // v9.38: the count lives INSIDE the ring only — the 9.31
+    // below-text ('173 လုပ်ငန်း' / 'မရှိသေး') is gone.
+    const countEl = await waitFor(() => screen.getByText('173'))
+    // The ring inner text is an SVG <text>; the count sits inside
+    // the same tile button as the category name.
+    expect(countEl.closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(countEl.closest('button').textContent).toContain('စား')
-    // A genuine 0 renders 'မရှိသေး' — the Directory page's S17 wording —
-    // inside the Cars tile, never '0 လုပ်ငန်း'.
-    const zeroEl = screen.getByText('မရှိသေး')
+    // The Hero count-up ends on "12" — wait it out, so the tile's
+    // "0" below is the only "0" on the page.
+    await waitFor(() => expect(screen.getByText('12')).toBeTruthy(), { timeout: 10000 })
+    // A genuine 0 renders "0" inside the ring — never 'မရှိသေး' or
+    // '0 လုပ်ငန်း' any more.
+    const zeroEl = screen.getByText('0')
+    expect(zeroEl.closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(zeroEl.closest('button').textContent).toContain('ကား')
     expect(screen.queryByText('0 လုပ်ငန်း')).toBeNull()
+    expect(screen.queryByText('မရှိသေး')).toBeNull()
   })
 
   it('an unknown count shows "–" — never 0 (failed count, and category missing from counts data)', async () => {
@@ -145,26 +155,24 @@ describe('v9.31 (A): Home Category grid tiles show listing counts', () => {
     const client = makeClient()
     seedClient(client)
     renderHome(client)
-    // v9.36: '–' appears twice per tile while the count is unknown —
-    // once INSIDE the ring and once below it (2 tiles × 2 = 4).
-    await waitFor(() => expect(screen.getAllByText('–')).toHaveLength(4))
+    // v9.38: '–' appears once per tile while the count is unknown —
+    // INSIDE the ring only (2 tiles × 1 = 2).
+    await waitFor(() => expect(screen.getAllByText('–')).toHaveLength(2))
     // Both tiles still render their names — an unknown count never
     // blanks or disables the tile. (Names are asserted inside the tile
     // buttons: 'စား' also appears in the featured card's category, so a
     // bare getByText would match twice.)
     const dashes = screen.getAllByText('–')
-    // DOM order per tile: ring-inner '–', then below-tile '–'.
+    // DOM order: one '–' per tile, inside its ring.
     expect(dashes[0].closest('button').textContent).toContain('စား')
-    expect(dashes[2].closest('button').textContent).toContain('ကား')
-    // The first '–' of each tile is the one inside the ring.
+    expect(dashes[1].closest('button').textContent).toContain('ကား')
+    // Both '–' are the ones inside the rings.
     expect(dashes[0].closest('[data-testid="load-ring"]')).toBeTruthy()
-    expect(dashes[2].closest('[data-testid="load-ring"]')).toBeTruthy()
-    expect(dashes[1].closest('[data-testid="load-ring"]')).toBeNull()
-    expect(dashes[3].closest('[data-testid="load-ring"]')).toBeNull()
+    expect(dashes[1].closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(screen.queryByText('0 လုပ်ငန်း')).toBeNull()
   })
 
-  it('tiles do not overflow at phone width: grid stays 4-col, tiles min-w-0, count truncates', async () => {
+  it('tiles do not overflow at phone width: grid stays 4-col, tiles min-w-0, count fits inside the ring', async () => {
     // A long count string is the overflow risk in a ~70px tile at 360px.
     mockFetchCategories.mockResolvedValue([
       { id: 'c1', listing_count: 123456 },
@@ -173,14 +181,18 @@ describe('v9.31 (A): Home Category grid tiles show listing counts', () => {
     const client = makeClient()
     seedClient(client)
     const { container } = renderHome(client)
-    const countEl = await waitFor(() => screen.getByText('123456 လုပ်ငန်း'))
+    // v9.38: the count is an SVG <text> inside the ring (the
+    // below-text span is gone) — the ring's font scales so a 6-digit
+    // count fits the fixed 30px circle.
+    const countEl = await waitFor(() => screen.getByText('123456'))
+    expect(countEl.closest('[data-testid="load-ring"]')).toBeTruthy()
     // jsdom has no layout engine, so overflow is asserted structurally
     // (the repo's fixes925 pattern): the classes that guarantee the
     // tile cannot push the grid wider than the viewport.
     const tile = countEl.closest('button')
     expect(tile.className).toContain('min-w-0')
-    expect(countEl.className).toContain('truncate')
-    expect(countEl.className).toContain('w-full')
+    const ringSvg = tile.querySelector('[data-testid="load-ring"] svg')
+    expect(ringSvg.getAttribute('width')).toBe('30')
     const grid = tile.parentElement
     expect(grid.className).toContain('grid-cols-4')
     // No fixed pixel width anywhere on the tile or the grid.

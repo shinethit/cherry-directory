@@ -201,14 +201,15 @@ describe('v9.36 (D2): category tile rings — count INSIDE the circle', () => {
     seedClient(client)
     renderHome(client)
 
-    await waitFor(() => expect(screen.getByText('173 လုပ်ငန်း')).toBeTruthy(), { timeout: 5000 })
-    expect(screen.getByText('50 လုပ်ငန်း')).toBeTruthy()
+    await waitFor(() => expect(screen.getByText('173')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.getByText('50')).toBeTruthy()
     // The newly added category's tile has its ring + count too —
     // nothing about it is hardcoded anywhere.
-    expect(screen.getByText('90 လုပ်ငန်း')).toBeTruthy()
+    expect(screen.getByText('90')).toBeTruthy()
     const newTile = screen.getByText('အသစ် စက်').closest('button')
     expect(newTile.querySelector('[data-testid="load-ring"]')).toBeTruthy()
-    // v9.36: each count is INSIDE its tile's ring as well as below it.
+    // v9.38: each count is INSIDE its tile's ring only — the
+    // below-text line is gone.
     expect(screen.getByText('173').closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(screen.getByText('50').closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(screen.getByText('90').closest('[data-testid="load-ring"]')).toBeTruthy()
@@ -233,11 +234,11 @@ describe('v9.36 (D2): category tile rings — count INSIDE the circle', () => {
     seedClient(client)
     renderHome(client)
 
-    await waitFor(() => expect(screen.getAllByText('–')).toHaveLength(6), { timeout: 5000 })
-    // v9.36: '–' appears twice per tile while waiting — once INSIDE
-    // the ring and once below it (3 tiles × 2). The Hero total ring
-    // is separate: its total comes from the seeded counts, so it is
-    // already full with "2,186" inside.
+    await waitFor(() => expect(screen.getAllByText('–')).toHaveLength(3), { timeout: 5000 })
+    // v9.38: '–' appears once per tile while waiting — INSIDE the
+    // ring only (3 tiles × 1). The Hero total ring is separate: its
+    // total comes from the seeded counts, so it is already full with
+    // "2,186" inside.
     expect(tileRing('အစား').textContent).toContain('–')
     expect(tileRing('ကားဆိုင်').textContent).toContain('–')
     expect(tileRing('အသစ် စက်').textContent).toContain('–')
@@ -250,10 +251,10 @@ describe('v9.36 (D2): category tile rings — count INSIDE the circle', () => {
     expect(tileRing('အစား').getAttribute('aria-valuenow')).toBe('0')
     expect(tileRing('ကားဆိုင်').getAttribute('aria-valuenow')).toBe('0')
     expect(tileRing('အသစ် စက်').getAttribute('aria-valuenow')).toBe('0')
-    expect(screen.queryByText('173 လုပ်ငန်း')).toBeNull()
+    expect(screen.queryByText('173')).toBeNull()
   }, 20000)
 
-  it('empty and unknown tiles: 0-count ring shows "0" inside with "မရှိသေး" below; unknown ring shows "–" inside', async () => {
+  it('empty and unknown tiles: 0-count ring shows "0" inside; unknown ring shows "–" inside (no below-text any more)', async () => {
     mockFetchCategories.mockResolvedValue([
       { id: 'c1', listing_count: 0 },
       { id: 'c2', listing_count: null },
@@ -263,18 +264,20 @@ describe('v9.36 (D2): category tile rings — count INSIDE the circle', () => {
     seedClient(client)
     renderHome(client)
 
-    await waitFor(() => expect(screen.getByText('မရှိသေး')).toBeTruthy(), { timeout: 5000 })
-    expect(screen.getByText('173 လုပ်ငန်း')).toBeTruthy()
+    // v9.38: the 9.31 'မရှိသေး' below-text is gone — wait for the
+    // 173-count tile's ring instead.
+    await waitFor(() => expect(screen.getByText('173')).toBeTruthy(), { timeout: 5000 })
     // Wait out the Hero count-up first: while it is still running the
     // Hero ring itself shows "0" inside, which would make getByText('0')
     // ambiguous with the tile's "0".
     await waitFor(() => expect(screen.getByText('2,186')).toBeTruthy(), { timeout: 10000 })
-    // 0-count: "0" inside the ring, "မရှိသေး" below it (9.31 wording).
+    // 0-count: "0" inside the ring; the 9.31 'မရှိသေး' below-text is
+    // gone in v9.38.
     expect(screen.getByText('0').closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(tileRing('အစား').textContent).toContain('0')
-    // Unknown count: '–' inside the ring and '–' below it — 2 total.
+    // Unknown count: '–' inside the ring only — 1 total.
     expect(tileRing('ကားဆိုင်').textContent).toContain('–')
-    expect(screen.getAllByText('–')).toHaveLength(2)
+    expect(screen.getAllByText('–')).toHaveLength(1)
     // Fill still loaded-vs-waiting: the arrived tiles (0 and 173)
     // are full rings — a 0 count is a loaded answer, not waiting —
     // and the unknown tile is empty.
@@ -292,11 +295,12 @@ describe('v9.36 (D2): category tile rings — count INSIDE the circle', () => {
     const client = makeClient()
     seedClient(client)
     const { container } = renderHome(client)
-    await waitFor(() => expect(screen.getByText('123456 လုပ်ငန်း')).toBeTruthy(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByText('123456')).toBeTruthy(), { timeout: 5000 })
     // Structural overflow guard (jsdom has no layout engine — the
     // repo's fixes925 pattern): the grid stays 4-col, tiles are
-    // min-w-0 with truncating count text, and each ring is a small
-    // fixed 30px svg that fits a ~77px tile at 360px.
+    // min-w-0, and each ring is a small fixed 30px svg that fits a
+    // ~77px tile at 360px (the count lives inside the ring now — no
+    // below-text to truncate).
     const tile = screen.getByText('အစား').closest('button')
     expect(tile.className).toContain('min-w-0')
     expect(tile.className).not.toMatch(/w-\[\d+px\]/)
