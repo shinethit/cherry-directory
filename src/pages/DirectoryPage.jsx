@@ -1135,15 +1135,17 @@ export default function DirectoryPage() {
         </div>
       </div>
 
-      {/* v9.35: circular load progress ring, directly under the sticky
+      {/* v9.36: circular load progress ring, directly under the sticky
           header at the top of the list area. Real counts only
           (loaded rows / query total); it stays visible permanently —
           at 100% it shows a full ring + the final count, never
           disappearing. Hidden only before the first page lands
-          (total unknown yet). */}
+          (total unknown yet). The percentage is now INSIDE the ring
+          (innerText) and the beside label drops the duplicated "%":
+          "61 / 173" only. */}
       {total > 0 && (
         <div className="px-4 pt-2">
-          <LoadRing done={listings.length} total={total} />
+          <LoadRing done={listings.length} total={total} innerText={`${total ? Math.round((listings.length / total) * 100) : 0}%`} text={`${listings.length} / ${total}`} />
         </div>
       )}
 

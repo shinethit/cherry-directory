@@ -145,14 +145,22 @@ describe('v9.31 (A): Home Category grid tiles show listing counts', () => {
     const client = makeClient()
     seedClient(client)
     renderHome(client)
-    await waitFor(() => expect(screen.getAllByText('–')).toHaveLength(2))
+    // v9.36: '–' appears twice per tile while the count is unknown —
+    // once INSIDE the ring and once below it (2 tiles × 2 = 4).
+    await waitFor(() => expect(screen.getAllByText('–')).toHaveLength(4))
     // Both tiles still render their names — an unknown count never
     // blanks or disables the tile. (Names are asserted inside the tile
     // buttons: 'စား' also appears in the featured card's category, so a
     // bare getByText would match twice.)
     const dashes = screen.getAllByText('–')
+    // DOM order per tile: ring-inner '–', then below-tile '–'.
     expect(dashes[0].closest('button').textContent).toContain('စား')
-    expect(dashes[1].closest('button').textContent).toContain('ကား')
+    expect(dashes[2].closest('button').textContent).toContain('ကား')
+    // The first '–' of each tile is the one inside the ring.
+    expect(dashes[0].closest('[data-testid="load-ring"]')).toBeTruthy()
+    expect(dashes[2].closest('[data-testid="load-ring"]')).toBeTruthy()
+    expect(dashes[1].closest('[data-testid="load-ring"]')).toBeNull()
+    expect(dashes[3].closest('[data-testid="load-ring"]')).toBeNull()
     expect(screen.queryByText('0 လုပ်ငန်း')).toBeNull()
   })
 

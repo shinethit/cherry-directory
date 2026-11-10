@@ -160,15 +160,17 @@ export default function HomePage() {
     enabled: consentGiven,
   });
   const categoryCountById = new Map((categoryCountsQ.data ?? []).map(c => [c.id, c.listing_count]));
-  // v9.35 (D2): largest top-level category count — every tile ring's
-  // fill is relative to this (largest = full ring). 0 while the
-  // counts have not arrived, so every ring stays visibly empty
-  // (still waiting) until then. Driven entirely by the live
+  // v9.36 (D2, fill rule corrected 2026-11-10 08:20): a tile ring is
+  // FULL once its count has arrived and EMPTY while waiting (count
+  // null) — it is NOT filled relative to the largest category. The
+  // user: if the Hero shows all 2,186 loaded (full ring), every
+  // category below must also read 100% loaded; partial rings under
+  // a full total are unnatural. Ring meaning is loaded-vs-waiting
+  // everywhere; the number inside the ring carries the size. (The
+  // list ring keeps real loaded/total progress — that is genuine
+  // progress, not a comparison.) Driven entirely by the live
   // ['categories'] data — a category added later gets its ring
   // automatically, nothing is hardcoded.
-  const maxCategoryCount = Math.max(0, ...((categoryCountsQ.data ?? [])
-    .filter(c => !c.parent_id && typeof c.listing_count === 'number')
-    .map(c => c.listing_count)));
   const countsQ = useQuery({
     queryKey: ['home', 'counts'],
     queryFn: async () => {
@@ -564,17 +566,22 @@ export default function HomePage() {
             </div>
 
             {/* RIGHT: Vertical stats — 1 col x 3 rows */}
-            <div className="flex flex-col gap-1.5 flex-shrink-0 w-[70px]">
-              {/* v9.35 (D1): Hero total ring — the ONE ring in the Hero,
+            <div className="flex flex-col gap-1.5 flex-shrink-0 w-[88px]">
+              {/* v9.36 (D1): Hero total ring — the ONE ring in the Hero,
                   with the TOTAL shop count (same ['home','counts'] value
                   the old number line showed — no second total fetched,
                   no second total displayed). done = total so the ring
                   ends FULL; the count counts up 0 → final on load and
                   the ring + number stay visible permanently, never
-                  auto-hide. While loading the ring stays empty ('…'). */}
+                  auto-hide. While loading the ring stays empty ('…').
+                  The count-up number is now INSIDE the ring (innerText)
+                  — the separate <p> below it is gone, so "2,186" appears
+                  exactly once. Ring grown 40 → 64 so "2,186" (5 chars,
+                  ~15px bold ≈ 44px wide) fits inside the ~52px usable
+                  inner width; the stat column widens 70 → 88px to hold
+                  it (64 + px-2 padding). */}
               <div className="glass rounded-lg px-2 py-1.5 text-center flex flex-col items-center gap-1">
-                <LoadRing done={stats.listings ?? 0} total={stats.listings ?? 0} size={40} text={false} />
-                <p className="font-display font-bold text-sm text-white leading-none">{countsQ.isLoading ? '…' : stats.listings == null ? '—' : totalCountUp.toLocaleString()}</p>
+                <LoadRing done={stats.listings ?? 0} total={stats.listings ?? 0} size={64} text={false} innerText={countsQ.isLoading ? '…' : stats.listings == null ? '—' : totalCountUp.toLocaleString()} />
                 <p className="text-[8px] text-white/60 mt-0.5 leading-tight">{lang === 'mm' ? 'လုပ်ငန်း' : 'Listings'}</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
@@ -809,19 +816,24 @@ export default function HomePage() {
                 >
                   <span className="text-xl">{cat.icon}</span>
                   <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar line-clamp-2">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</span>
-                  {/* v9.35 (D2): small ring + real count on EVERY tile —
+                  {/* v9.36 (D2): small ring + real count on EVERY tile —
                       the same shared LoadRing as the list ring and the
-                      Hero total ring. Fill is this tile's count relative
-                      to the largest category (maxCategoryCount); the ring
-                      never auto-hides. While a tile's count has not
-                      arrived (count null, or max still 0) the ring stays
-                      visibly empty — "still waiting" — and animates to
-                      its true fill when the counts land. Driven entirely
-                      by the live categories data: a category added later
-                      renders its tile + ring from this same map, no
-                      hardcoded list. The count text below stays as the
-                      9.31 wording ('–' / 'မရှိသေး' / 'N လုပ်ငန်း'). */}
-                  <LoadRing done={count ?? 0} total={maxCategoryCount} size={30} text={false} />
+                      Hero total ring. Fill is loaded-vs-waiting (rule
+                      corrected 2026-11-10 08:20): FULL once the tile's
+                      count has arrived (done = total = 1, even for a
+                      0 count — 0 listings is a loaded answer, not a
+                      waiting one), EMPTY while it has not (count null
+                      → 0/0). NOT relative to the largest category — a
+                      "52% loaded" ring under a Hero showing 2,186 fully
+                      loaded contradicts itself. The ring never
+                      auto-hides. Driven entirely by the live categories
+                      data: a category added later renders its tile +
+                      ring from this same map, no hardcoded list. The
+                      count is now INSIDE the ring (innerText: '–' while
+                      unknown, "0" for an empty category, else the
+                      count); the count text below stays as the 9.31
+                      wording ('–' / 'မရှိသေး' / 'N လုပ်ငန်း'). */}
+                  <LoadRing done={count == null ? 0 : 1} total={1} size={30} text={false} innerText={count == null ? '–' : String(count)} />
                   <span className="text-[9px] text-white/40 text-center leading-tight font-myanmar truncate w-full">{countText}</span>
                 </button>
               );

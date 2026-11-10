@@ -169,7 +169,7 @@ describe('Bug C: /prices last content clears the Submit FAB', () => {
 describe('v9.21: version + Change Log Admin rule', () => {
   it('package.json is 9.25 (work copy bumped; the 9.21 entry below is still the 9.21 record)', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.35')
+    expect(pkg.version).toBe('9.36')
   })
 
   it('the 9.21 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {

@@ -11,13 +11,16 @@ import DirectoryPage, { groupListingsByCity } from './DirectoryPage'
 // total): the list showed "ထပ်တင်ရန် (112 ကျန်)" and only grew 20
 // rows per tap. Now pages load themselves as the user scrolls
 // (IntersectionObserver sentinel + 800px prefetch rootMargin), the
-// shared LoadRing shows the real X / total · Y% at the top of the
+// shared LoadRing shows the real X / total at the top of the
 // list area and STAYS visible at 100% (user correction 2026-11-10:
 // "why would it disappear?"), a failed background page keeps the
 // loaded rows with an amber strip + retry, and the manual button
 // survives ONLY as that retry control. Sequential pages only — a
 // 2,186-row "အားလုံး" list still fetches page 0 only until the
 // sentinel fires.
+//
+// v9.36: the percentage now lives INSIDE the ring (innerText, e.g.
+// "12%") and the beside label is "20 / 173" with no "%" in it.
 //
 // NOTE: this file has NO filesystem-path comparisons at all (no
 // path.relative / path.join / readdir comparisons), so the 9.19/9.25
@@ -210,12 +213,16 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     // Page 0: 20 rows, ring at 20 / 173.
     expect(screen.getByText('Car Rental 1')).toBeTruthy()
     expect(screen.queryByText('Car Rental 21')).toBeNull()
-    expect(screen.getByText('20 / 173 · 12%')).toBeTruthy()
+    expect(screen.getByText('20 / 173')).toBeTruthy()
+    // v9.36: the % is INSIDE the ring; the beside label carries no "%".
+    expect(screen.getByText('12%').closest('[data-testid="load-ring"]')).toBeTruthy()
+    expect(screen.getByText('20 / 173').textContent).not.toContain('%')
     expect(screen.queryByText(/ထပ်တင်ရန်/)).toBeNull()
     expect(screen.getByTestId('load-more-sentinel')).toBeTruthy()
 
     triggerSentinel()
-    await waitFor(() => expect(screen.getByText('40 / 173 · 23%')).toBeTruthy(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByText('40 / 173')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.getByText('23%').closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(screen.getByText('Car Rental 21')).toBeTruthy()
     expect(screen.getByText('Car Rental 40')).toBeTruthy()
     // Still no tap button — the page arrived by itself.
@@ -238,16 +245,21 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     }, { timeout: 5000 })
 
     // Drive all 9 pages (20, 40, …, 160, 173) via the sentinel only.
-    const expected = ['40 / 173 · 23%', '60 / 173 · 35%', '80 / 173 · 46%', '100 / 173 · 58%', '120 / 173 · 69%', '140 / 173 · 81%', '160 / 173 · 92%', '173 / 173 · 100%']
-    for (const text of expected) {
+    // v9.36: each step's % is inside the ring, the beside label is
+    // "N / 173" with no "%".
+    const expected = [['40 / 173', '23%'], ['60 / 173', '35%'], ['80 / 173', '46%'], ['100 / 173', '58%'], ['120 / 173', '69%'], ['140 / 173', '81%'], ['160 / 173', '92%'], ['173 / 173', '100%']]
+    for (const [label, pct] of expected) {
       triggerSentinel()
-      await waitFor(() => expect(screen.getByText(text)).toBeTruthy(), { timeout: 5000 })
+      await waitFor(() => expect(screen.getByText(label)).toBeTruthy(), { timeout: 5000 })
+      expect(screen.getByText(pct).closest('[data-testid="load-ring"]')).toBeTruthy()
+      expect(screen.getByText(label).textContent).not.toContain('%')
     }
     // 100% — the ring AND the final count REMAIN visible (user
     // correction 2026-11-10: it must not disappear). Full ring:
     // dashoffset 0, aria-valuenow 100.
     expect(screen.queryByTestId('load-ring')).toBeTruthy()
-    expect(screen.getByText('173 / 173 · 100%')).toBeTruthy()
+    expect(screen.getByText('173 / 173')).toBeTruthy()
+    expect(screen.getByText('100%').closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(screen.getByText('Car Rental 173')).toBeTruthy()
     await waitFor(() => {
       const arc = screen.getByTestId('load-ring-arc')
@@ -262,7 +274,7 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     client.setQueryData(['category-map'], ALL_CATS)
     renderDirectory(client)
     await openCarRental()
-    expect(screen.getByText('20 / 173 · 12%')).toBeTruthy()
+    expect(screen.getByText('20 / 173')).toBeTruthy()
 
     // Page 1 hangs in flight…
     mockDB.hangPages.add(1)
@@ -273,13 +285,13 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     // old 20 / 173 is gone) and the new filter's page 0 loads.
     const selects = screen.getAllByRole('combobox')
     fireEvent.change(selects[0], { target: { value: 'Kalaw' } })
-    await waitFor(() => expect(screen.getByText('20 / 58 · 34%')).toBeTruthy(), { timeout: 5000 })
-    expect(screen.queryByText('20 / 173 · 12%')).toBeNull()
+    await waitFor(() => expect(screen.getByText('20 / 58')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.queryByText('20 / 173')).toBeNull()
 
     // The hung old-filter page 1 finally resolves — it must NOT land
     // on the new filter's list (page guard / key change drops it).
     await act(async () => { mockDB.pendingResolves[1]() })
-    await waitFor(() => expect(screen.getByText('20 / 58 · 34%')).toBeTruthy(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByText('20 / 58')).toBeTruthy(), { timeout: 5000 })
     // Still 20 Kalaw rows only: no Taunggyi row from the stale page,
     // and no append to 40.
     expect(screen.queryByText('Car Rental 1')).toBeNull() // row 1 is Taunggyi
@@ -292,14 +304,14 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     client.setQueryData(['category-map'], ALL_CATS)
     renderDirectory(client)
     await openCarRental()
-    expect(screen.getByText('20 / 173 · 12%')).toBeTruthy()
+    expect(screen.getByText('20 / 173')).toBeTruthy()
 
     mockDB.failPages = { 1: 1 }
     triggerSentinel()
     await waitFor(() => expect(screen.getByText('စာရင်း တစ်ချို့ တင်မရသေးပါ — အဟောင်းပြထားသည်')).toBeTruthy(), { timeout: 5000 })
     // Loaded rows stay; ring stays at the real 20 / 173.
     expect(screen.getByText('Car Rental 1')).toBeTruthy()
-    expect(screen.getByText('20 / 173 · 12%')).toBeTruthy()
+    expect(screen.getByText('20 / 173')).toBeTruthy()
     // The manual button survives ONLY as the retry control.
     expect(screen.getByText('ထပ်တင်ရန် (153 ကျန်)')).toBeTruthy()
     // The sentinel must not loop on the failing page.
@@ -310,7 +322,7 @@ describe('v9.35 (A) auto background loading — no tap', () => {
 
     // Retry from the amber strip: the page lands, strip + button go.
     fireEvent.click(screen.getByText('ပြန်ကြိုးစားမည်'))
-    await waitFor(() => expect(screen.getByText('40 / 173 · 23%')).toBeTruthy(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByText('40 / 173')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText('Car Rental 21')).toBeTruthy()
     expect(screen.queryByText('စာရင်း တစ်ချို့ တင်မရသေးပါ — အဟောင်းပြထားသည်')).toBeNull()
     expect(screen.queryByText(/ထပ်တင်ရန်/)).toBeNull()
@@ -331,7 +343,7 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     // its heading renders the raw name 'Heho', not 'ဟဲဟိုး'.)
     expect(headings()).toEqual(['တောင်ကြီး (7)', 'ကလော (7)', 'Heho (6)'])
     triggerSentinel()
-    await waitFor(() => expect(screen.getByText('40 / 173 · 23%')).toBeTruthy(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByText('40 / 173')).toBeTruthy(), { timeout: 5000 })
     // Pages 0+1: Taunggyi 14, Kalaw 13, Heho 13 — groups grow in place.
     // (Tie at 13 sorts by raw city code A-Z: 'Heho' before 'Kalaw'.)
     expect(headings()).toEqual(['တောင်ကြီး (14)', 'Heho (13)', 'ကလော (13)'])
@@ -351,14 +363,16 @@ describe('v9.35 (A) auto background loading — no tap', () => {
     fireEvent.click(screen.getByText('ကားငှားဝန်ဆောင်မှု'))
     await waitFor(() => expect(screen.getByRole('button', { name: /အားလုံး/ })).toBeTruthy(), { timeout: 5000 })
     fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
-    await waitFor(() => expect(screen.getByText('20 / 2186 · 1%')).toBeTruthy(), { timeout: 10000 })
+    await waitFor(() => expect(screen.getByText('20 / 2186')).toBeTruthy(), { timeout: 10000 })
+    expect(screen.getByText('1%').closest('[data-testid="load-ring"]')).toBeTruthy()
     // Only page 0 was ever requested — no page 1, 2, … storm, and no
     // attempt to fetch/render thousands of cards at once.
     expect(mockDB.listingsCalls.length).toBeGreaterThanOrEqual(1)
     expect(mockDB.listingsCalls.every(p => p === 0)).toBe(true)
     // The sentinel is the only thing that may fetch page 1.
     triggerSentinel()
-    await waitFor(() => expect(screen.getByText('40 / 2186 · 2%')).toBeTruthy(), { timeout: 10000 })
+    await waitFor(() => expect(screen.getByText('40 / 2186')).toBeTruthy(), { timeout: 10000 })
+    expect(screen.getByText('2%').closest('[data-testid="load-ring"]')).toBeTruthy()
     expect(mockDB.listingsCalls).toContain(1)
   }, 20000)
 })

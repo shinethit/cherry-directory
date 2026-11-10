@@ -6,8 +6,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import HomePage from './HomePage'
 import { yangonToday } from '../lib/myanmarDate'
 
-// v9.35 (D) — REVISED 2026-11-10 05:40 (replaces the discarded top-5
-// Hero strip: no per-sector rings in the Hero, it would get messy).
+// v9.36 — the number moves INSIDE the ring in all three places:
+// (D1) Hero total "2,186" is the ring's innerText (the separate <p>
+// below it is gone — exactly one "2,186" on the page, inside the
+// ring); (D2) every tile ring carries its count inside ('–' while
+// unknown, "0" for an empty category); the list ring's % is inside
+// (proved in DirectoryPage935.test.jsx). Ring fill, animation and
+// aria behaviour are unchanged from 9.35.
 // (D1) Hero: ONE ring with the TOTAL shop count (same ['home','counts']
 // value the old number line showed — no second total), animated
 // count-up on load, ending as a FULL ring + the final total, staying
@@ -140,7 +145,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('v9.35 (D1): Hero total ring', () => {
+describe('v9.36 (D1): Hero total ring — number INSIDE the circle', () => {
   it('shows ONE ring with the real total 2,186 — count-up ends on the final number, full ring, stays visible', async () => {
     mockFetchCategories.mockResolvedValue([
       { id: 'c1', listing_count: 173 },
@@ -158,6 +163,18 @@ describe('v9.35 (D1): Hero total ring', () => {
     // enough margin — the assertion itself is unchanged.
     await waitFor(() => expect(screen.getByText('2,186')).toBeTruthy(), { timeout: 10000 })
     expect(screen.getAllByText('2,186')).toHaveLength(1)
+    // v9.36: that one "2,186" is INSIDE the Hero ring (an SVG <text>
+    // in the load-ring), not in a separate <p> below it — the Hero
+    // stat box holds exactly one <p> now, the "လုပ်ငန်း" label.
+    const heroNumber = screen.getByText('2,186')
+    expect(heroNumber.closest('[data-testid="load-ring"]')).toBeTruthy()
+    const heroBox = screen.getAllByTestId('load-ring')[0].closest('.glass')
+    expect(heroBox.querySelectorAll('p')).toHaveLength(1)
+    expect(heroBox.querySelector('p').textContent).toBe('လုပ်ငန်း')
+    // The ring grew 40 → 64 so "2,186" fits inside it, and the stat
+    // column widened 70 → 88px to hold it.
+    expect(screen.getAllByTestId('load-ring')[0].querySelector('svg').getAttribute('width')).toBe('64')
+    expect(screen.getAllByTestId('load-ring')[0].parentElement.parentElement.className).toContain('w-[88px]')
 
     // The Hero ring is the first load-ring: full (100) once loaded,
     // and it does NOT disappear — it is still in the document after
@@ -173,8 +190,8 @@ describe('v9.35 (D1): Hero total ring', () => {
   }, 30000)
 })
 
-describe('v9.35 (D2): category tile rings', () => {
-  it('every tile — including a newly added category — renders a ring + real count, fill proportional to the largest', async () => {
+describe('v9.36 (D2): category tile rings — count INSIDE the circle', () => {
+  it('every tile — including a newly added category — renders a ring + real count, full once loaded', async () => {
     mockFetchCategories.mockResolvedValue([
       { id: 'c1', listing_count: 173 },
       { id: 'c2', listing_count: 50 },
@@ -191,12 +208,21 @@ describe('v9.35 (D2): category tile rings', () => {
     expect(screen.getByText('90 လုပ်ငန်း')).toBeTruthy()
     const newTile = screen.getByText('အသစ် စက်').closest('button')
     expect(newTile.querySelector('[data-testid="load-ring"]')).toBeTruthy()
+    // v9.36: each count is INSIDE its tile's ring as well as below it.
+    expect(screen.getByText('173').closest('[data-testid="load-ring"]')).toBeTruthy()
+    expect(screen.getByText('50').closest('[data-testid="load-ring"]')).toBeTruthy()
+    expect(screen.getByText('90').closest('[data-testid="load-ring"]')).toBeTruthy()
+    expect(tileRing('အစား').textContent).toContain('173')
+    expect(tileRing('အသစ် စက်').textContent).toContain('90')
+    expect(tileRing('ကားဆိုင်').textContent).toContain('50')
 
-    // Fill is relative to the largest (173 = full ring): 90 → 52%,
-    // 50 → 29%. The largest tile itself is full.
+    // Fill is loaded-vs-waiting (v9.36 rule, corrected 2026-11-10):
+    // EVERY loaded tile is a full ring — the old 100/52/29
+    // relative-to-largest fill is gone. The number inside the ring
+    // carries the size (173 vs 90 vs 50).
     expect(tileRing('အစား').getAttribute('aria-valuenow')).toBe('100')
-    expect(tileRing('အသစ် စက်').getAttribute('aria-valuenow')).toBe('52')
-    expect(tileRing('ကားဆိုင်').getAttribute('aria-valuenow')).toBe('29')
+    expect(tileRing('အသစ် စက်').getAttribute('aria-valuenow')).toBe('100')
+    expect(tileRing('ကားဆိုင်').getAttribute('aria-valuenow')).toBe('100')
     // Rings never auto-hide: all three are still present.
     expect(screen.getAllByTestId('load-ring')).toHaveLength(4)
   }, 20000)
@@ -207,7 +233,14 @@ describe('v9.35 (D2): category tile rings', () => {
     seedClient(client)
     renderHome(client)
 
-    await waitFor(() => expect(screen.getAllByText('–')).toHaveLength(3), { timeout: 5000 })
+    await waitFor(() => expect(screen.getAllByText('–')).toHaveLength(6), { timeout: 5000 })
+    // v9.36: '–' appears twice per tile while waiting — once INSIDE
+    // the ring and once below it (3 tiles × 2). The Hero total ring
+    // is separate: its total comes from the seeded counts, so it is
+    // already full with "2,186" inside.
+    expect(tileRing('အစား').textContent).toContain('–')
+    expect(tileRing('ကားဆိုင်').textContent).toContain('–')
+    expect(tileRing('အသစ် စက်').textContent).toContain('–')
     // Every tile ring is present but empty (0%) — you can tell which
     // categories are still waiting. The Hero total ring is separate:
     // its total comes from the seeded counts, so it is already full.
@@ -218,6 +251,36 @@ describe('v9.35 (D2): category tile rings', () => {
     expect(tileRing('ကားဆိုင်').getAttribute('aria-valuenow')).toBe('0')
     expect(tileRing('အသစ် စက်').getAttribute('aria-valuenow')).toBe('0')
     expect(screen.queryByText('173 လုပ်ငန်း')).toBeNull()
+  }, 20000)
+
+  it('empty and unknown tiles: 0-count ring shows "0" inside with "မရှိသေး" below; unknown ring shows "–" inside', async () => {
+    mockFetchCategories.mockResolvedValue([
+      { id: 'c1', listing_count: 0 },
+      { id: 'c2', listing_count: null },
+      { id: 'c3', listing_count: 173 },
+    ])
+    const client = makeClient()
+    seedClient(client)
+    renderHome(client)
+
+    await waitFor(() => expect(screen.getByText('မရှိသေး')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.getByText('173 လုပ်ငန်း')).toBeTruthy()
+    // Wait out the Hero count-up first: while it is still running the
+    // Hero ring itself shows "0" inside, which would make getByText('0')
+    // ambiguous with the tile's "0".
+    await waitFor(() => expect(screen.getByText('2,186')).toBeTruthy(), { timeout: 10000 })
+    // 0-count: "0" inside the ring, "မရှိသေး" below it (9.31 wording).
+    expect(screen.getByText('0').closest('[data-testid="load-ring"]')).toBeTruthy()
+    expect(tileRing('အစား').textContent).toContain('0')
+    // Unknown count: '–' inside the ring and '–' below it — 2 total.
+    expect(tileRing('ကားဆိုင်').textContent).toContain('–')
+    expect(screen.getAllByText('–')).toHaveLength(2)
+    // Fill still loaded-vs-waiting: the arrived tiles (0 and 173)
+    // are full rings — a 0 count is a loaded answer, not waiting —
+    // and the unknown tile is empty.
+    expect(tileRing('အစား').getAttribute('aria-valuenow')).toBe('100')
+    expect(tileRing('ကားဆိုင်').getAttribute('aria-valuenow')).toBe('0')
+    expect(tileRing('အသစ် စက်').getAttribute('aria-valuenow')).toBe('100')
   }, 20000)
 
   it('no page overflow at 360px: 4-col grid, min-w-0 tiles, small fixed rings', async () => {
@@ -243,5 +306,13 @@ describe('v9.35 (D2): category tile rings', () => {
     const ringSvg = tile.querySelector('[data-testid="load-ring"] svg')
     expect(ringSvg.getAttribute('width')).toBe('30')
     expect(container.querySelectorAll('.grid-cols-4 button').length).toBe(3)
+    // v9.36: the widened Hero stat column (88px, 64px ring) still fits
+    // the 360px Hero — the column is a fixed width with a shrinking
+    // title side (min-w-0), and the count-up total sits inside the ring.
+    await waitFor(() => expect(screen.getByText('2,186')).toBeTruthy(), { timeout: 10000 })
+    const heroRing = screen.getAllByTestId('load-ring')[0]
+    expect(heroRing.querySelector('svg').getAttribute('width')).toBe('64')
+    expect(heroRing.parentElement.parentElement.className).toContain('w-[88px]')
+    expect(screen.getByText('2,186').closest('[data-testid="load-ring"]')).toBeTruthy()
   }, 20000)
 })
