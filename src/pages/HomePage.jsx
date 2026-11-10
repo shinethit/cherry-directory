@@ -10,6 +10,7 @@ import { useLang } from '../contexts/LangContext';
 import { useAuth } from '../contexts/AuthContext';
 import SplashScreen from '../components/SplashScreen';
 import LoadProgress from '../components/LoadProgress';
+import LoadRing from '../components/LoadRing';
 import ShareButton from '../components/ShareButton';
 import { usePWA } from '../hooks/usePWA'
 import { yangonToday, formatMyanmarDateTime, mmtParts, MY_MONTHS } from '../lib/myanmarDate';
@@ -29,7 +30,6 @@ import { APP_VERSION } from '../lib/appVersion';
 export const LOAD_TIMEOUT_MS = 30000;
 
 // Helper: country code → full name
-
 
 // Shimmer skeleton component
 const ShimmerSkeleton = ({ className }) => (
@@ -56,6 +56,42 @@ const StaleStrip = ({ onRetry }) => (
     <button onClick={onRetry} className="text-xs text-amber-200 font-myanmar underline flex-shrink-0 min-h-[32px] px-2">ပြန်ကြိုးစားမည်</button>
   </div>
 );
+
+// v9.35 (D1): animated count-up for the Hero total ring — counts
+// 0 → target over ~900ms on load (ease-out cubic), ending on the
+// exact final total. A null/0 target shows 0 (the caller shows '…'
+// or '—' instead while loading / on error).
+function useCountUp(target) {
+  const [value, setValue] = useState(0)
+  useEffect(() => {
+    if (!target) { setValue(0); return }
+    let raf = 0
+    let finished = false
+    const start = performance.now()
+    const tick = (now) => {
+      if (finished) return
+      const p = Math.min(1, (now - start) / 900)
+      setValue(Math.round(target * (1 - Math.pow(1 - p, 3))))
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    // v9.35 (D1) fallback: rAF can stall on a heavily loaded machine
+    // (jsdom rAF is timer-based), so the count-up might never land on
+    // the exact final number. Guarantee the end state with a timeout
+    // that sets the final value unconditionally AND stops the rAF
+    // chain — without the stop, a starved rAF tick arriving late with
+    // p < 1 would overwrite the final value with a smaller one and the
+    // number would jump backwards after landing. If rAF already
+    // finished this is a no-op (same value). Cleared on cleanup.
+    const done = setTimeout(() => {
+      finished = true
+      cancelAnimationFrame(raf)
+      setValue(target)
+    }, 950)
+    return () => { finished = true; cancelAnimationFrame(raf); clearTimeout(done) }
+  }, [target])
+  return value
+}
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -124,6 +160,15 @@ export default function HomePage() {
     enabled: consentGiven,
   });
   const categoryCountById = new Map((categoryCountsQ.data ?? []).map(c => [c.id, c.listing_count]));
+  // v9.35 (D2): largest top-level category count — every tile ring's
+  // fill is relative to this (largest = full ring). 0 while the
+  // counts have not arrived, so every ring stays visibly empty
+  // (still waiting) until then. Driven entirely by the live
+  // ['categories'] data — a category added later gets its ring
+  // automatically, nothing is hardcoded.
+  const maxCategoryCount = Math.max(0, ...((categoryCountsQ.data ?? [])
+    .filter(c => !c.parent_id && typeof c.listing_count === 'number')
+    .map(c => c.listing_count)));
   const countsQ = useQuery({
     queryKey: ['home', 'counts'],
     queryFn: async () => {
@@ -174,6 +219,9 @@ export default function HomePage() {
   const stats = countsQ.isError
     ? { listings: null, posts: null }
     : (countsQ.data ?? { listings: 0, posts: 0 });
+  // v9.35 (D1): Hero total ring count-up — animates 0 → the real
+  // total on load, ending on the exact final number.
+  const totalCountUp = useCountUp(stats.listings ?? 0);
   // Any section still waiting on its FIRST fetch (no cached data yet).
   const loading = postsQ.isLoading || featuredQ.isLoading || categoriesQ.isLoading
     || countsQ.isLoading || eventsQ.isLoading || quickLinksQ.isLoading;
@@ -517,8 +565,16 @@ export default function HomePage() {
 
             {/* RIGHT: Vertical stats — 1 col x 3 rows */}
             <div className="flex flex-col gap-1.5 flex-shrink-0 w-[70px]">
-              <div className="glass rounded-lg px-2 py-1.5 text-center">
-                <p className="font-display font-bold text-sm text-white leading-none">{countsQ.isLoading ? '…' : stats.listings == null ? '—' : stats.listings.toLocaleString()}</p>
+              {/* v9.35 (D1): Hero total ring — the ONE ring in the Hero,
+                  with the TOTAL shop count (same ['home','counts'] value
+                  the old number line showed — no second total fetched,
+                  no second total displayed). done = total so the ring
+                  ends FULL; the count counts up 0 → final on load and
+                  the ring + number stay visible permanently, never
+                  auto-hide. While loading the ring stays empty ('…'). */}
+              <div className="glass rounded-lg px-2 py-1.5 text-center flex flex-col items-center gap-1">
+                <LoadRing done={stats.listings ?? 0} total={stats.listings ?? 0} size={40} text={false} />
+                <p className="font-display font-bold text-sm text-white leading-none">{countsQ.isLoading ? '…' : stats.listings == null ? '—' : totalCountUp.toLocaleString()}</p>
                 <p className="text-[8px] text-white/60 mt-0.5 leading-tight">{lang === 'mm' ? 'လုပ်ငန်း' : 'Listings'}</p>
               </div>
               <div className="glass rounded-lg px-2 py-1.5 text-center">
@@ -753,6 +809,19 @@ export default function HomePage() {
                 >
                   <span className="text-xl">{cat.icon}</span>
                   <span className="text-[9px] text-white/60 text-center leading-tight font-myanmar line-clamp-2">{lang === 'mm' ? (cat.name_mm || cat.name) : cat.name}</span>
+                  {/* v9.35 (D2): small ring + real count on EVERY tile —
+                      the same shared LoadRing as the list ring and the
+                      Hero total ring. Fill is this tile's count relative
+                      to the largest category (maxCategoryCount); the ring
+                      never auto-hides. While a tile's count has not
+                      arrived (count null, or max still 0) the ring stays
+                      visibly empty — "still waiting" — and animates to
+                      its true fill when the counts land. Driven entirely
+                      by the live categories data: a category added later
+                      renders its tile + ring from this same map, no
+                      hardcoded list. The count text below stays as the
+                      9.31 wording ('–' / 'မရှိသေး' / 'N လုပ်ငန်း'). */}
+                  <LoadRing done={count ?? 0} total={maxCategoryCount} size={30} text={false} />
                   <span className="text-[9px] text-white/40 text-center leading-tight font-myanmar truncate w-full">{countText}</span>
                 </button>
               );

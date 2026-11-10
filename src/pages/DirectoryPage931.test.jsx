@@ -1,10 +1,28 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { LangProvider } from '../contexts/LangContext'
 import DirectoryPage from './DirectoryPage'
+
+// v9.35 (A): the manual "ထပ်တင်ရန်" button is gone from the normal
+// path — pages now load themselves via an IntersectionObserver
+// sentinel. This file's load-more test keeps its assertion (page-1
+// appends on top of page 0) and triggers the sentinel instead of
+// tapping the retired button. jsdom has no IntersectionObserver, so
+// the mock below records every instance's callback.
+const ioCallbacks = []
+class MockIntersectionObserver {
+  constructor(cb) { this.cb = cb; ioCallbacks.push(cb) }
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
+function triggerSentinel() {
+  act(() => { for (const cb of [...ioCallbacks]) cb([{ isIntersecting: true }]) })
+}
 
 // v9.31 (B): "173 count but 0 results". The listings apply effect used
 // to dedupe by filterKey+page (appliedKeyRef): a background refetch
@@ -172,6 +190,7 @@ async function expectRefetchApplied(rows) {
 
 beforeEach(() => {
   cleanup()
+  ioCallbacks.length = 0
   mockFetchCategories.mockReset()
   mockFetchCategories.mockResolvedValue([CAR_CAT])
   mockDB.cats = [CAR_CAT, SUB_CAT]
@@ -217,7 +236,9 @@ describe('v9.31 (B) stale cached 0 must not swallow the refetch', () => {
     await tapDirectListings()
     await expectRefetchApplied(page0)
 
-    fireEvent.click(screen.getByRole('button', { name: /ထပ်တင်ရန်/ }))
+    // v9.35 (A): no tap — the sentinel intersection loads page 1.
+    // Assertion unchanged: page-1 rows append, page-0 rows stay.
+    triggerSentinel()
     await waitFor(() => expect(screen.getByText(page1[0].name_mm)).toBeTruthy(), { timeout: 5000 })
     // Page-0 rows stay (append, not replace) and the count stays 173.
     for (const row of page0) {

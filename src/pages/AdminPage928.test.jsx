@@ -334,7 +334,7 @@ describe('v9.28 source guards: isAdmin gates, version + changelog', () => {
   })
 
   it('package.json is 9.28 and the 9.28 changelog entry has zero "Admin"', () => {
-    expect(pkg.version).toBe('9.34')
+    expect(pkg.version).toBe('9.35')
     const entry = headerSrc.split("{ v: '9.28'")[1].split('},')[0]
     expect(entry).toBeTruthy()
     expect(entry.toLowerCase()).not.toContain('admin')

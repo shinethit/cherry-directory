@@ -11,6 +11,11 @@ import { collectDescendantIds, resolveListingCategoryIds } from '../lib/category
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
 import { buildOrFilter } from '../lib/myanmarSearch'
+import LoadRing from '../components/LoadRing'
+// v9.35: the list ring is the shared LoadRing (also used by the Home
+// Hero top-5 strip) — kept re-exported under its old name so existing
+// imports keep working.
+export { LoadRing as DirectoryLoadRing }
 
 // v9.30: group the LOADED listings by town for the Directory page.
 // Grouping is over the loaded rows only — NOT the whole DB: a town's
@@ -63,6 +68,17 @@ export default function DirectoryPage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [listingsError, setListingsError] = useState(false)
+  // v9.35: a background page (page > 0) failed — the loaded rows stay
+  // and the retry affordance shows; the sentinel must not auto-advance
+  // past the failed page (it would re-fire the same failing fetch in
+  // a loop). Cleared on a successful page apply, on retry, and on any
+  // filter change. Page-0 failures keep the existing full error card
+  // (listings.length === 0) and never set this.
+  const [pageFailed, setPageFailed] = useState(false)
+  // v9.35: IntersectionObserver sentinel for auto background loading
+  // (no tap). One page in flight at a time — the observer only
+  // advances when nothing is fetching.
+  const sentinelRef = useRef(null)
   const [categoryError, setCategoryError] = useState(false)
   // Pagination is driven ONLY by the effect below (see listings query).
   const pageRef = useRef(0)
@@ -592,7 +608,7 @@ export default function DirectoryPage() {
   const filterKey = selectedSubcategory ? `${selectedSubcategory.id}|${listingCategoryIdsKey}|${city}|${verifiedOnly}|${q}|${sort}` : ''
   const { data: listingsData, isLoading: listingsQueryLoading, isFetching: listingsQueryFetching, isError: listingsQueryError, refetch: refetchListings } = useQuery({
     queryKey: ['listings', 'directory', selectedSubcategory?.id, listingCategoryIdsKey, city, verifiedOnly, q, sort, page, featuredOnly],
-    queryFn: async ({ queryKey: [, , subId, idsKey, cityF, verifiedF, qF, sortF, pageF, featuredF] }) => {
+    queryFn: async ({ queryKey: [, , subId, idsKey, cityF, verifiedF, qF, sortF, pageF, featuredF], signal }) => {
       let query = supabase
         .from('listings')
         .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
@@ -620,6 +636,13 @@ export default function DirectoryPage() {
       }
       if (cityF !== 'All') query = query.eq('city', cityF)
       if (verifiedF) query = query.eq('is_verified', true)
+
+      // v9.35: abort the in-flight fetch when the filter/sort/category
+      // changes (React Query hands the new key's signal here) — the old
+      // page's late response must never land on the new filter's list.
+      // The apply effect's page guard below is the second line of
+      // defence for a response that already resolved.
+      query = query.abortSignal(signal)
 
       // A hung query used to spin the skeletons forever with no retry.
       const { data, count, error } = await withTimeout(query, LOAD_TIMEOUT_MS, 'Directory listings')
@@ -655,6 +678,10 @@ export default function DirectoryPage() {
     if (listingsData.page !== page) return
     if (appliedDataRef.current === listingsData) return
     appliedDataRef.current = listingsData
+    // v9.35: a page landed — any earlier background-page failure is
+    // over (the retry worked, or the sentinel moved on), so the amber
+    // strip + retry button go away.
+    setPageFailed(false)
     if (listingsData.page === 0 || lastFilterKeyRef.current !== listingsData.filterKey) {
       lastFilterKeyRef.current = listingsData.filterKey
       setListings(listingsData.rows)
@@ -674,21 +701,68 @@ export default function DirectoryPage() {
 
   // A filter change resets to page 0 — otherwise the query would fetch
   // page N of the new filter and the list would start mid-way.
+  // v9.35: the reset also clears the old rows + total (so the ring
+  // restarts from the new filter's counts instead of showing the old
+  // filter's numbers), drops any failed-page state, and forgets the
+  // applied data object so the new page 0 always applies.
   const filterKeyStateRef = useRef('')
   useEffect(() => {
     if (!selectedSubcategory) return
     if (filterKeyStateRef.current && filterKeyStateRef.current !== filterKey) {
       pageRef.current = 0
       setPage(0)
+      setListings([])
+      setTotal(0)
+      setPageFailed(false)
+      appliedDataRef.current = null
+      lastFilterKeyRef.current = ''
     }
     filterKeyStateRef.current = filterKey
   }, [filterKey, selectedSubcategory])
+
+  // v9.35: a background page (page > 0) failed while rows are already
+  // on screen — mark it failed (amber strip + retry) instead of
+  // letting the full error card replace the list. Page-0 failures
+  // (no rows yet) keep the existing card and never set this.
+  useEffect(() => {
+    if (listingsQueryError && page > 0 && listings.length > 0) setPageFailed(true)
+  }, [listingsQueryError, page, listings.length])
+
+  // v9.35: AUTO background loading — no tap. An IntersectionObserver
+  // watches a sentinel just past the last card; a generous 800px
+  // rootMargin prefetches the next page BEFORE the user reaches the
+  // bottom, so the list grows by itself as they scroll. Sequential
+  // only: one page in flight at a time (guarded by
+  // listingsQueryFetching), never a parallel page storm, and never a
+  // fetch-all — only the next page is requested, so a 2,186-row
+  // "အားလုံး" list still fetches page 0 only until the user scrolls.
+  // The pageRef guard stops a double-fire in the same tick (the
+  // observer can fire again before setPage re-renders): advance only
+  // when pageRef still equals the rendered page. A failed page blocks
+  // auto-advance until the user retries — the sentinel never loops
+  // on a failing fetch.
+  const hasMore = total > 0 && listings.length < total
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !selectedSubcategory) return
+    if (typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some(e => e.isIntersecting)) return
+      if (!hasMore || pageFailed || listingsQueryError || listingsQueryFetching) return
+      if (pageRef.current !== page) return
+      pageRef.current += 1
+      setPage(pageRef.current)
+    }, { rootMargin: '800px 0px' })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [hasMore, pageFailed, listingsQueryError, listingsQueryFetching, page, selectedSubcategory])
 
   // Clear the list when no subcategory is selected.
   useEffect(() => {
     if (!selectedSubcategory) {
       setListings([])
       setTotal(0)
+      setPageFailed(false)
       appliedDataRef.current = null
       lastFilterKeyRef.current = ''
     }
@@ -1061,6 +1135,18 @@ export default function DirectoryPage() {
         </div>
       </div>
 
+      {/* v9.35: circular load progress ring, directly under the sticky
+          header at the top of the list area. Real counts only
+          (loaded rows / query total); it stays visible permanently —
+          at 100% it shows a full ring + the final count, never
+          disappearing. Hidden only before the first page lands
+          (total unknown yet). */}
+      {total > 0 && (
+        <div className="px-4 pt-2">
+          <LoadRing done={listings.length} total={total} />
+        </div>
+      )}
+
       {/* Results count */}
       <div className="px-4 py-2 flex items-center justify-between flex-wrap gap-1">
         <p className="text-[11px] text-white/60">
@@ -1079,10 +1165,30 @@ export default function DirectoryPage() {
 
       {/* Listings */}
       <div className="px-4 space-y-2 pb-8">
-        {listingsError && (
+        {/* v9.25 regen #2: the full error card is for page 0 only (no
+            rows yet). A failed BACKGROUND page (rows already on
+            screen) keeps the rows and shows the amber strip below
+            instead — never a full-page error for a failed page. */}
+        {listingsError && listings.length === 0 && (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
-            <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်{listings.length > 0 ? ' — အဟောင်းများကို ပြထားသည်' : ''}</p>
+            <p className="text-sm text-red-400 font-myanmar">Data တင်ရာတွင် အမှားဖြစ်သွားသည်</p>
             <button onClick={() => refetchListings()} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+          </div>
+        )}
+        {/* v9.35: failed background page — loaded rows stay, amber
+            strip + retry (same 9.25 pattern as the category levels).
+            The strip's retry refetches the SAME failed page; on
+            success the apply effect clears pageFailed and the
+            sentinel resumes auto-loading. */}
+        {pageFailed && listings.length > 0 && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-center justify-between gap-2">
+            <p className="text-xs text-amber-300 font-myanmar">စာရင်း တစ်ချို့ တင်မရသေးပါ — အဟောင်းပြထားသည်</p>
+            <button
+              onClick={() => { setPageFailed(false); refetchListings() }}
+              className="text-xs text-amber-200 underline font-myanmar flex-shrink-0"
+            >
+              ပြန်ကြိုးစားမည်
+            </button>
           </div>
         )}
         {listingsLoading && listings.length === 0
@@ -1102,13 +1208,25 @@ export default function DirectoryPage() {
           : listings.map(l => <ListingCard key={l.id} listing={l} bookmarked={bookmarkedSet?.has?.(l.id)} />)
         }
 
-        {listings.length < total && !listingsLoading && (
+        {/* v9.35: the manual "ထပ်တင်ရန်" button survives ONLY as the
+            retry control for a failed background page — normal loading
+            is automatic via the sentinel below, no tap required. */}
+        {pageFailed && listings.length < total && (
           <button
-            onClick={() => { pageRef.current += 1; setPage(pageRef.current) }}
+            onClick={() => { setPageFailed(false); refetchListings() }}
             className="w-full btn-ghost text-sm mt-2"
           >
             ထပ်တင်ရန် ({total - listings.length} ကျန်)
           </button>
+        )}
+        {/* v9.35: auto-load sentinel — the observer (above) watches
+            this element and prefetches the next page 800px before the
+            user reaches it. While a background page is fetching, a
+            small line shows under the list; the ring at the top of
+            the list area carries the real X / total · Y%. */}
+        <div ref={sentinelRef} data-testid="load-more-sentinel" aria-hidden="true" className="h-1" />
+        {hasMore && listingsQueryFetching && !pageFailed && (
+          <p className="text-center text-[11px] text-white/50 font-myanmar py-2">တင်နေသည်…</p>
         )}
       </div>
     </div>

@@ -9,5 +9,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.{js,jsx}'],
+    // Slow Windows machine: hooks timed out at the 10s default
+    // (App925slow + AuthContext926). Timeout only — no assertion weakened.
+    hookTimeout: 30000,
   },
 })
