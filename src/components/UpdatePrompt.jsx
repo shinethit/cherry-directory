@@ -77,7 +77,7 @@ function isDismissalActive(raw, serverVersion) {
 }
 
 export default function UpdatePrompt() {
-  const { updateAvailable, updating, applyUpdate, serverVersion } = useServiceWorker()
+  const { updateAvailable, updating, applyUpdate, serverVersion, serverChanges } = useServiceWorker()
   const [dismissed, setDismissed] = useState(() => isDismissalActive(safeGet(DISMISSED_KEY), serverVersion))
   // v9.26: while a long task (e.g. a CSV import) is running, the
   // "ပြန်ဖွင့်မည်" button must not reload — a reload would wipe the
@@ -170,13 +170,40 @@ export default function UpdatePrompt() {
 
   if (!shown) return null
 
+  // v9.39: FULL new-version change log (cross-app rule, NgweSarYin
+  // v7.5.76 pattern) — the prompt shows every change in the new
+  // version ALL AT ONCE, not one generic line. UpdatePrompt lives
+  // OUTSIDE LangProvider (main.jsx renders it as a sibling of
+  // <App/>), so useLang would throw here — read the stored language
+  // directly instead. Without a server log (older server, mocked
+  // hook), the previous generic line is the fallback.
+  const lang = safeGet('cd_lang') || 'mm'
+  const changes = serverChanges && (lang === 'en' && serverChanges.changesEn?.length
+    ? serverChanges.changesEn
+    : serverChanges.changesMy?.length ? serverChanges.changesMy : serverChanges.changesEn)
+
   return (
     <div className="fixed left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-sm z-[100]" style={{ bottom: 'calc(var(--nav-h) + env(safe-area-inset-bottom) + 5rem)' }}>
-      <div className="bg-[#1a0028]/95 backdrop-blur-md border border-brand-400/20 rounded-2xl p-3 shadow-xl shadow-black/40 flex items-center gap-3">
+      <div className="bg-[#1a0028]/95 backdrop-blur-md border border-brand-400/20 rounded-2xl p-3 shadow-xl shadow-black/40">
+        {changes && (
+          <div className="mb-2">
+            <p className="text-xs font-bold text-white font-myanmar">ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့</p>
+            <ul className="space-y-1 mt-1 max-h-48 overflow-y-auto pr-1">
+              {changes.map((item, i) => (
+                <li key={i} className="text-[11px] text-white/80 font-myanmar flex items-start gap-2">
+                  <span className="text-brand-400 mt-0.5">•</span> {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="flex items-center gap-3">
         <span className="text-2xl flex-shrink-0">🍒</span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-display font-bold text-white leading-tight">အသစ်ထွက်ပြီ</p>
-          <p className="text-[10px] text-white/50 font-myanmar">{longTaskBusy ? 'လက်ရှိ လုပ်ငန်း ပြီးသွားမှ အပ်ဒိတ် အလိုအလျောက် ပြောင်းသွားမည်' : 'Version အသစ် ရနေပြီ — ပြန်ဖွင့်ပြီး အပ်ဒိတ်လုပ်မည်'}</p>
+          {!changes && (
+            <p className="text-[10px] text-white/50 font-myanmar">{longTaskBusy ? 'လက်ရှိ လုပ်ငန်း ပြီးသွားမှ အပ်ဒိတ် အလိုအလျောက် ပြောင်းသွားမည်' : 'Version အသစ် ရနေပြီ — ပြန်ဖွင့်ပြီး အပ်ဒိတ်လုပ်မည်'}</p>
+          )}
         </div>
         <button
           onClick={handleApply}
@@ -192,6 +219,7 @@ export default function UpdatePrompt() {
         >
           <X size={13} className="text-white/50" />
         </button>
+        </div>
       </div>
     </div>
   )

@@ -209,6 +209,15 @@ export default function DirectoryPage() {
     if (categories.length > 0) categoriesLoadedRef.current = true
   }, [categories])
 
+  // v9.39: mirrors of the current selection for directNavigate below.
+  // Its effect deps are [urlCatId, categories.length], so its closure
+  // cannot see the current selection — these refs (updated by effects
+  // declared BEFORE it, so they run first in every flush) let it tell
+  // an in-app tap's ?cat= change (selection already correct) from a
+  // real deep link / browser-Back navigation (selection must change).
+  const selectedSubcategoryRef = useRef(null)
+  useEffect(() => { selectedSubcategoryRef.current = selectedSubcategory }, [selectedSubcategory])
+
   // Single-pass: fetch target category + its listings directly
   useEffect(() => {
     if (!urlCatId) return
@@ -246,6 +255,23 @@ export default function DirectoryPage() {
         const mapRows = queryClient.getQueryData(['category-map']) || []
         const mapTarget = mapRows.find(c => String(c.id) === String(urlCatId))
         if (mapTarget) {
+          // v9.39: the ?cat= change may come from an IN-APP tap —
+          // handleSubcategorySelect / handleDirectListings set the
+          // same param after already setting the selection. Re-setting
+          // the same subcategory (a NEW object) + setPage(0) here
+          // undid the v9.39 cache hydration: the apply effect
+          // re-applied page 0 as REPLACE and the list climbed from 20
+          // again. Skip the whole block when the target is already
+          // selected — a real deep link or browser-Back navigation
+          // always lands on a different selection, so it still
+          // resolves. NOTE: for a TOP-LEVEL target, skip ONLY when
+          // already viewing its direct list — tapping the category
+          // itself must still run, because this block is what decides
+          // picker vs direct listings for it.
+          const alreadyThere = mapTarget.parent_id
+            ? String(selectedSubcategoryRef.current?.id ?? '') === String(mapTarget.id)
+            : (selectedSubcategoryRef.current?.is_direct && String(selectedSubcategoryRef.current?.id ?? '') === String(mapTarget.id))
+          if (alreadyThere) return
           if (mapTarget.parent_id) {
             const parent = mapRows.find(c => c.id === mapTarget.parent_id)
               || cachedCats.find(c => c.id === mapTarget.parent_id)
@@ -333,15 +359,19 @@ export default function DirectoryPage() {
             setSelectedCategory(cachedTarget)
             if (childCount === 0) {
               // No children → show listings directly
-              setSelectedSubcategory({
-                id: cachedTarget.id,
-                icon: cachedTarget.icon,
-                name_mm: cachedTarget.name_mm,
-                name: cachedTarget.name,
-                is_direct: true,
-              })
-              pageRef.current = 0
-              setPage(0)
+              // v9.39: skip when already viewing this direct list —
+              // the reset below would undo the cache hydration.
+              if (!(selectedSubcategoryRef.current?.is_direct && String(selectedSubcategoryRef.current?.id ?? '') === String(cachedTarget.id))) {
+                setSelectedSubcategory({
+                  id: cachedTarget.id,
+                  icon: cachedTarget.icon,
+                  name_mm: cachedTarget.name_mm,
+                  name: cachedTarget.name,
+                  is_direct: true,
+                })
+                pageRef.current = 0
+                setPage(0)
+              }
             }
             // If it has children (or the count is unknown), the
             // subcategory picker will show
@@ -382,10 +412,15 @@ export default function DirectoryPage() {
             parent = parentRow
           }
           if (!parent) return
-          setSelectedCategory(parent)
-          setSelectedSubcategory(target)
-          pageRef.current = 0
-          setPage(0)
+          // v9.39: skip when this subcategory is already selected —
+          // re-setting it (new object) + setPage(0) would undo the
+          // cache hydration (see the map-first guard above).
+          if (String(selectedSubcategoryRef.current?.id ?? '') !== String(target.id)) {
+            setSelectedCategory(parent)
+            setSelectedSubcategory(target)
+            pageRef.current = 0
+            setPage(0)
+          }
         } else {
           // Top-level → check if it has children
           const { count, error: countError } = await withTimeout(supabase
@@ -402,15 +437,19 @@ export default function DirectoryPage() {
           // listings. loadSubcategories has its own error state.
           if (!countError && (count || 0) === 0) {
             // No children → show listings directly
-            setSelectedSubcategory({
-              id: target.id,
-              icon: target.icon,
-              name_mm: target.name_mm,
-              name: target.name,
-              is_direct: true,
-            })
-            pageRef.current = 0
-            setPage(0)
+            // v9.39: skip when already viewing this direct list (see
+            // the map-first guard above).
+            if (!(selectedSubcategoryRef.current?.is_direct && String(selectedSubcategoryRef.current?.id ?? '') === String(target.id))) {
+              setSelectedSubcategory({
+                id: target.id,
+                icon: target.icon,
+                name_mm: target.name_mm,
+                name: target.name,
+                is_direct: true,
+              })
+              pageRef.current = 0
+              setPage(0)
+            }
           }
           // If has children, subcategory picker will show
         }
@@ -722,20 +761,87 @@ export default function DirectoryPage() {
   // restarts from the new filter's counts instead of showing the old
   // filter's numbers), drops any failed-page state, and forgets the
   // applied data object so the new page 0 always applies.
+  // v9.39: only wipe the list when the applied data is NOT already for
+  // the NEW filter. On a warm in-place switch the apply effect above
+  // (declared first, so it runs first in this commit) has already
+  // applied the new filter's cached page 0 — wiping it strands the
+  // list at "0 ရလဒ်" and the apply effect never re-runs (same cached
+  // object, same page 0). When the new data is NOT cached,
+  // appliedDataRef still holds the OLD filter's data (or null), so the
+  // wipe still runs and the cold switch shows skeletons, then the new
+  // rows. lastFilterKeyRef must NOT be cleared when the wipe is
+  // skipped — the apply effect already set it to the new filter, and
+  // clearing it would make the next page REPLACE the list instead of
+  // appending. The page/pageRef reset stays unconditional (the new
+  // filter always starts at page 0; hydration below moves it on).
   const filterKeyStateRef = useRef('')
   useEffect(() => {
     if (!selectedSubcategory) return
     if (filterKeyStateRef.current && filterKeyStateRef.current !== filterKey) {
       pageRef.current = 0
       setPage(0)
-      setListings([])
-      setTotal(0)
+      if (appliedDataRef.current?.filterKey !== filterKey) {
+        setListings([])
+        setTotal(0)
+        appliedDataRef.current = null
+        lastPageRowCountRef.current = PAGE_SIZE
+        lastFilterKeyRef.current = ''
+      }
       setPageFailed(false)
-      appliedDataRef.current = null
-      lastPageRowCountRef.current = PAGE_SIZE
-      lastFilterKeyRef.current = ''
     }
     filterKeyStateRef.current = filterKey
+  }, [filterKey, selectedSubcategory])
+
+  // v9.39: HYDRATE FROM CACHE ON ENTRY. When the query cache already
+  // holds pages for the current filter, show the FULL list at once —
+  // the Home tile already shows 172/172 outside, so inside must not
+  // climb 20 → 40 → … → 172. The background refetch still runs
+  // quietly (staleTime 0) to pick up changes, but it no longer gates
+  // the display. ONE update (one setListings + setTotal + setPage):
+  // advancing page-by-page through cached pages in one flush would
+  // trip React's "Maximum update depth exceeded" cap on long chains
+  // (the 110-page All list: 110 pages × ~4 setStates = 440). Only
+  // CONTIGUOUS pages from page 0 count — a gap means the chain
+  // fetches the rest. Runs once per filterKey (hydratedFilterKeyRef);
+  // declared AFTER the reset effect so a wipe in the same commit
+  // happens first and this overwrites it with the cached rows. The
+  // chain continues from the last hydrated page (appliedDataRef /
+  // pageRef / lastPageRowCountRef are set consistently), so it
+  // fetches only MISSING pages. A cold entry finds nothing and
+  // behaves exactly as before (chain from page 0).
+  const hydratedFilterKeyRef = useRef('')
+  useEffect(() => {
+    if (!selectedSubcategory || !filterKey) return
+    if (hydratedFilterKeyRef.current === filterKey) return
+    hydratedFilterKeyRef.current = filterKey
+    const entries = queryClient.getQueriesData({
+      queryKey: ['listings', 'directory', selectedSubcategory.id, listingCategoryIdsKey, city, verifiedOnly, q, sort],
+    })
+    const byPage = new Map()
+    for (const [key, data] of entries) {
+      if (!data || data.filterKey !== filterKey) continue
+      const p = key[key.length - 2]
+      if (typeof p !== 'number' || byPage.has(p)) continue
+      byPage.set(p, data)
+    }
+    const pages = []
+    for (let p = 0; byPage.has(p); p++) pages.push(byPage.get(p))
+    if (pages.length === 0) return
+    const seen = new Set()
+    const rows = []
+    for (const pg of pages) {
+      for (const r of pg.rows || []) {
+        if (!seen.has(r.id)) { seen.add(r.id); rows.push(r) }
+      }
+    }
+    const last = pages[pages.length - 1]
+    lastFilterKeyRef.current = filterKey
+    appliedDataRef.current = last
+    lastPageRowCountRef.current = (last.rows || []).length
+    pageRef.current = last.page
+    setListings(rows)
+    setTotal(last.total || 0)
+    setPage(last.page)
   }, [filterKey, selectedSubcategory])
 
   // v9.35: a background page (page > 0) failed while rows are already
@@ -808,6 +914,8 @@ export default function DirectoryPage() {
   }, [hasMore, pageFailed, listingsQueryFetching, page, selectedSubcategory, listingsData?.page])
 
   // Clear the list when no subcategory is selected.
+  // v9.39: also forget the hydrated filter, so re-entering the same
+  // list hydrates from the cache again instead of chaining from 0.
   useEffect(() => {
     if (!selectedSubcategory) {
       setListings([])
@@ -815,6 +923,7 @@ export default function DirectoryPage() {
       setPageFailed(false)
       appliedDataRef.current = null
       lastFilterKeyRef.current = ''
+      hydratedFilterKeyRef.current = ''
     }
   }, [selectedSubcategory])
 

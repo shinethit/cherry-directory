@@ -47,6 +47,12 @@ export function useServiceWorker() {
   const [swState, setSwState] = useState('initializing')
   const [updateAvailable, setUpdateAvailable] = useState(false)
   const [updating, setUpdating] = useState(false)
+  // v9.39: the new version's full change log from /version.json
+  // (changesMy/changesEn) — STATE, not just a ref, so UpdatePrompt
+  // re-renders when it lands. Kept in a ref too, so the change check
+  // below can compare without re-rendering on every poll.
+  const [serverChanges, setServerChanges] = useState(null)
+  const serverChangesRef = useRef(null)
   const waitingRef = useRef(null)
   const updatingRef = useRef(false)
   const serverVersionRef = useRef(null)
@@ -130,6 +136,19 @@ export function useServiceWorker() {
         const data = await res.json().catch(() => null)
         const serverVersion = data?.version
         if (!serverVersion) return
+        // v9.39: keep the server's change log (if it sent one) so the
+        // update prompt can show the FULL new-version log, not one
+        // generic line. Set before the newer-check below so the log is
+        // kept even when the server is not newer (a rollback still
+        // carries its own log for the modal). Only set state when the
+        // log actually changed — the poll runs hourly / on focus.
+        const nextChanges = (data?.changesMy || data?.changesEn)
+          ? { changesMy: data.changesMy ?? null, changesEn: data.changesEn ?? null }
+          : null
+        if (JSON.stringify(nextChanges) !== JSON.stringify(serverChangesRef.current)) {
+          serverChangesRef.current = nextChanges
+          setServerChanges(nextChanges)
+        }
         if (serverVersionRef.current === serverVersion) return
         serverVersionRef.current = serverVersion
         // v9.27: only a numerically NEWER server version prompts — a
@@ -321,5 +340,5 @@ export function useServiceWorker() {
     }
   }
 
-  return { ready, swState, updateAvailable, updating, serverVersion: serverVersionRef.current, applyUpdate: reloadForUpdate }
+  return { ready, swState, updateAvailable, updating, serverVersion: serverVersionRef.current, serverChanges, applyUpdate: reloadForUpdate }
 }

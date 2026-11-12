@@ -12,6 +12,12 @@ import { APP_VERSION } from '../lib/appVersion'
 // Main navigation pages — no back button needed
 const MAIN_NAV_PATHS = ['/', '/directory', '/community', '/calendar', '/profile']
 
+// v9.39: fallback lead items when /version.json is unreachable
+// (offline) — MUST match the 9.39 entry in the history array below
+// and version-changes.json; DirectoryPage939.test.jsx (F3) asserts
+// this. The bundled history is Burmese-only, so the fallback is too.
+const LEAD_FALLBACK_MY_939 = ['အမျိုးအစားတစ်ခုကနေ နောက်တစ်ခုကို ပြောင်းကြည့်ရင် စာရင်း "၀ ရလဒ်" ပြနေတာ ပြင်ပြီး — ဒေါင်းထားပြီးသား စာရင်း ချက်ချင်း ပေါ်မည်', 'အပြင်မှာ 172/172 ပြရင် အထဲဖွင့်လိုက်တာနဲ့ စာရင်း အပြည့် ချက်ချင်း ပေါ်ပြီ — တစ်ခုချင်း ထပ်တင်နေတာ စောင့်စရာ မလိုတော့ပါ', 'Version အသစ် ရရင် ပြောင်းလဲထားတာတွေ အားလုံး တစ်ခါတည်း ပေါ်ပြီ — အပ်ဒိတ်လုပ်ဖို့ နှိပ်ခိုင်းတဲ့ စာမှာ အပြည့်အစုံ ပါမည်', 'လုပ်ငန်းကတ် ပြတာ ပိုမြန်လာပြီ — စာရင်း ရှည်လည်း ချောချောမွေ့မွေ့ ပွတ်ဆွဲနိုင်မည်']
+
 export default function Header() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -30,6 +36,25 @@ export default function Header() {
   const manualSync = useManualSync()
   const [menuOpen, setMenuOpen] = useState(false)
   const [showChangelog, setShowChangelog] = useState(false)
+  // v9.39: the NEW version's full change log from live /version.json
+  // (changesMy/changesEn) — fetched on mount so the auto-show modal
+  // can LEAD with it instead of showing only the old generic history.
+  // The old app never has the new entry in its own bundled history,
+  // so the live file is the only source that is always current.
+  const [liveChanges, setLiveChanges] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/version.json', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data || data.version !== APP_VERSION) return
+        if (data.changesMy?.length || data.changesEn?.length) {
+          setLiveChanges({ changesMy: data.changesMy ?? null, changesEn: data.changesEn ?? null })
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
 
   // v9.20: lock body scroll while the drawer is open — the drawer is its
   // own overflow-y-auto sheet, and the page behind it must not scroll.
@@ -113,6 +138,15 @@ export default function Header() {
     { path: '/admin/settings', label: 'App ဆက်တင်များ', icon: Settings },
     { path: '/admin/reports', label: 'အစီရင်ခံစာများ', icon: BarChart3 },
   ]
+
+  // v9.39: the modal LEADS with the new version's full log, all at
+  // once — live version.json first (it is the only source that has
+  // the new entry on first run), the bundled 9.39 entry when offline.
+  // The history list below filters the current version out, so the
+  // new log appears exactly once.
+  const leadItems = lang === 'en' && liveChanges?.changesEn?.length
+    ? liveChanges.changesEn
+    : liveChanges?.changesMy?.length ? liveChanges.changesMy : LEAD_FALLBACK_MY_939
 
   return (
     <>
@@ -387,7 +421,25 @@ export default function Header() {
               </button>
             </div>
             <div className="p-4 overflow-y-auto space-y-4">
+              {/* v9.39: LEAD with the new version's full log, all at once,
+                  under the same heading as the update prompt — the
+                  history below is the older versions only. */}
+              <div className="space-y-2 rounded-2xl border border-brand-400/30 bg-brand-500/5 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="badge bg-brand-600/30 text-brand-300 font-bold border border-brand-400/30">v{APP_VERSION}</span>
+                  <span className="text-[10px] text-white/60">2026-11-10</span>
+                </div>
+                <p className="text-xs font-bold text-white font-myanmar">ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့</p>
+                <ul className="space-y-1 pl-4">
+                  {leadItems.map((item, j) => (
+                    <li key={j} className="text-xs text-white/80 font-myanmar flex items-start gap-2">
+                      <span className="text-brand-400 mt-0.5">•</span> {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
               {[
+                { v: '9.39', date: '2026-11-10', items: ['အမျိုးအစားတစ်ခုကနေ နောက်တစ်ခုကို ပြောင်းကြည့်ရင် စာရင်း "၀ ရလဒ်" ပြနေတာ ပြင်ပြီး — ဒေါင်းထားပြီးသား စာရင်း ချက်ချင်း ပေါ်မည်', 'အပြင်မှာ 172/172 ပြရင် အထဲဖွင့်လိုက်တာနဲ့ စာရင်း အပြည့် ချက်ချင်း ပေါ်ပြီ — တစ်ခုချင်း ထပ်တင်နေတာ စောင့်စရာ မလိုတော့ပါ', 'Version အသစ် ရရင် ပြောင်းလဲထားတာတွေ အားလုံး တစ်ခါတည်း ပေါ်ပြီ — အပ်ဒိတ်လုပ်ဖို့ နှိပ်ခိုင်းတဲ့ စာမှာ အပြည့်အစုံ ပါမည်', 'လုပ်ငန်းကတ် ပြတာ ပိုမြန်လာပြီ — စာရင်း ရှည်လည်း ချောချောမွေ့မွေ့ ပွတ်ဆွဲနိုင်မည်'] },
                 { v: '9.38', date: '2026-11-10', items: ['ဒေါင်းထားပြီးသား လုပ်ငန်းစာရင်း ပြန်ဖွင့်ရင် လိုင်းမကောင်းလည်း စာရင်း အပြည့်ပေါ်ပြီ — နောက်ကွယ် အသစ်ရယူတာ မအောင်လည်း ဒေါင်းထားတဲ့ စာမျက်နှာတွေ ဆက်တိုက် တင်လာပြီး 172/172 အပြည့်ဖြစ်သွားမည် (အရင် 20 မှာ ရပ်နေတာ ပြင်ပြီး)', 'အမျိုးအစား ကတ်အောက်က အရေအတွက် စာကြောင်း ဖြုတ်လိုက်ပြီ — အရေအတွက်က စက်ဝိုင်းထဲမှာပဲ ပေါ်မည်'] },
                 { v: '9.37', date: '2026-11-10', items: ['လုပ်ငန်းစာရင်း ဖွင့်လိုက်တာနဲ့ နောက်စာမျက်နှာတွေ သူ့အလိုလို ဆက်တိုက် တင်လာပြီ — အောက်ဆွဲစရာ၊ နှိပ်စရာ မလိုတော့ပါ; အပေါ်က စက်ဝိုင်းက 20/172 ကနေ 172/172 အထိ သူ့အလိုလို တက်လာပြီး အပြည့်ဖြစ်သွားမည်', 'အပြင်က အမျိုးအစား ကတ်က 100% ပြပြီး အထဲက စာရင်းက 20/172 ပဲ ပြနေတာ ပြင်ပြီး — နှစ်ခုလုံး အခု ကိုက်ညီသွားမည်'] },
                 { v: '9.36', date: '2026-11-10', items: ['စက်ဝိုင်းတွေထဲမှာ ဂဏန်း ဝင်သွားပြီ — ပင်မစာမျက်နှာက စုစုပေါင်း အရေအတွက်၊ စာရင်းအပေါ်က % နဲ့ အမျိုးအစား ကတ်တိုင်းက ဆိုင်အရေအတွက် အားလုံး အဝိုင်းကွင်းထဲမှာ ပေါ်မည်', 'စာရင်းအပေါ်က စက်ဝိုင်းဘေးက စာသားမှာ % ထပ်မပါတော့ပါ — "61 / 173" သာ ပြမည်'] },
@@ -432,7 +484,7 @@ export default function Header() {
                 { v: '5.0', date: '2026-10-12', items: ['၆ လခွဲ ရပ်နားပြီးနောက် ပြန်စခြင်း', 'Search + Notifications စာမျက်နှာများ', 'Saved Places + Onboarding Guide', 'Sentry + Toast ထည့်ခြင်း'] },
                 { v: '2.0', date: '2026-03-22', items: ['React + Supabase အဖြစ် ပြန်ရေးခြင်း (Total Upgrade)', 'စာမျက်နှာ ၄၀ ကျော် (Fuel, Chat, Jobs, Rent, Tutoring…)', 'BottomNav + ErrorBoundary', 'Share + QR Code', 'Weather Alert + LocationPicker'] },
                 { v: '1.0', date: '2026-02-16', items: ['ပရောဂျက် စတင်ခြင်း (TGIBUS)', 'Google Sheets သုံး Cherry Directory', 'သတင်း/ပွဲ + အသိပညာ + လုပ်ငန်းရှာဖွေခြင်း', 'Chat + PWA စနစ်'] }
-              ].map((rel, i) => (
+              ].filter((rel) => rel.v !== APP_VERSION).map((rel, i) => (
                 <div key={i} className="space-y-2">
                   <div className="flex items-center gap-2">
                     <span className="badge bg-brand-600/30 text-brand-300 font-bold border border-brand-400/30">v{rel.v}</span>

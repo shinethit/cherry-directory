@@ -11,11 +11,28 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 // The SW lets /version.json through uncached, so the check can never be
 // answered from the old cache. Do NOT put a hardcoded version.json in
 // public/ — it would rot.
+// v9.39: version.json also carries the current version's full change
+// log (changesMy/changesEn) so the UpdatePrompt and the post-update
+// "What's New" modal can show the new version's changes ALL AT ONCE
+// instead of one generic line (cross-app rule, NgweSarYin v7.5.76
+// pattern). The log lives in version-changes.json at the repo root
+// (git-tracked; each version updates its own entry) — the plugin reads
+// it with readFileSync and fails soft (version only) when the file or
+// the entry is missing, so a missing entry can never break the build.
 function versionJsonPlugin() {
   return {
     name: 'version-json',
     writeBundle({ dir }) {
-      writeFileSync(join(dir, 'version.json'), JSON.stringify({ version: pkg.version }))
+      let changes = {}
+      try {
+        const all = JSON.parse(readFileSync(new URL('./version-changes.json', import.meta.url), 'utf8'))
+        const entry = all?.[pkg.version]
+        if (entry?.changesMy?.length) changes.changesMy = entry.changesMy
+        if (entry?.changesEn?.length) changes.changesEn = entry.changesEn
+      } catch {
+        // Missing/unparseable version-changes.json: emit version only.
+      }
+      writeFileSync(join(dir, 'version.json'), JSON.stringify({ version: pkg.version, ...changes }))
     },
   }
 }

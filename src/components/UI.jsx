@@ -1,5 +1,5 @@
 import { Star, MapPin, Bookmark, BookmarkCheck } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getOptimizedUrl } from '../lib/cloudinary'
 import { supabase } from '../lib/supabase'
@@ -27,7 +27,13 @@ export function Skeleton({ className = '' }) {
 }
 
 // ── Listing Card ─────────────────────────────────────────────
-export function ListingCard({ listing, compact = false, bookmarked: bookmarkedProp }) {
+// v9.39: React.memo — a list re-renders on every chain page (setPage
+// / setListings), and without memo every card body re-ran each time.
+// Memo is safe here: every caller passes only `listing` (a stable
+// object from the list state), `compact` (a boolean literal) and
+// `bookmarked` (a boolean from a Set lookup) — no inline object or
+// function props that would defeat the shallow comparison.
+export const ListingCard = memo(function ListingCard({ listing, compact = false, bookmarked: bookmarkedProp }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { isLoggedIn } = useAuth()
@@ -109,7 +115,7 @@ export function ListingCard({ listing, compact = false, bookmarked: bookmarkedPr
       </div>
     </div>
   )
-}
+})
 
 // ── Post Card ─────────────────────────────────────────────────
 export function PostCard({ post, bookmarked: bookmarkedProp }) {

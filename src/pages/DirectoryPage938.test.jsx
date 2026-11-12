@@ -253,11 +253,16 @@ describe('v9.38 cached data advances the chain', () => {
     // no full error card, no amber strip.
     expect(screen.queryByText('Data တင်ရာတွင် အမှားဖြစ်သွားသည်')).toBeNull()
     expect(screen.queryByText('စာရင်း တစ်ချို့ တင်မရသေးပါ — အဟောင်းပြထားသည်')).toBeNull()
-    // Each page's refetch was attempted exactly once — the chain
-    // advanced through the cache, it did not loop on failing pages.
-    expect(mockDB.listingsCalls).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    // v9.39: hydration supersedes the climb — the full list shows at
+    // once from the cache, so pages 1–7 are never fetched for display
+    // at all. Only quiet background refetches of pages already shown
+    // remain (page 0 on entry, page 8 after hydration sets the page).
+    // The no-error-card / no-strip / no-loop assertions below are
+    // unchanged: a failed refetch with applied data is still not a
+    // display failure.
+    expect(mockDB.listingsCalls).toEqual([0, 8])
     await act(async () => { await new Promise(r => setTimeout(r, 300)) })
-    expect(mockDB.listingsCalls).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+    expect(mockDB.listingsCalls).toEqual([0, 8])
     expect(screen.getByText('100%').closest('[data-testid="load-ring"]')).toBeTruthy()
   }, 30000)
 
