@@ -52,7 +52,7 @@ function filesContaining(needle) {
 describe('v9.25: version + Change Log Admin rule', () => {
   it('package.json is 9.28', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.39')
+    expect(pkg.version).toBe('9.40')
   })
 
   it('the 9.25 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {

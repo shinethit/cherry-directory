@@ -11,6 +11,7 @@ import IconPicker from '../components/IconPicker'   // ← IconPicker ထည့�
 import { confirmDialog } from '../lib/confirmDialog'
 import { withTimeout } from '../lib/withTimeout'
 import { myanmarVariants } from '../lib/myanmarSearch'
+import { invalidateCategoryQueries } from '../lib/queryClient'
 
 const BLANK = { name: '', name_mm: '', icon: '📦', type: 'directory', sort_order: 0, parent_id: null, description_mm: '', is_active: true, is_featured: false }
 
@@ -40,8 +41,21 @@ function CategoryForm({ initial, parentId, parentName, allCategories, onClose, o
     if (!form.name_mm && !form.name) { setError('အမည် ထည့်ပါ'); return }
     // S7 (v9.17): duplicate check is case-insensitive and covers both
     // name fields, within the same type — the DB has no unique index.
+    // v9.40: check against FRESH server data, not the manager's
+    // locally loaded list — a row another admin added while this page
+    // was open used to slip through, because the local list only
+    // refreshes on load(). On a failed refetch, fall back to the local
+    // list (never block a save on a network blip — the local check
+    // still catches most duplicates).
+    let freshCats = allCategories || []
+    try {
+      const { data, error } = await withTimeout(supabase
+        .from('categories')
+        .select('id, name, name_mm, type'), 30000, 'Categories duplicate check')
+      if (!error && data) freshCats = data
+    } catch (e) { console.warn('Duplicate check refetch failed, using local list:', e) }
     const effName = (form.name || form.name_mm).trim().toLowerCase()
-    const dup = (allCategories || []).some(c =>
+    const dup = (freshCats || []).some(c =>
       c.id !== initial?.id && c.type === form.type &&
       [c.name, c.name_mm].some(n => (n || '').trim().toLowerCase() === effName))
     if (dup) { setError('အမည်တူ Category ရှိပြီးဖြစ်သည်'); return }
@@ -539,6 +553,9 @@ export default function CategoryManagerPage() {
     }).then(ok => { if (!ok) console.warn('Audit log failed for category delete') })
     showSuccess(lang === 'mm' ? 'ဖျက်ပြီးပါပြီ' : 'Deleted')
     load()
+    // v9.40: the deleted category must vanish from Home/Directory at
+    // once, not after the 5 min staleTime.
+    invalidateCategoryQueries()
   }
 
   async function handleToggle(cat) {
@@ -549,6 +566,8 @@ export default function CategoryManagerPage() {
       return
     }
     load()
+    // v9.40: a hidden/shown category must hide/show everywhere at once.
+    invalidateCategoryQueries()
   }
 
   const totalActive  = cats.filter(c => c.is_active && c.type === typeFilter).length
@@ -688,7 +707,7 @@ export default function CategoryManagerPage() {
           allCategories={cats}
           lang={lang}
           onClose={() => setFormData(null)}
-          onSaved={() => { setFormData(null); load() }}
+          onSaved={() => { setFormData(null); load(); invalidateCategoryQueries() }}
         />
       )}
     </div>

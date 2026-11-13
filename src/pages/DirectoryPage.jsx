@@ -7,7 +7,7 @@ import { withTimeout } from '../lib/withTimeout'
 import { fetchCategories } from '../lib/prefetch'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useBookmarkedSet } from '../hooks/useBookmarksDB'
-import { collectDescendantIds, resolveListingCategoryIds } from '../lib/categoryTree'
+import { collectDescendantIds, resolveListingCategoryIds, mergeTreeRows } from '../lib/categoryTree'
 import { useAppConfig } from '../contexts/AppConfigContext'
 import { useLang } from '../contexts/LangContext'
 import { buildOrFilter } from '../lib/myanmarSearch'
@@ -41,6 +41,53 @@ export function groupListingsByCity(rows) {
     })
 }
 
+// v9.40: the top-most ancestor of a category, from a flat
+// id/parent_id list (itself when top-level; the deepest known node
+// when the chain breaks — never null, never a crash).
+export function topAncestorOf(cat, rows) {
+  let cur = cat
+  while (cur?.parent_id) {
+    const parent = (rows || []).find(c => String(c.id) === String(cur.parent_id))
+    if (!parent) break
+    cur = parent
+  }
+  return cur
+}
+
+// v9.40: the ancestor chain of `target` BELOW the top-level anchor
+// `topId`, top-down, EXCLUDING the target itself (e.g. General
+// Hospital under Hospital under Health -> [Hospital]; Hospital ->
+// []). Returns [] when the target IS the anchor or its parent is the
+// anchor, and null when the target is not a descendant of the anchor
+// (or its chain is broken) — never a crash, never a hallucinated
+// level. (The first version of this helper wrongly included the
+// target itself — caught by the 9.40 drill tests: the stack came out
+// [Hospital, Hospital] and Back never reached the top picker.)
+export function chainBelowTop(target, rows, topId) {
+  if (!target?.parent_id) return []
+  const chain = []
+  let cur = (rows || []).find(c => String(c.id) === String(target.parent_id))
+  if (!cur) return null
+  while (cur && String(cur.id) !== String(topId)) {
+    chain.unshift(cur)
+    if (!cur.parent_id) return null
+    cur = (rows || []).find(c => String(c.id) === String(cur.parent_id))
+    if (!cur) return null
+  }
+  return chain
+}
+
+// v9.40: the full path of `target` below the top-level anchor, top-down
+// and INCLUSIVE of the target (General Hospital -> [Hospital, General
+// Hospital]). [] when the target IS the anchor; null when the target
+// is not a descendant of the anchor (or its chain is broken).
+export function pathBelowTop(target, rows, topId) {
+  if (String(target.id) === String(topId)) return []
+  const chain = chainBelowTop(target, rows, topId)
+  if (chain === null) return null
+  return [...chain, target]
+}
+
 export default function DirectoryPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -58,6 +105,27 @@ export default function DirectoryPage() {
   const [selectedSubcategory, setSelectedSubcategory] = useState(null)
   const [subcategoryLoading, setSubcategoryLoading] = useState(false)
   const [subcategoryError, setSubcategoryError] = useState(false)
+
+  // v9.40: GENERIC drill-down stack — the drilled picker levels BELOW
+  // the top-level anchor, top-down, as full category objects (e.g.
+  // [Hospital] while showing Hospital's children, [Hospital, General
+  // Hospital] one level deeper). Empty at the top-level picker. No
+  // hardcoded category, no depth limit: any category Admin adds, at
+  // any depth, drills the same way. The URL carries the same state in
+  // ?level= (the ?cat= stays the TOP-level anchor) so browser/device
+  // Back walks levels; the level-sync effect below rebuilds this
+  // stack from the URL and is its sole reconciler — directNavigate
+  // never writes it, drill/goBack write it optimistically AND the
+  // URL, and the effect confirms.
+  const [pickerStack, setPickerStack] = useState([])
+  // The category whose children the picker currently shows: the last
+  // drilled level, or the top-level category itself.
+  const pickerLevelCat = pickerStack.length ? pickerStack[pickerStack.length - 1] : selectedCategory
+  // Synchronous mirror of the picker level id, for the stale-load
+  // guard in loadSubcategories (a load started for the old level
+  // must never overwrite the new level's rows when it lands late).
+  const pickerLevelRef = useRef(null)
+  useEffect(() => { pickerLevelRef.current = pickerLevelCat?.id ?? null }, [pickerLevelCat])
   
   // Level 3: Listings
   const [listings, setListings] = useState([])
@@ -277,7 +345,14 @@ export default function DirectoryPage() {
               || cachedCats.find(c => c.id === mapTarget.parent_id)
               || categories.find(c => c.id === mapTarget.parent_id)
             if (parent) {
-              setSelectedCategory(parent)
+              // v9.40: the anchor is the TOP-level ancestor, not the
+              // direct parent — the picker stack (reconciled by the
+              // level effect below) holds the levels between them, so
+              // Back from a level-3 listing returns to its parent
+              // picker, not to the parent's listings. directNavigate
+              // never writes the stack itself.
+              const top = topAncestorOf(mapTarget, mapRows)
+              setSelectedCategory(top && !top.parent_id && String(top.id) !== String(mapTarget.id) ? top : parent)
               setSelectedSubcategory(mapTarget)
               pageRef.current = 0
               setPage(0)
@@ -416,7 +491,10 @@ export default function DirectoryPage() {
           // re-setting it (new object) + setPage(0) would undo the
           // cache hydration (see the map-first guard above).
           if (String(selectedSubcategoryRef.current?.id ?? '') !== String(target.id)) {
-            setSelectedCategory(parent)
+            // v9.40: top-level anchor when the cached map knows the
+            // chain; otherwise the direct parent (today's behaviour).
+            const top = mapRows.length ? topAncestorOf(target, mapRows) : null
+            setSelectedCategory(top && !top.parent_id && String(top.id) !== String(target.id) ? top : parent)
             setSelectedSubcategory(target)
             pageRef.current = 0
             setPage(0)
@@ -535,12 +613,26 @@ export default function DirectoryPage() {
       // retry strip never appeared for a first-entry count failure
       // (setSubcategoryError(true) only ran when the subcategory LIST
       // fetch failed). When every count failed, surface the retry UI.
+      // v9.40: stale-level guard — the user may have drilled to
+      // another level (or gone back) while this load was in flight.
+      // A late load for the OLD level must never overwrite the new
+      // level's rows or error state. pickerLevelRef is set
+      // synchronously by drill/goBack and mirrored on every
+      // picker-level change. (Guarded, not returned:
+      // setSubcategoryLoading(false) below must still run.)
+      if (pickerLevelRef.current === categoryId) {
       if ((data || []).length > 0 && countResults.every(r => r.status === 'rejected')) {
         setSubcategoryError(true)
       }
       setSubcategories(subcatsWithCount)
+      }
     } catch (e) {
       console.warn('loadSubcategories error:', e)
+      // v9.40: same stale-level guard as the success path — a late
+      // error for the old level must not seed its children or its
+      // error strip onto the new level. (Guarded, not returned:
+      // setSubcategoryLoading(false) below must still run.)
+      if (pickerLevelRef.current === categoryId) {
       // v9.25 regen #4: offline, seed the picker from the cached
       // ['category-map'] (full id/parent_id table, warmed alongside
       // ['categories']) instead of leaving it empty — a warm cache
@@ -552,6 +644,7 @@ export default function DirectoryPage() {
       const mapKids = mapRows.filter(c => c.parent_id === categoryId)
       if (mapKids.length) setSubcategories(mapKids.map(c => ({ ...c, listing_count: null })))
       setSubcategoryError(true)
+      }
     }
     setSubcategoryLoading(false)
   }
@@ -593,11 +686,16 @@ export default function DirectoryPage() {
   // selectedSubcategory re-runs the load on every return to the
   // picker; the !selectedSubcategory guard keeps it a no-op while a
   // subcategory's listings (or a direct link) are showing.
+  // v9.40: the level is pickerLevelCat — the drilled level, or the
+  // top-level category — and pickerStack in deps re-runs the load on
+  // every drill / pop, so counts reload at EACH level (the 9.34 rule,
+  // generalised). The direct ("အားလုံး") row is that level's own
+  // direct listings, not the top level's.
   useEffect(() => {
     if (selectedCategory) {
       if (!selectedSubcategory) {
-        loadSubcategories(selectedCategory.id)
-        checkDirectListings(selectedCategory.id)
+        loadSubcategories(pickerLevelCat.id)
+        checkDirectListings(pickerLevelCat.id)
       }
     } else if (!featuredOnly) {
       // v9.25 regen #2: while a ?cat= deep link is still resolving,
@@ -613,8 +711,10 @@ export default function DirectoryPage() {
       setListings([])
       setHasDirectListings(false)
       setDirectCount(0)
+      // v9.40: leaving the category clears the drill stack too.
+      setPickerStack(prev => (prev.length ? [] : prev))
     }
-  }, [selectedCategory, selectedSubcategory, featuredOnly])
+  }, [selectedCategory, selectedSubcategory, featuredOnly, pickerStack])
 
   // v9.32: subscribe to both tree sources WITHOUT fetching (enabled:
   // false — the observers exist only so this component re-renders when
@@ -626,6 +726,44 @@ export default function DirectoryPage() {
   // never strand apart.
   const { data: categoryMap } = useQuery({ queryKey: ['category-map'], queryFn: () => queryClient.getQueryData(['category-map']) ?? [], enabled: false })
   const { data: categoryTree } = useQuery({ queryKey: ['category-tree'], queryFn: () => queryClient.getQueryData(['category-tree']) ?? [], enabled: false })
+
+  // v9.40: LEVEL SYNC — the ?level= param is the drilled picker level
+  // (?cat= stays the TOP-level anchor). Browser/device Back changes
+  // only the URL, so this effect rebuilds the picker stack from it
+  // and is the stack's sole reconciler: directNavigate never writes
+  // the stack (it only sets the top anchor + the subcategory), and
+  // drill/goBack write the stack optimistically AND the URL while
+  // this effect confirms (the id-equality guard makes that a no-op).
+  // The wanted stack for the current view is:
+  //   - the ?level= chain, when the param is present, or
+  //   - the shown subcategory's ancestors below the top anchor
+  //     (deep link / leaf tap, where the URL carries no ?level=), or
+  //   - [] at the top picker / in a direct ("အားလုံး") or featured view.
+  // When the tree is not cached yet, the stack is left alone — the
+  // effect re-runs when the map/tree arrive (categoryMap/categoryTree
+  // deps), so a cold deep link still lands on the right level.
+  const levelParam = searchParams.get('level')
+  useEffect(() => {
+    if (featuredOnly || !selectedCategory) return
+    const rows = mergeTreeRows(categoryMap ?? [], categoryTree ?? [])
+    let want = []
+    if (levelParam) {
+      if (!rows.length) return
+      const target = rows.find(c => String(c.id) === String(levelParam))
+      if (target) {
+        // INCLUSIVE path: the drilled level itself belongs in the
+        // stack (level=Hospital -> [Hospital], not []).
+        const path = pathBelowTop(target, rows, selectedCategory.id)
+        want = path === null ? [] : path
+      }
+    } else if (selectedSubcategory && !selectedSubcategory.is_direct && !selectedSubcategory.is_featured_view) {
+      if (!rows.length) return
+      const chain = chainBelowTop(selectedSubcategory, rows, selectedCategory.id)
+      want = chain === null ? [] : chain
+    }
+    const ids = want.map(c => String(c.id)).join(',')
+    setPickerStack(prev => (prev.map(c => String(c.id)).join(',') === ids ? prev : want))
+  }, [levelParam, selectedCategory, categoryMap, categoryTree, featuredOnly, selectedSubcategory])
 
   // v9.32: ids for the listings query — subcategory + all descendants
   // (what the picker badge counts); [subId] alone for the direct
@@ -931,6 +1069,9 @@ export default function DirectoryPage() {
   function handleCategorySelect(cat) {
     setSelectedCategory(cat)
     setSelectedSubcategory(null)
+    // v9.40: a new top-level category starts at its own top picker.
+    setPickerStack([])
+    pickerLevelRef.current = cat.id
     setListings([])
     pageRef.current = 0
     setPage(0)
@@ -938,11 +1079,67 @@ export default function DirectoryPage() {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev)
       next.set('cat', cat.id)
+      next.delete('level')
       return next
     }, { replace: true })
   }
 
+  // v9.40: GENERIC drill-down — tapping a picker row whose category
+  // HAS children opens that category's own picker level (same row
+  // style, descendant-inclusive badges, 0-count rows disabled); a
+  // leaf shows its listings exactly as before. No hardcoded list, no
+  // depth limit: the children test reads the cached category tree
+  // (['category-map'] / ['category-tree'], warmed on boot and by
+  // every picker load), so the warm path decides SYNCHRONOUSLY — the
+  // tap must never wait on the network. Only when no tree is cached
+  // at all does it ask the server for a child count first; on a
+  // failed count it falls back to the old behaviour (listings), so a
+  // cold/offline tap degrades instead of stranding.
   function handleSubcategorySelect(sub) {
+    const known = mergeTreeRows(
+      queryClient.getQueryData(['category-map']) || [],
+      queryClient.getQueryData(['category-tree']) || [],
+    )
+    if (known.length > 0) {
+      if (known.some(c => c.parent_id === sub.id)) drillTo(sub)
+      else selectSubcategoryListings(sub)
+      return
+    }
+    ;(async () => {
+      let childCount = null
+      try {
+        const { count, error } = await withTimeout(supabase
+          .from('categories')
+          .select('*', { count: 'exact', head: true })
+          .eq('parent_id', sub.id)
+          .eq('is_active', true), 30000, 'Directory subcategory children')
+        if (error) throw error
+        childCount = count || 0
+      } catch (e) {
+        console.warn('Directory subcategory child count failed:', e)
+      }
+      if (childCount > 0) drillTo(sub)
+      else selectSubcategoryListings(sub)
+    })()
+  }
+
+  // v9.40: drill one level deeper. The ?cat= stays the TOP-level
+  // anchor and ?level= records the drilled level — PUSHED (not
+  // replaced) so browser/device Back walks levels. The picker-load
+  // effect reloads counts for the new level (the 9.34 rule, per
+  // level); the level-sync effect confirms the stack from the URL.
+  function drillTo(sub) {
+    pickerLevelRef.current = sub.id
+    setPickerStack(prev => [...prev, sub])
+    setSubcategories([])
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      next.set('level', sub.id)
+      return next
+    })
+  }
+
+  function selectSubcategoryListings(sub) {
     setSelectedSubcategory(sub)
     pageRef.current = 0
     setPage(0)
@@ -957,13 +1154,16 @@ export default function DirectoryPage() {
   function handleDirectListings() {
     // v9.31 (B): reset the page like handleSubcategorySelect does —
     // tapping "အားလုံး" after a Load more must start at page 0.
+    // v9.40: the direct row belongs to the CURRENT picker level
+    // (drilled or top), not always to the top-level category.
+    const levelCat = pickerLevelCat || selectedCategory
     pageRef.current = 0
     setPage(0)
     setSelectedSubcategory({
-      id: selectedCategory.id,
-      icon: selectedCategory.icon,
-      name_mm: selectedCategory.name_mm,
-      name: selectedCategory.name,
+      id: levelCat.id,
+      icon: levelCat.icon,
+      name_mm: levelCat.name_mm,
+      name: levelCat.name,
       listing_count: directCount,
       is_direct: true
     })
@@ -982,28 +1182,63 @@ export default function DirectoryPage() {
       return
     }
     if (selectedSubcategory) {
+      // v9.40: from a listing, Back returns to the picker level the
+      // listing came from — the drilled level, not the top level.
+      const levelCat = pickerStack.length ? pickerStack[pickerStack.length - 1] : null
       setSelectedSubcategory(null)
       setListings([])
-      // Update URL to parent category
+      // The direct ("အားလုံး") row of the current level: the URL
+      // already points at that level, so just clear the selection.
+      if (selectedSubcategory.is_direct && levelCat && String(selectedSubcategory.id) === String(levelCat.id)) {
+        return
+      }
       if (selectedCategory) {
         setSearchParams(prev => {
           const next = new URLSearchParams(prev)
           next.set('cat', selectedCategory.id)
+          if (levelCat) next.set('level', levelCat.id)
+          else next.delete('level')
           return next
         }, { replace: true })
       }
     } else if (selectedCategory) {
-      setSelectedCategory(null)
-      setSubcategories([])
-      setUrlResolved(false)  // reset for URL sync
-      // Remove cat param
-      setSearchParams(prev => {
-        const next = new URLSearchParams(prev)
-        next.delete('cat')
-        return next
-      }, { replace: true })
-      // No urlCatId now → mark resolved
-      setTimeout(() => setUrlResolved(true), 0)
+      // v9.40: from a drilled picker, Back pops one level; from the
+      // top picker it leaves the category (today's behaviour).
+      if (pickerStack.length > 1) {
+        const parent = pickerStack[pickerStack.length - 2]
+        pickerLevelRef.current = parent.id
+        setPickerStack(prev => prev.slice(0, -1))
+        setSubcategories([])
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev)
+          next.set('cat', selectedCategory.id)
+          next.set('level', parent.id)
+          return next
+        }, { replace: true })
+      } else if (pickerStack.length === 1) {
+        pickerLevelRef.current = selectedCategory.id
+        setPickerStack([])
+        setSubcategories([])
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev)
+          next.set('cat', selectedCategory.id)
+          next.delete('level')
+          return next
+        }, { replace: true })
+      } else {
+        setSelectedCategory(null)
+        setSubcategories([])
+        setUrlResolved(false)  // reset for URL sync
+        // Remove cat param
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev)
+          next.delete('cat')
+          next.delete('level')
+          return next
+        }, { replace: true })
+        // No urlCatId now → mark resolved
+        setTimeout(() => setUrlResolved(true), 0)
+      }
     } else {
       navigate('/')
     }
@@ -1100,6 +1335,14 @@ export default function DirectoryPage() {
 
   // Render Subcategory Level
   if (selectedCategory && !selectedSubcategory) {
+    // v9.40: the picker shows the CURRENT level (drilled or top).
+    // A stack entry built from tree-only rows carries no name/icon,
+    // so fall back to the top-level anchor's.
+    const levelCat = pickerLevelCat || selectedCategory
+    const levelName = lang === 'mm'
+      ? (levelCat.name_mm || levelCat.name || selectedCategory.name_mm || selectedCategory.name)
+      : (levelCat.name || levelCat.name_mm || selectedCategory.name || selectedCategory.name_mm)
+    const levelIcon = levelCat.icon || selectedCategory.icon
     return (
       <div className="pb-8">
         <div className="sticky top-[var(--header-h)] z-40 bg-[#140020] border-b border-white/10">
@@ -1109,8 +1352,8 @@ export default function DirectoryPage() {
               <span className="text-xs">နောက်သို့</span>
             </button>
             <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-              <span className="text-2xl flex-shrink-0">{selectedCategory.icon}</span>
-              <h1 className="font-display font-bold text-lg text-white truncate">{lang === 'mm' ? (selectedCategory.name_mm || selectedCategory.name) : selectedCategory.name}</h1>
+              <span className="text-2xl flex-shrink-0">{levelIcon}</span>
+              <h1 className="font-display font-bold text-lg text-white truncate">{levelName}</h1>
             </div>
             <p className="text-xs text-white/60 font-myanmar mt-1">အမျိုးအစားခွဲကို ရွေးပါ</p>
           </div>
@@ -1122,7 +1365,7 @@ export default function DirectoryPage() {
           ) : subcategoryError && subcategories.length === 0 && !hasDirectListings ? (
             <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
               <p className="text-sm text-red-400 font-myanmar">Data တင်မရသေးပါ — ပြန်ကြိုးစားမည်</p>
-              <button onClick={() => loadSubcategories(selectedCategory.id)} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
+              <button onClick={() => loadSubcategories(levelCat.id)} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
             </div>
           ) : (
             <>
@@ -1132,7 +1375,7 @@ export default function DirectoryPage() {
               {subcategoryError && (
                 <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-center justify-between gap-2">
                   <p className="text-xs text-amber-300 font-myanmar">အဟောင်းပြထားသည် — အင်တာနက် နှေးနေသည်</p>
-                  <button onClick={() => loadSubcategories(selectedCategory.id)} className="text-xs text-amber-200 underline font-myanmar flex-shrink-0">ပြန်ကြိုးစားမည်</button>
+                  <button onClick={() => loadSubcategories(levelCat.id)} className="text-xs text-amber-200 underline font-myanmar flex-shrink-0">ပြန်ကြိုးစားမည်</button>
                 </div>
               )}
               {hasDirectListings && (
@@ -1141,7 +1384,7 @@ export default function DirectoryPage() {
                   className="w-full flex items-center justify-between p-4 rounded-2xl card-dark hover:bg-white/8 transition-colors border border-brand-500/30 bg-brand-500/5"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
-                    <span className="text-2xl flex-shrink-0">{selectedCategory.icon}</span>
+                    <span className="text-2xl flex-shrink-0">{levelIcon}</span>
                     <div className="text-left min-w-0 flex-1 overflow-hidden">
                       <p className="font-display font-semibold text-white truncate">အားလုံး</p>
                       <p className="text-[10px] text-white/60 font-myanmar truncate">All listings</p>

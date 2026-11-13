@@ -15,6 +15,7 @@ import { confirmDialog } from '../lib/confirmDialog'
 import { showError } from '../lib/toast'
 import { validateListing, normalizePhone, toLatinDigits } from '../lib/validation'
 import { draftKey, saveDraft, loadDraft, clearDraft, debounce } from '../lib/draftStorage'
+import { invalidateCategoryQueries } from '../lib/queryClient'
 
 function Field({ label, children, required, optional }) {
   return (
@@ -185,6 +186,9 @@ export default function SubmitListingPage() {
       // category picker with []. Keep the last good list on failure.
       if (!catsErr) setCategories(cats || [])
       if (newCat) setFormField('category_id', newCat.id)
+      // v9.40: the new category must show on Home/Directory at once,
+      // not after the 5 min staleTime (same gap as the Manager).
+      invalidateCategoryQueries()
       setQuickCat({ name_mm: '', name: '', icon: '📦', parent_id: '' })
       setShowQuickCat(false)
     } catch (e) {
@@ -482,13 +486,48 @@ export default function SubmitListingPage() {
         (c.name || '').toLowerCase().includes(catQuery)
       )
     : categories
-  const visibleParents = filteredCategories.filter(c => !c.parent_id)
+  // v9.40: every ancestor of a category, from the flat list.
+  function ancestorsOf(cat) {
+    const chain = []
+    let cur = cat
+    while (cur?.parent_id) {
+      const parent = categories.find(x => x.id === cur.parent_id)
+      if (!parent) break
+      chain.push(parent)
+      cur = parent
+    }
+    return chain
+  }
+  // v9.40: the categories the picker renders. Without a search, all
+  // of them. With a search, the matches PLUS their ancestors — so a
+  // level-3 match keeps its parent chain visible (a match used to hide
+  // its whole group when the top-level name did not match), and a
+  // non-matching intermediate never hides a matching descendant.
+  const pickerCats = catQuery
+    ? [...new Map([...filteredCategories, ...filteredCategories.flatMap(c => ancestorsOf(c))].map(c => [c.id, c])).values()]
+    : categories
+  const visibleParents = pickerCats.filter(c => !c.parent_id)
   // NICE (v9.17): the search filter must never hide the currently
   // selected category — a filtered-out selection rendered as blank.
+  // v9.40: generalised to any depth — visible when it is in the
+  // rendered set (a match, an ancestor of a match, or no search).
   const selectedCategory = categories.find(c => c.id === form.category_id)
   const selectedCatVisible = !selectedCategory
-    || visibleParents.some(p => p.id === selectedCategory.id)
-    || filteredCategories.some(c => c.id === selectedCategory.id && visibleParents.some(p => p.id === c.parent_id))
+    || pickerCats.some(c => c.id === selectedCategory.id)
+  // v9.40: <option>s for ALL descendants of a category, depth-first,
+  // indented by depth — a level-3 (or deeper) category is pickable in
+  // the same optgroup as its parent and grandparent. The parent
+  // itself stays selectable via its own '(အားလုံး)' option (SB7/E9).
+  function descendantOptions(parentId, depth) {
+    return pickerCats
+      .filter(c => c.parent_id === parentId)
+      .flatMap(sub => [
+        <option key={sub.id} value={sub.id}>
+          {'\u00A0'.repeat(depth * 2)}{depth > 1 ? '↳ ' : ''}{sub.icon} {sub.name_mm || sub.name}
+        </option>,
+        ...descendantOptions(sub.id, depth + 1),
+      ])
+  }
 
   return (
     <div className="pb-28">
@@ -661,7 +700,7 @@ export default function SubmitListingPage() {
             >
               <option value="">{t('category_placeholder')}</option>
               {visibleParents.map(parent => {
-                const subs = filteredCategories.filter(c => c.parent_id === parent.id)
+                const subs = pickerCats.filter(c => c.parent_id === parent.id)
                 if (subs.length === 0) {
                   return <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name}</option>
                 }
@@ -671,9 +710,7 @@ export default function SubmitListingPage() {
                         listing can be filed directly under a parent category,
                         not only under its sub-categories. */}
                     <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name} (အားလုံး)</option>
-                    {subs.map(sub => (
-                      <option key={sub.id} value={sub.id}>  {sub.icon} {sub.name_mm || sub.name}</option>
-                    ))}
+                    {descendantOptions(parent.id, 1)}
                   </optgroup>
                 )
               })}

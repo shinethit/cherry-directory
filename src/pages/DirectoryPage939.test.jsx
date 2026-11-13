@@ -84,6 +84,28 @@ const CHANGES_EN_939 = [
   'Listing cards render faster — long lists scroll more smoothly',
 ]
 
+// v9.40 ROLL-FORWARD: tests (F1)/(F2) pin the modal MECHANISM, not a
+// frozen version — the prompt only fires when the server version is
+// NEWER than the running APP_VERSION (now 9.40), and the post-update
+// modal leads with the CURRENT version's log. So F1/F2 carry the
+// current (9.40) log: serverVersion '9.41' in F1 (a newer version
+// carrying the 9.40 log) and version.json '9.40' in F2. The 9.39 log
+// itself is still pinned by (F3) below and by version-changes.json.
+// The SAME strings live in version-changes.json (9.40) and in the
+// Header.jsx 9.40 entry (Burmese).
+const CHANGES_MY_940 = [
+  'Category အသစ် ထည့်လိုက်တာနဲ့ ပင်မစာမျက်နှာနဲ့ Directory မှာ ချက်ချင်း ပေါ်ပြီ — ၅ မိနစ် စောင့်စရာ မလိုတော့ပါ',
+  'အမျိုးအစားခွဲထဲက အမျိုးအစားခွဲကို ထပ်ရွေးလို့ ရပြီ — ကျန်းမာရေး → ဆေးရုံ → အထွေထွေဆေးရုံ ဆိုပြီး အဆင့်ဆင့် ဝင်ကြည့်နိုင်ပြီ',
+  'လုပ်ငန်းထည့်တဲ့နေရာမှာ အဆင့် ၃ အမျိုးအစားကိုလည်း ရွေးလို့ ရပြီ',
+  'အမည်တူ Category ထပ်ထည့်မိတာ ချက်ချင်း သိပြီ — နောက်တစ်ယောက် ထည့်ထားတာ ရှိရင်လည်း တွေ့မည်',
+]
+const CHANGES_EN_940 = [
+  'A newly added category appears on Home and in the Directory immediately — no more waiting up to 5 minutes',
+  'You can now drill into a sub-category of a sub-category — Health → Hospital → General Hospital, level by level',
+  'The submit form now offers level-3 categories too',
+  'Adding a category with a name that already exists is caught at once — even if someone else just added it',
+]
+
 const { mockFetchCategories, mockDB, swMock } = vi.hoisted(() => ({
   mockFetchCategories: vi.fn(),
   mockDB: {
@@ -445,32 +467,32 @@ describe('v9.39 (E) COLD ENTRY still chains normally to completion', () => {
   }, 30000)
 })
 
-describe('v9.39 (F) MODAL — full 9.39 change log, all bullets, from version.json', () => {
+describe('v9.39 (F) MODAL — full new-version change log, all bullets, from version.json', () => {
   it('(F1) UpdatePrompt renders the full new-version log under the heading', async () => {
-    swMock.serverVersion = '9.40'
-    swMock.serverChanges = { changesMy: CHANGES_MY_939, changesEn: CHANGES_EN_939 }
+    swMock.serverVersion = '9.41'
+    swMock.serverChanges = { changesMy: CHANGES_MY_940, changesEn: CHANGES_EN_940 }
     render(<UpdatePrompt />)
     await waitFor(() => expect(screen.getByText('ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့')).toBeTruthy(), { timeout: 5000 })
-    for (const item of CHANGES_MY_939) {
+    for (const item of CHANGES_MY_940) {
       expect(screen.getByText(item)).toBeTruthy()
     }
     // Reload + dismiss behaviour is unchanged.
     expect(screen.getByText('ပြန်ဖွင့်မည်')).toBeTruthy()
   }, 20000)
 
-  it('(F2) post-update modal leads with the 9.39 log from live version.json and says "Version 9.39"', async () => {
+  it('(F2) post-update modal leads with the 9.40 log from live version.json and says "Version 9.40"', async () => {
     window.localStorage.setItem('cherry_onboarding_done', '1')
     window.localStorage.removeItem('cherry_last_seen_version')
     const fetchMock = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ version: '9.39', changesMy: CHANGES_MY_939, changesEn: CHANGES_EN_939 }),
+      json: async () => ({ version: '9.40', changesMy: CHANGES_MY_940, changesEn: CHANGES_EN_940 }),
     }))
     vi.stubGlobal('fetch', fetchMock)
     try {
       renderHeader()
       await waitFor(() => expect(screen.getByText('ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့')).toBeTruthy(), { timeout: 8000 })
-      expect(screen.getByText('Version 9.39')).toBeTruthy()
-      for (const item of CHANGES_MY_939) {
+      expect(screen.getByText('Version 9.40')).toBeTruthy()
+      for (const item of CHANGES_MY_940) {
         expect(screen.getByText(item)).toBeTruthy()
       }
       expect(fetchMock).toHaveBeenCalled()

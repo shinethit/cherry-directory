@@ -71,9 +71,6 @@ const ALL_ROWS = [
   makeRow('row-post-office', POST_OFFICE, POST_ID),
 ]
 
-const LISTINGS_KEY = ['listings', 'directory', DELIVERY_ID, `${DELIVERY_ID},${CUSTOM_ID}`, 'All', false, '', 'rating', 0, false]
-const FILTER_KEY = `${DELIVERY_ID}|${DELIVERY_ID},${CUSTOM_ID}|All|false||rating`
-
 const { mockFetchCategories, mockDB } = vi.hoisted(() => ({
   mockFetchCategories: vi.fn(),
   mockDB: { cats: [], rows: [], failTree: false, failCounts: false, lastListingsInVals: null },
@@ -171,10 +168,10 @@ function makeClient() {
   })
 }
 
-function renderDirectory(client) {
+function renderDirectory(client, entry = '/directory') {
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/directory']}>
+      <MemoryRouter initialEntries={[entry]}>
         <LangProvider>
           <DirectoryPage />
         </LangProvider>
@@ -207,6 +204,15 @@ async function expectFiveResults() {
   expectNoEmptyState()
 }
 
+async function expectTwoResults() {
+  await waitFor(() => expect(screen.getByText('2 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
+  for (const name of LEAF_NAMES) {
+    expect(screen.getByText(name)).toBeTruthy()
+  }
+  expect(screen.queryByText(CHERRY)).toBeNull()
+  expectNoEmptyState()
+}
+
 beforeEach(() => {
   cleanup()
   mockFetchCategories.mockReset()
@@ -221,7 +227,7 @@ beforeEach(() => {
 afterEach(() => { cleanup() })
 
 describe('v9.32 subcategory listings include descendants', () => {
-  it('(a) subcategory with child listings (reported case): badge 5, list 5', async () => {
+  it('(a) subcategory with child listings (reported case): badge 5 at the parent; drill shows Custom Clearance 4 + direct 1', async () => {
     const client = makeClient()
     client.setQueryData(['category-map'], ALL_CATS)
     renderDirectory(client)
@@ -233,10 +239,36 @@ describe('v9.32 subcategory listings include descendants', () => {
     expect(screen.getByText('2 လုပ်ငန်း')).toBeTruthy()
     expect(screen.getByText('1 လုပ်ငန်း')).toBeTruthy()
 
+    // v9.40: Delivery Service HAS a child, so tapping it drills to
+    // its children picker instead of its listings (the old tap opened
+    // the 5 listings directly). The drilled level shows Custom
+    // Clearance (4) and the direct row (1).
     fireEvent.click(screen.getByText('အိမ်တိုင်ရာရောက် ပို့ဆောင်ရေး'))
-    await expectFiveResults()
-    // The query asked for the subcategory AND its child, root first.
-    expect(mockDB.lastListingsInVals).toEqual([DELIVERY_ID, CUSTOM_ID])
+    await waitFor(() => expect(screen.getByText('4 လုပ်ငန်း')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.queryByText(/ရလဒ်/)).toBeNull()
+
+    // Custom Clearance (leaf) shows only its 4 listings.
+    fireEvent.click(screen.getByText('အကောက်ခွန်ရှင်းလင်းရေး'))
+    await waitFor(() => expect(screen.getByText('4 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
+    for (const name of CUSTOM_NAMES) {
+      expect(screen.getByText(name)).toBeTruthy()
+    }
+    expect(screen.queryByText(CHERRY)).toBeNull()
+    expectNoEmptyState()
+    expect(mockDB.lastListingsInVals).toEqual([CUSTOM_ID])
+
+    // Back to the drilled level, then the direct ("အားလုံး") row
+    // shows only Delivery Service's own direct listing.
+    fireEvent.click(screen.getByText('နောက်သို့'))
+    await waitFor(() => expect(screen.getByText('4 လုပ်ငန်း')).toBeTruthy(), { timeout: 5000 })
+    fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
+    await waitFor(() => expect(screen.getByText('1 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.getByText(CHERRY)).toBeTruthy()
+    for (const name of CUSTOM_NAMES) {
+      expect(screen.queryByText(name)).toBeNull()
+    }
+    expectNoEmptyState()
+    expect(mockDB.lastListingsInVals).toEqual([DELIVERY_ID])
   }, 20000)
 
   it('(b) direct path unchanged: "အားလုံး" shows only the parent\'s own direct listings', async () => {
@@ -277,10 +309,17 @@ describe('v9.32 subcategory listings include descendants', () => {
 })
 
 describe('v9.32 subcategory-path strand: a cached 0 entry must not swallow the refetch', () => {
+  // v9.40: retargeted at the LEAF sub (Express Delivery) — tapping a
+  // parent sub (Delivery Service) now drills to its children picker
+  // instead of opening its listings, so the strand scenario lives on
+  // the leaf tap. The descendant-inclusive 5-listing case is pinned
+  // by the direct ?cat= link in test (e) below.
+  const LEAF_LISTINGS_KEY = ['listings', 'directory', LEAF_ID, LEAF_ID, 'All', false, '', 'rating', 0, false]
+  const LEAF_FILTER_KEY = `${LEAF_ID}|${LEAF_ID}|All|false||rating`
   function seedZeroEntry(client, ageMs) {
     client.setQueryData(
-      LISTINGS_KEY,
-      { rows: [], total: 0, page: 0, filterKey: FILTER_KEY },
+      LEAF_LISTINGS_KEY,
+      { rows: [], total: 0, page: 0, filterKey: LEAF_FILTER_KEY },
       { updatedAt: Date.now() - ageMs },
     )
   }
@@ -288,7 +327,7 @@ describe('v9.32 subcategory-path strand: a cached 0 entry must not swallow the r
   it.each([
     ['stale (>5 min) cached 0 entry', 6 * 60 * 1000],
     ['fresh (<5 min) cached 0 entry', 60 * 1000],
-  ])('%s: background refetch applies, 5 results show', async (_label, ageMs) => {
+  ])('%s: background refetch applies, 2 results show', async (_label, ageMs) => {
     const client = makeClient()
     client.setQueryData(['category-map'], ALL_CATS)
     client.setQueryData(['category-tree'], TREE_ROWS)
@@ -296,9 +335,9 @@ describe('v9.32 subcategory-path strand: a cached 0 entry must not swallow the r
     renderDirectory(client)
 
     await tapCategory()
-    fireEvent.click(screen.getByText('အိမ်တိုင်ရာရောက် ပို့ဆောင်ရေး'))
-    await expectFiveResults()
-    expect(mockDB.lastListingsInVals).toEqual([DELIVERY_ID, CUSTOM_ID])
+    fireEvent.click(screen.getByText('အမြန်ပို့ဆောင်ရေး'))
+    await expectTwoResults()
+    expect(mockDB.lastListingsInVals).toEqual([LEAF_ID])
   }, 20000)
 })
 
@@ -308,13 +347,14 @@ describe('v9.32 tree arrives late / offline degradation', () => {
     // No map, no tree, and both the tree fetch and the count calls
     // fail — the picker shows '–' badges and the first listings
     // fetch can only be direct-only.
+    // v9.40: reached via a direct ?cat= link now — tapping Delivery
+    // Service in the picker drills to its children instead of opening
+    // its listings, so the late-tree upgrade (the only path that still
+    // opens a parent sub's listings) is pinned on the deep link.
     mockDB.failTree = true
     mockDB.failCounts = true
-    renderDirectory(client)
+    renderDirectory(client, '/directory?cat=' + DELIVERY_ID)
 
-    await tapCategory()
-    expect(screen.getAllByText('–').length).toBe(2)
-    fireEvent.click(screen.getByText('အိမ်တိုင်ရာရောက် ပို့ဆောင်ရေး'))
     await waitFor(() => expect(screen.getByText('1 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText(CHERRY)).toBeTruthy()
     for (const name of CUSTOM_NAMES) {
@@ -331,7 +371,7 @@ describe('v9.32 tree arrives late / offline degradation', () => {
     expect(mockDB.lastListingsInVals).toEqual([DELIVERY_ID, CUSTOM_ID])
   }, 20000)
 
-  it('(f) offline degradation: no map/tree, tree fetch fails — 1 direct result, no crash', async () => {
+  it('(f) offline degradation: no map/tree, tree fetch fails — the drill still works, direct row shows the 1 direct result, no crash', async () => {
     const client = makeClient()
     mockDB.failTree = true
     mockDB.failCounts = true
@@ -339,7 +379,14 @@ describe('v9.32 tree arrives late / offline degradation', () => {
 
     await tapCategory()
     expect(screen.getAllByText('–').length).toBe(2)
+    // v9.40: tapping Delivery Service drills (the child count
+    // succeeds even though the tree fetch fails) — the drilled picker
+    // degrades to '–' badges + the retry strip, and its direct row
+    // still shows the 1 direct listing.
     fireEvent.click(screen.getByText('အိမ်တိုင်ရာရောက် ပို့ဆောင်ရေး'))
+    await waitFor(() => expect(screen.getByText('အကောက်ခွန်ရှင်းလင်းရေး')).toBeTruthy(), { timeout: 5000 })
+    expect(screen.getAllByText('–').length).toBe(1)
+    fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
     await waitFor(() => expect(screen.getByText('1 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText(CHERRY)).toBeTruthy()
     for (const name of CUSTOM_NAMES) {

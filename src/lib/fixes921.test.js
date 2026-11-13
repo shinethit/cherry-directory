@@ -141,7 +141,11 @@ describe('Bug B: Featured pseudo-subcategory sticks', () => {
   it('the selectedCategory effect does not wipe the pseudo in the featured view', () => {
     const dir = read('pages/DirectoryPage.jsx')
     expect(dir).toContain('else if (!featuredOnly) {')
-    expect(dir).toContain('}, [selectedCategory, selectedSubcategory, featuredOnly])')
+    // v9.40: pickerStack joined the deps — the effect loads the
+    // DRILLED picker level (pickerLevelCat) and clears the stack on
+    // leaving the category, so it must re-run on every drill / pop.
+    // The Bug-B guard itself (the else-if) is unchanged.
+    expect(dir).toContain('}, [selectedCategory, selectedSubcategory, featuredOnly, pickerStack])')
   })
 
   it('the H1 effect still sets the pseudo, and goBack still clears it on param removal', () => {
@@ -169,7 +173,7 @@ describe('Bug C: /prices last content clears the Submit FAB', () => {
 describe('v9.21: version + Change Log Admin rule', () => {
   it('package.json is 9.25 (work copy bumped; the 9.21 entry below is still the 9.21 record)', () => {
     const pkg = JSON.parse(readFileSync(join(srcDir, '..', 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.39')
+    expect(pkg.version).toBe('9.40')
   })
 
   it('the 9.21 entry is new, on top, dated 2026-11-06, with zero Admin mentions', () => {

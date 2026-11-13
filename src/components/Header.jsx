@@ -12,11 +12,11 @@ import { APP_VERSION } from '../lib/appVersion'
 // Main navigation pages — no back button needed
 const MAIN_NAV_PATHS = ['/', '/directory', '/community', '/calendar', '/profile']
 
-// v9.39: fallback lead items when /version.json is unreachable
-// (offline) — MUST match the 9.39 entry in the history array below
-// and version-changes.json; DirectoryPage939.test.jsx (F3) asserts
+// v9.40: fallback lead items when /version.json is unreachable
+// (offline) — MUST match the 9.40 entry in the history array below
+// and version-changes.json; DirectoryPage940.test.jsx (F3) asserts
 // this. The bundled history is Burmese-only, so the fallback is too.
-const LEAD_FALLBACK_MY_939 = ['အမျိုးအစားတစ်ခုကနေ နောက်တစ်ခုကို ပြောင်းကြည့်ရင် စာရင်း "၀ ရလဒ်" ပြနေတာ ပြင်ပြီး — ဒေါင်းထားပြီးသား စာရင်း ချက်ချင်း ပေါ်မည်', 'အပြင်မှာ 172/172 ပြရင် အထဲဖွင့်လိုက်တာနဲ့ စာရင်း အပြည့် ချက်ချင်း ပေါ်ပြီ — တစ်ခုချင်း ထပ်တင်နေတာ စောင့်စရာ မလိုတော့ပါ', 'Version အသစ် ရရင် ပြောင်းလဲထားတာတွေ အားလုံး တစ်ခါတည်း ပေါ်ပြီ — အပ်ဒိတ်လုပ်ဖို့ နှိပ်ခိုင်းတဲ့ စာမှာ အပြည့်အစုံ ပါမည်', 'လုပ်ငန်းကတ် ပြတာ ပိုမြန်လာပြီ — စာရင်း ရှည်လည်း ချောချောမွေ့မွေ့ ပွတ်ဆွဲနိုင်မည်']
+const LEAD_FALLBACK_MY_940 = ['Category အသစ် ထည့်လိုက်တာနဲ့ ပင်မစာမျက်နှာနဲ့ Directory မှာ ချက်ချင်း ပေါ်ပြီ — ၅ မိနစ် စောင့်စရာ မလိုတော့ပါ', 'အမျိုးအစားခွဲထဲက အမျိုးအစားခွဲကို ထပ်ရွေးလို့ ရပြီ — ကျန်းမာရေး → ဆေးရုံ → အထွေထွေဆေးရုံ ဆိုပြီး အဆင့်ဆင့် ဝင်ကြည့်နိုင်ပြီ', 'လုပ်ငန်းထည့်တဲ့နေရာမှာ အဆင့် ၃ အမျိုးအစားကိုလည်း ရွေးလို့ ရပြီ', 'အမည်တူ Category ထပ်ထည့်မိတာ ချက်ချင်း သိပြီ — နောက်တစ်ယောက် ထည့်ထားတာ ရှိရင်လည်း တွေ့မည်']
 
 export default function Header() {
   const navigate = useNavigate()
@@ -141,12 +141,12 @@ export default function Header() {
 
   // v9.39: the modal LEADS with the new version's full log, all at
   // once — live version.json first (it is the only source that has
-  // the new entry on first run), the bundled 9.39 entry when offline.
+  // the new entry on first run), the bundled 9.40 entry when offline.
   // The history list below filters the current version out, so the
   // new log appears exactly once.
   const leadItems = lang === 'en' && liveChanges?.changesEn?.length
     ? liveChanges.changesEn
-    : liveChanges?.changesMy?.length ? liveChanges.changesMy : LEAD_FALLBACK_MY_939
+    : liveChanges?.changesMy?.length ? liveChanges.changesMy : LEAD_FALLBACK_MY_940
 
   return (
     <>
@@ -427,7 +427,7 @@ export default function Header() {
               <div className="space-y-2 rounded-2xl border border-brand-400/30 bg-brand-500/5 p-3">
                 <div className="flex items-center gap-2">
                   <span className="badge bg-brand-600/30 text-brand-300 font-bold border border-brand-400/30">v{APP_VERSION}</span>
-                  <span className="text-[10px] text-white/60">2026-11-10</span>
+                  <span className="text-[10px] text-white/60">2026-11-13</span>
                 </div>
                 <p className="text-xs font-bold text-white font-myanmar">ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့</p>
                 <ul className="space-y-1 pl-4">
@@ -439,6 +439,7 @@ export default function Header() {
                 </ul>
               </div>
               {[
+                { v: '9.40', date: '2026-11-13', items: ['Category အသစ် ထည့်လိုက်တာနဲ့ ပင်မစာမျက်နှာနဲ့ Directory မှာ ချက်ချင်း ပေါ်ပြီ — ၅ မိနစ် စောင့်စရာ မလိုတော့ပါ', 'အမျိုးအစားခွဲထဲက အမျိုးအစားခွဲကို ထပ်ရွေးလို့ ရပြီ — ကျန်းမာရေး → ဆေးရုံ → အထွေထွေဆေးရုံ ဆိုပြီး အဆင့်ဆင့် ဝင်ကြည့်နိုင်ပြီ', 'လုပ်ငန်းထည့်တဲ့နေရာမှာ အဆင့် ၃ အမျိုးအစားကိုလည်း ရွေးလို့ ရပြီ', 'အမည်တူ Category ထပ်ထည့်မိတာ ချက်ချင်း သိပြီ — နောက်တစ်ယောက် ထည့်ထားတာ ရှိရင်လည်း တွေ့မည်'] },
                 { v: '9.39', date: '2026-11-10', items: ['အမျိုးအစားတစ်ခုကနေ နောက်တစ်ခုကို ပြောင်းကြည့်ရင် စာရင်း "၀ ရလဒ်" ပြနေတာ ပြင်ပြီး — ဒေါင်းထားပြီးသား စာရင်း ချက်ချင်း ပေါ်မည်', 'အပြင်မှာ 172/172 ပြရင် အထဲဖွင့်လိုက်တာနဲ့ စာရင်း အပြည့် ချက်ချင်း ပေါ်ပြီ — တစ်ခုချင်း ထပ်တင်နေတာ စောင့်စရာ မလိုတော့ပါ', 'Version အသစ် ရရင် ပြောင်းလဲထားတာတွေ အားလုံး တစ်ခါတည်း ပေါ်ပြီ — အပ်ဒိတ်လုပ်ဖို့ နှိပ်ခိုင်းတဲ့ စာမှာ အပြည့်အစုံ ပါမည်', 'လုပ်ငန်းကတ် ပြတာ ပိုမြန်လာပြီ — စာရင်း ရှည်လည်း ချောချောမွေ့မွေ့ ပွတ်ဆွဲနိုင်မည်'] },
                 { v: '9.38', date: '2026-11-10', items: ['ဒေါင်းထားပြီးသား လုပ်ငန်းစာရင်း ပြန်ဖွင့်ရင် လိုင်းမကောင်းလည်း စာရင်း အပြည့်ပေါ်ပြီ — နောက်ကွယ် အသစ်ရယူတာ မအောင်လည်း ဒေါင်းထားတဲ့ စာမျက်နှာတွေ ဆက်တိုက် တင်လာပြီး 172/172 အပြည့်ဖြစ်သွားမည် (အရင် 20 မှာ ရပ်နေတာ ပြင်ပြီး)', 'အမျိုးအစား ကတ်အောက်က အရေအတွက် စာကြောင်း ဖြုတ်လိုက်ပြီ — အရေအတွက်က စက်ဝိုင်းထဲမှာပဲ ပေါ်မည်'] },
                 { v: '9.37', date: '2026-11-10', items: ['လုပ်ငန်းစာရင်း ဖွင့်လိုက်တာနဲ့ နောက်စာမျက်နှာတွေ သူ့အလိုလို ဆက်တိုက် တင်လာပြီ — အောက်ဆွဲစရာ၊ နှိပ်စရာ မလိုတော့ပါ; အပေါ်က စက်ဝိုင်းက 20/172 ကနေ 172/172 အထိ သူ့အလိုလို တက်လာပြီး အပြည့်ဖြစ်သွားမည်', 'အပြင်က အမျိုးအစား ကတ်က 100% ပြပြီး အထဲက စာရင်းက 20/172 ပဲ ပြနေတာ ပြင်ပြီး — နှစ်ခုလုံး အခု ကိုက်ညီသွားမည်'] },
