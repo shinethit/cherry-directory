@@ -40,7 +40,7 @@ export const POINT_ACTIONS = [
   { id: 'write_review',     icon: Star,          points: 5,  mm: 'Review ရေးသည်',                 en: 'Write a review' },
   { id: 'submit_listing',   icon: Building2,     points: 10, mm: 'လုပ်ငန်း တင်ခြင်း',                 en: 'Submit a listing' },
   { id: 'listing_approved', icon: Trophy,        points: 20, mm: 'လုပ်ငန်း အတည်ပြုခြင်း',           en: 'Listing approved' },
-  { id: 'rsvp_going',       icon: CalendarCheck, points: 2,  mm: 'Event RSVP',                     en: 'RSVP to event' },
+  { id: 'rsvp_going',       icon: CalendarCheck, points: 2,  mm: 'ပွဲတက်ရန် စာရင်းပေးခြင်း', en: 'RSVP to event' },
   { id: 'chat_message',     icon: MessageCircle, points: 1,  mm: 'Chat မက်ဆေ့ (max 10/day)',       en: 'Chat message (max 10/day)' },
   { id: 'claim_approved',   icon: ShieldCheck,   points: 30, mm: 'ပိုင်ဆိုင်ကြောင်း အတည်ပြုခြင်း',   en: 'Claim approved' },
 ]

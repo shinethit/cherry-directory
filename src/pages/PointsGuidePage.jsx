@@ -18,7 +18,7 @@ const HISTORY_LABELS = {
   write_review:     { mm: 'Review',   en: 'Review' },
   submit_listing:   { mm: 'တင်ပြခြင်း', en: 'Submit' },
   listing_approved: { mm: 'Approved', en: 'Approved' },
-  rsvp_going:       { mm: 'RSVP',     en: 'RSVP' },
+  rsvp_going:       { mm: 'ပွဲတက်ရန် စာရင်းပေးခြင်း', en: 'RSVP' },
   chat_message:     { mm: 'Chat',     en: 'Chat' },
   claim_approved:   { mm: 'Claim',    en: 'Claim' },
 }

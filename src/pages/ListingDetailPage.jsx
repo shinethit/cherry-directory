@@ -374,10 +374,10 @@ export default function ListingDetailPage() {
       setReported(true)
       setReportReason('')
       setReportDetail('')
-      showSuccess('Report တင်ပြီးပါပြီ — Admin မှ စစ်ဆေးမည်')
+      showSuccess('တိုင်ကြားပြီးပါပြီ — Admin မှ စစ်ဆေးမည်')
     } catch (err) {
       console.warn('Report failed:', err)
-      showError('Report တင်မရပါ — ထပ်ကြိုးစားပါ')
+      showError('တိုင်ကြားမရပါ — ထပ်ကြိုးစားပါ')
     } finally {
       setReportSubmitting(false)
     }
@@ -841,12 +841,12 @@ export default function ListingDetailPage() {
         )}
         {reporting && (
           <div className="space-y-2 rounded-2xl bg-white/5 border border-white/10 p-3">
-            <p className="text-xs font-semibold text-white/70 font-myanmar">ဤလုပ်ငန်းကို Report လုပ်မည်</p>
+            <p className="text-xs font-semibold text-white/70 font-myanmar">ဤလုပ်ငန်းကို တိုင်ကြားမည်</p>
             <input
               type="text"
               value={reportReason}
               onChange={e => setReportReason(e.target.value)}
-              placeholder="Report လုပ်ရသည့် အကြောင်းရင်း..."
+              placeholder="တိုင်ကြားရသည့် အကြောင်းရင်း..."
               className="input-dark font-myanmar w-full"
             />
             <textarea
@@ -857,7 +857,7 @@ export default function ListingDetailPage() {
             />
             <div className="flex gap-2">
               <button onClick={handleReport} disabled={!reportReason.trim() || reportSubmitting} className="flex-1 py-2 rounded-xl btn-danger text-xs font-bold disabled:opacity-40">
-                {reportSubmitting ? 'တင်နေသည်...' : 'Report တင်မည်'}
+                {reportSubmitting ? 'တင်နေသည်...' : 'တိုင်ကြားမည်'}
               </button>
               <button onClick={() => { setReporting(false); setReportReason(''); setReportDetail('') }} className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs">
                 Cancel

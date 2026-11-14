@@ -96,14 +96,14 @@ function RsvpButton({ postId }) {
   }, [postId, user])
 
   async function rsvp(newStatus) {
-    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ RSVP လုပ်နိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ စာရင်းပေးနိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
     setLoading(true)
     if (status === newStatus) {
       const { error } = await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
       if (error) { showError(error.message); setLoading(false); return }
       setCounts(c => ({ ...c, [newStatus]: Math.max(0, c[newStatus] - 1) }))
       setStatus(null)
-      showSuccess('RSVP ဖျက်ပြီးပါပြီ')
+      showSuccess('စာရင်း ဖျက်ပြီးပါပြီ')
     } else {
       const { error } = await supabase.from('event_rsvps').upsert(
         { post_id: postId, user_id: user.id, status: newStatus },
@@ -113,7 +113,7 @@ function RsvpButton({ postId }) {
       if (status) setCounts(c => ({ ...c, [status]: Math.max(0, c[status] - 1) }))
       setCounts(c => ({ ...c, [newStatus]: c[newStatus] + 1 }))
       setStatus(newStatus)
-      showSuccess(newStatus === 'going' ? '✓ Going အဖြစ် မှတ်ပြီးပါပြီ' : '✓ Interested အဖြစ် မှတ်ပြီးပါပြီ')
+      showSuccess(newStatus === 'going' ? '✓ ပါဝင်မည် အဖြစ် မှတ်ပြီးပါပြီ' : '✓ စိတ်ဝင်စားသည် အဖြစ် မှတ်ပြီးပါပြီ')
     }
     setLoading(false)
   }
@@ -130,7 +130,7 @@ function RsvpButton({ postId }) {
         }`}
       >
         <CheckCircle size={12} />
-        Going {counts.going > 0 && <span className="bg-white/15 px-1 rounded-full">{counts.going}</span>}
+        ပါဝင်မည် {counts.going > 0 && <span className="bg-white/15 px-1 rounded-full">{counts.going}</span>}
       </button>
       <button
         onClick={() => rsvp('interested')}
@@ -142,7 +142,7 @@ function RsvpButton({ postId }) {
         }`}
       >
         <Star size={11} />
-        Interested {counts.interested > 0 && <span className="bg-white/15 px-1 rounded-full">{counts.interested}</span>}
+        စိတ်ဝင်စားသည် {counts.interested > 0 && <span className="bg-white/15 px-1 rounded-full">{counts.interested}</span>}
       </button>
     </div>
   )

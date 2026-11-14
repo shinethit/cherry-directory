@@ -938,8 +938,8 @@ export default function MarketPricePage() {
       <div className="mx-4 card-dark rounded-2xl p-4">
         <p className="text-[10px] text-white/60 font-myanmar">
           💡 {lang === 'mm'
-            ? 'Report ချက်တွေကို ၆ လကျော်ရင် auto-delete ဖြစ်မည် • Verified ဈေးနှုန်းများ (✓) သည် ထာဝရ သိမ်းဆည်းထားမည်'
-            : 'Reports auto-deleted after 6 months • Verified prices (✓) are kept permanently for history'}
+            ? 'Verified ဈေးနှုန်းများ (✓) သည် ထာဝရ သိမ်းဆည်းထားမည်'
+            : 'Verified prices (✓) are kept permanently for history'}
         </p>
       </div>
 

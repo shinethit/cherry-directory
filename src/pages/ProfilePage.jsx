@@ -511,7 +511,7 @@ export default function ProfilePage() {
           <button onClick={togglePush} disabled={pushLoading} className="w-full flex items-center gap-3 p-4 card-dark rounded-2xl hover:bg-white/8 transition-colors">
             {pushEnabled ? <Bell size={18} className="text-brand-300" /> : <BellOff size={18} className="text-white/40" />}
             <div className="text-left flex-1">
-              <p className="text-sm font-display font-semibold text-white">Push Notifications</p>
+              <p className="text-sm font-display font-semibold text-white">အသိပေးချက်များ</p>
               <p className="text-xs text-white/60">{pushEnabled ? (lang === 'mm' ? 'ဖွင့်ထားသည်' : 'Enabled') : (lang === 'mm' ? 'ပိတ်ထားသည်' : 'Disabled')}</p>
             </div>
             <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${pushEnabled ? 'bg-brand-500' : 'bg-white/15'}`}>

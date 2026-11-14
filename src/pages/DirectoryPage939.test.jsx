@@ -84,15 +84,33 @@ const CHANGES_EN_939 = [
   'Listing cards render faster — long lists scroll more smoothly',
 ]
 
-// v9.40 ROLL-FORWARD: tests (F1)/(F2) pin the modal MECHANISM, not a
+// v9.41 ROLL-FORWARD: tests (F1)/(F2) pin the modal MECHANISM, not a
 // frozen version — the prompt only fires when the server version is
-// NEWER than the running APP_VERSION (now 9.40), and the post-update
+// NEWER than the running APP_VERSION (now 9.41), and the post-update
 // modal leads with the CURRENT version's log. So F1/F2 carry the
-// current (9.40) log: serverVersion '9.41' in F1 (a newer version
-// carrying the 9.40 log) and version.json '9.40' in F2. The 9.39 log
+// current (9.41) log: serverVersion '9.42' in F1 (a newer version
+// carrying the 9.41 log) and version.json '9.41' in F2. The 9.39 log
 // itself is still pinned by (F3) below and by version-changes.json.
-// The SAME strings live in version-changes.json (9.40) and in the
-// Header.jsx 9.40 entry (Burmese).
+// The SAME strings live in version-changes.json (9.41) and in the
+// Header.jsx 9.41 entry (Burmese).
+const CHANGES_MY_941 = [
+  'About / Privacy / Terms စာသားများကို အစအဆုံး ပြန်ရေးပြီး သာမန်လူ နားလည်လွယ်အောင် ပြင်ထားသည်',
+  'RSVP၊ Tier၊ Leaderboard၊ GPS စသော အင်္ဂလိပ် အသုံးများကို မြန်မာလို ပြောင်းထားသည်',
+  'ပြက္ခဒိန် ပွဲတက်ရန် ခလုတ်များ "ပါဝင်မည်" / "စိတ်ဝင်စားသည်" မြန်မာလို ဖြစ်သွားပြီ',
+  'Profile က အသိပေးချက် toggle မြန်မာလို ("အသိပေးချက်များ") ဖြစ်သွားပြီ',
+  'ဈေးနှုန်း စာမျက်နှာက ၆ လ auto-delete ဆိုတဲ့ စာသားကို ဖြုတ်ထားသည်',
+  'စာမျက်နှာကို တိုက်ရိုက်ဖွင့်ပြီး Back နှိပ်ရင် App အပြင်ကို ထွက်မသွားတော့ဘဲ ပင်မစာမျက်နှာကို ပြန်သွားမည်',
+  'လုပ်ငန်းတင်သွင်းတဲ့ ဖောင်မှာ အင်္ဂလိပ် သတိပေးချက် မပေါ်တော့ပါ',
+]
+const CHANGES_EN_941 = [
+  'About, Privacy and Terms rewritten from scratch in plain language anyone can understand',
+  'English jargon (RSVP, Tier, Leaderboard, GPS…) replaced with Burmese',
+  'Calendar event buttons are now in Burmese (Going / Interested)',
+  'Profile notifications toggle is now in Burmese',
+  'Removed the 6-month auto-delete note from the Market Price page',
+  'Back button on a directly opened page now goes Home instead of leaving the app',
+  'Submit form no longer shows an English browser message',
+]
 const CHANGES_MY_940 = [
   'Category အသစ် ထည့်လိုက်တာနဲ့ ပင်မစာမျက်နှာနဲ့ Directory မှာ ချက်ချင်း ပေါ်ပြီ — ၅ မိနစ် စောင့်စရာ မလိုတော့ပါ',
   'အမျိုးအစားခွဲထဲက အမျိုးအစားခွဲကို ထပ်ရွေးလို့ ရပြီ — ကျန်းမာရေး → ဆေးရုံ → အထွေထွေဆေးရုံ ဆိုပြီး အဆင့်ဆင့် ဝင်ကြည့်နိုင်ပြီ',
@@ -469,30 +487,30 @@ describe('v9.39 (E) COLD ENTRY still chains normally to completion', () => {
 
 describe('v9.39 (F) MODAL — full new-version change log, all bullets, from version.json', () => {
   it('(F1) UpdatePrompt renders the full new-version log under the heading', async () => {
-    swMock.serverVersion = '9.41'
-    swMock.serverChanges = { changesMy: CHANGES_MY_940, changesEn: CHANGES_EN_940 }
+    swMock.serverVersion = '9.42'
+    swMock.serverChanges = { changesMy: CHANGES_MY_941, changesEn: CHANGES_EN_941 }
     render(<UpdatePrompt />)
     await waitFor(() => expect(screen.getByText('ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့')).toBeTruthy(), { timeout: 5000 })
-    for (const item of CHANGES_MY_940) {
+    for (const item of CHANGES_MY_941) {
       expect(screen.getByText(item)).toBeTruthy()
     }
     // Reload + dismiss behaviour is unchanged.
     expect(screen.getByText('ပြန်ဖွင့်မည်')).toBeTruthy()
   }, 20000)
 
-  it('(F2) post-update modal leads with the 9.40 log from live version.json and says "Version 9.40"', async () => {
+  it('(F2) post-update modal leads with the 9.41 log from live version.json and says "Version 9.41"', async () => {
     window.localStorage.setItem('cherry_onboarding_done', '1')
     window.localStorage.removeItem('cherry_last_seen_version')
     const fetchMock = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ version: '9.40', changesMy: CHANGES_MY_940, changesEn: CHANGES_EN_940 }),
+      json: async () => ({ version: '9.41', changesMy: CHANGES_MY_941, changesEn: CHANGES_EN_941 }),
     }))
     vi.stubGlobal('fetch', fetchMock)
     try {
       renderHeader()
       await waitFor(() => expect(screen.getByText('ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့')).toBeTruthy(), { timeout: 8000 })
-      expect(screen.getByText('Version 9.40')).toBeTruthy()
-      for (const item of CHANGES_MY_940) {
+      expect(screen.getByText('Version 9.41')).toBeTruthy()
+      for (const item of CHANGES_MY_941) {
         expect(screen.getByText(item)).toBeTruthy()
       }
       expect(fetchMock).toHaveBeenCalled()

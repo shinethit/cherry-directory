@@ -609,7 +609,7 @@ export default function SubmitListingPage() {
         </div>
       )}
 
-      <form id="submit-listing-form" onSubmit={handleSubmit} className="px-4 pt-4 space-y-4">
+      <form id="submit-listing-form" onSubmit={handleSubmit} noValidate className="px-4 pt-4 space-y-4">
 
         {/* v9.17 (Issue 2): an unsaved draft was restored. */}
         {draftRestored && (

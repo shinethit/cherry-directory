@@ -316,8 +316,6 @@ describe('v9.40 (F) CHANGELOG — 9.40 entry, Header match, zero Admin', () => {
     expect(changes['9.40']).toBeTruthy()
     expect(changes['9.40'].changesMy).toEqual(CHANGES_MY_940)
     expect(changes['9.40'].changesEn).toEqual(CHANGES_EN_940)
-    const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.40')
     const header = readFileSync(join(rootDir, 'src', 'components', 'Header.jsx'), 'utf8')
     expect(header).toContain("{ v: '9.40', date: '2026-11-13'")
     for (const item of CHANGES_MY_940) {
@@ -326,16 +324,9 @@ describe('v9.40 (F) CHANGELOG — 9.40 entry, Header match, zero Admin', () => {
     const entry = header.slice(header.indexOf("{ v: '9.40'"), header.indexOf("{ v: '9.39'"))
     expect(entry).not.toMatch(/Admin/i)
     expect(JSON.stringify(changes['9.40'])).not.toMatch(/Admin/i)
-    // The modal's lead block (v{APP_VERSION} badge) must carry the
-    // CURRENT version's date, not the previous version's — the lead
-    // date was still 2026-11-10 after the bump until this fix.
-    const lead = header.slice(header.indexOf('v{APP_VERSION}'), header.indexOf("{ v: '9.40'"))
-    expect(lead).toContain('2026-11-13')
-    // The offline fallback constant carries the same 9.40 items.
-    expect(header).toContain('LEAD_FALLBACK_MY_940')
-    const fallback = header.slice(header.indexOf('LEAD_FALLBACK_MY_940 = ['), header.indexOf('LEAD_FALLBACK_MY_940 = [') + 2000)
-    for (const item of CHANGES_MY_940) {
-      expect(fallback).toContain(item)
-    }
+    // v9.41 ROLL-FORWARD: the current-version pins that used to live
+    // here (pkg.version, the modal lead date, LEAD_FALLBACK_MY_940)
+    // now live in InfoPages941.test.jsx (F) for 9.41 — this block
+    // keeps only the 9.40-entry match, like the 9.39 (F3) block.
   })
 })

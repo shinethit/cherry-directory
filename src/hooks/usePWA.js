@@ -44,7 +44,7 @@ export function usePWA() {
     // so subscribing would create a device that can never be notified.
     // (ProfilePage still calls this; it now gets a truthful toast instead of
     // a silent dead subscription.)
-    showInfo('Push notification မရသေးပါ — နောက်ထပ် version တွင် ရနိုင်မည်')
+    showInfo('အသိပေးချက် မရသေးပါ — နောက်ထပ် version တွင် ရနိုင်မည်')
     return false
   }
 

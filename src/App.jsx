@@ -13,6 +13,7 @@ import OnboardingGuide from './components/OnboardingGuide'
 import { ConfirmProvider } from './components/ConfirmModal'
 import { logVisit } from './lib/visitTracking'
 import { schedulePrefetch } from './lib/prefetch'
+import { NAV_DEPTH_KEY } from './lib/navigation'
 import { usePresence } from './hooks/usePresence'
 
 // ── Lazy pages — default exports ─────────────────────────────
@@ -119,6 +120,27 @@ const HistoryDetailPage   = lazyWithRetry(() => import('./pages/HistoryPage').th
 function ScrollToTop() {
   const { pathname } = useLocation()
   useEffect(() => { window.scrollTo(0, 0) }, [pathname])
+  return null
+}
+
+// v9.41: in-app navigation depth for goBackOrHome — window.history.length
+// counts external entries (a fresh tab's new-tab page counts), so a
+// directly opened page wrongly went Back OUT of the app. The ref starts
+// at the first pathname, so the first mount does NOT count; every later
+// pathname change (a real in-app navigation) increments the
+// sessionStorage depth by 1. goBackOrHome goes back only when depth > 0,
+// otherwise it goes to the fallback page.
+function TrackNavDepth() {
+  const { pathname } = useLocation()
+  const lastPathRef = useRef(pathname)
+  useEffect(() => {
+    if (lastPathRef.current === pathname) return
+    lastPathRef.current = pathname
+    try {
+      const depth = parseInt(sessionStorage.getItem(NAV_DEPTH_KEY) || '0', 10)
+      sessionStorage.setItem(NAV_DEPTH_KEY, String((Number.isFinite(depth) ? depth : 0) + 1))
+    } catch { /* storage unavailable — Back falls back to '/' */ }
+  }, [pathname])
   return null
 }
 
@@ -303,6 +325,7 @@ function AppRoutes() {
       <Header />
       <AnnouncementBanner />
       <ScrollToTop />
+      <TrackNavDepth />
       <main className="flex-1 pb-32">
       <TimedSuspense>
         <Routes>
