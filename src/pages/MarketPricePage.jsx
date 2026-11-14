@@ -329,7 +329,7 @@ function ManageMarketsModal({ onClose, onUpdated, lang }) {
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/8">
           <div>
             <p className="font-display font-bold text-white">🏪 {lang === 'mm' ? 'ဈေးကွက် စီမံမည်' : 'Manage Markets'}</p>
-            <p className="text-[10px] text-white/60 font-myanmar mt-0.5">{lang === 'mm' ? 'ဈေးနှုန်း Report မှာ ပေါ်မည့် ဈေးကွက်များ' : 'Markets shown when reporting prices'}</p>
+            <p className="text-[10px] text-white/60 font-myanmar mt-0.5">{lang === 'mm' ? 'ဈေးနှုန်း တင်ပြရာမှာ ပေါ်မည့် ဈေးကွက်များ' : 'Markets shown when reporting prices'}</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-xl bg-white/8 flex items-center justify-center text-white/50">✕</button>
         </div>
@@ -768,7 +768,7 @@ export default function MarketPricePage() {
         </div>
         <div className="flex-1 card-dark rounded-2xl p-3 text-center">
           <p className="font-display font-bold text-lg text-white">{totalReports}</p>
-          <p className="text-[9px] text-white/60">{lang === 'mm' ? 'Report (48h)' : 'Reports (48h)'}</p>
+          <p className="text-[9px] text-white/60">{lang === 'mm' ? 'တင်ပြချက် (48h)' : 'Reports (48h)'}</p>
         </div>
         <div className="flex-1 card-dark rounded-2xl p-3 text-center">
           {isOnline && liveConnected ? (
@@ -913,7 +913,7 @@ export default function MarketPricePage() {
       {/* Recent reports */}
       {recentReports.length > 0 && (
         <div className="px-4 mb-4">
-          <p className="text-[10px] text-white/60 font-display font-bold uppercase tracking-wider mb-2">{lang === 'mm' ? 'နောက်ဆုံး Report များ' : 'Recent Reports'}</p>
+          <p className="text-[10px] text-white/60 font-display font-bold uppercase tracking-wider mb-2">{lang === 'mm' ? 'နောက်ဆုံး တင်ပြချက်များ' : 'Recent Reports'}</p>
           <div className="space-y-1.5">
             {recentReports.map(r => (
               <div key={r.id} className="flex flex-wrap items-center gap-2 text-[10px] text-white/60">
@@ -924,7 +924,7 @@ export default function MarketPricePage() {
                 <span className="text-white/60 truncate max-w-[120px]">{r.reporter?.nickname ? `@${r.reporter.nickname}` : 'Guest'}</span>
                 <span className="text-white/60">{timeAgoShort(r.reported_at, lang)}</span>
                 {isModerator && (
-                  <button onClick={async () => { if (!(await confirmDialog(lang === 'mm' ? 'ဒီ Report ကို ဖျက်မည်လား?' : 'Delete this report?', { danger: true }))) return; const { error } = await supabase.from('price_reports').delete().eq('id', r.id); if (error) { console.error('Delete price report error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed'); return } refetchPrices() }} className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center hover:text-red-400 transition-colors" aria-label={lang === 'mm' ? 'Report ဖျက်မည်' : 'Delete report'}>
+                  <button onClick={async () => { if (!(await confirmDialog(lang === 'mm' ? 'ဒီ တင်ပြချက်ကို ဖျက်မည်လား?' : 'Delete this report?', { danger: true }))) return; const { error } = await supabase.from('price_reports').delete().eq('id', r.id); if (error) { console.error('Delete price report error:', error); showError(lang === 'mm' ? 'ဖျက်ရာတွင် အမှားရှိသည်' : 'Delete failed'); return } refetchPrices() }} className="min-w-[44px] min-h-[44px] -my-2 flex items-center justify-center hover:text-red-400 transition-colors" aria-label={lang === 'mm' ? 'တင်ပြချက် ဖျက်မည်' : 'Delete report'}>
                     <Trash2 size={10} />
                   </button>
                 )}

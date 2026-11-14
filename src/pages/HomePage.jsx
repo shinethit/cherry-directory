@@ -635,9 +635,8 @@ export default function HomePage() {
               <ul className="space-y-1">
                 <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>Review ရေး + အဆင့်သတ်မှတ်</li>
                 <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>သိမ်းဆည်း (Saved)</li>
-                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>အမှတ် + Leaderboard</li>
-                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>Event RSVP</li>
-                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>Push Notification</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>အမှတ် + အမှတ်စာရင်း</li>
+                <li className="text-xs text-white/60 font-myanmar flex items-start gap-2"><span className="text-brand-400 mt-0.5">•</span>ပွဲတက်ရန် စာရင်းပေးခြင်း</li>
               </ul>
             </div>
           </div>

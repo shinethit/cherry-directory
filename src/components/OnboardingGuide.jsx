@@ -44,7 +44,7 @@ const STEPS = [
     icon: '🏆',
     mm: {
       title: 'အမှတ် ရယူပါ',
-      desc: 'Review ရေး၊ Listing တင်၊ Chat လုပ်ပြီး အမှတ် ရယူပြီး Leaderboard မှာ ပါဝင်ပါ',
+      desc: 'Review ရေး၊ Listing တင်၊ Chat လုပ်ပြီး အမှတ် ရယူပြီး အမှတ်စာရင်း မှာ ပါဝင်ပါ',
     },
     en: {
       title: 'Earn Points',

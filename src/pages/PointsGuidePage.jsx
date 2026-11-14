@@ -94,7 +94,7 @@ export default function PointsGuidePage() {
                   <p className={`font-display font-bold text-base ${currentTier.color}`}>
                     {lang === 'mm' ? currentTier.mm : currentTier.en}
                   </p>
-                  <p className="text-[10px] text-white/50 font-myanmar">{lang === 'mm' ? 'လက်ရှိ Tier' : 'Current tier'}</p>
+                  <p className="text-[10px] text-white/50 font-myanmar">{lang === 'mm' ? 'လက်ရှိ အဆင့်' : 'Current tier'}</p>
                 </div>
               </div>
               <div className="text-right">
@@ -114,7 +114,7 @@ export default function PointsGuidePage() {
                 </div>
               </>
             ) : (
-              <p className="text-[10px] text-purple-300 text-center font-myanmar">👑 {lang === 'mm' ? 'အမြင့်ဆုံး Tier' : 'Top tier'}</p>
+              <p className="text-[10px] text-purple-300 text-center font-myanmar">👑 {lang === 'mm' ? 'အမြင့်ဆုံး အဆင့်' : 'Top tier'}</p>
             )}
           </div>
         </div>
@@ -147,7 +147,7 @@ export default function PointsGuidePage() {
       <div className="px-4">
         <h2 className="text-xs font-display font-bold text-white/60 uppercase tracking-wider mb-3 flex items-center gap-2">
           <Trophy size={14} className="text-gold-400" />
-          {lang === 'mm' ? 'Tier အဆင့်များ' : 'Tier Levels'}
+          {lang === 'mm' ? 'အဆင့်များ' : 'Tier Levels'}
         </h2>
         <div className="space-y-2">
           {TIERS.map(tier => {
@@ -220,7 +220,7 @@ export default function PointsGuidePage() {
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-brand-600/30 border border-brand-400/40 text-brand-200 text-xs font-bold hover:bg-brand-600/40 transition-colors"
         >
           <Trophy size={14} />
-          {lang === 'mm' ? 'Leaderboard ကြည့်မည်' : 'View Leaderboard'}
+          {lang === 'mm' ? 'အမှတ်စာရင်း ကြည့်မည်' : 'View Leaderboard'}
         </button>
       </div>
     </div>

@@ -62,7 +62,7 @@ function RsvpSection({ postId }) {
   }, [postId, user])
 
   async function rsvp(newStatus) {
-    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ RSVP လုပ်နိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
+    if (!isLoggedIn) { showError('အကောင့်ဝင်မှ စာရင်းပေးနိုင်မည်'); navigate('/login', { state: { from: location.pathname } }); return }
     setLoading(true)
     if (status === newStatus) {
       const { error } = await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
@@ -98,7 +98,7 @@ function RsvpSection({ postId }) {
           }`}
         >
           <CheckCircle size={14} />
-          သွားမည် {counts.going > 0 && <span className="text-xs opacity-70">({counts.going})</span>}
+          ပါဝင်မည် {counts.going > 0 && <span className="text-xs opacity-70">({counts.going})</span>}
         </button>
         <button
           onClick={() => rsvp('interested')}
@@ -110,11 +110,11 @@ function RsvpSection({ postId }) {
           }`}
         >
           <Star size={13} />
-          ဖြစ်နိုင်သည် {counts.interested > 0 && <span className="text-xs opacity-70">({counts.interested})</span>}
+          စိတ်ဝင်စားသည် {counts.interested > 0 && <span className="text-xs opacity-70">({counts.interested})</span>}
         </button>
       </div>
       {!isLoggedIn && (
-        <p className="text-[10px] text-white/60 font-myanmar">RSVP လုပ်ရန် Login လိုအပ်သည်</p>
+        <p className="text-[10px] text-white/60 font-myanmar">စာရင်းပေးရန် Login လိုအပ်သည်</p>
       )}
     </div>
   )

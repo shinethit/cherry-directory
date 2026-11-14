@@ -45,7 +45,7 @@ describe('v9.41 (A) ABOUT — draft rewrite', () => {
     expect(document.body.textContent).not.toContain('RSVP')
     expect(document.body.textContent).not.toContain('Top Contributor Badge')
     // Top card unchanged: logo city, version, byline.
-    expect(screen.getByText(/Version 9.41 • Since 2026/)).toBeTruthy()
+    expect(screen.getByText(/Version 9.42 • Since 2026/)).toBeTruthy()
     expect(screen.getByText('by Shine Thit')).toBeTruthy()
   })
 })
@@ -122,9 +122,13 @@ describe('v9.41 (A) HELP — all 10 draft fixes + push corrections', () => {
 })
 
 // v9.41 (F) CHANGELOG — the 9.41 entry in version-changes.json matches
-// the Header.jsx history entry (Burmese), zero Admin, and the offline
-// fallback leads with the same items. Follows the 9.40 (F3) pattern;
-// the current-version pins moved here from DirectoryPage940.test.jsx.
+// the Header.jsx history entry (Burmese), zero Admin. Follows the 9.40
+// (F3) pattern; the current-version pins moved here from
+// DirectoryPage940.test.jsx.
+// v9.42 ROLL-FORWARD: the current-version pins that used to live
+// here (pkg.version, the modal lead date, LEAD_FALLBACK_MY_941)
+// now live in Fixes942.test.jsx (F) for 9.42 — this block
+// keeps only the 9.41-entry match, like the 9.40 (F3) block.
 const CHANGES_MY_941 = [
   'About / Privacy / Terms စာသားများကို အစအဆုံး ပြန်ရေးပြီး သာမန်လူ နားလည်လွယ်အောင် ပြင်ထားသည်',
   'RSVP၊ Tier၊ Leaderboard၊ GPS စသော အင်္ဂလိပ် အသုံးများကို မြန်မာလို ပြောင်းထားသည်',
@@ -151,8 +155,6 @@ describe('v9.41 (F) CHANGELOG — 9.41 entry, Header match, zero Admin', () => {
     expect(changes['9.41']).toBeTruthy()
     expect(changes['9.41'].changesMy).toEqual(CHANGES_MY_941)
     expect(changes['9.41'].changesEn).toEqual(CHANGES_EN_941)
-    const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.41')
     const header = readFileSync(join(rootDir, 'src', 'components', 'Header.jsx'), 'utf8')
     expect(header).toContain("{ v: '9.41', date: '2026-11-14'")
     for (const item of CHANGES_MY_941) {
@@ -161,16 +163,6 @@ describe('v9.41 (F) CHANGELOG — 9.41 entry, Header match, zero Admin', () => {
     const entry = header.slice(header.indexOf("{ v: '9.41'"), header.indexOf("{ v: '9.40'"))
     expect(entry).not.toMatch(/Admin/i)
     expect(JSON.stringify(changes['9.41'])).not.toMatch(/Admin/i)
-    // The modal's lead block (v{APP_VERSION} badge) must carry the
-    // CURRENT version's date, not the previous version's.
-    const lead = header.slice(header.indexOf('v{APP_VERSION}'), header.indexOf("{ v: '9.41'"))
-    expect(lead).toContain('2026-11-14')
-    // The offline fallback constant carries the same 9.41 items.
-    expect(header).toContain('LEAD_FALLBACK_MY_941')
-    const fallback = header.slice(header.indexOf('LEAD_FALLBACK_MY_941 = ['), header.indexOf('LEAD_FALLBACK_MY_941 = [') + 2000)
-    for (const item of CHANGES_MY_941) {
-      expect(fallback).toContain(item)
-    }
   })
 
   it('(F) usePWA enablePush toast is plain Burmese and promises nothing', () => {

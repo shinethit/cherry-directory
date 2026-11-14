@@ -87,7 +87,7 @@ describe('LeaderboardPage 9.25 slow-network', () => {
     )
     await waitFor(() => expect(screen.getByText(/အဟောင်းပြထားသည်/)).toBeTruthy())
     expect(screen.getByText('User Four')).toBeTruthy()
-    expect(screen.queryByText('Leaderboard ရယူမရပါ')).toBeNull()
+    expect(screen.queryByText('အမှတ်စာရင်း ရယူမရပါ')).toBeNull()
     fireEvent.click(screen.getByText('ပြန်ကြိုးစားမည်'))
     expect(mockRefetchBoard).toHaveBeenCalled()
   })
@@ -106,7 +106,7 @@ describe('LeaderboardPage 9.25 slow-network', () => {
     setBoard({ data: undefined })
     renderBoard()
     await waitFor(() => expect(screen.getByText('Activity မရှိသေးပါ')).toBeTruthy())
-    expect(screen.queryByText('Leaderboard ရယူမရပါ')).toBeNull()
+    expect(screen.queryByText('အမှတ်စာရင်း ရယူမရပါ')).toBeNull()
   })
 })
 

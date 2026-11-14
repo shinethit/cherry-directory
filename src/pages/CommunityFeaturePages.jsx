@@ -1023,7 +1023,7 @@ export function BusSchedulePage() {
       <div className="px-4 pt-4 pb-3 flex items-start justify-between">
         <div>
           <h1 className="font-display font-bold text-xl text-white">🚌 {lang === 'mm' ? 'ကားထွက်ချိန်' : 'Bus Schedule'}</h1>
-          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကားထွက်ချိန် Community Report` : 'Community reported bus departures'}</p>
+          <p className="text-xs text-white/60 mt-0.5 font-myanmar">{lang === 'mm' ? `${config.app_city || ''} ကားထွက်ချိန် တင်ပြချက်များ` : 'Community reported bus departures'}</p>
         </div>
         <button onClick={() => setShowForm(true)} className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5 flex-shrink-0"><Plus size={14} /> {lang === 'mm' ? 'ထည့်မည်' : 'Add'}</button>
       </div>

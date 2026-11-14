@@ -202,7 +202,7 @@ export default function LeaderboardPage() {
   const navigate   = useNavigate()
   const { lang }   = useLang()
   const { user: me, profile } = useAuth()
-  useSEO({ title: 'Top Contributors' })
+  useSEO({ title: lang === 'mm' ? 'ထိပ်တန်း ပါဝင်သူများ' : 'Top Contributors' })
 
   const [tab, setTab]     = useState('points')
   const [period, setPeriod] = useState('month')
@@ -264,7 +264,7 @@ export default function LeaderboardPage() {
       }))
     },
   })
-  const loadError = loadFailed ? (loadErrObj?.message || 'Leaderboard ရယူမရပါ') : ''
+  const loadError = loadFailed ? (loadErrObj?.message || 'အမှတ်စာရင်း ရယူမရပါ') : ''
 
   const myIdx = me ? users.findIndex(u => u.id === me.id) : -1
   const myRank = myIdx >= 0 ? myIdx + 1 : null
@@ -314,7 +314,7 @@ export default function LeaderboardPage() {
       <div className="px-4 pt-4 pb-3">
         <div className="flex items-center gap-2.5 mb-1">
           <Trophy size={22} className="text-gold-400 flex-shrink-0" />
-          <h1 className="font-display font-bold text-xl text-white">Top Contributors</h1>
+          <h1 className="font-display font-bold text-xl text-white">{lang === 'mm' ? 'ထိပ်တန်း ပါဝင်သူများ' : 'Top Contributors'}</h1>
         </div>
         <p className="text-xs text-white/60 font-myanmar">{periodLabel(period, lang)}</p>
         {/* 9.25 slow-network: stale pill — background refetch in flight
@@ -347,7 +347,7 @@ export default function LeaderboardPage() {
           <div className="flex items-center gap-2.5 mb-2">
             <Trophy size={14} className="text-brand-300 flex-shrink-0" />
             <p className="text-xs text-white/70 flex-1 font-myanmar">
-              {lang === 'mm' ? 'သင်၏ rank' : 'Your rank'}:
+              {lang === 'mm' ? 'သင်၏ အဆင့်' : 'Your rank'}:
               <span className="font-display font-bold text-brand-300 ml-1">#{myRank || rankBeyond?.rank}</span>
             </p>
             <TierBadge points={profile.points || 0} size="xs" lang={lang} />
@@ -367,7 +367,7 @@ export default function LeaderboardPage() {
             if (!prog.next) {
               return (
                 <p className="text-[9px] text-purple-300 text-center font-myanmar">
-                  👑 {lang === 'mm' ? 'အမြင့်ဆုံး Tier ရောက်ပြီ' : 'Top tier reached'}
+                  👑 {lang === 'mm' ? 'အမြင့်ဆုံး အဆင့် ရောက်ပြီ' : 'Top tier reached'}
                 </p>
               )
             }
@@ -413,7 +413,7 @@ export default function LeaderboardPage() {
             <div className="flex flex-col items-center py-14 text-center px-6">
               <Medal size={44} className="text-white/15 mb-3" />
               <p className="font-display font-semibold text-white/60">
-                {lang === 'mm' ? 'Leaderboard ရယူမရပါ' : 'Could not load leaderboard'}
+                {lang === 'mm' ? 'အမှတ်စာရင်း ရယူမရပါ' : 'Could not load leaderboard'}
               </p>
               <p className="text-xs text-white/60 mt-1 font-myanmar">{loadError}</p>
               <button
@@ -489,9 +489,9 @@ export default function LeaderboardPage() {
         {/* Period reset note */}
         <div className="mt-3 pt-3 border-t border-white/8 space-y-1">
           {[
-            { id: 'month',  mm: '"ဒီလ" ranking — လတိုင်း ၁ ရက်နေ့ reset',          en: 'Monthly — resets on the 1st each month' },
-            { id: '6month', mm: '"နောက်ဆုံး ၆ လ" ranking — နောက်ဆုံး ၁၈၀ ရက်',               en: '6 Months — rolling last 180 days' },
-            { id: 'year',   mm: '"ဒီနှစ်" ranking — ဇန်နဝါရီ ၁ ရက်မှ reset',      en: 'Year — resets on January 1st' },
+            { id: 'month',  mm: '"ဒီလ" အဆင့်သတ်မှတ်ချက် — လတိုင်း ၁ ရက်နေ့ ပြန်စသည်',          en: 'Monthly — resets on the 1st each month' },
+            { id: '6month', mm: '"နောက်ဆုံး ၆ လ" အဆင့်သတ်မှတ်ချက် — နောက်ဆုံး ၁၈၀ ရက်',               en: '6 Months — rolling last 180 days' },
+            { id: 'year',   mm: '"ဒီနှစ်" အဆင့်သတ်မှတ်ချက် — ဇန်နဝါရီ ၁ ရက်မှ ပြန်စသည်',      en: 'Year — resets on January 1st' },
           ].map(p => (
             <p key={p.id} className="text-[9px] text-white/60 font-myanmar">
               💡 {lang === 'mm' ? p.mm : p.en}

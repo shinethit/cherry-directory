@@ -280,7 +280,7 @@ export default function EditListingPage() {
   }
 
   function getMyLocation() {
-    if (!navigator.geolocation) { showError('GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ'); return }
+    if (!navigator.geolocation) { showError('မြေပုံပေါ်က နေရာ ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ'); return }
     setLocationLoading(true)
     navigator.geolocation.getCurrentPosition(pos => {
       set('latitude', pos.coords.latitude.toFixed(7))
@@ -288,7 +288,7 @@ export default function EditListingPage() {
       setLocationLoading(false)
     }, () => {
       setLocationLoading(false)
-      showError('GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ')
+      showError('မြေပုံပေါ်က နေရာ ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ')
     }, { timeout: 10000, maximumAge: 60000 })
   }
 
@@ -715,7 +715,7 @@ export default function EditListingPage() {
             <p className="text-xs text-white/60 font-display font-semibold uppercase tracking-wider">တည်နေရာ</p>
             <div className="flex items-center gap-3">
               <button type="button" onClick={getMyLocation} disabled={locationLoading} className="flex items-center gap-1.5 text-xs text-brand-300 hover:text-brand-200 transition-colors">
-                <MapPin size={12} /> {locationLoading ? 'ရှာနေသည်...' : 'GPS ရယူမည်'}
+                <MapPin size={12} /> {locationLoading ? 'ရှာနေသည်...' : 'မြေပုံပေါ်က နေရာ ရယူမည်'}
               </button>
               <button type="button" onClick={() => setShowMapPicker(true)} className="flex items-center gap-1.5 text-xs text-brand-300 hover:text-brand-200 transition-colors">
                 <MapPin size={12} /> မြေပုံမှ ရွေးမည်
@@ -755,7 +755,7 @@ export default function EditListingPage() {
               {fieldErrors.coords && <p className="text-xs text-red-400 mt-1 font-myanmar">{fieldErrors.coords}</p>}
               </>
             ) : (
-              <p className="text-[11px] text-white/60 font-myanmar">တည်နေရာ မသတ်မှတ်ရသေးပါ — GPS သို့မဟုတ် မြေပုံမှ ရွေးပါ</p>
+              <p className="text-[11px] text-white/60 font-myanmar">တည်နေရာ မသတ်မှတ်ရသေးပါ — မြေပုံပေါ်က နေရာ သို့မဟုတ် မြေပုံမှ ရွေးပါ</p>
             )}
           </div>
         </div>

@@ -144,7 +144,7 @@ export default function SubmitListingPage() {
   }
 
   function getMyLocation() {
-    if (!navigator.geolocation) { showError(lang === 'mm' ? 'GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ' : 'GPS is not available — please pick on the map'); return }
+    if (!navigator.geolocation) { showError(lang === 'mm' ? 'မြေပုံပေါ်က နေရာ ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ' : 'GPS is not available — please pick on the map'); return }
     setLocationLoading(true)
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -154,7 +154,7 @@ export default function SubmitListingPage() {
       },
       () => {
         setLocationLoading(false)
-        showError(lang === 'mm' ? 'GPS ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ' : 'Could not find GPS location — please pick on the map')
+        showError(lang === 'mm' ? 'မြေပုံပေါ်က နေရာ ရှာမရပါ — မြေပုံပေါ်မှာ ရွေးပေးပါ' : 'Could not find GPS location — please pick on the map')
       },
       // Without a timeout getCurrentPosition can spin forever.
       { timeout: 10000, maximumAge: 60000 }
@@ -825,7 +825,7 @@ export default function SubmitListingPage() {
         <Field label="Website" optional><input type="url" value={form.website} onChange={e => setFormField('website', e.target.value)} className="input-dark" placeholder="https://..." /></Field>
 
         {/* ③ တည်နေရာ */}
-        <SectionHeader num="3" title={lang === 'mm' ? 'တည်နေရာ' : 'Location'} subtitle={lang === 'mm' ? 'လိပ်စာ၊ မြို့၊ GPS' : 'Address & map'} />
+        <SectionHeader num="3" title={lang === 'mm' ? 'တည်နေရာ' : 'Location'} subtitle={lang === 'mm' ? 'လိပ်စာ၊ မြို့၊ မြေပုံပေါ်က နေရာ' : 'Address & map'} />
 
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('city_label')}>
@@ -856,7 +856,7 @@ export default function SubmitListingPage() {
             className="flex-1 min-w-[140px] flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-brand-300 hover:border-brand-400/30 transition-colors"
           >
             <MapPin size={12} />
-            {locationLoading ? (lang === 'mm' ? 'ရှာနေသည်...' : 'Locating...') : (lang === 'mm' ? 'GPS ရယူမည်' : 'Use GPS')}
+            {locationLoading ? (lang === 'mm' ? 'ရှာနေသည်...' : 'Locating...') : (lang === 'mm' ? 'မြေပုံပေါ်က နေရာ ရယူမည်' : 'Use GPS')}
           </button>
           <button
             type="button"

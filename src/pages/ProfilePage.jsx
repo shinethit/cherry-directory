@@ -302,7 +302,7 @@ export default function ProfilePage() {
         </h2>
         <p className="text-white/50 font-myanmar mb-6">{otherError}</p>
         <button onClick={() => navigate('/leaderboard')} className="btn-primary">
-          {lang === 'mm' ? 'Leaderboard သို့ ပြန်မည်' : 'Back to Leaderboard'}
+          {lang === 'mm' ? 'အမှတ်စာရင်း သို့ ပြန်မည်' : 'Back to Leaderboard'}
         </button>
       </div>
     )
@@ -471,7 +471,7 @@ export default function ProfilePage() {
           { icon: Building2,    label: lang === 'mm' ? 'လုပ်ငန်း' : 'Listings',  value: myStats.listings,  action: () => navigate('/my-submissions') },
           { icon: Star,         label: 'Reviews',                               value: myStats.reviews,  action: () => navigate('/my-reviews') },
           { icon: BookMarked,   label: lang === 'mm' ? 'သိမ်းထားသော' : 'Saved',      value: myStats.bookmarks, action: () => navigate('/bookmarks') },
-          { icon: Calendar,     label: lang === 'mm' ? 'RSVP' : 'RSVPs',       value: myStats.rsvps,    action: () => navigate('/my-rsvps') },
+          { icon: Calendar,     label: lang === 'mm' ? 'ပွဲစာရင်း' : 'RSVPs',       value: myStats.rsvps,    action: () => navigate('/my-rsvps') },
         ].map(({ icon: Icon, label, value, action }) => (
           action ? (
             <button key={label} onClick={action} className="card-dark p-3 rounded-2xl text-center hover:bg-white/8 transition-colors">
@@ -540,11 +540,11 @@ export default function ProfilePage() {
         </p>
 
         {[
-          { icon: Trophy,    label: 'Top Contributors', labelMm: 'Top Contributors', path: '/leaderboard', color: 'text-gold-400' },
+          { icon: Trophy,    label: 'Top Contributors', labelMm: 'ထိပ်တန်း ပါဝင်သူများ', path: '/leaderboard', color: 'text-gold-400' },
           { icon: Sparkles,  label: 'Points Guide',     labelMm: 'Points လမ်းညွှန်',  path: '/points',      color: 'text-gold-400' },
           { icon: BookMarked,label: 'Saved Items',      labelMm: 'သိမ်းထားသော',      path: '/bookmarks',  color: 'text-brand-300' },
           { icon: MapPin,     label: 'Saved Places',     labelMm: 'သိမ်းထားသောနေရာများ', path: '/saved-places', color: 'text-emerald-300' },
-          { icon: Calendar,   label: 'My RSVPs',          labelMm: 'တက်မည့် ဖြစ်ရပ်များ',  path: '/my-rsvps',   color: 'text-green-300' },
+          { icon: Calendar,   label: 'My RSVPs',          labelMm: 'စာရင်းပေးထားသော ပွဲများ',  path: '/my-rsvps',   color: 'text-green-300' },
           { icon: Building2, label: 'My Submissions',  labelMm: 'ကျွန်တော့်တင်ထားသောများ', path: '/my-submissions', color: 'text-amber-300' },
           { icon: Building2, label: 'Add Listing',      labelMm: 'လုပ်ငန်းထည့်မည်',  path: '/submit',     color: 'text-brand-300' },
           ...(isModerator ? [{ icon: Shield, label: 'Admin Panel', labelMm: 'Admin Panel', path: '/admin', color: 'text-amber-400' }] : []),

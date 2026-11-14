@@ -16,8 +16,8 @@ import { showError, showSuccess } from '../lib/toast'
 
 // RSVP status → honest label (never collapse a real status into "Interested").
 const RSVP_STATUS = {
-  going:       { mm: 'တက်မည်',        en: 'Going',       cls: 'bg-green-500/15 text-green-400 border-green-500/30', icon: CheckCircle },
-  interested:  { mm: 'စိတ်ဝင်စား',     en: 'Interested',  cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30', icon: Star },
+  going:       { mm: 'ပါဝင်မည်',      en: 'Going',       cls: 'bg-green-500/15 text-green-400 border-green-500/30', icon: CheckCircle },
+  interested:  { mm: 'စိတ်ဝင်စားသည်', en: 'Interested',  cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30', icon: Star },
   not_going:   { mm: 'မတက်ပါ',        en: 'Not going',   cls: 'bg-white/10 text-white/50 border-white/15',        icon: XCircle },
   maybe:       { mm: 'မသေချာသေး',     en: 'Maybe',       cls: 'bg-amber-500/15 text-amber-400 border-amber-500/30', icon: Star },
 }
@@ -26,7 +26,7 @@ export default function MyRsvpsPage() {
   const navigate = useNavigate()
   const { user, isLoggedIn, refreshProfile } = useAuth()
   const { lang } = useLang()
-  useSEO({ title: lang === 'mm' ? 'တက်မည့် ဖြစ်ရပ်များ' : 'My RSVPs' })
+  useSEO({ title: lang === 'mm' ? 'စာရင်းပေးထားသော ပွဲများ' : 'My RSVPs' })
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
@@ -63,16 +63,16 @@ export default function MyRsvpsPage() {
   useEffect(() => { load() }, [load])
 
   async function cancelRsvp(postId) {
-    if (!(await confirmDialog(lang === 'mm' ? 'RSVP ပယ်ဖျက်မှာ သေချာလား?' : 'Cancel RSVP?'))) return
+    if (!(await confirmDialog(lang === 'mm' ? 'စာရင်းပေးထားတာ ပယ်ဖျက်မှာ သေချာလား?' : 'Cancel RSVP?'))) return
     const prev = items
     setItems(prev => prev.filter(i => i.id !== postId))
     const { error } = await supabase.from('event_rsvps').delete().match({ post_id: postId, user_id: user.id })
     if (error) {
       console.error('Cancel RSVP failed:', error)
-      showError(error.message || (lang === 'mm' ? 'RSVP ပယ်ဖျက်မရပါ — ထပ်ကြိုးစားပါ' : 'Could not cancel RSVP — please try again'))
+      showError(error.message || (lang === 'mm' ? 'စာရင်းပေးထားတာ ပယ်ဖျက်မရပါ — ထပ်ကြိုးစားပါ' : 'Could not cancel RSVP — please try again'))
       setItems(prev)
     } else {
-      showSuccess(lang === 'mm' ? 'RSVP ပယ်ဖျက်ပြီးပါပြီ' : 'RSVP cancelled')
+      showSuccess(lang === 'mm' ? 'စာရင်းပေးထားတာ ပယ်ဖျက်ပြီးပါပြီ' : 'RSVP cancelled')
       refreshProfile()
     }
   }
@@ -85,7 +85,7 @@ export default function MyRsvpsPage() {
           {lang === 'mm' ? 'Login လိုအပ်သည်' : 'Login Required'}
         </h2>
         <p className="text-white/50 font-myanmar mb-6">
-          {lang === 'mm' ? 'RSVP များ ကြည့်ရန် Login ဝင်ပါ' : 'Sign in to view your RSVPs'}
+          {lang === 'mm' ? 'စာရင်းပေးထားတဲ့ ပွဲတွေ ကြည့်ရန် Login ဝင်ပါ' : 'Sign in to view your RSVPs'}
         </p>
         <button onClick={() => navigate('/login')} className="btn-primary">
           {lang === 'mm' ? 'Login ဝင်ရောက်မည်' : 'Sign In'}
@@ -125,7 +125,7 @@ export default function MyRsvpsPage() {
           </button>
           <div>
             <h1 className="font-display font-bold text-xl text-white">
-              🎟️ {lang === 'mm' ? 'တက်မည့် ဖြစ်ရပ်များ' : 'My RSVPs'}
+              🎟️ {lang === 'mm' ? 'စာရင်းပေးထားသော ပွဲများ' : 'My RSVPs'}
             </h1>
             <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
               {/* F13: on error the count is unknown — show "—", never "0 ခု". */}
@@ -165,7 +165,7 @@ export default function MyRsvpsPage() {
           <div className="flex flex-col items-center py-16 text-center px-8">
             <span className="text-5xl mb-4">⚠️</span>
             <p className="font-display font-semibold text-white/70">
-              {lang === 'mm' ? 'RSVP များ ရယူမရပါ' : 'Could not load your RSVPs'}
+              {lang === 'mm' ? 'စာရင်းပေးထားတဲ့ ပွဲတွေ ရယူမရပါ' : 'Could not load your RSVPs'}
             </p>
             <p className="text-xs text-white/60 mt-1 font-myanmar max-w-xs">
               {lang === 'mm' ? 'တင်မရပါ — ပြန်ကြိုးစားမည်' : 'Could not load — please try again'}
@@ -178,9 +178,9 @@ export default function MyRsvpsPage() {
           <EmptyState
             icon="🎟️"
             title={tab === 'upcoming'
-              ? (lang === 'mm' ? 'လာမည့် RSVP မရှိ' : 'No upcoming RSVPs')
-              : (lang === 'mm' ? 'RSVP မှတ်တမ်း မရှိ' : 'No past RSVPs')}
-            message={lang === 'mm' ? 'Calendar မှ Event များ RSVP လုပ်ပါ' : 'RSVP to events from the calendar'}
+              ? (lang === 'mm' ? 'လာမည့် စာရင်းပေးထားသော ပွဲ မရှိ' : 'No upcoming RSVPs')
+              : (lang === 'mm' ? 'စာရင်းပေးထားတဲ့ မှတ်တမ်း မရှိ' : 'No past RSVPs')}
+            message={lang === 'mm' ? 'Calendar မှ ပွဲတွေ စာရင်းပေးပါ' : 'RSVP to events from the calendar'}
           />
         ) : (
           list.map(ev => {
@@ -241,7 +241,7 @@ export default function MyRsvpsPage() {
                       onClick={() => cancelRsvp(ev.id)}
                       className="w-full py-2.5 text-xs text-white/60 hover:text-red-400 hover:bg-red-500/5 transition-colors"
                     >
-                      {lang === 'mm' ? 'RSVP ပယ်ဖျက်' : 'Cancel RSVP'}
+                      {lang === 'mm' ? 'စာရင်းပေးထားတာ ပယ်ဖျက်' : 'Cancel RSVP'}
                     </button>
                   </div>
                 )}

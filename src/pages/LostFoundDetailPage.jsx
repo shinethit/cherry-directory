@@ -153,7 +153,7 @@ export default function LostFoundDetailPage() {
     // N25 (v9.17): one report per user per post per 24 h — repeated taps
     // used to stack identical rows for the admin to triage.
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const coolMsg = lang === 'mm' ? 'ဤ Post ကို ၂၄ နာရီအတွင်း Report တင်ပြီးဖြစ်သည်' : 'You already reported this post in the last 24 hours'
+    const coolMsg = lang === 'mm' ? 'ဤ Post ကို ၂၄ နာရီအတွင်း တိုင်ကြားပြီးဖြစ်သည်' : 'You already reported this post in the last 24 hours'
     if (user?.id) {
       const { data: existing, error: existingErr } = await supabase.from('reports')
         .select('id').eq('target_type', 'lost_found').eq('target_id', id)
@@ -162,7 +162,7 @@ export default function LostFoundDetailPage() {
       // (existing null) and let a duplicate report through. Fail
       // closed — the user can retry; the insert below would fail
       // on a dead connection anyway.
-      if (existingErr) { showError(lang === 'mm' ? 'Report တင်မရပါ' : 'Report failed'); return }
+      if (existingErr) { showError(lang === 'mm' ? 'တိုင်ကြားမရပါ' : 'Report failed'); return }
       if (existing && existing.length > 0) { showError(coolMsg); return }
     } else {
       try {
@@ -177,11 +177,11 @@ export default function LostFoundDetailPage() {
       reporter_id: user?.id || null,
       status: 'pending',
     })
-    if (error) { console.error('Report lost & found error:', error); showError(lang === 'mm' ? 'Report တင်မရပါ' : 'Report failed'); return }
+    if (error) { console.error('Report lost & found error:', error); showError(lang === 'mm' ? 'တိုင်ကြားမရပါ' : 'Report failed'); return }
     if (!user?.id) { try { localStorage.setItem('cherry-report-lostfound-' + id, String(Date.now())) } catch { /* ignore */ } }
     setReporting(false)
     setReportReason('')
-    showSuccess(lang === 'mm' ? 'Report တင်ပြီးပါပြီ — Admin မှ စစ်ဆေးမည်' : 'Report submitted — an admin will review it')
+    showSuccess(lang === 'mm' ? 'တိုင်ကြားပြီးပါပြီ — Admin မှ စစ်ဆေးမည်' : 'Report submitted — an admin will review it')
   }
 
   function openLightbox(startIndex = 0) {
@@ -361,7 +361,7 @@ export default function LostFoundDetailPage() {
         {/* Report */}
         {!reporting ? (
           <button onClick={() => setReporting(true)} className="w-full py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white/60 hover:text-red-400 hover:border-red-500/30 transition-colors">
-            🚩 {lang === 'mm' ? 'Report လုပ်မည်' : 'Report this post'}
+            🚩 {lang === 'mm' ? 'တိုင်ကြားမည်' : 'Report this post'}
           </button>
         ) : (
           <div className="space-y-2 rounded-2xl bg-white/5 border border-white/10 p-3">
@@ -369,12 +369,12 @@ export default function LostFoundDetailPage() {
               type="text"
               value={reportReason}
               onChange={e => setReportReason(e.target.value)}
-              placeholder={lang === 'mm' ? 'Report လုပ်ရသည့် အကြောင်းရင်း...' : 'Reason for reporting...'}
+              placeholder={lang === 'mm' ? 'တိုင်ကြားရသည့် အကြောင်းရင်း...' : 'Reason for reporting...'}
               className="input-dark font-myanmar"
             />
             <div className="flex gap-2">
               <button onClick={handleReport} disabled={!reportReason.trim()} className="flex-1 py-2 rounded-xl btn-danger text-xs font-bold disabled:opacity-40">
-                {lang === 'mm' ? 'Report တင်မည်' : 'Submit report'}
+                {lang === 'mm' ? 'တိုင်ကြားမည်' : 'Submit report'}
               </button>
               <button onClick={() => { setReporting(false); setReportReason('') }} className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 text-xs">
                 Cancel

@@ -85,7 +85,7 @@ export default function AdminReportsPage() {
       }
 
       setItems((data || []).map(r => ({ ...r, _target: listingMap[r.target_id] || null })))
-    } catch (e) { console.warn(e); setLoadError('Report များ ရယူမရပါ') }
+    } catch (e) { console.warn(e); setLoadError('တိုင်ကြားချက်များ ရယူမရပါ') }
     setLoading(false)
   }, [tab, limit, sortOrder, authLoading, isAdmin, isModerator])
 
@@ -101,8 +101,8 @@ export default function AdminReportsPage() {
   // the claim is rolled back so the report stays pending and retryable.
   async function updateStatus(report, status) {
     if (status === 'reviewed') {
-      if (!(await confirmDialog(lang === 'mm' ? 'ဤ Report ကို ဖြေရှင်းပြီး သတ်မှတ်မည်လား? ဆက်စပ် လုပ်ငန်းကို ဆိုင်းငံ့ထားမည်။' : 'Mark this report as resolved? The reported listing will be suspended.'))) return
-    } else if (!(await confirmDialog(lang === 'mm' ? 'ဤ Report ကို ပယ်ချမည်လား?' : 'Dismiss this report?'))) return
+      if (!(await confirmDialog(lang === 'mm' ? 'ဤ တိုင်ကြားချက်ကို ဖြေရှင်းပြီး သတ်မှတ်မည်လား? ဆက်စပ် လုပ်ငန်းကို ဆိုင်းငံ့ထားမည်။' : 'Mark this report as resolved? The reported listing will be suspended.'))) return
+    } else if (!(await confirmDialog(lang === 'mm' ? 'ဤ တိုင်ကြားချက်ကို ပယ်ချမည်လား?' : 'Dismiss this report?'))) return
     setActionBusy(report.id)
     try {
       // N11 (v9.17): only a still-pending report can be decided — two
@@ -115,11 +115,11 @@ export default function AdminReportsPage() {
         .select('id')
       if (error) {
         console.error('Report update error:', error)
-        showError('Report အပ်ဒိတ်လုပ်ရာတွင် အမှားရှိသည်')
+        showError('တိုင်ကြားချက် အပ်ဒိတ်လုပ်ရာတွင် အမှားရှိသည်')
         return
       }
       if (!updated || updated.length === 0) {
-        showError('ဤ Report ကို အခြား Admin မှ ဆုံးဖြတ်ပြီးဖြစ်သည်')
+        showError('ဤ တိုင်ကြားချက်ကို အခြား Admin မှ ဆုံးဖြတ်ပြီးဖြစ်သည်')
         load()
         return
       }
@@ -133,14 +133,14 @@ export default function AdminReportsPage() {
           // Roll the claim back — otherwise the report sits in Reviewed
           // while the listing stays live, with no retry.
           await supabase.from('reports').update({ status: 'pending', reviewed_at: null, reviewed_by: null }).eq('id', report.id)
-          showError('လုပ်ငန်း ဆိုင်းငံ့မရပါ — Report ကို မဖြေရှင်းရသေးပါ')
+          showError('လုပ်ငန်း ဆိုင်းငံ့မရပါ — တိုင်ကြားချက်ကို မဖြေရှင်းရသေးပါ')
           return
         }
       }
       // S14 (v9.17): review/dismiss decisions are audit-logged.
       log({ action: status === 'reviewed' ? 'review_report' : 'dismiss_report', table: 'reports', id: report.id, name: report._target?.name_mm || report._target?.name || report.target_id, before: { status: 'pending' }, after: { status } })
         .then(ok => { if (!ok) console.warn('Audit log failed for report decision') })
-      showSuccess(status === 'reviewed' ? '✓ ဖြေရှင်းပြီးပါပြီ' : 'Report ပယ်ချပြီးပါပြီ')
+      showSuccess(status === 'reviewed' ? '✓ ဖြေရှင်းပြီးပါပြီ' : 'တိုင်ကြားချက် ပယ်ချပြီးပါပြီ')
       setItems(prev => prev.filter(r => r.id !== report.id))
     } finally {
       setActionBusy(null)
@@ -181,7 +181,7 @@ export default function AdminReportsPage() {
           </button>
           <div>
             <h1 className="font-display font-bold text-xl text-white">
-              🚩 {lang === 'mm' ? 'Report များ' : 'Reports'}
+              🚩 {lang === 'mm' ? 'တိုင်ကြားချက်များ' : 'Reports'}
             </h1>
             <p className="text-[10px] text-white/60 mt-0.5 font-myanmar">
               {lang === 'mm' ? (totalCount ?? items.length) + ' ခု' : (totalCount ?? items.length) + ' items'}
@@ -222,7 +222,7 @@ export default function AdminReportsPage() {
           [1,2,3].map(n => <div key={n} className="h-24 rounded-2xl bg-white/4 animate-pulse" />)
         ) : loadError ? (
           <div className="card-dark rounded-2xl p-4 text-center space-y-2 border border-red-500/30">
-            <p className="text-sm text-red-400 font-myanmar">Report များ ရယူရာတွင် အမှားဖြစ်သွားသည်</p>
+            <p className="text-sm text-red-400 font-myanmar">တိုင်ကြားချက်များ ရယူရာတွင် အမှားဖြစ်သွားသည်</p>
             <p className="text-[10px] text-white/60">{loadError}</p>
             <button onClick={load} className="btn-primary text-xs px-4 py-2">ပြန်ကြိုးစားမည်</button>
           </div>
@@ -230,7 +230,7 @@ export default function AdminReportsPage() {
           <div className="text-center py-16">
             <span className="text-5xl mb-3 block">✓</span>
             <p className="text-white/60 font-myanmar">
-              {lang === 'mm' ? 'Report မရှိပါ' : 'No reports'}
+              {lang === 'mm' ? 'တိုင်ကြားချက် မရှိပါ' : 'No reports'}
             </p>
           </div>
         ) : (
