@@ -709,7 +709,7 @@ export default function SubmitListingPage() {
                     {/* SB7/E9 (v9.20): the parent itself is selectable — a
                         listing can be filed directly under a parent category,
                         not only under its sub-categories. */}
-                    <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name} (အားလုံး)</option>
+                    <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name} (အမျိုးအစားခွဲ မရှိ)</option>
                     {descendantOptions(parent.id, 1)}
                   </optgroup>
                 )

@@ -269,7 +269,7 @@ describe('v9.32 subcategory listings include descendants', () => {
     // shows only Delivery Service's own direct listing.
     fireEvent.click(screen.getByText('နောက်သို့'))
     await waitFor(() => expect(screen.getByText('4 လုပ်ငန်း')).toBeTruthy(), { timeout: 5000 })
-    fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
+    fireEvent.click(screen.getByRole('button', { name: /အမျိုးအစားခွဲ မရှိ/ }))
     await waitFor(() => expect(screen.getByText('1 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText(CHERRY)).toBeTruthy()
     for (const name of CUSTOM_NAMES) {
@@ -285,7 +285,7 @@ describe('v9.32 subcategory listings include descendants', () => {
     renderDirectory(client)
 
     await tapCategory()
-    fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
+    fireEvent.click(screen.getByRole('button', { name: /အမျိုးအစားခွဲ မရှိ/ }))
     await waitFor(() => expect(screen.getByText('1 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText(POST_OFFICE)).toBeTruthy()
     // Direct-only: neither the subcategory's own row nor any
@@ -394,7 +394,7 @@ describe('v9.32 tree arrives late / offline degradation', () => {
     fireEvent.click(screen.getByText('အိမ်တိုင်ရာရောက် ပို့ဆောင်ရေး'))
     await waitFor(() => expect(screen.getByText('အကောက်ခွန်ရှင်းလင်းရေး')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getAllByText('–').length).toBe(1)
-    fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
+    fireEvent.click(screen.getByRole('button', { name: /အမျိုးအစားခွဲ မရှိ/ }))
     await waitFor(() => expect(screen.getByText('1 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText(CHERRY)).toBeTruthy()
     for (const name of CUSTOM_NAMES) {

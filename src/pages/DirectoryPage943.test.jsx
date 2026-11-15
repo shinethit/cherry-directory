@@ -293,11 +293,12 @@ describe('v9.43 count once per filter', () => {
     await waitFor(() => expect(screen.getByText('172 / 172')).toBeTruthy(), { timeout: 20000 })
     expect(screen.getByText('Car Rental 172')).toBeTruthy()
     expect(screen.getByText('100%').closest('[data-testid="load-ring"]')).toBeTruthy()
-    // Only quiet background refetches of pages already shown remain
-    // (page 0 on entry, page 8 after hydration sets the page).
-    expect(mockDB.listingsCalls).toEqual([0, 8])
+    // Only one quiet background refetch remains on entry (page 0 —
+    // v9.44: hydration no longer advances the page past 0, so the
+    // last page's background refetch no longer fires).
+    expect(mockDB.listingsCalls).toEqual([0])
     await act(async () => { await new Promise(r => setTimeout(r, 300)) })
-    expect(mockDB.listingsCalls).toEqual([0, 8])
+    expect(mockDB.listingsCalls).toEqual([0])
   }, 30000)
 
   it('(iv) 9.31 regression — a fresh cached 0 entry still refetches rows to 173', async () => {
@@ -322,9 +323,10 @@ describe('v9.43 count once per filter', () => {
     const client = makeClient()
     client.setQueryData(['category-map'], ALL_CATS)
     seedListingsCacheNewFormat(client)
-    // The only background refetch after hydration is page 8; it
-    // fails, but its data already applied from cache.
-    mockDB.failPages = { 8: 99 }
+    // v9.44: hydration no longer advances the page past 0, so the
+    // only background refetch on entry is page 0 — fail THAT one:
+    // its data already applied from cache, so no error card / strip.
+    mockDB.failPages = { 0: 99 }
     renderDirectory(client)
     await openCarRental(172)
 
@@ -332,9 +334,9 @@ describe('v9.43 count once per filter', () => {
     expect(screen.getByText('Car Rental 172')).toBeTruthy()
     expect(screen.queryByText('Data တင်ရာတွင် အမှားဖြစ်သွားသည်')).toBeNull()
     expect(screen.queryByText('စာရင်း တစ်ချို့ တင်မရသေးပါ — အဟောင်းပြထားသည်')).toBeNull()
-    expect(mockDB.listingsCalls).toEqual([0, 8])
+    expect(mockDB.listingsCalls).toEqual([0])
     await act(async () => { await new Promise(r => setTimeout(r, 300)) })
-    expect(mockDB.listingsCalls).toEqual([0, 8])
+    expect(mockDB.listingsCalls).toEqual([0])
   }, 30000)
 
   it('(vi) loadSubcategories uses the aggregated RPC (c2) and the chain still completes', async () => {

@@ -168,13 +168,13 @@ async function tapDirectListings() {
   await waitFor(() => expect(screen.getByText('ကားငှားခြင်း')).toBeTruthy(), { timeout: 5000 })
   fireEvent.click(screen.getByText('ကားငှားခြင်း'))
   await waitFor(
-    () => expect(screen.getByRole('button', { name: /အားလုံး/ })).toBeTruthy(),
+    () => expect(screen.getByRole('button', { name: /အမျိုးအစားခွဲ မရှိ/ })).toBeTruthy(),
     { timeout: 5000 },
   )
   // The picker badges are the fresh count calls — 173 on the direct
   // button and 173 on the subcategory, like the live report.
   expect(screen.getAllByText('173 လုပ်ငန်း')).toHaveLength(2)
-  fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
+  fireEvent.click(screen.getByRole('button', { name: /အမျိုးအစားခွဲ မရှိ/ }))
 }
 
 async function expectRefetchApplied(rows) {

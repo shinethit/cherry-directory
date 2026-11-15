@@ -600,7 +600,7 @@ export default function EditListingPage() {
                     {/* SB7/E9 (v9.20): the parent itself is selectable — a
                         listing can be filed directly under a parent category,
                         not only under its sub-categories. */}
-                    <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name} (အားလုံး)</option>
+                    <option key={parent.id} value={parent.id}>{parent.icon} {parent.name_mm || parent.name} (အမျိုးအစားခွဲ မရှိ)</option>
                     {subs.map(sub => (
                       <option key={sub.id} value={sub.id}>  {sub.icon} {sub.name_mm || sub.name}</option>
                     ))}

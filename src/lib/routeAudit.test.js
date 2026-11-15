@@ -89,8 +89,8 @@ describe('route audit v9.20: annoyances', () => {
   })
 
   it('SB7/E9: category selects offer the parent itself inside each optgroup', () => {
-    expect(read('pages/SubmitListingPage.jsx')).toContain('(အားလုံး)')
-    expect(read('pages/EditListingPage.jsx')).toContain('(အားလုံး)')
+    expect(read('pages/SubmitListingPage.jsx')).toContain('(အမျိုးအစားခွဲ မရှိ)')
+    expect(read('pages/EditListingPage.jsx')).toContain('(အမျိုးအစားခွဲ မရှိ)')
   })
 
   it('NB2: rejectNotice sets status=rejected instead of deleting the row', () => {

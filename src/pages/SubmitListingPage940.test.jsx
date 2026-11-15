@@ -128,12 +128,12 @@ describe('v9.40 (D) SUBMIT PICKER — a level-3 category is pickable and submitt
     expect(optionTexts.some(t => t.includes('ပုဂ္ဂလိကဆေးရုံ'))).toBe(true)
     // The intermediate parent stays selectable via its own option
     // (SB7/E9: a listing can be filed directly under a parent, not
-    // only under its subs — the '(အားလုံး)' alias is the top-level
+    // only under its subs — the '(အမျိုးအစားခွဲ မရှိ)' alias is the top-level
     // parent's option, the sub's own option carries its id).
-    const hospOption = [...select.options].find(o => o.textContent.includes('ဆေးရုံ') && !o.textContent.includes('အားလုံး'))
+    const hospOption = [...select.options].find(o => o.textContent.includes('ဆေးရုံ') && !o.textContent.includes('အမျိုးအစားခွဲ မရှိ'))
     expect(hospOption).toBeTruthy()
     expect(hospOption.value).toBe('hospital-id')
-    expect(optionTexts.some(t => t.includes('ကျန်းမာရေး') && t.includes('အားလုံး'))).toBe(true)
+    expect(optionTexts.some(t => t.includes('ကျန်းမာရေး') && t.includes('အမျိုးအစားခွဲ မရှိ'))).toBe(true)
     fireEvent.change(select, { target: { value: 'general-id' } })
     expect(select.value).toBe('general-id')
 

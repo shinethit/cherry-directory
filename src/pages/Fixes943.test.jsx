@@ -45,8 +45,11 @@ describe('v9.43 (A) COUNT ONCE — DirectoryPage asks for the count on page 0 on
     expect(page).toContain('total: pageF === 0 ? (count || 0) : null')
     // The apply effect keeps the page-0 total when a later page
     // lands with total: null — setTotal(0) would collapse the ring
-    // and stop the chain.
-    expect(page).toContain('if (listingsData.total != null) setTotal(listingsData.total)')
+    // and stop the chain. v9.44: only a page-0 payload for this
+    // filter sets the total at all — a stale cached page > 0 (old
+    // persisted entry, pre-9.43 shape) still carries its old total
+    // and must not overwrite the fresh page-0 total.
+    expect(page).toContain('if (listingsData.page === 0 && listingsData.filterKey === filterKey && listingsData.total != null) setTotal(listingsData.total)')
     // Hydration reads the total from page 0, not the last page
     // (which now carries total: null).
     expect(page).toContain('setTotal(pages[0]?.total || 0)')
@@ -116,6 +119,10 @@ describe('v9.43 (D) MIGRATION — indexes + count RPC, idempotent, manual step a
 // the Header.jsx history entry (Burmese), zero Admin, and the offline
 // fallback leads with the same items. Follows the 9.42 (F) pattern;
 // the current-version pins moved here from Fixes942.test.jsx.
+// v9.44 ROLL-FORWARD: the current-version pins that used to live
+// here (pkg.version, the modal lead date, LEAD_FALLBACK_MY_943)
+// now live in Fixes944.test.jsx (F) for 9.44 — this block
+// keeps only the 9.43-entry match, like the 9.42 (F) block.
 const CHANGES_MY_943 = [
   'လုပ်ငန်းစာရင်း ဖွင့်တာ ပိုမြန်လာမည် — စာရင်း အရှည်ကြီးလည်း တစ်ခါတည်း တင်ပြီးသား ဖြစ်မည်',
   'အမျိုးအစားတစ်ခုချင်းစီရဲ့ လုပ်ငန်းအရေအတွက်ကို တစ်ခါတည်း တွက်ပြမည်',
@@ -133,8 +140,6 @@ describe('v9.43 (F) CHANGELOG — 9.43 entry, Header match, zero Admin', () => {
     expect(changes['9.43']).toBeTruthy()
     expect(changes['9.43'].changesMy).toEqual(CHANGES_MY_943)
     expect(changes['9.43'].changesEn).toEqual(CHANGES_EN_943)
-    const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.43')
     const header = readFileSync(join(srcDir, 'components', 'Header.jsx'), 'utf8')
     expect(header).toContain("{ v: '9.43', date: '2026-11-15'")
     for (const item of CHANGES_MY_943) {
@@ -143,15 +148,5 @@ describe('v9.43 (F) CHANGELOG — 9.43 entry, Header match, zero Admin', () => {
     const entry = header.slice(header.indexOf("{ v: '9.43'"), header.indexOf("{ v: '9.42'"))
     expect(entry).not.toMatch(/Admin/i)
     expect(JSON.stringify(changes['9.43'])).not.toMatch(/Admin/i)
-    // The modal's lead block (v{APP_VERSION} badge) must carry the
-    // CURRENT version's date, not the previous version's.
-    const lead = header.slice(header.indexOf('v{APP_VERSION}'), header.indexOf("{ v: '9.43'"))
-    expect(lead).toContain('2026-11-15')
-    // The offline fallback constant carries the same 9.43 items.
-    expect(header).toContain('LEAD_FALLBACK_MY_943')
-    const fallback = header.slice(header.indexOf('LEAD_FALLBACK_MY_943 = ['), header.indexOf('LEAD_FALLBACK_MY_943 = [') + 2000)
-    for (const item of CHANGES_MY_943) {
-      expect(fallback).toContain(item)
-    }
   })
 })

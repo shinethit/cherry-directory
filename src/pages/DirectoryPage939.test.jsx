@@ -84,24 +84,24 @@ const CHANGES_EN_939 = [
   'Listing cards render faster — long lists scroll more smoothly',
 ]
 
-// v9.43 ROLL-FORWARD: tests (F1)/(F2) pin the modal MECHANISM, not a
+// v9.44 ROLL-FORWARD: tests (F1)/(F2) pin the modal MECHANISM, not a
 // frozen version — the prompt only fires when the server version is
-// NEWER than the running APP_VERSION (now 9.43), and the post-update
+// NEWER than the running APP_VERSION (now 9.44), and the post-update
 // modal leads with the CURRENT version's log. So F1/F2 carry the
-// current (9.43) log: serverVersion '9.44' in F1 (a newer version
-// carrying the 9.43 log) and version.json '9.43' in F2. The 9.39 log
+// current (9.44) log: serverVersion '9.45' in F1 (a newer version
+// carrying the 9.44 log) and version.json '9.44' in F2. The 9.39 log
 // itself is still pinned by (F3) below and by version-changes.json.
-// The SAME strings live in version-changes.json (9.43) and in the
-// Header.jsx 9.43 entry (Burmese).
-const CHANGES_MY_943 = [
-  'လုပ်ငန်းစာရင်း ဖွင့်တာ ပိုမြန်လာမည် — စာရင်း အရှည်ကြီးလည်း တစ်ခါတည်း တင်ပြီးသား ဖြစ်မည်',
-  'အမျိုးအစားတစ်ခုချင်းစီရဲ့ လုပ်ငန်းအရေအတွက်ကို တစ်ခါတည်း တွက်ပြမည်',
-  'စကားပြောခန်းမှာ မက်ဆေ့ချ် အသစ် စစ်တာ ၆၀ စက္ကန့်တစ်ခါ ဖြစ်သွားမည်',
+// The SAME strings live in version-changes.json (9.44) and in the
+// Header.jsx 9.44 entry (Burmese).
+const CHANGES_MY_944 = [
+  'အမျိုးအစား ပြောင်းလိုက်တဲ့ လုပ်ငန်းကို အဟောင်းစာရင်းမှာ ဆက်မပြတော့ပါ — ပြောင်းလိုက်တာနဲ့ ချက်ချင်း ပျောက်သွားမည်',
+  'အမျိုးအစားခွဲ မသတ်မှတ်ရသေးတဲ့ ဆိုင်တွေကို "အားလုံး" လို့ မပြတော့ဘဲ "အမျိုးအစားခွဲ မရှိ" လို့ ပြမည်',
+  'စာရင်းအပေါ်က အရေအတွက် (ဥပမာ 37/37) လည်း ပြောင်းလိုက်တဲ့ အတိုင်း ချက်ချင်း မှန်သွားမည်',
 ]
-const CHANGES_EN_943 = [
-  'Lists open faster — long lists still load fully in the background',
-  'Category counts are now computed in a single query',
-  'Chat checks for new messages every 60 seconds',
+const CHANGES_EN_944 = [
+  'A listing moved to another category disappears from the old list at once — no more stale row after a category change',
+  'Shops with no sub-category are no longer called "အားလုံး" — the row is now "အမျိုးအစားခွဲ မရှိ" (No sub-category)',
+  'The count above the list (e.g. 37/37) now follows the move at once too',
 ]
 const CHANGES_MY_940 = [
   'Category အသစ် ထည့်လိုက်တာနဲ့ ပင်မစာမျက်နှာနဲ့ Directory မှာ ချက်ချင်း ပေါ်ပြီ — ၅ မိနစ် စောင့်စရာ မလိုတော့ပါ',
@@ -487,30 +487,30 @@ describe('v9.39 (E) COLD ENTRY still chains normally to completion', () => {
 
 describe('v9.39 (F) MODAL — full new-version change log, all bullets, from version.json', () => {
   it('(F1) UpdatePrompt renders the full new-version log under the heading', async () => {
-    swMock.serverVersion = '9.44'
-    swMock.serverChanges = { changesMy: CHANGES_MY_943, changesEn: CHANGES_EN_943 }
+    swMock.serverVersion = '9.45'
+    swMock.serverChanges = { changesMy: CHANGES_MY_944, changesEn: CHANGES_EN_944 }
     render(<UpdatePrompt />)
     await waitFor(() => expect(screen.getByText('ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့')).toBeTruthy(), { timeout: 5000 })
-    for (const item of CHANGES_MY_943) {
+    for (const item of CHANGES_MY_944) {
       expect(screen.getByText(item)).toBeTruthy()
     }
     // Reload + dismiss behaviour is unchanged.
     expect(screen.getByText('ပြန်ဖွင့်မည်')).toBeTruthy()
   }, 20000)
 
-  it('(F2) post-update modal leads with the 9.43 log from live version.json and says "Version 9.43"', async () => {
+  it('(F2) post-update modal leads with the 9.44 log from live version.json and says "Version 9.44"', async () => {
     window.localStorage.setItem('cherry_onboarding_done', '1')
     window.localStorage.removeItem('cherry_last_seen_version')
     const fetchMock = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ version: '9.43', changesMy: CHANGES_MY_943, changesEn: CHANGES_EN_943 }),
+      json: async () => ({ version: '9.44', changesMy: CHANGES_MY_944, changesEn: CHANGES_EN_944 }),
     }))
     vi.stubGlobal('fetch', fetchMock)
     try {
       renderHeader()
       await waitFor(() => expect(screen.getByText('ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့')).toBeTruthy(), { timeout: 8000 })
-      expect(screen.getByText('Version 9.43')).toBeTruthy()
-      for (const item of CHANGES_MY_943) {
+      expect(screen.getByText('Version 9.44')).toBeTruthy()
+      for (const item of CHANGES_MY_944) {
         expect(screen.getByText(item)).toBeTruthy()
       }
       expect(fetchMock).toHaveBeenCalled()

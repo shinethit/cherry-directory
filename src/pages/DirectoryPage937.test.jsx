@@ -251,8 +251,8 @@ describe('v9.37 chain mechanism', () => {
     // "အားလုံး" (direct listings under the parent).
     await waitFor(() => expect(screen.getByText('ကားငှားဝန်ဆောင်မှု')).toBeTruthy(), { timeout: 5000 })
     fireEvent.click(screen.getByText('ကားငှားဝန်ဆောင်မှု'))
-    await waitFor(() => expect(screen.getByRole('button', { name: /အားလုံး/ })).toBeTruthy(), { timeout: 5000 })
-    fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: /အမျိုးအစားခွဲ မရှိ/ })).toBeTruthy(), { timeout: 5000 })
+    fireEvent.click(screen.getByRole('button', { name: /အမျိုးအစားခွဲ မရှိ/ }))
     await waitFor(() => expect(screen.getByText('20 / 2186')).toBeTruthy(), { timeout: 10000 })
 
     // The uniform chain runs the whole 2,186-row list by itself —

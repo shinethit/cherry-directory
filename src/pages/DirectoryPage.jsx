@@ -873,10 +873,51 @@ export default function DirectoryPage() {
   // change reset page to 0; appliedDataRef dedupes the same object
   // (main.jsx renders no <StrictMode>, so there is no double-run to
   // guard against — the old key guard only dropped real refetches).
+  // v9.44: a FRESH page-0 payload that lands while the hydrated list
+  // is on screen still counts. Before, hydration advanced the page
+  // past 0, and the fresh page-0 refetch — the one that carries a
+  // listing moved out of this filter — never reached this effect at
+  // all: keepPreviousData never re-delivers a previous query's
+  // refetched data, so the moved listing stayed rendered and the
+  // total stayed stale (proved by debug: the page-0 refetch fired
+  // but no apply run ever saw page-0 data while page was 1). So
+  // hydration no longer advances the page (below): the page-0
+  // refetch lands as the ACTIVE query's data and arrives here with
+  // page 0. isHydratedPage0 covers the remaining path — a page-0
+  // placeholder while the chain has advanced (a cached page-1 is
+  // missing, so the previous query's data shows meanwhile).
   useEffect(() => {
     if (!listingsData) return
-    if (listingsData.page !== page) return
+    const isHydratedPage0 = listingsData.page === 0 && page !== 0 && listingsData.filterKey === filterKey
+    if (listingsData.page !== page && !isHydratedPage0) return
+    // v9.44: never apply data from ANOTHER filter. A stale placeholder
+    // (keepPreviousData) carries the old filter's rows; the old code
+    // let it through when the pages happened to match (page 0 === 0)
+    // and relied on the reset effect wiping it in the same commit —
+    // but the wipe itself re-triggers this effect (listings/total
+    // deps), and with appliedDataRef just nulled by the wipe the
+    // placeholder re-applied, stranding the old rows under the new
+    // header (9.39 (B) cold switch). The reset effect still wipes;
+    // this just stops stale-filter data ever landing.
+    if (listingsData.filterKey !== filterKey) return
     if (appliedDataRef.current === listingsData) return
+    // v9.44: when the displayed list already holds MORE than this
+    // page-0 payload (hydration merged the cached pages), only
+    // replace when the fresh payload actually differs from what is
+    // on screen (row ids, then total). An unconditional replace
+    // would collapse every warm re-entry from 172 rows back to 20
+    // and make the chain climb all over again — the 9.39 instant
+    // list, undone on every entry. A differing payload replaces and
+    // the chain re-walks from page 0, so the later pages re-apply
+    // fresh and a moved listing stays gone. The diff check runs
+    // BEFORE appliedDataRef is set, so an identical payload leaves
+    // the hydrated apply standing and the chain stays idle.
+    if (listingsData.page === 0 && listingsData.filterKey === filterKey && listings.length > listingsData.rows.length) {
+      const freshIds = listingsData.rows.map(l => l.id)
+      const shownIds = listings.slice(0, freshIds.length).map(l => l.id)
+      const sameRows = freshIds.length === shownIds.length && freshIds.every((id, i) => id === shownIds[i])
+      if (sameRows && listingsData.total === total) return
+    }
     appliedDataRef.current = listingsData
     lastPageRowCountRef.current = listingsData.rows.length
     // v9.35: a page landed — any earlier background-page failure is
@@ -886,6 +927,14 @@ export default function DirectoryPage() {
     if (listingsData.page === 0 || lastFilterKeyRef.current !== listingsData.filterKey) {
       lastFilterKeyRef.current = listingsData.filterKey
       setListings(listingsData.rows)
+      // v9.44: the replace above truncated the hydrated list to page 0
+      // — make sure the chain restarts from page 0 (a no-op when the
+      // page is already 0, which hydration now guarantees) so the
+      // later pages re-apply fresh and the moved listing stays gone.
+      if (isHydratedPage0) {
+        pageRef.current = 0
+        setPage(0)
+      }
     } else {
       setListings(prev => {
         const seen = new Set(prev.map(l => l.id))
@@ -894,8 +943,15 @@ export default function DirectoryPage() {
     }
     // v9.43: page > 0 carries total: null — never let it wipe the total
     // (setTotal(0) would collapse the ring and stop the chain).
-    if (listingsData.total != null) setTotal(listingsData.total)
-  }, [listingsData, page])
+    // v9.44: ONLY a page-0 payload for THIS filter sets the total. A
+    // page > 0 payload is total: null when fresh — but a STALE cached
+    // page > 0 (an old persisted entry, pre-9.43 shape) still carries
+    // its old total, and letting it overwrite the fresh page-0 total
+    // leaves the ring stale (37 rows / 38 total) after a move. The
+    // page-0 total is authoritative: it is the only one the query
+    // counts.
+    if (listingsData.page === 0 && listingsData.filterKey === filterKey && listingsData.total != null) setTotal(listingsData.total)
+  }, [listingsData, page, listings, total, filterKey])
 
   // v9.38: listingsLoading / listingsError are DERIVED during render,
   // not mirrored into state by an effect. The old sync effect ran on
@@ -954,18 +1010,27 @@ export default function DirectoryPage() {
   // the Home tile already shows 172/172 outside, so inside must not
   // climb 20 → 40 → … → 172. The background refetch still runs
   // quietly (staleTime 0) to pick up changes, but it no longer gates
-  // the display. ONE update (one setListings + setTotal + setPage):
-  // advancing page-by-page through cached pages in one flush would
-  // trip React's "Maximum update depth exceeded" cap on long chains
+  // the display. ONE update (one setListings + setTotal): merging
+  // pages in one flush instead of advancing page-by-page would trip
+  // React's "Maximum update depth exceeded" cap on long chains
   // (the 110-page All list: 110 pages × ~4 setStates = 440). Only
   // CONTIGUOUS pages from page 0 count — a gap means the chain
   // fetches the rest. Runs once per filterKey (hydratedFilterKeyRef);
   // declared AFTER the reset effect so a wipe in the same commit
-  // happens first and this overwrites it with the cached rows. The
-  // chain continues from the last hydrated page (appliedDataRef /
-  // pageRef / lastPageRowCountRef are set consistently), so it
-  // fetches only MISSING pages. A cold entry finds nothing and
-  // behaves exactly as before (chain from page 0).
+  // happens first and this overwrites it with the cached rows.
+  // v9.44: the page STAYS at 0 here (appliedDataRef = page 0, so the
+  // chain can still re-walk from 0 through the cached pages — each
+  // append dedupes — and then fetch only the MISSING ones). The 9.39
+  // version advanced the page to the last hydrated page, which
+  // stranded the fresh page-0 refetch: keepPreviousData never
+  // re-delivers a previous query's refetched data, so a listing
+  // moved out of this filter stayed rendered with a stale total
+  // (the refetch fired — the data just never reached the apply
+  // effect). With the page at 0, the refetch lands as the ACTIVE
+  // query's data; the apply effect's diff guard replaces only on a
+  // real change, so an unchanged list stays 172/172 with no flicker.
+  // A cold entry finds nothing and behaves exactly as before
+  // (chain from page 0).
   const hydratedFilterKeyRef = useRef('')
   useEffect(() => {
     if (!selectedSubcategory || !filterKey) return
@@ -991,18 +1056,15 @@ export default function DirectoryPage() {
         if (!seen.has(r.id)) { seen.add(r.id); rows.push(r) }
       }
     }
-    const last = pages[pages.length - 1]
     lastFilterKeyRef.current = filterKey
-    appliedDataRef.current = last
-    lastPageRowCountRef.current = (last.rows || []).length
-    pageRef.current = last.page
+    appliedDataRef.current = pages[0]
+    lastPageRowCountRef.current = (pages[0].rows || []).length
     setListings(rows)
     // v9.43: pages > 0 now carry total: null (count-once); the total lives
     // on page 0, which the contiguous-from-0 walk always holds when any
     // page is present. Old persisted entries (pre-9.43) carry total on
     // every page, so pages[0].total is correct for both.
     setTotal(pages[0]?.total || 0)
-    setPage(last.page)
   }, [filterKey, selectedSubcategory])
 
   // v9.35: a background page (page > 0) failed while rows are already
@@ -1409,8 +1471,8 @@ export default function DirectoryPage() {
                   <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
                     <span className="text-2xl flex-shrink-0">{levelIcon}</span>
                     <div className="text-left min-w-0 flex-1 overflow-hidden">
-                      <p className="font-display font-semibold text-white truncate">အားလုံး</p>
-                      <p className="text-[10px] text-white/60 font-myanmar truncate">All listings</p>
+                      <p className="font-display font-semibold text-white truncate">{lang === 'mm' ? 'အမျိုးအစားခွဲ မရှိ' : 'No sub-category'}</p>
+                      <p className="text-[10px] text-white/60 font-myanmar truncate">{lang === 'mm' ? 'အမျိုးအစားခွဲ မသတ်မှတ်ရသေးသော ဆိုင်များ' : 'Shops with no sub-category'}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0 ml-2">
@@ -1475,6 +1537,12 @@ export default function DirectoryPage() {
             }
           </h1>
         </div>
+
+        {/* v9.44: direct-only list (no sub-category assigned yet) — say
+            so under the heading, same wording as the picker row. */}
+        {selectedSubcategory?.is_direct && (
+          <p className="text-xs text-white/60 font-myanmar truncate">{lang === 'mm' ? 'အမျိုးအစားခွဲ မသတ်မှတ်ရသေးသော ဆိုင်များ' : 'Shops with no sub-category'}</p>
+        )}
 
         {/* v9.25: search + filters stay pinned — the old B8 collapse
             hid them once scrolled past 140px and flickered on iPhone:

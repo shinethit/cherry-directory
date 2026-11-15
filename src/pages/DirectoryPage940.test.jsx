@@ -250,7 +250,7 @@ describe('v9.40 (C) DRILL-DOWN — a sub with children opens its own picker leve
     await enterHealthPicker()
     await drillToHospital()
 
-    fireEvent.click(screen.getByRole('button', { name: /အားလုံး/ }))
+    fireEvent.click(screen.getByRole('button', { name: /အမျိုးအစားခွဲ မရှိ/ }))
     await waitFor(() => expect(screen.getByText('2 ရလဒ်')).toBeTruthy(), { timeout: 5000 })
     expect(screen.getByText('Hospital Direct 1')).toBeTruthy()
     expect(screen.getByText('Hospital Direct 2')).toBeTruthy()
