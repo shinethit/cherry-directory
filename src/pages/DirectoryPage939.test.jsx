@@ -84,28 +84,24 @@ const CHANGES_EN_939 = [
   'Listing cards render faster — long lists scroll more smoothly',
 ]
 
-// v9.42 ROLL-FORWARD: tests (F1)/(F2) pin the modal MECHANISM, not a
+// v9.43 ROLL-FORWARD: tests (F1)/(F2) pin the modal MECHANISM, not a
 // frozen version — the prompt only fires when the server version is
-// NEWER than the running APP_VERSION (now 9.42), and the post-update
+// NEWER than the running APP_VERSION (now 9.43), and the post-update
 // modal leads with the CURRENT version's log. So F1/F2 carry the
-// current (9.42) log: serverVersion '9.43' in F1 (a newer version
-// carrying the 9.42 log) and version.json '9.42' in F2. The 9.39 log
+// current (9.43) log: serverVersion '9.44' in F1 (a newer version
+// carrying the 9.43 log) and version.json '9.43' in F2. The 9.39 log
 // itself is still pinned by (F3) below and by version-changes.json.
-// The SAME strings live in version-changes.json (9.42) and in the
-// Header.jsx 9.42 entry (Burmese).
-const CHANGES_MY_942 = [
-  'RSVP၊ GPS စသော ကျန်နေတဲ့ အင်္ဂလိပ် အသုံးတွေကို မြန်မာလို ထပ်ပြောင်းထားသည်',
-  'ပွဲတက်ရန် ခလုတ်နဲ့ အခြေအနေ စာသားတွေ အားလုံး တစ်ပုံစံတည်း ဖြစ်သွားပြီ (ပါဝင်မည် / စိတ်ဝင်စားသည်)',
-  '"My RSVPs" စာမျက်နှာနဲ့ Profile က စာရင်းတွေ မြန်မာလို ဖြစ်သွားပြီ',
-  'Home က အကျိုးခံစားခွင့် စာရင်းက အသိပေးချက် (မရသေးတာ) ကို ဖြုတ်ထားသည်',
-  'Help စာထဲက ကျန်နေတဲ့ "Report" စာသားကိုလည်း "တိုင်ကြား" လို့ ပြင်ထားသည်',
+// The SAME strings live in version-changes.json (9.43) and in the
+// Header.jsx 9.43 entry (Burmese).
+const CHANGES_MY_943 = [
+  'လုပ်ငန်းစာရင်း ဖွင့်တာ ပိုမြန်လာမည် — စာရင်း အရှည်ကြီးလည်း တစ်ခါတည်း တင်ပြီးသား ဖြစ်မည်',
+  'အမျိုးအစားတစ်ခုချင်းစီရဲ့ လုပ်ငန်းအရေအတွက်ကို တစ်ခါတည်း တွက်ပြမည်',
+  'စကားပြောခန်းမှာ မက်ဆေ့ချ် အသစ် စစ်တာ ၆၀ စက္ကန့်တစ်ခါ ဖြစ်သွားမည်',
 ]
-const CHANGES_EN_942 = [
-  'Remaining English terms (RSVP, GPS…) replaced with Burmese',
-  'Event buttons and status labels are now consistent everywhere',
-  '"My RSVPs" page and Profile labels are now in Burmese',
-  'Removed the not-yet-available notifications item from the Home benefits list',
-  "Fixed a remaining 'Report' wording in Help",
+const CHANGES_EN_943 = [
+  'Lists open faster — long lists still load fully in the background',
+  'Category counts are now computed in a single query',
+  'Chat checks for new messages every 60 seconds',
 ]
 const CHANGES_MY_940 = [
   'Category အသစ် ထည့်လိုက်တာနဲ့ ပင်မစာမျက်နှာနဲ့ Directory မှာ ချက်ချင်း ပေါ်ပြီ — ၅ မိနစ် စောင့်စရာ မလိုတော့ပါ',
@@ -145,7 +141,15 @@ class RecordingIntersectionObserver {
 }
 vi.stubGlobal('IntersectionObserver', RecordingIntersectionObserver)
 
-vi.mock('../lib/prefetch', () => ({ fetchCategories: mockFetchCategories }))
+vi.mock('../lib/prefetch', async (importOriginal) => {
+  const actual = await importOriginal()
+  // v9.43: only fetchCategories is mocked; fetchListingCountsByCategory
+  // + sumDescendantCounts stay REAL (loadSubcategories' (c2) RPC
+  // path). These files' supabase mocks have no rpc, so the helper
+  // returns null and the per-subcategory fallback runs, as on a
+  // device where the 9.43 migration has not run yet.
+  return { ...actual, fetchCategories: mockFetchCategories }
+})
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ user: null, isLoggedIn: false, profile: null, isAdmin: false, isModerator: false, signOut: vi.fn() }),
@@ -483,30 +487,30 @@ describe('v9.39 (E) COLD ENTRY still chains normally to completion', () => {
 
 describe('v9.39 (F) MODAL — full new-version change log, all bullets, from version.json', () => {
   it('(F1) UpdatePrompt renders the full new-version log under the heading', async () => {
-    swMock.serverVersion = '9.43'
-    swMock.serverChanges = { changesMy: CHANGES_MY_942, changesEn: CHANGES_EN_942 }
+    swMock.serverVersion = '9.44'
+    swMock.serverChanges = { changesMy: CHANGES_MY_943, changesEn: CHANGES_EN_943 }
     render(<UpdatePrompt />)
     await waitFor(() => expect(screen.getByText('ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့')).toBeTruthy(), { timeout: 5000 })
-    for (const item of CHANGES_MY_942) {
+    for (const item of CHANGES_MY_943) {
       expect(screen.getByText(item)).toBeTruthy()
     }
     // Reload + dismiss behaviour is unchanged.
     expect(screen.getByText('ပြန်ဖွင့်မည်')).toBeTruthy()
   }, 20000)
 
-  it('(F2) post-update modal leads with the 9.42 log from live version.json and says "Version 9.42"', async () => {
+  it('(F2) post-update modal leads with the 9.43 log from live version.json and says "Version 9.43"', async () => {
     window.localStorage.setItem('cherry_onboarding_done', '1')
     window.localStorage.removeItem('cherry_last_seen_version')
     const fetchMock = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ version: '9.42', changesMy: CHANGES_MY_942, changesEn: CHANGES_EN_942 }),
+      json: async () => ({ version: '9.43', changesMy: CHANGES_MY_943, changesEn: CHANGES_EN_943 }),
     }))
     vi.stubGlobal('fetch', fetchMock)
     try {
       renderHeader()
       await waitFor(() => expect(screen.getByText('ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့')).toBeTruthy(), { timeout: 8000 })
-      expect(screen.getByText('Version 9.42')).toBeTruthy()
-      for (const item of CHANGES_MY_942) {
+      expect(screen.getByText('Version 9.43')).toBeTruthy()
+      for (const item of CHANGES_MY_943) {
         expect(screen.getByText(item)).toBeTruthy()
       }
       expect(fetchMock).toHaveBeenCalled()

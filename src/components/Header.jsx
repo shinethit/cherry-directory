@@ -12,11 +12,11 @@ import { APP_VERSION } from '../lib/appVersion'
 // Main navigation pages — no back button needed
 const MAIN_NAV_PATHS = ['/', '/directory', '/community', '/calendar', '/profile']
 
-// v9.42: fallback lead items when /version.json is unreachable
-// (offline) — MUST match the 9.42 entry in the history array below
-// and version-changes.json; Fixes942.test.jsx (F) asserts
+// v9.43: fallback lead items when /version.json is unreachable
+// (offline) — MUST match the 9.43 entry in the history array below
+// and version-changes.json; Fixes943.test.jsx (F) asserts
 // this. The bundled history is Burmese-only, so the fallback is too.
-const LEAD_FALLBACK_MY_942 = ['RSVP၊ GPS စသော ကျန်နေတဲ့ အင်္ဂလိပ် အသုံးတွေကို မြန်မာလို ထပ်ပြောင်းထားသည်', 'ပွဲတက်ရန် ခလုတ်နဲ့ အခြေအနေ စာသားတွေ အားလုံး တစ်ပုံစံတည်း ဖြစ်သွားပြီ (ပါဝင်မည် / စိတ်ဝင်စားသည်)', '"My RSVPs" စာမျက်နှာနဲ့ Profile က စာရင်းတွေ မြန်မာလို ဖြစ်သွားပြီ', 'Home က အကျိုးခံစားခွင့် စာရင်းက အသိပေးချက် (မရသေးတာ) ကို ဖြုတ်ထားသည်', 'Help စာထဲက ကျန်နေတဲ့ "Report" စာသားကိုလည်း "တိုင်ကြား" လို့ ပြင်ထားသည်']
+const LEAD_FALLBACK_MY_943 = ['လုပ်ငန်းစာရင်း ဖွင့်တာ ပိုမြန်လာမည် — စာရင်း အရှည်ကြီးလည်း တစ်ခါတည်း တင်ပြီးသား ဖြစ်မည်', 'အမျိုးအစားတစ်ခုချင်းစီရဲ့ လုပ်ငန်းအရေအတွက်ကို တစ်ခါတည်း တွက်ပြမည်', 'စကားပြောခန်းမှာ မက်ဆေ့ချ် အသစ် စစ်တာ ၆၀ စက္ကန့်တစ်ခါ ဖြစ်သွားမည်']
 
 export default function Header() {
   const navigate = useNavigate()
@@ -141,12 +141,12 @@ export default function Header() {
 
   // v9.39: the modal LEADS with the new version's full log, all at
   // once — live version.json first (it is the only source that has
-  // the new entry on first run), the bundled 9.42 entry when offline.
+  // the new entry on first run), the bundled 9.43 entry when offline.
   // The history list below filters the current version out, so the
   // new log appears exactly once.
   const leadItems = lang === 'en' && liveChanges?.changesEn?.length
     ? liveChanges.changesEn
-    : liveChanges?.changesMy?.length ? liveChanges.changesMy : LEAD_FALLBACK_MY_942
+    : liveChanges?.changesMy?.length ? liveChanges.changesMy : LEAD_FALLBACK_MY_943
 
   return (
     <>
@@ -427,7 +427,7 @@ export default function Header() {
               <div className="space-y-2 rounded-2xl border border-brand-400/30 bg-brand-500/5 p-3">
                 <div className="flex items-center gap-2">
                   <span className="badge bg-brand-600/30 text-brand-300 font-bold border border-brand-400/30">v{APP_VERSION}</span>
-                  <span className="text-[10px] text-white/60">2026-11-14</span>
+                  <span className="text-[10px] text-white/60">2026-11-15</span>
                 </div>
                 <p className="text-xs font-bold text-white font-myanmar">ဤ Version မှာ ပြောင်းလဲထားသည်များကတော့</p>
                 <ul className="space-y-1 pl-4">
@@ -439,6 +439,7 @@ export default function Header() {
                 </ul>
               </div>
               {[
+                { v: '9.43', date: '2026-11-15', items: ['လုပ်ငန်းစာရင်း ဖွင့်တာ ပိုမြန်လာမည် — စာရင်း အရှည်ကြီးလည်း တစ်ခါတည်း တင်ပြီးသား ဖြစ်မည်', 'အမျိုးအစားတစ်ခုချင်းစီရဲ့ လုပ်ငန်းအရေအတွက်ကို တစ်ခါတည်း တွက်ပြမည်', 'စကားပြောခန်းမှာ မက်ဆေ့ချ် အသစ် စစ်တာ ၆၀ စက္ကန့်တစ်ခါ ဖြစ်သွားမည်'] },
                 { v: '9.42', date: '2026-11-14', items: ['RSVP၊ GPS စသော ကျန်နေတဲ့ အင်္ဂလိပ် အသုံးတွေကို မြန်မာလို ထပ်ပြောင်းထားသည်', 'ပွဲတက်ရန် ခလုတ်နဲ့ အခြေအနေ စာသားတွေ အားလုံး တစ်ပုံစံတည်း ဖြစ်သွားပြီ (ပါဝင်မည် / စိတ်ဝင်စားသည်)', '"My RSVPs" စာမျက်နှာနဲ့ Profile က စာရင်းတွေ မြန်မာလို ဖြစ်သွားပြီ', 'Home က အကျိုးခံစားခွင့် စာရင်းက အသိပေးချက် (မရသေးတာ) ကို ဖြုတ်ထားသည်', 'Help စာထဲက ကျန်နေတဲ့ "Report" စာသားကိုလည်း "တိုင်ကြား" လို့ ပြင်ထားသည်'] },
                 { v: '9.41', date: '2026-11-14', items: ['About / Privacy / Terms စာသားများကို အစအဆုံး ပြန်ရေးပြီး သာမန်လူ နားလည်လွယ်အောင် ပြင်ထားသည်', 'RSVP၊ Tier၊ Leaderboard၊ GPS စသော အင်္ဂလိပ် အသုံးများကို မြန်မာလို ပြောင်းထားသည်', 'ပြက္ခဒိန် ပွဲတက်ရန် ခလုတ်များ "ပါဝင်မည်" / "စိတ်ဝင်စားသည်" မြန်မာလို ဖြစ်သွားပြီ', 'Profile က အသိပေးချက် toggle မြန်မာလို ("အသိပေးချက်များ") ဖြစ်သွားပြီ', 'ဈေးနှုန်း စာမျက်နှာက ၆ လ auto-delete ဆိုတဲ့ စာသားကို ဖြုတ်ထားသည်', 'စာမျက်နှာကို တိုက်ရိုက်ဖွင့်ပြီး Back နှိပ်ရင် App အပြင်ကို ထွက်မသွားတော့ဘဲ ပင်မစာမျက်နှာကို ပြန်သွားမည်', 'လုပ်ငန်းတင်သွင်းတဲ့ ဖောင်မှာ အင်္ဂလိပ် သတိပေးချက် မပေါ်တော့ပါ'] },
                 { v: '9.40', date: '2026-11-13', items: ['Category အသစ် ထည့်လိုက်တာနဲ့ ပင်မစာမျက်နှာနဲ့ Directory မှာ ချက်ချင်း ပေါ်ပြီ — ၅ မိနစ် စောင့်စရာ မလိုတော့ပါ', 'အမျိုးအစားခွဲထဲက အမျိုးအစားခွဲကို ထပ်ရွေးလို့ ရပြီ — ကျန်းမာရေး → ဆေးရုံ → အထွေထွေဆေးရုံ ဆိုပြီး အဆင့်ဆင့် ဝင်ကြည့်နိုင်ပြီ', 'လုပ်ငန်းထည့်တဲ့နေရာမှာ အဆင့် ၃ အမျိုးအစားကိုလည်း ရွေးလို့ ရပြီ', 'အမည်တူ Category ထပ်ထည့်မိတာ ချက်ချင်း သိပြီ — နောက်တစ်ယောက် ထည့်ထားတာ ရှိရင်လည်း တွေ့မည်'] },

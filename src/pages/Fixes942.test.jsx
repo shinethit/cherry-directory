@@ -234,9 +234,13 @@ describe('v9.42 (G) FINAL SWEEP — remaining pages', () => {
 })
 
 // v9.42 (F) CHANGELOG — the 9.42 entry in version-changes.json matches
-// the Header.jsx history entry (Burmese), zero Admin, and the offline
-// fallback leads with the same items. Follows the 9.41 (F) pattern;
-// the current-version pins moved here from InfoPages941.test.jsx.
+// the Header.jsx history entry (Burmese), zero Admin. Follows the 9.41
+// (F) pattern; the current-version pins moved here from
+// InfoPages941.test.jsx.
+// v9.43 ROLL-FORWARD: the current-version pins that used to live
+// here (pkg.version, the modal lead date, LEAD_FALLBACK_MY_942)
+// now live in Fixes943.test.jsx (F) for 9.43 — this block
+// keeps only the 9.42-entry match, like the 9.41 (F) block.
 const CHANGES_MY_942 = [
   'RSVP၊ GPS စသော ကျန်နေတဲ့ အင်္ဂလိပ် အသုံးတွေကို မြန်မာလို ထပ်ပြောင်းထားသည်',
   'ပွဲတက်ရန် ခလုတ်နဲ့ အခြေအနေ စာသားတွေ အားလုံး တစ်ပုံစံတည်း ဖြစ်သွားပြီ (ပါဝင်မည် / စိတ်ဝင်စားသည်)',
@@ -258,8 +262,6 @@ describe('v9.42 (F) CHANGELOG — 9.42 entry, Header match, zero Admin', () => {
     expect(changes['9.42']).toBeTruthy()
     expect(changes['9.42'].changesMy).toEqual(CHANGES_MY_942)
     expect(changes['9.42'].changesEn).toEqual(CHANGES_EN_942)
-    const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8'))
-    expect(pkg.version).toBe('9.42')
     const header = readFileSync(join(srcDir, 'components', 'Header.jsx'), 'utf8')
     expect(header).toContain("{ v: '9.42', date: '2026-11-14'")
     for (const item of CHANGES_MY_942) {
@@ -268,15 +270,5 @@ describe('v9.42 (F) CHANGELOG — 9.42 entry, Header match, zero Admin', () => {
     const entry = header.slice(header.indexOf("{ v: '9.42'"), header.indexOf("{ v: '9.41'"))
     expect(entry).not.toMatch(/Admin/i)
     expect(JSON.stringify(changes['9.42'])).not.toMatch(/Admin/i)
-    // The modal's lead block (v{APP_VERSION} badge) must carry the
-    // CURRENT version's date, not the previous version's.
-    const lead = header.slice(header.indexOf('v{APP_VERSION}'), header.indexOf("{ v: '9.42'"))
-    expect(lead).toContain('2026-11-14')
-    // The offline fallback constant carries the same 9.42 items.
-    expect(header).toContain('LEAD_FALLBACK_MY_942')
-    const fallback = header.slice(header.indexOf('LEAD_FALLBACK_MY_942 = ['), header.indexOf('LEAD_FALLBACK_MY_942 = [') + 2000)
-    for (const item of CHANGES_MY_942) {
-      expect(fallback).toContain(item)
-    }
   })
 })

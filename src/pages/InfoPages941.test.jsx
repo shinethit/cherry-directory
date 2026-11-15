@@ -45,7 +45,7 @@ describe('v9.41 (A) ABOUT — draft rewrite', () => {
     expect(document.body.textContent).not.toContain('RSVP')
     expect(document.body.textContent).not.toContain('Top Contributor Badge')
     // Top card unchanged: logo city, version, byline.
-    expect(screen.getByText(/Version 9.42 • Since 2026/)).toBeTruthy()
+    expect(screen.getByText(/Version 9.43 • Since 2026/)).toBeTruthy()
     expect(screen.getByText('by Shine Thit')).toBeTruthy()
   })
 })

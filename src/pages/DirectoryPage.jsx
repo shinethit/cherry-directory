@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { Search, X, ShieldCheck, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { withTimeout } from '../lib/withTimeout'
-import { fetchCategories } from '../lib/prefetch'
+import { fetchCategories, fetchListingCountsByCategory, sumDescendantCounts } from '../lib/prefetch'
 import { ListingCard, Skeleton, EmptyState } from '../components/UI'
 import { useBookmarkedSet } from '../hooks/useBookmarksDB'
 import { collectDescendantIds, resolveListingCategoryIds, mergeTreeRows } from '../lib/categoryTree'
@@ -589,6 +589,15 @@ export default function DirectoryPage() {
       // these minimal rows to ['category-map']: they would strip the
       // name_mm/icon directNavigate's map-first path renders.
       if (treeCats.length) queryClient.setQueryData(['category-tree'], treeCats)
+      // v9.43 (c2): ONE aggregated count query instead of one head-count
+      // per subcategory shown. Falls back to the old per-subcategory
+      // counts when the 9.43 migration has not run yet (RPC null).
+      const countById = await fetchListingCountsByCategory()
+      let subcatsWithCount
+      let allCountsFailed = false
+      if (countById) {
+        subcatsWithCount = (data || []).map(sub => ({ ...sub, listing_count: sumDescendantCounts(treeCats, countById, sub.id) }))
+      } else {
       const countResults = await Promise.allSettled(
         (data || []).map(async (sub) => {
           const ids = collectDescendantIds(treeCats, sub.id)
@@ -605,9 +614,11 @@ export default function DirectoryPage() {
           return { ...sub, listing_count: count || 0 }
         })
       )
-      const subcatsWithCount = countResults.map((r, i) =>
+      subcatsWithCount = countResults.map((r, i) =>
         r.status === 'fulfilled' ? r.value : { ...(data || [])[i], listing_count: null }
       )
+      allCountsFailed = (data || []).length > 0 && countResults.every(r => r.status === 'rejected')
+      }
       // v9.34: per-count failures were swallowed by allSettled into
       // listing_count null WITHOUT setting the error flag, so the
       // retry strip never appeared for a first-entry count failure
@@ -621,7 +632,7 @@ export default function DirectoryPage() {
       // picker-level change. (Guarded, not returned:
       // setSubcategoryLoading(false) below must still run.)
       if (pickerLevelRef.current === categoryId) {
-      if ((data || []).length > 0 && countResults.every(r => r.status === 'rejected')) {
+      if (allCountsFailed) {
         setSubcategoryError(true)
       }
       setSubcategories(subcatsWithCount)
@@ -792,9 +803,15 @@ export default function DirectoryPage() {
   const { data: listingsData, isLoading: listingsQueryLoading, isFetching: listingsQueryFetching, isError: listingsQueryError, refetch: refetchListings } = useQuery({
     queryKey: ['listings', 'directory', selectedSubcategory?.id, listingCategoryIdsKey, city, verifiedOnly, q, sort, page, featuredOnly],
     queryFn: async ({ queryKey: [, , subId, idsKey, cityF, verifiedF, qF, sortF, pageF, featuredF], signal }) => {
+      // v9.43: count ONCE per filter (page 0 only). PostgREST count:'exact'
+      // is a full count scan; the 9.37/9.39 chain re-fetched it on EVERY
+      // page (9 scans for Car Rental) and on every background refetch.
+      // Later pages return total: null and the apply effect keeps the
+      // page-0 total (below) — the ring, hasMore and the chain all read
+      // that same total, so behaviour is identical.
       let query = supabase
         .from('listings')
-        .select('*, category:categories(name, name_mm, icon)', { count: 'exact' })
+        .select('*, category:categories(name, name_mm, icon)', pageF === 0 ? { count: 'exact' } : {})
         .eq('status', 'approved')
       // H1: the featured pseudo-subcategory filters is_featured, not a category.
       if (featuredF && subId === FEATURED_PSEUDO_ID) query = query.eq('is_featured', true)
@@ -830,7 +847,7 @@ export default function DirectoryPage() {
       // A hung query used to spin the skeletons forever with no retry.
       const { data, count, error } = await withTimeout(query, LOAD_TIMEOUT_MS, 'Directory listings')
       if (error) throw error
-      return { rows: data || [], total: count || 0, page: pageF, filterKey: `${subId}|${idsKey}|${cityF}|${verifiedF}|${qF}|${sortF}` }
+      return { rows: data || [], total: pageF === 0 ? (count || 0) : null, page: pageF, filterKey: `${subId}|${idsKey}|${cityF}|${verifiedF}|${qF}|${sortF}` }
     },
     enabled: !!selectedSubcategory,
     // v9.31 (B): a FRESH (<5 min) cached 0 entry would otherwise be
@@ -875,7 +892,9 @@ export default function DirectoryPage() {
         return [...prev, ...listingsData.rows.filter(l => !seen.has(l.id))]
       })
     }
-    setTotal(listingsData.total)
+    // v9.43: page > 0 carries total: null — never let it wipe the total
+    // (setTotal(0) would collapse the ring and stop the chain).
+    if (listingsData.total != null) setTotal(listingsData.total)
   }, [listingsData, page])
 
   // v9.38: listingsLoading / listingsError are DERIVED during render,
@@ -978,7 +997,11 @@ export default function DirectoryPage() {
     lastPageRowCountRef.current = (last.rows || []).length
     pageRef.current = last.page
     setListings(rows)
-    setTotal(last.total || 0)
+    // v9.43: pages > 0 now carry total: null (count-once); the total lives
+    // on page 0, which the contiguous-from-0 walk always holds when any
+    // page is present. Old persisted entries (pre-9.43) carry total on
+    // every page, so pages[0].total is correct for both.
+    setTotal(pages[0]?.total || 0)
     setPage(last.page)
   }, [filterKey, selectedSubcategory])
 

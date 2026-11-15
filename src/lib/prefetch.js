@@ -18,6 +18,51 @@ import { startRun, recordItem, finishRun, failRun } from './cacheStatus'
 
 // ── Fetchers (shared with the pages) ──────────────────────────
 
+// v9.43: ONE aggregated count query instead of one head-count per
+// category (~20 scans -> 1). The RPC returns per-category counts
+// for every category with >=1 approved listing; a category absent
+// from the result has 0. Returns null when the 9.43 migration has
+// not run yet (code deploys before the migration — 9.19 lesson),
+// so callers fall back to the old per-category counts and nothing
+// breaks. The warn names the cause; the fallback is silent after it.
+// Descendant ids (ALL levels, not just children) of a category,
+// from a flat id/parent_id list — same shape as categoryTree's
+// collectDescendantIds (kept local so this module stays the single
+// source of truth for the prefetch path).
+export function collectDescendantIds(all, rootId) {
+  const ids = [rootId]
+  let frontier = [rootId]
+  while (frontier.length) {
+    const next = (all || []).filter(c => frontier.includes(c.parent_id)).map(c => c.id)
+    ids.push(...next)
+    frontier = next
+  }
+  return ids
+}
+
+// Sum of approved-listing counts for a category AND all of its
+// descendants, from the RPC map. A category missing from the map
+// contributes 0 — identical to `count || 0` in the old path.
+export function sumDescendantCounts(allCats, countById, rootId) {
+  return collectDescendantIds(allCats || [], rootId)
+    .reduce((s, id) => s + (countById.get(String(id)) || 0), 0)
+}
+
+export async function fetchListingCountsByCategory() {
+  try {
+    const { data: agg, error: aggErr } = await withTimeout(
+      supabase.rpc('get_category_listing_counts'), 30000, 'Directory category counts')
+    if (aggErr || !agg) {
+      console.warn('[prefetch] category counts RPC unavailable, falling back to per-category counts:', aggErr?.message || aggErr)
+      return null
+    }
+    return new Map((agg || []).map(r => [String(r.category_id), Number(r.listing_count) || 0]))
+  } catch (e) {
+    console.warn('[prefetch] category counts RPC unavailable, falling back to per-category counts:', e?.message || e)
+    return null
+  }
+}
+
 // Directory categories with listing counts (same query as
 // DirectoryPage.loadCategories: one tree fetch + one count per
 // top-level category, best-effort counts).
@@ -48,15 +93,15 @@ export async function fetchCategories() {
   // Guarded: a failed tree fetch yields [] and must NOT wipe a good
   // cached map.
   if (allCats?.length) queryClient.setQueryData(['category-map'], allCats)
-  const collectDescendantIds = (all, rootId) => {
-    const ids = [rootId]
-    let frontier = [rootId]
-    while (frontier.length) {
-      const next = (all || []).filter(c => frontier.includes(c.parent_id)).map(c => c.id)
-      ids.push(...next)
-      frontier = next
-    }
-    return ids
+  // v9.43: ONE aggregated count query instead of one head-count per
+  // top-level category (~20 scans -> 1). The RPC returns per-category
+  // counts; descendant sums are computed client-side from the tree
+  // this function already fetches (same sums as before, same numbers
+  // on the tiles). If the 9.43 migration has not run yet, fall back
+  // to the old per-category counts so nothing breaks.
+  const countById = await fetchListingCountsByCategory()
+  if (countById) {
+    return (data || []).map(cat => ({ ...cat, listing_count: sumDescendantCounts(allCats || [], countById, cat.id) }))
   }
   const countResults = await Promise.allSettled(
     (data || []).map(async (cat) => {

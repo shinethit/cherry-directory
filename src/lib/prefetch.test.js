@@ -56,12 +56,29 @@ vi.mock('./supabase', () => {
   return {
     supabase: {
       from: (table) => builderFor(table),
-      rpc: () => {
+      // v9.43: fn-aware RPC. get_visit_stats keeps its stats shape;
+      // get_category_listing_counts returns TRUE per-category counts
+      // from ROWS.listings (unlike the head-count mock above, which
+      // returns rows.length unfiltered for every count query — so
+      // [1, 1] proves the RPC path ran and [2, 2] proves the
+      // fallback ran). globalThis.__prefetchRpcError forces ONLY the
+      // RPC to resolve-with-error, leaving the data queries healthy.
+      rpc: (fn) => {
         const b = {}
-        b.then = (onF, onR) => Promise.resolve({
-          data: { total: 5, today: 1, this_week: 3, this_month: 5, by_device: [], by_country: [], by_hour: [], daily: [] },
-          error: null,
-        }).then(onF, onR)
+        b.then = (onF, onR) => {
+          if (globalThis.__prefetchRpcError) {
+            return Promise.resolve({ data: null, error: { message: 'rpc failed' } }).then(onF, onR)
+          }
+          if (fn === 'get_category_listing_counts') {
+            const byId = {}
+            for (const r of ROWS.listings) byId[r.category_id] = (byId[r.category_id] || 0) + 1
+            return Promise.resolve({ data: Object.entries(byId).map(([category_id, listing_count]) => ({ category_id, listing_count })), error: null }).then(onF, onR)
+          }
+          return Promise.resolve({
+            data: { total: 5, today: 1, this_week: 3, this_month: 5, by_device: [], by_country: [], by_hour: [], daily: [] },
+            error: null,
+          }).then(onF, onR)
+        }
         return b
       },
     },
@@ -162,20 +179,83 @@ describe('prefetch writes the offline cache (v9.17 Issue 5)', () => {
 describe('fetchCategories count resolve-with-error (v9.25 regen #5)', () => {
   it('a count that resolves with { data: null, error } settles as listing_count null, not 0', async () => {
     const { fetchCategories } = await import('./prefetch')
-    // Happy path first: counts land as real numbers.
+    // Happy path first: counts land as real numbers — via the 9.43
+    // RPC now, so the TRUE per-category counts [1, 1] (one listing
+    // each), not the old per-category mock's unfiltered rows.length
+    // [2, 2].
     const ok = await fetchCategories()
-    expect(ok.map(c => c.listing_count)).toEqual([2, 2])
-    // Now ONLY the count queries resolve-with-error; the category rows
-    // themselves still arrive. A null count must not become 0 — 0 would
-    // disable a good category button in DirectoryPage.
+    expect(ok.map(c => c.listing_count)).toEqual([1, 1])
+    // Now the RPC is unavailable AND only the count queries
+    // resolve-with-error; the category rows themselves still
+    // arrive. The fallback runs, its counts fail, and a null count
+    // must not become 0 — 0 would disable a good category button
+    // in DirectoryPage.
     globalThis.__prefetchCountError = true
+    globalThis.__prefetchRpcError = true
     try {
       const out = await fetchCategories()
       expect(out.map(c => c.id)).toEqual(['c1', 'c2'])
       expect(out.map(c => c.listing_count)).toEqual([null, null])
     } finally {
       delete globalThis.__prefetchCountError
+      delete globalThis.__prefetchRpcError
     }
+  })
+})
+
+describe('fetchCategories category counts via RPC (v9.43)', () => {
+  it('RPC path returns true per-category counts in one query (not the unfiltered fallback counts)', async () => {
+    const { fetchCategories } = await import('./prefetch')
+    const out = await fetchCategories()
+    expect(out.map(c => c.id)).toEqual(['c1', 'c2'])
+    // ROWS.listings has one listing per category; the fallback's
+    // head-count mock would return rows.length (2) for each.
+    expect(out.map(c => c.listing_count)).toEqual([1, 1])
+  })
+
+  it('RPC error falls back to per-category counts and still returns numbers', async () => {
+    const { fetchCategories } = await import('./prefetch')
+    globalThis.__prefetchRpcError = true
+    try {
+      const out = await fetchCategories()
+      expect(out.map(c => c.id)).toEqual(['c1', 'c2'])
+      expect(out.map(c => c.listing_count)).toEqual([2, 2])
+    } finally {
+      delete globalThis.__prefetchRpcError
+    }
+  })
+
+  it('fetchListingCountsByCategory returns a Map, and null when the RPC is unavailable', async () => {
+    const { fetchListingCountsByCategory } = await import('./prefetch')
+    const map = await fetchListingCountsByCategory()
+    expect(map).toBeInstanceOf(Map)
+    expect(map.get('c1')).toBe(1)
+    expect(map.get('c2')).toBe(1)
+    expect(map.get('no-such-category')).toBeUndefined()
+    globalThis.__prefetchRpcError = true
+    try {
+      expect(await fetchListingCountsByCategory()).toBeNull()
+    } finally {
+      delete globalThis.__prefetchRpcError
+    }
+  })
+
+  it('sumDescendantCounts sums a category + all descendants; a category absent from the map is 0', async () => {
+    const { sumDescendantCounts } = await import('./prefetch')
+    const tree = [
+      { id: 'p', parent_id: null },
+      { id: 'c1', parent_id: 'p' },
+      { id: 'c2', parent_id: 'p' },
+      { id: 'g', parent_id: 'c1' },
+    ]
+    const counts = new Map([['p', 1], ['c1', 2], ['c2', 3], ['g', 4]])
+    expect(sumDescendantCounts(tree, counts, 'p')).toBe(10)
+    expect(sumDescendantCounts(tree, counts, 'c1')).toBe(6)
+    expect(sumDescendantCounts(tree, counts, 'c2')).toBe(3)
+    expect(sumDescendantCounts(tree, counts, 'missing')).toBe(0)
+    // A category with no row in the map contributes 0, not NaN.
+    const partial = new Map([['c1', 2]])
+    expect(sumDescendantCounts(tree, partial, 'p')).toBe(2)
   })
 })
 

@@ -217,10 +217,14 @@ export default function ChatPage() {
     loadMessages()
 
     // v9.18: realtime is off on the proxied origin (see supabase.js) —
-    // poll every 20 s while the room is open so new messages still
-    // arrive, instead of a WebSocket reconnect storm.
+    // poll while the room is open so new messages still arrive,
+    // instead of a WebSocket reconnect storm.
+    // v9.43: 60 s (was 20 s) — Disk IO: 3x fewer message-list scans.
+    // Incoming messages can now arrive up to 60 s late on the proxied
+    // origin; the sender's own message is optimistically appended
+    // (v9.20 D1), so sending feels instant. Skip while hidden.
     if (!realtimeEnabled) {
-      const t = setInterval(() => { if (isSubscribed) loadMessages() }, 20000)
+      const t = setInterval(() => { if (isSubscribed && !document.hidden) loadMessages() }, 60000)
       return () => { isSubscribed = false; clearInterval(t) }
     }
 

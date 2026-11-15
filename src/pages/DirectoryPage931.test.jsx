@@ -43,7 +43,15 @@ const { mockFetchCategories, mockDB } = vi.hoisted(() => ({
   mockDB: { cats: [], pages: {}, total: 0 },
 }))
 
-vi.mock('../lib/prefetch', () => ({ fetchCategories: mockFetchCategories }))
+vi.mock('../lib/prefetch', async (importOriginal) => {
+  const actual = await importOriginal()
+  // v9.43: only fetchCategories is mocked; fetchListingCountsByCategory
+  // + sumDescendantCounts stay REAL (loadSubcategories' (c2) RPC
+  // path). These files' supabase mocks have no rpc, so the helper
+  // returns null and the per-subcategory fallback runs, as on a
+  // device where the 9.43 migration has not run yet.
+  return { ...actual, fetchCategories: mockFetchCategories }
+})
 
 vi.mock('../contexts/AuthContext', () => ({
   useAuth: () => ({ user: null, isLoggedIn: false }),
